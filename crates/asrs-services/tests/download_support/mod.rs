@@ -1,0 +1,545 @@
+//! The fixture of `files/download-live`: the same scenario file, remote tree, sshd configuration,
+//! byte-counting proxy and raw servers as `oracle/src/download/live.ts`.
+
+use std::fs;
+use std::io;
+use std::net::{Ipv4Addr, SocketAddr, TcpStream as StdStream};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::{Duration, Instant};
+
+use asrs_parity::Json;
+use asrs_parity::vectors::workspace_root;
+use sha2::{Digest, Sha256};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::net::{TcpListener, TcpStream};
+use tokio::runtime::Runtime;
+use tokio::sync::watch;
+
+pub fn scenarios() -> Json {
+    let path = workspace_root().join("parity/specs/files/download-live.scenarios.json");
+    let text = fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+    asrs_parity::json::parse(&text).expect("scenario file")
+}
+
+pub fn text(json: &Json, key: &str) -> String {
+    optional_text(json, key).unwrap_or_else(|| panic!("no {key:?} in {}", json.to_compact()))
+}
+
+pub fn optional_text(json: &Json, key: &str) -> Option<String> {
+    Some(json.get(key)?.as_str()?.to_string_lossy())
+}
+
+pub fn number(json: &Json, key: &str) -> Option<f64> {
+    json.get(key)?.as_f64()
+}
+
+pub fn array<'a>(json: &'a Json, key: &str) -> &'a [Json] {
+    json.get(key).and_then(Json::as_array).unwrap_or_default()
+}
+
+fn file_bytes(size: usize) -> Vec<u8> {
+    (0..size)
+        .map(|i| (i.wrapping_mul(31) + (i >> 8) * 7 + (i >> 16)) as u8)
+        .collect()
+}
+
+pub fn hex(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+fn first_existing(candidates: &[&str]) -> Option<PathBuf> {
+    candidates
+        .iter()
+        .map(PathBuf::from)
+        .find(|path| path.exists())
+}
+
+pub struct Tools {
+    sshd: PathBuf,
+    sftp_server: PathBuf,
+    pub user: String,
+}
+
+/// What an sshd scenario needs, or why this machine cannot run one.
+pub fn tools() -> Result<Tools, String> {
+    if !cfg!(unix) {
+        return Err("no unprivileged sshd on this platform".to_owned());
+    }
+    let sshd = first_existing(&[
+        "/usr/sbin/sshd",
+        "/usr/local/sbin/sshd",
+        "/opt/homebrew/sbin/sshd",
+    ])
+    .ok_or("no sshd")?;
+    let sftp_server = first_existing(&[
+        "/usr/libexec/sftp-server",
+        "/usr/lib/openssh/sftp-server",
+        "/usr/libexec/openssh/sftp-server",
+        "/usr/lib/ssh/sftp-server",
+    ])
+    .ok_or("no sftp-server")?;
+    let id = |flag: &str| {
+        let output = Command::new("id")
+            .arg(flag)
+            .output()
+            .map_err(|e| format!("id {flag}: {e}"))?;
+        Ok::<String, String>(String::from_utf8_lossy(&output.stdout).trim().to_owned())
+    };
+    if id("-u")? == "0" {
+        return Err(
+            "running as root, which every file permission scenario would ignore".to_owned(),
+        );
+    }
+    Command::new("ssh-keygen")
+        .arg("-?")
+        .stdin(Stdio::null())
+        .output()
+        .map_err(|e| format!("ssh-keygen: {e}"))?;
+    Ok(Tools {
+        sshd,
+        sftp_server,
+        user: id("-un")?,
+    })
+}
+
+pub struct Fixture {
+    pub root: PathBuf,
+    pub port: u16,
+    pub key: String,
+    partial: bool,
+    sshd: Option<Child>,
+    drops: watch::Sender<Option<&'static str>>,
+    runtime: Option<Runtime>,
+}
+
+#[derive(Clone)]
+struct DropRule {
+    bytes: usize,
+    how: &'static str,
+}
+
+fn how(name: &str) -> &'static str {
+    match name {
+        "fin" => "fin",
+        "rst" => "rst",
+        other => panic!("unknown drop {other}"),
+    }
+}
+
+impl Fixture {
+    /// `Err` when this machine's sshd does not accept the scenario's configuration.
+    pub fn start(spec: &Json, scenario: &Json, tools: Option<&Tools>) -> Result<Fixture, String> {
+        static NEXT: AtomicU32 = AtomicU32::new(0);
+        let name = format!(
+            "asrs-sshd-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::SeqCst)
+        );
+        let root = std::env::temp_dir().join(name);
+        fs::create_dir_all(root.join("local")).expect("fixture folder");
+        let root = fs::canonicalize(&root).expect("fixture folder");
+        let mut fixture = Fixture {
+            root,
+            port: 0,
+            key: String::new(),
+            partial: matches!(scenario.get("partial"), Some(Json::Bool(true))),
+            sshd: None,
+            drops: watch::channel(None).0,
+            runtime: None,
+        };
+        let server = scenario.get("server").expect("server");
+        match text(server, "kind").as_str() {
+            "closed" => {
+                let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind");
+                fixture.port = listener.local_addr().expect("address").port();
+            }
+            "blackhole" => fixture.port = 22,
+            "raw" => {
+                let send = text(server, "send").chars().map(|c| c as u8).collect();
+                let (then, when) = (text(server, "then"), text(server, "when"));
+                fixture.listen(move |socket, _| {
+                    raw(socket, Vec::clone(&send), then.clone(), when.clone())
+                });
+            }
+            "sshd" => {
+                for entry in array(spec, "tree") {
+                    fixture.put(entry);
+                }
+                let tools = tools.expect("sshd scenarios run only with the tools");
+                let port = fixture.start_sshd(server, tools)?;
+                let rule = server.get("drop").map(|rule| DropRule {
+                    bytes: number(rule, "bytes").expect("bytes") as usize,
+                    how: how(&text(rule, "how")),
+                });
+                fixture.listen(move |socket, drops| proxy(socket, port, rule.clone(), drops));
+            }
+            other => panic!("unknown server {other}"),
+        }
+        Ok(fixture)
+    }
+
+    fn listen<F>(
+        &mut self,
+        serve: impl Fn(TcpStream, watch::Receiver<Option<&'static str>>) -> F + Send + 'static,
+    ) where
+        F: Future<Output = ()> + Send + 'static,
+    {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .expect("runtime");
+        let listener = runtime
+            .block_on(TcpListener::bind((Ipv4Addr::LOCALHOST, 0)))
+            .expect("bind");
+        self.port = listener.local_addr().expect("address").port();
+        let drops = self.drops.subscribe();
+        runtime.spawn(async move {
+            while let Ok((socket, _)) = listener.accept().await {
+                let mut drops = drops.clone();
+                drops.mark_unchanged();
+                tokio::spawn(serve(socket, drops));
+            }
+        });
+        self.runtime = Some(runtime);
+    }
+
+    fn start_sshd(&mut self, server: &Json, tools: &Tools) -> Result<u16, String> {
+        let file = |name: &str| self.root.join(name);
+        let keygen = |kind: &str, name: &str| {
+            let status = Command::new("ssh-keygen")
+                .args(["-q", "-t", kind, "-N", "", "-C", "asrs-fixture", "-f"])
+                .arg(file(name))
+                .status()
+                .expect("ssh-keygen");
+            assert!(status.success(), "ssh-keygen -t {kind}");
+        };
+        keygen("ed25519", "user");
+        keygen(
+            &optional_text(server, "hostKey").unwrap_or("ed25519".to_owned()),
+            "host",
+        );
+        self.key = fs::read_to_string(file("user")).expect("user key");
+        fs::copy(file("user.pub"), file("authorized")).expect("authorized key");
+        let port = {
+            let listener = std::net::TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).expect("bind");
+            listener.local_addr().expect("address").port()
+        };
+        let sftp_server = tools.sftp_server.display().to_string();
+        let subsystem = match server.get("subsystem") {
+            None => Some(sftp_server.clone()),
+            Some(Json::Null) => None,
+            Some(_) => Some(text(server, "subsystem").replace("SFTP_SERVER", &sftp_server)),
+        };
+        let mut lines = vec![
+            format!("Port {port}"),
+            "ListenAddress 127.0.0.1".to_owned(),
+            format!("HostKey {}", file("host").display()),
+            "PidFile none".to_owned(),
+            format!("AuthorizedKeysFile {}", file("authorized").display()),
+            "StrictModes no".to_owned(),
+            "UsePAM no".to_owned(),
+            "PasswordAuthentication yes".to_owned(),
+            "KbdInteractiveAuthentication no".to_owned(),
+        ];
+        lines.extend(subsystem.map(|command| format!("Subsystem sftp {command}")));
+        lines.extend(
+            array(server, "options")
+                .iter()
+                .map(|option| option.as_str().expect("an option").to_string_lossy()),
+        );
+        let config = file("sshd_config");
+        let check = |lines: &[String]| {
+            fs::write(&config, lines.join("\n") + "\n").expect("sshd_config");
+            let output = Command::new(&tools.sshd)
+                .args(["-t", "-f"])
+                .arg(&config)
+                .output()
+                .expect("sshd -t");
+            if output.status.success() {
+                Ok(())
+            } else {
+                Err(String::from_utf8_lossy(&output.stderr).into_owned())
+            }
+        };
+        let mut penalties = lines.clone();
+        penalties.push("PerSourcePenalties no".to_owned());
+        check(&penalties).or_else(|_| check(&lines))?;
+        let log = fs::File::create(file("sshd.log")).expect("sshd.log");
+        let child = Command::new(&tools.sshd)
+            .args(["-D", "-e", "-f"])
+            .arg(&config)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(log)
+            .spawn()
+            .expect("sshd");
+        self.sshd = Some(child);
+        let deadline = Instant::now() + Duration::from_secs(10);
+        while !answers(port) {
+            assert!(
+                Instant::now() < deadline,
+                "sshd did not start: {}",
+                fs::read_to_string(file("sshd.log")).unwrap_or_default()
+            );
+            std::thread::sleep(Duration::from_millis(25));
+        }
+        Ok(port)
+    }
+
+    pub fn remote(&self, path: &str) -> String {
+        format!("{}/remote/{path}", self.root.display())
+    }
+
+    pub fn local(&self, path: &str) -> PathBuf {
+        match path {
+            "." => self.root.join("local"),
+            path => self.root.join("local").join(path),
+        }
+    }
+
+    pub fn put(&self, entry: &Json) {
+        let full = self.root.join("remote").join(text(entry, "path"));
+        fs::create_dir_all(full.parent().expect("parent")).expect("remote folder");
+        if entry.get("dir").is_some() {
+            fs::create_dir_all(&full).expect("remote folder");
+        } else if let Some(link) = optional_text(entry, "link") {
+            symlink(&link, &full);
+        } else {
+            let size = number(entry, "size").expect("size") as usize;
+            fs::write(&full, file_bytes(size)).expect("remote file");
+        }
+        if let Some(mode) = number(entry, "mode") {
+            set_mode(&full, mode as u32);
+        }
+    }
+
+    pub fn remove_remote(&self, path: &str) {
+        let full = self.root.join("remote").join(path);
+        if full.is_dir() {
+            unlock(&full);
+            fs::remove_dir_all(&full).expect("remove remote folder");
+        } else {
+            fs::remove_file(&full).expect("remove remote file");
+        }
+    }
+
+    pub fn put_local(&self, path: &str, size: usize) {
+        fs::write(self.local(path), file_bytes(size)).expect("local file");
+    }
+
+    /// Drops every proxied connection.
+    pub fn drop_all(&self, name: &str) {
+        let _ = self.drops.send(Some(how(name)));
+        std::thread::sleep(Duration::from_millis(1));
+        let _ = self.drops.send(None);
+    }
+
+    pub fn saved(&self) -> Json {
+        let mut files = Vec::new();
+        self.visit(&self.local("."), "", &mut files);
+        let files: Vec<(&str, Json)> = files.iter().map(|(k, v)| (k.as_str(), v.clone())).collect();
+        Json::object(files)
+    }
+
+    fn visit(&self, dir: &Path, prefix: &str, files: &mut Vec<(String, Json)>) {
+        let mut names: Vec<String> = fs::read_dir(dir)
+            .expect("local folder")
+            .map(|entry| {
+                entry
+                    .expect("entry")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+        names.sort();
+        for name in names {
+            let full = dir.join(&name);
+            if full.is_dir() {
+                files.push((format!("{prefix}{name}/"), Json::Object(Vec::new())));
+                self.visit(&full, &format!("{prefix}{name}/"), files);
+            } else if self.partial {
+                files.push((format!("{prefix}{name}"), Json::Object(Vec::new())));
+            } else {
+                let data = fs::read(&full).expect("saved file");
+                let described = Json::object([
+                    ("size", Json::Number(data.len() as f64)),
+                    ("sha256", Json::string(&hex(&Sha256::digest(&data)[..8]))),
+                ]);
+                files.push((format!("{prefix}{name}"), described));
+            }
+        }
+    }
+}
+
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        if let Some(runtime) = self.runtime.take() {
+            runtime.shutdown_background();
+        }
+        if let Some(mut sshd) = self.sshd.take() {
+            let _ = sshd.kill();
+            let _ = sshd.wait();
+        }
+        unlock(&self.root);
+        let _ = fs::remove_dir_all(&self.root);
+    }
+}
+
+#[cfg(unix)]
+fn symlink(target: &str, path: &Path) {
+    std::os::unix::fs::symlink(target, path).expect("symlink");
+}
+
+#[cfg(not(unix))]
+fn symlink(_: &str, _: &Path) {
+    unreachable!("sshd scenarios need unix");
+}
+
+#[cfg(unix)]
+fn set_mode(path: &Path, mode: u32) {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(mode)).expect("mode");
+}
+
+#[cfg(not(unix))]
+fn set_mode(_: &Path, _: u32) {
+    unreachable!("sshd scenarios need unix");
+}
+
+fn unlock(dir: &Path) {
+    #[cfg(unix)]
+    set_mode(dir, 0o700);
+    for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+        if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            unlock(&entry.path());
+        }
+    }
+}
+
+fn answers(port: u16) -> bool {
+    let address = SocketAddr::from((Ipv4Addr::LOCALHOST, port));
+    StdStream::connect_timeout(&address, Duration::from_secs(1)).is_ok()
+}
+
+/// Whether the TEST-NET address of a blackhole scenario really never answers here.
+pub fn blackhole_works(host: &str) -> bool {
+    let address = format!("{host}:22").parse().expect("an address");
+    matches!(
+        StdStream::connect_timeout(&address, Duration::from_millis(500)),
+        Err(e) if e.kind() == io::ErrorKind::TimedOut
+    )
+}
+
+fn reset(socket: TcpStream) {
+    socket.set_zero_linger().expect("linger");
+}
+
+async fn raw(mut socket: TcpStream, send: Vec<u8>, then: String, when: String) {
+    if !send.is_empty() && socket.write_all(&send).await.is_err() {
+        return;
+    }
+    let mut acted = false;
+    let mut received = Vec::new();
+    loop {
+        let ident = received
+            .windows(2)
+            .position(|w| w == b"\r\n")
+            .map(|i| i + 2);
+        let ready = match when.as_str() {
+            "accept" => true,
+            "data" => ident.is_some(),
+            "kexinit" => ident.is_some_and(|start| {
+                received[start..].first_chunk::<4>().is_some_and(|len| {
+                    received.len() - start >= 4 + u32::from_be_bytes(*len) as usize
+                })
+            }),
+            other => panic!("unknown when {other}"),
+        };
+        if ready && !acted {
+            acted = true;
+            match then.as_str() {
+                "fin" => {
+                    let _ = socket.shutdown().await;
+                }
+                "rst" => {
+                    reset(socket);
+                    return;
+                }
+                "hold" => {}
+                other => panic!("unknown then {other}"),
+            }
+        }
+        let mut buffer = [0; 4096];
+        match socket.read(&mut buffer).await {
+            Ok(n) if n > 0 => received.extend_from_slice(&buffer[..n]),
+            _ => return,
+        }
+    }
+}
+
+async fn proxy(
+    mut client: TcpStream,
+    port: u16,
+    rule: Option<DropRule>,
+    mut drops: watch::Receiver<Option<&'static str>>,
+) {
+    let Ok(mut server) = TcpStream::connect((Ipv4Addr::LOCALHOST, port)).await else {
+        return;
+    };
+    let mut sent = 0;
+    let mut from_client = vec![0; 65536];
+    let mut from_server = vec![0; 65536];
+    let (mut client_open, mut server_open) = (true, true);
+    let how = loop {
+        if !client_open && !server_open {
+            return;
+        }
+        tokio::select! {
+            result = client.read(&mut from_client), if client_open => match result {
+                Ok(0) => {
+                    client_open = false;
+                    let _ = server.shutdown().await;
+                }
+                Ok(n) => if server.write_all(&from_client[..n]).await.is_err() { return },
+                Err(_) => return,
+            },
+            result = server.read(&mut from_server), if server_open => match result {
+                Ok(0) | Err(_) => {
+                    server_open = false;
+                    let _ = client.shutdown().await;
+                }
+                Ok(n) => {
+                    let left = rule.as_ref().map_or(usize::MAX, |rule| rule.bytes - sent);
+                    if client.write_all(&from_server[..n.min(left)]).await.is_err() {
+                        return;
+                    }
+                    if let Some(rule) = &rule {
+                        sent += n.min(left);
+                        if sent >= rule.bytes {
+                            break rule.how;
+                        }
+                    }
+                }
+            },
+            result = drops.changed() => {
+                let how = *drops.borrow_and_update();
+                match (result, how) {
+                    (Ok(()), Some(how)) => break how,
+                    (Ok(()), None) => {}
+                    (Err(_), _) => return,
+                }
+            }
+        }
+    };
+    drop(server);
+    if how == "rst" {
+        reset(client);
+        return;
+    }
+    let _ = client.shutdown().await;
+    while matches!(client.read(&mut from_client).await, Ok(n) if n > 0) {}
+}

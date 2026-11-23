@@ -287,7 +287,8 @@ impl DownloadHost for Host {
     }
 
     fn focus_hub(&mut self) {
-        self.effects.push(obj(vec![("k", Json::string("focusHub"))]));
+        self.effects
+            .push(obj(vec![("k", Json::string("focusHub"))]));
     }
 
     fn open_files(&mut self, files: &[String]) {
@@ -475,7 +476,10 @@ impl Replay {
             *self.effects.entry(kind).or_default() += 1;
         }
         if threw != record.string("threw") {
-            return Err(format!("threw {threw:?}, expected {:?}", record.string("threw")));
+            return Err(format!(
+                "threw {threw:?}, expected {:?}",
+                record.string("threw")
+            ));
         }
         let expected = record.field("effects").ok_or("effects")?.to_compact();
         let actual = Json::Array(std::mem::take(&mut host.effects)).to_compact();
@@ -512,11 +516,28 @@ fn replay(id: &str, style: PathStyle, platform: &str) {
         }
     }
     for kind in [
-        "connect", "end", "sftp", "readdir", "fastGet", "timeout", "interval", "clearTimeout",
-        "clearInterval", "send", "open", "save", "box", "destroyWindow", "focusHub", "openFiles",
+        "connect",
+        "end",
+        "sftp",
+        "readdir",
+        "fastGet",
+        "timeout",
+        "interval",
+        "clearTimeout",
+        "clearInterval",
+        "send",
+        "open",
+        "save",
+        "box",
+        "destroyWindow",
+        "focusHub",
+        "openFiles",
         "mkdir",
     ] {
-        assert!(replay.effects.contains_key(kind), "{id} never reached {kind}");
+        assert!(
+            replay.effects.contains_key(kind),
+            "{id} never reached {kind}"
+        );
     }
 }
 
@@ -562,7 +583,11 @@ fn window() {
             return if start.to_compact() == expected.to_compact() {
                 Ok(())
             } else {
-                Err(format!("{} vs {}", start.to_compact(), expected.to_compact()))
+                Err(format!(
+                    "{} vs {}",
+                    start.to_compact(),
+                    expected.to_compact()
+                ))
             };
         }
         let message = record.string("message").ok_or("message")?;
@@ -585,5 +610,8 @@ fn window() {
             other => Err(format!("expected {other:?}, got {actual:?}")),
         }
     });
-    assert!(starts > 50 && errors > 200 && alerts > 200, "{starts} {errors} {alerts}");
+    assert!(
+        starts > 50 && errors > 200 && alerts > 200,
+        "{starts} {errors} {alerts}"
+    );
 }

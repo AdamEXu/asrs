@@ -34,11 +34,9 @@ pub fn friendly_error(message: &str, address: &JsString, remote_path: &JsString)
     };
     match message {
         "No such file" => around("Failed to open log folder at <u>", remote_path, "</u>"),
-        "Timed out while waiting for handshake" | "Fetch failed" => around(
-            "Robot not found at <u>",
-            address,
-            "</u> (check connection)",
-        ),
+        "Timed out while waiting for handshake" | "Fetch failed" => {
+            around("Robot not found at <u>", address, "</u> (check connection)")
+        }
         _ if message.contains("ENOTFOUND") => around("Unknown address <u>", address, "</u>"),
         "All configured authentication methods failed" => {
             around("Failed to authenticate to robot at <u>", address, "</u>")

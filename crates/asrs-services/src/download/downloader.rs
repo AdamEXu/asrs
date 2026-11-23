@@ -187,12 +187,22 @@ struct Batch {
 
 enum Pending {
     ListSftp,
-    ListRoot { sftp: SftpId },
+    ListRoot {
+        sftp: SftpId,
+    },
     ListFolder(Listing),
-    SaveSftp { files: Vec<String>, save_path: String },
+    SaveSftp {
+        files: Vec<String>,
+        save_path: String,
+    },
     SaveFolder(SaveMany),
-    GetSingle { save_path: String },
-    GetMany { batch: usize, index: usize },
+    GetSingle {
+        save_path: String,
+    },
+    GetMany {
+        batch: usize,
+        index: usize,
+    },
 }
 
 pub struct Downloader {
@@ -535,8 +545,7 @@ impl Downloader {
         }
         self.send(host, WindowMessage::SetList(listing.items.clone()));
         for item in listing.items {
-            self.sizes
-                .insert(item.name, item.size.unwrap_or(f64::NAN));
+            self.sizes.insert(item.name, item.size.unwrap_or(f64::NAN));
         }
     }
 
@@ -642,8 +651,8 @@ impl Downloader {
         };
         let mut downloads = Vec::new();
         for (index, task) in save.tasks.into_iter().enumerate() {
-            let saved =
-                host.exists(&task.local) && host.file_size(&task.local).is_ok_and(|s| s >= task.size);
+            let saved = host.exists(&task.local)
+                && host.file_size(&task.local).is_ok_and(|s| s >= task.size);
             if saved {
                 batch.complete_count += 1;
                 batch.skip_count += 1;
