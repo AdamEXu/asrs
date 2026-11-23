@@ -25,6 +25,7 @@ use crate::form::{NumberInput, Select, SelectOption};
 use crate::list_cx::{self, SourceListCx, js_error, with_env};
 use crate::simple_statistics as stats;
 
+pub mod renderer;
 pub mod values;
 
 const UPDATE_PERIOD_MS: f64 = 100.0;

@@ -20,10 +20,9 @@ use chart::{Chart, Dataset};
 
 const MAX_TITLE_LENGTH: usize = 20;
 
-/// The parts of `StatisticsRendererCommand` the chart reads.
+/// The parts of `StatisticsRendererCommand` the chart's data is made of.
 #[derive(Clone, Debug, PartialEq)]
 pub struct HistogramCommand {
-    pub change_counter: f64,
     pub bins: Vec<f64>,
     pub step_size: f64,
     pub fields: Vec<HistogramField>,
@@ -47,8 +46,6 @@ pub struct ScaleLayout {
 
 pub struct Histogram {
     chart: Chart,
-    change_counter: f64,
-    first_render: bool,
     last_is_light: Option<bool>,
 }
 
@@ -57,8 +54,6 @@ impl Histogram {
     pub fn new(device_pixel_ratio: f64) -> Histogram {
         Histogram {
             chart: Chart::new(device_pixel_ratio),
-            change_counter: -1.0,
-            first_render: true,
             last_is_light: None,
         }
     }
@@ -95,58 +90,47 @@ impl Histogram {
         self.chart.run_callback(env)
     }
 
-    /// One animation frame: the callbacks queued before it, in order. A callback that throws
-    /// does not stop the others.
-    pub fn frame(&mut self, env: &mut Env<'_>) -> Result<(), JsError> {
-        let mut result = Ok(());
-        for _ in 0..self.callbacks() {
-            if let Some((_, Err(error))) = self.run_callback(env) {
-                result = result.and(Err(error));
-            }
+    /// The colours for a theme, when it is not the one set last.
+    pub fn set_theme(&mut self, dark: bool, env: &mut Env<'_>) -> Result<(), JsError> {
+        let light = !dark;
+        if self.last_is_light == Some(light) {
+            return Ok(());
         }
-        result
+        self.last_is_light = Some(light);
+        let (text, grid) = if light {
+            ("#222", "#eee")
+        } else {
+            ("#eee", "#333")
+        };
+        self.chart.legend_color = text.to_owned();
+        self.chart.scale_colors.ticks = text.to_owned();
+        self.chart.scale_colors.border = text.to_owned();
+        self.chart.scale_colors.grid = grid.to_owned();
+        self.chart.update(env)
     }
 
-    pub fn render(
+    /// The data of a new command.
+    pub fn set_data(
         &mut self,
         command: &HistogramCommand,
         dark: bool,
         env: &mut Env<'_>,
     ) -> Result<(), JsError> {
-        let light = !dark;
-        if self.last_is_light != Some(light) {
-            self.last_is_light = Some(light);
-            let (text, grid) = if light {
-                ("#222", "#eee")
-            } else {
-                ("#eee", "#333")
-            };
-            self.chart.legend_color = text.to_owned();
-            self.chart.scale_colors.ticks = text.to_owned();
-            self.chart.scale_colors.border = text.to_owned();
-            self.chart.scale_colors.grid = grid.to_owned();
-            self.chart.update(env)?;
-        }
-        if command.change_counter != self.change_counter || self.first_render {
-            self.first_render = false;
-            self.change_counter = command.change_counter;
-            let half = command.step_size / 2.0;
-            self.chart.labels = command.bins.iter().map(|value| value + half).collect();
-            self.chart.datasets = command
-                .fields
-                .iter()
-                .map(|field| {
-                    Rc::new(Dataset {
-                        label: label(&field.title),
-                        data: field.counts.clone(),
-                        background: ensure_theme_contrast(&field.color, dark),
-                    })
+        let half = command.step_size / 2.0;
+        self.chart.labels = command.bins.iter().map(|value| value + half).collect();
+        self.chart.datasets = command
+            .fields
+            .iter()
+            .map(|field| {
+                Rc::new(Dataset {
+                    label: label(&field.title),
+                    data: field.counts.clone(),
+                    background: ensure_theme_contrast(&field.color, dark),
                 })
-                .collect();
-            self.chart.step_size = command.step_size;
-            self.chart.update(env)?;
-        }
-        Ok(())
+            })
+            .collect();
+        self.chart.step_size = command.step_size;
+        self.chart.update(env)
     }
 
     /// The canvas's display list since its last full clear.
