@@ -18,6 +18,7 @@ use asrs_services::asset_downloader;
 use asrs_services::beta::{self, BetaConfig, BetaStartup};
 use asrs_services::constants::{AKIT_PATH_INPUT_PERIOD_MS, layout_default_path};
 use asrs_services::dialog::MessageBox;
+use asrs_services::download::DownloadService;
 use asrs_services::ds_layout::default_ds_layout;
 use asrs_services::fs::RealFs;
 use asrs_services::lifecycle::{self, AppPaths, HubRestore, MainState, StartupWindow};
@@ -63,6 +64,7 @@ pub const RELEASE_PROFILE: ReleaseProfile = if cfg!(feature = "parity") {
 pub struct MainProcess {
     state: MainState,
     updater: UpdateChecker,
+    download: Option<DownloadService>,
     /// `menuTemplate`.
     menu: Vec<MenuItem>,
     hubs: Vec<(WindowId, WeakEntity<Hub>)>,
@@ -244,6 +246,7 @@ impl MainProcess {
         MainProcess {
             state,
             updater: UpdateChecker::new(),
+            download: None,
             menu: Vec::new(),
             hubs: Vec::new(),
         }
@@ -441,9 +444,18 @@ impl MainProcess {
             .ok()
     }
 
-    /// `downloadStop()`, which closing the download, licenses and source list help windows calls.
-    /// The download service (P04) stops here.
-    pub fn download_stop(_cx: &mut App) {}
+    /// `downloadStop()`, which closing a licenses or source list help window calls too.
+    pub fn download_stop(cx: &App) {
+        let main = cx.try_global::<MainProcess>();
+        if let Some(download) = main.and_then(|main| main.download.as_ref()) {
+            download.stop();
+        }
+    }
+
+    /// The downloader [`MainProcess::download_stop`] stops, from the first `openDownload` on.
+    pub fn set_download(cx: &mut App, download: DownloadService) {
+        cx.global_mut::<MainProcess>().download = Some(download);
+    }
 
     /// The beta block of a hub window's `dom-ready`.
     pub(crate) fn beta_init(cx: &mut App, window: WindowId) {
@@ -937,6 +949,7 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
     cx.set_global(MainProcess {
         state,
         updater: UpdateChecker::new(),
+        download: None,
         menu,
         hubs: Vec::new(),
     });

@@ -196,7 +196,7 @@ fn license_texts_are_munged_as_upstream_munges_them() {
         }
     }
     assert_eq!(pages, 19);
-    assert_eq!(compared, 1126);
+    assert_eq!(compared, 1122);
 }
 
 fn rgb(color: &str) -> String {

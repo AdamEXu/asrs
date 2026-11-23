@@ -568,6 +568,7 @@ impl CoreText {
             let Face {
                 color, fallback, ..
             } = self.faces[face as usize];
+            // Blink creates fallback fonts at the zoomed size.
             let zoomed = ((color || fallback) && zoom != 1.0).then(|| {
                 let device = self.device_font(face, &run_font, spec.size * zoom);
                 let mut zoomed = vec![CGSize::new(0.0, 0.0); ids.len()];

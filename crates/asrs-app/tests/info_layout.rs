@@ -240,7 +240,7 @@ fn report(failures: &[String], equal: usize) {
 #[test]
 fn licenses() {
     let name = |tag: &str, class: &str| (tag == "div").then(|| class.to_owned());
-    let (mut failures, mut equal) = (Vec::new(), 0);
+    let (mut failures, mut equal, mut recorded) = (Vec::new(), 0, 0);
     let pages = pages("info/licenses", &name);
     assert_eq!(pages.len(), 15);
     for page in pages {
@@ -274,10 +274,11 @@ fn licenses() {
                 laid.text(boxes.collect());
             }
         }
+        recorded += page.items.len();
         equal += same(&page, &laid, layout.height, &mut failures);
     }
     report(&failures, equal);
-    assert_eq!(equal, EQUAL);
+    assert_eq!(equal, recorded);
 }
 
 #[test]
@@ -287,7 +288,7 @@ fn source_list_help() {
         "div" => Some(class.to_owned()),
         other => Some(other.to_owned()),
     };
-    let (mut failures, mut equal) = (Vec::new(), 0);
+    let (mut failures, mut equal, mut recorded) = (Vec::new(), 0, 0);
     let pages = pages("info/source-list-help", &name);
     assert_eq!(pages.len(), 96);
     for page in pages {
@@ -329,10 +330,11 @@ fn source_list_help() {
             laid.named("source-types", l.sources);
             laid.block(&l.sources_text, 1);
         }
+        recorded += page.items.len();
         equal += same(&page, &laid, layout.height, &mut failures);
     }
     report(&failures, equal);
-    assert_eq!(equal, EQUAL);
+    assert_eq!(equal, recorded);
 }
 
 #[test]
@@ -341,7 +343,7 @@ fn beta_welcome() {
         "body" | "tbody" | "span" => None,
         other => Some(other.to_owned()),
     };
-    let (mut failures, mut equal) = (Vec::new(), 0);
+    let (mut failures, mut equal, mut recorded) = (Vec::new(), 0, 0);
     let pages = pages("info/beta-welcome", &name);
     assert_eq!(pages.len(), 7);
     for page in pages {
@@ -375,8 +377,9 @@ fn beta_welcome() {
         laid.block(&layout.outro.1, 3);
         laid.named("button", layout.button);
         laid.block(&layout.button_text, 1);
+        recorded += page.items.len();
         equal += same(&page, &laid, layout.height, &mut failures);
     }
     report(&failures, equal);
-    assert_eq!(equal, EQUAL);
+    assert_eq!(equal, recorded);
 }
