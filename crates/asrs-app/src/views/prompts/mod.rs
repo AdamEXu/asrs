@@ -7,8 +7,6 @@ pub mod window;
 
 pub use window::PromptWindow;
 
-use std::cell::Cell;
-
 use asrs_js::ops;
 use asrs_js::value::JsValue;
 use asrs_tabs::prompts::{
@@ -93,31 +91,29 @@ pub fn post(
     Ok(())
 }
 
-/// The window of `openPreferences`, or `None` when it was open and now has the focus. Its first
-/// reply closes it and goes to `on_reply`.
+/// The window of `openPreferences`, or `None` when it was open and now has the focus. Its replies
+/// close it and go to `on_reply`.
 pub fn open_preferences(
     cx: &mut App,
     parent: WindowId,
-    on_reply: impl FnOnce(JsValue, &mut App) + 'static,
+    on_reply: impl Fn(JsValue, &mut App) + 'static,
 ) -> SingletonOpening<PromptWindow> {
     let kind = WindowKind::Preferences;
     let opened = windows::open_preferences(cx, parent, |window, cx| load(kind, window, cx))?;
     if let Some((id, view)) = &opened {
-        connect(cx, *id, view, first_reply(on_reply));
+        connect(cx, *id, view, close_and(on_reply));
     }
     Ok(opened)
 }
 
-/// Closes the prompt on its first reply, which goes to `on_reply`.
-fn first_reply(
-    on_reply: impl FnOnce(JsValue, &mut App) + 'static,
+/// Closes the prompt and hands its reply to `on_reply`. Enter on a button posts two replies, the
+/// window's `keydown` listener's and the button's, and `main.ts` handles both.
+fn close_and(
+    on_reply: impl Fn(JsValue, &mut App) + 'static,
 ) -> impl Fn(JsValue, WindowId, &mut App) + 'static {
-    let on_reply = Cell::new(Some(on_reply));
     move |value, id, cx| {
-        if let Some(on_reply) = on_reply.take() {
-            windows::close(cx, id);
-            on_reply(value, cx);
-        }
+        windows::close(cx, id);
+        on_reply(value, cx);
     }
 }
 
@@ -136,20 +132,19 @@ fn alert(message: String, id: WindowId, cx: &mut App) {
     }
 }
 
-/// Opens the prompt a context menu item asks for. Its first reply closes it and goes to
-/// `on_reply`.
+/// Opens the prompt a context menu item asks for. Its replies close it and go to `on_reply`.
 pub fn ask(
     cx: &mut App,
     parent: WindowId,
     prompt: &Prompt,
-    on_reply: impl FnOnce(JsValue, &mut App) + 'static,
+    on_reply: impl Fn(JsValue, &mut App) + 'static,
 ) -> Opening<PromptWindow> {
     open(
         cx,
         prompt.window(),
         parent,
         &prompt.initial(),
-        first_reply(on_reply),
+        close_and(on_reply),
     )
 }
 

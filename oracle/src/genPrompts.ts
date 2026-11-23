@@ -32,8 +32,8 @@ const out = (value: object) => process.stdout.write(JSON.stringify(value) + "\n"
 // on the port, alert and uncaught error since the previous record. A flow ends at the reply after
 // which main.ts destroys the window, which is the first one except for export.html's help URL.
 // The "preferences" set is preferences.html alone: its records also hold each option's "hidden"
-// and each input's placeholder, and an end record the bytes jsonfile writes for the first reply,
-// which is what openPreferences does with it.
+// and each input's placeholder, and an end record the bytes prefs.json is left with when jsonfile
+// writes each reply, as openPreferences does (Enter on a button posts two).
 
 interface Step {
   op: "select" | "text" | "insert" | "key" | "click" | "pick" | "post";
@@ -332,6 +332,11 @@ function preferenceFlows(): Flow[] {
   add("space on exit", post(full), [...tabs(2, true), key(" ")]);
   add("enter on exit", post(full), [...tabs(2, true), key("Enter")]);
   add("enter on confirm", post(full), [...tabs(1, true), key("Enter")]);
+  for (const [name, n] of [["exit", 2], ["confirm", 1]] as [string, number][]) {
+    for (const press of ["Enter", "Shift+Enter", "NumpadEnter", "Shift+NumpadEnter", " "]) {
+      add(`${press} on ${name} after an edit`, post(full), [pick("theme", "light"), select("robotAddress"), text("typed"), select("field3dAntialiasing"), ...tabs(3 - n), key(press)]);
+    }
+  }
   add("numpad enter on exit", post(full), [...tabs(2, true), key("NumpadEnter")]);
   add("numpad enter on confirm", post(full), [...tabs(1, true), key("NumpadEnter")]);
   add("enter on a select", post(full), [select("coordinateSystem"), key("NumpadEnter"), key("Enter")]);
@@ -528,8 +533,8 @@ try {
   const prefsFile = path.join(scratch, "prefs.json");
   const written = new Map<string, string>();
   for (const r of preferences ? records : []) {
-    if (r.kind === "end" || r.state.replies.length === 0 || written.has(r.flow)) continue;
-    jsonfile.writeFileSync(prefsFile, r.state.replies[0]);
+    if (r.kind === "end" || r.state.replies.length === 0) continue;
+    for (const reply of r.state.replies) jsonfile.writeFileSync(prefsFile, reply);
     written.set(r.flow, fs.readFileSync(prefsFile, "utf8"));
   }
   for (const r of records) {

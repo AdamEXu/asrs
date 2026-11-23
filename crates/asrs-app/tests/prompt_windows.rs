@@ -5,7 +5,7 @@
 //! headless app, gets main's messages, and then the recorded user input as GPUI input events.
 //! After the open and after every step the controls, the focused element, the buttons' class,
 //! and the replies, alerts and errors since the previous record must equal the recording, and so
-//! must the bytes `prefs.json` gets from a preferences flow's first reply. Every flow runs in an active and in an inactive window, whose blur events GPUI does not deliver.
+//! must the bytes a preferences flow's replies leave in `prefs.json`. Every flow runs in an active and in an inactive window, whose blur events GPUI does not deliver.
 
 #[path = "../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code)]
@@ -140,7 +140,7 @@ struct Prompt<'a> {
     window: AnyWindowHandle,
     view: Entity<PromptWindow>,
     events: Rc<RefCell<Vec<PromptEvent>>>,
-    /// The bytes main writes for the first reply.
+    /// The bytes main leaves in `prefs.json`.
     written: Option<String>,
     preferences: bool,
     width: f32,
@@ -392,10 +392,8 @@ impl Prompt<'_> {
         for event in self.events.borrow_mut().drain(..) {
             match event {
                 PromptEvent::Reply(value) => {
-                    if self.written.is_none() {
-                        let bytes = json_file::stringify(&value).expect("a JSON reply");
-                        self.written = Some(String::from_utf8(bytes).expect("UTF-8"));
-                    }
+                    let bytes = json_file::stringify(&value).expect("a JSON reply");
+                    self.written = Some(String::from_utf8(bytes).expect("UTF-8"));
                     replies.push(js_json::from_js(&value));
                 }
                 PromptEvent::Alert(message) => alerts.push(js_text(&message)),

@@ -127,7 +127,8 @@ impl PromptWindow {
                     if !platform::numpad_enter(cx) {
                         view.act(|page| page.click_confirm(), window, cx);
                     }
-                    if view.commit(window, cx) {
+                    let modified = modifiers.control || modifiers.alt || modifiers.platform;
+                    if view.commit(window, cx) || (!modified && view.press(window, cx)) {
                         cx.stop_propagation();
                     }
                 }
@@ -321,6 +322,19 @@ impl PromptWindow {
             id => self.select(id, window, cx),
         }
         cx.notify();
+    }
+
+    /// Enter's `keypress` on the focused button or link, which clicks it; false when neither has
+    /// focus. GPUI would click at the key's release, after a reply closed the window.
+    fn press(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> bool {
+        let click: fn(&mut dyn PromptPage) -> Vec<PromptEvent> = match self.active(window, cx) {
+            Some(EXIT) => |page| page.click_exit(),
+            Some(CONFIRM) => |page| page.click_confirm(),
+            Some(HELP) => |page| page.click_help(),
+            _ => return false,
+        };
+        self.click(click, window, cx);
+        true
     }
 
     /// Fires the `change` event the focused text or number field owes; false when no such
