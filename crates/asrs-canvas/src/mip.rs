@@ -122,7 +122,7 @@ impl Mip {
 
 /// One `SkMipmap` level: a box over two pixels of an even axis and a 1-2-1 filter over three of
 /// an odd one, truncated.
-fn downsample(src: &Pixmap) -> Option<Pixmap> {
+pub(crate) fn downsample(src: &Pixmap) -> Option<Pixmap> {
     let (sw, sh) = (src.width() as usize, src.height() as usize);
     let (w, h) = ((sw / 2).max(1), (sh / 2).max(1));
     let taps = |size: usize| -> &'static [u32] {

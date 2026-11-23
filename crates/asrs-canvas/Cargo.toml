@@ -17,8 +17,18 @@ core-graphics = "=0.24.0"
 core-text = "=21.0.0"
 icu_properties = "=2.4.0"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+icu_properties = "=2.4.0"
+png = "=0.18.1"
+rustybuzz = "=0.20.1"
+skrifa = "=0.37.0"
+yeslogic-fontconfig-sys = "=6.0.1"
+
 [dev-dependencies]
 asrs-parity = { path = "../asrs-parity" }
+
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+sha2 = "=0.10.9"
 
 [lints]
 workspace = true

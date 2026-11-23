@@ -50,7 +50,11 @@ impl MaskGammaLut {
         return MaskGammaLut::from_bytes(include_bytes!(
             "../../../../parity/vectors/canvas/lut-macos.bin"
         ));
-        #[cfg(not(target_os = "macos"))]
+        #[cfg(target_os = "linux")]
+        return MaskGammaLut::from_bytes(include_bytes!(
+            "../../../../parity/vectors/canvas/lut-linux.bin"
+        ));
+        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
         return None;
     }
 }

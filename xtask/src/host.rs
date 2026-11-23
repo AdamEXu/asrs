@@ -1340,8 +1340,14 @@ fn font_hashes() -> Result<Vec<(String, Option<String>)>> {
                 "monospace:bold",
                 "system-ui",
                 "ui-sans-serif",
+                "monospace:italic",
                 "Courier",
                 "Courier:bold",
+                "Arial",
+                "Arial:bold",
+                "Arial:italic",
+                "Arial:bold:italic",
+                "Times New Roman",
                 "emoji",
             ] {
                 let file = command_text("fc-match", &["-f", "%{file}", pattern])

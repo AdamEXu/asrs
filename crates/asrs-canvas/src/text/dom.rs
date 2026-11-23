@@ -240,6 +240,7 @@ impl Layout {
 
 /// Font metrics of the zoomed font in device pixels: ascent, descent and line height.
 pub fn line_metrics(backend: &mut dyn TextBackend, style: &Style, scale: f32) -> (Lu, Lu, Lu) {
+    backend.set_device_scale(scale);
     let mut zoomed = style.font;
     zoomed.size *= scale;
     let m = backend.metrics(&zoomed);
@@ -885,6 +886,7 @@ pub fn rasterize(
     scale: f32,
     color: [u8; 3],
 ) -> Option<RunImage> {
+    backend.set_device_scale(scale);
     let origin = fraction as f32 / 64.0;
     let mut placed: Vec<(i32, Arc<Mask>)> = Vec::with_capacity(glyphs.len());
     for g in glyphs {

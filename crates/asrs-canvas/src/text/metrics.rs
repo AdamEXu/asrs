@@ -26,7 +26,8 @@ pub struct TextMetrics {
     pub ideographic_baseline: f64,
 }
 
-/// `gfx::RectF` as `[x, y, right, bottom]`, with its rule that empty rects never grow a union.
+/// `gfx::RectF` as `[x, y, right, bottom]`, with its rule that a union with an empty rect is the
+/// other rect, which keeps the position of the last of several empty ones.
 #[derive(Clone, Copy, Default)]
 struct RectF([f32; 4]);
 
@@ -36,11 +37,11 @@ impl RectF {
     }
 
     fn union(&mut self, other: RectF) {
-        if other.is_empty() {
-            return;
-        }
         if self.is_empty() {
             *self = other;
+            return;
+        }
+        if other.is_empty() {
             return;
         }
         let [x, y, r, b] = &mut self.0;
@@ -247,10 +248,10 @@ impl TextBackend for FixedAdvance {
     fn glyph_bounds(&mut self, glyph: Glyph) -> Option<Bounds> {
         let unit = glyph.id as u16;
         let table = table();
-        if table.blank.contains(&unit) {
+        let size = f32::from_bits(glyph.face);
+        if table.blank.contains(&unit) || size == 0.0 {
             return None;
         }
-        let size = f32::from_bits(glyph.face);
         Some(Bounds {
             left: 0.0,
             top: table.ink_top * size,
