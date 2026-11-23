@@ -4,6 +4,7 @@ pub mod asset_loader;
 pub mod beta;
 pub mod constants;
 pub mod dialog;
+pub mod download;
 pub mod download_deps;
 pub mod ds_layout;
 pub mod export_flow;
