@@ -59,6 +59,11 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "hub_console"
+harness = false
+required-features = ["parity"]
+
+[[test]]
 name = "hub_table"
 harness = false
 required-features = ["parity"]
