@@ -171,12 +171,15 @@ impl<Cx: HubTabCx + 'static> HubTabFactory<Cx> {
                 Box::new(VideoController::new()),
                 Box::new(VideoRenderer::new(Rc::default())),
             ),
-            Some(TabType::Joysticks) => (
-                Box::new(JoysticksController::new(cx)),
-                Box::new(JoysticksRenderer::new(Rc::new(RefCell::new(
-                    JoysticksDom::default(),
-                )))),
-            ),
+            Some(TabType::Joysticks) => {
+                let controller = JoysticksController::new(cx);
+                let renderer = cx.view_renderer(TabType::Joysticks).unwrap_or_else(|| {
+                    Box::new(JoysticksRenderer::new(Rc::new(RefCell::new(
+                        JoysticksDom::default(),
+                    ))))
+                });
+                (Box::new(controller), renderer)
+            }
             Some(TabType::Swerve) => (
                 Box::new(SwerveController::new(cx)),
                 Box::new(SwerveRenderer::new(Rc::new(RefCell::new(

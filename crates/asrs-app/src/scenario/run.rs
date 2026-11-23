@@ -6,18 +6,20 @@ use std::time::{Duration, Instant};
 
 use asrs_js::value::JsValue;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
+use asrs_model::preferences::Preferences;
 use asrs_model::selection::{Selection, SelectionMode};
 use asrs_model::selection_impl::SelectionImpl;
 use asrs_services::fs::RealFs;
 use asrs_services::lifecycle::{AppPaths, MainState};
 use asrs_services::path::PathStyle;
+use asrs_services::window_manager::Platform;
 use asrs_services::windows::{Rect, WindowSystem};
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
-    AnyWindowHandle, AppContext, Context, Entity, IntoElement, KeyUpEvent, Keystroke, Modifiers,
-    MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, PlatformInput,
-    Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div, point, px,
-    rgb, size,
+    AnyWindowHandle, App, AppContext, Context, Entity, IntoElement, KeyUpEvent, Keystroke,
+    Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
+    PlatformInput, Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div,
+    point, px, rgb, size,
 };
 use asrs_ui::parity::Recorder;
 use asrs_ui::platform::dialog::{Reply, Script};
@@ -25,14 +27,17 @@ use asrs_ui::theme::ThemeSource;
 
 use super::capture::{self, Probes, Shot};
 use super::{
-    Action, Button, COLUMNS, DialogReply, MouseKind, PATCH, Page, Scenario, Theme, Wheel,
+    Action, Button, COLUMNS, DialogReply, MouseKind, PATCH, Page, Scenario, Seed, Theme, Wheel,
     patch_colours,
 };
 use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
 use crate::hub_dialogs;
 use crate::main_process::{MainProcess, process_platform};
-use crate::menus::bridge::ScriptedMenu;
+use crate::menus::app_menu;
+use crate::menus::bridge::{MenuAction, ScriptedMenu};
+use crate::menus::dispatch::dispatch;
+use crate::menus::model::{Command, MenuItem};
 use crate::views::field3d::WwwRoot;
 use crate::views::frame::{FrameHost, HubFrame};
 use crate::views::hub_host::{HubEntityHost, boot_messages};
@@ -204,6 +209,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             let mut variant = Variant {
                 headless: &mut headless,
                 scenario: &scenario,
+                scenario_dir: options.scenario.parent().unwrap_or(Path::new("")),
                 probes: &probes,
                 inputs: options.inputs.as_deref(),
                 bundled_assets: options.bundled_assets.as_deref(),
@@ -237,6 +243,7 @@ struct Saves {
 struct Variant<'a> {
     headless: &'a mut HeadlessCapture,
     scenario: &'a Scenario,
+    scenario_dir: &'a Path,
     probes: &'a Probes,
     inputs: Option<&'a Path>,
     bundled_assets: Option<&'a Path>,
@@ -377,6 +384,36 @@ fn scroll_delta(wheel: &Wheel) -> Result<ScrollDelta, String> {
         wheel.wheel_ticks_x as f32,
         wheel.wheel_ticks_y as f32,
     )))
+}
+
+fn click_app_menu(labels: &[String], cx: &mut App) -> Result<(), String> {
+    fn find(items: &[MenuItem], labels: &[String], found: &mut Vec<Command>) {
+        for item in items {
+            if let Some(submenu) = &item.submenu {
+                find(submenu, labels, found);
+            } else if item.label.as_ref().is_some_and(|l| labels.contains(l)) {
+                found.extend(item.command);
+            }
+        }
+    }
+    let prefs = Preferences::default();
+    let menu = app_menu::template(Platform::current(), &prefs, crate::IDENTITY);
+    let mut found = Vec::new();
+    find(&menu, labels, &mut found);
+    let &[command] = found.as_slice() else {
+        return Err(format!(
+            "{} application menu items are labelled {labels:?}",
+            found.len()
+        ));
+    };
+    dispatch(
+        MenuAction::Command {
+            command,
+            checked: false,
+        },
+        cx,
+    );
+    Ok(())
 }
 
 impl Variant<'_> {
@@ -743,6 +780,12 @@ impl Variant<'_> {
                     .update(|cx| ScriptedMenu::click(cx, path))?;
                 self.settle();
             }
+            Action::AppMenu { labels } => {
+                self.headless
+                    .context()
+                    .update(|cx| click_app_menu(labels, cx))?;
+                self.settle();
+            }
             Action::Prompt { page } => self.switch_prompt(*page)?,
             Action::Capture {
                 name,
@@ -766,7 +809,14 @@ impl Variant<'_> {
     fn start_main(&mut self) -> Result<(JsValue, JsValue), String> {
         let user_data = self.dir.join("userData");
         std::fs::create_dir_all(&user_data).map_err(|e| format!("{}: {e}", user_data.display()))?;
-        capture::write(&user_data.join("prefs.json"), &self.prefs_seed()?)?;
+        for (file, bytes) in self.seeds()? {
+            let file = user_data.join(file);
+            if let Some(parent) = file.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| format!("{}: {e}", parent.display()))?;
+            }
+            std::fs::write(&file, bytes).map_err(|e| format!("{}: {e}", file.display()))?;
+        }
         let absolute = |p: &Path| {
             std::path::absolute(p)
                 .map(|p| p.to_string_lossy().into_owned())
@@ -806,10 +856,24 @@ impl Variant<'_> {
         }
     }
 
-    fn prefs_seed(&self) -> Result<String, String> {
-        asrs_js::json::stringify(&seeded_prefs(self.scenario, self.theme)?)
-            .map_err(|e| format!("prefs: {e:?}"))
-            .map(Option::unwrap_or_default)
+    /// What the Electron driver seeds in userData.
+    fn seeds(&self) -> Result<Vec<(String, Vec<u8>)>, String> {
+        let json = |file: &str, value: &JsValue| {
+            asrs_js::json::stringify(value)
+                .map_err(|e| format!("{file}: {e:?}"))
+                .map(|text| text.unwrap_or_default().into_bytes())
+        };
+        let prefs = seeded_prefs(self.scenario, self.theme)?;
+        let mut seeds = vec![("prefs.json".to_owned(), json("prefs", &prefs)?)];
+        for (file, seed) in &self.scenario.user_assets {
+            let bytes = match seed {
+                Seed::Json(value) => json(file, value)?,
+                Seed::File(path) => std::fs::read(self.scenario_dir.join(path))
+                    .map_err(|e| format!("{file}: {path}: {e}"))?,
+            };
+            seeds.push((file.clone(), bytes));
+        }
+        Ok(seeds)
     }
 
     fn open(&mut self) -> Result<(), String> {
@@ -948,10 +1012,7 @@ impl Variant<'_> {
                 self.scale,
                 self.theme,
                 &exceptions,
-                &capture::collect_files(
-                    self.dir,
-                    &[("prefs.json", self.prefs_seed()?.into_bytes())],
-                )?,
+                &capture::collect_files(self.dir, &self.seeds()?)?,
                 &dialogs,
             ),
         )

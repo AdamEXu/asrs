@@ -95,6 +95,7 @@ pub fn kind(action: &Action) -> &'static str {
         Action::Key { .. } => "key",
         Action::Dialog(_) => "dialog",
         Action::Menu { .. } => "menu",
+        Action::AppMenu { .. } => "appMenu",
         Action::Prompt { .. } => "prompt",
         Action::Capture { .. } => "capture",
     }
@@ -154,12 +155,12 @@ pub struct WrittenFile {
 /// Copies what the port's main wrote to `<dir>/userData` into `<dir>/files`, with the driver's
 /// filter: top-level JSON files and the asset folders. `seeds` are the files the run seeded,
 /// with the bytes it seeded them with.
-pub fn collect_files(dir: &Path, seeds: &[(&str, Vec<u8>)]) -> Result<Vec<WrittenFile>, String> {
+pub fn collect_files(dir: &Path, seeds: &[(String, Vec<u8>)]) -> Result<Vec<WrittenFile>, String> {
     fn visit(
         root: &Path,
         rel: &Path,
         out_root: &Path,
-        seeds: &[(&str, Vec<u8>)],
+        seeds: &[(String, Vec<u8>)],
         written: &mut Vec<WrittenFile>,
     ) -> Result<(), String> {
         let full = root.join(rel);

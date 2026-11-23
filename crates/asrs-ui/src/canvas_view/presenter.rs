@@ -124,6 +124,11 @@ impl FramePresenter {
     /// Paints the image one device pixel per bitmap pixel with its top-left corner where Chromium
     /// snaps the canvas box's origin.
     pub fn paint(&self, origin: [f32; 2], window: &mut Window) {
+        self.paint_rounded(origin, 0.0, window);
+    }
+
+    /// [`FramePresenter::paint`] clipped to corners of `radius` logical px.
+    pub fn paint_rounded(&self, origin: [f32; 2], radius: f32, window: &mut Window) {
         let Some(image) = self.image.clone() else {
             return;
         };
@@ -137,7 +142,7 @@ impl FramePresenter {
             ),
             size: size(to_px(device.width.0), to_px(device.height.0)),
         };
-        let _ = window.paint_image(bounds, bounds, Corners::default(), image, 0, false);
+        let _ = window.paint_image(bounds, bounds, Corners::all(px(radius)), image, 0, false);
     }
 }
 
