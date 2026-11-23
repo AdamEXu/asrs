@@ -331,7 +331,7 @@ async fn run(
     };
     let mut downloader = Downloader::new(style);
     loop {
-        while let Some(event) = host.clients.next() {
+        while let Some(event) = host.clients.next_event() {
             client_event(event, &mut downloader, &mut host, &network);
         }
         let due = host.timers.first_key_value().map(|(key, _)| key.0);

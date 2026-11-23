@@ -163,7 +163,7 @@ fn offer() -> Vec<u8> {
             key: None,
         },
     });
-    while clients.next().is_some() {}
+    while clients.next_event().is_some() {}
     server.join().expect("server")
 }
 

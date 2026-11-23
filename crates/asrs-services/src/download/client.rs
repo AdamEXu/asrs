@@ -3,7 +3,7 @@
 //! handling leans on: main ends the failed client from inside its `error` event, and writing to a
 //! socket that has no handle yet is itself an error, emitted on that client later.
 //!
-//! [`Clients`] owns every client. Calls and connection events queue work; [`Clients::next`] runs it up
+//! [`Clients`] owns every client. Calls and connection events queue work; [`Clients::next_event`] runs it up
 //! to the next event for the caller, so that a listener runs before anything ssh2 does after it.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
@@ -164,7 +164,7 @@ impl Clients {
         if target.host.is_empty() {
             target.host = "localhost".to_owned();
         }
-        self.work.push_back(match target.host.parse_ip() {
+        self.work.push_back(match literal_ip(&target.host) {
             Some(ip) => Work::Resolved(id, Ok(ip)),
             None => Work::Emit(ClientEvent::Resolve(id, target.host.clone())),
         });
@@ -286,7 +286,7 @@ impl Clients {
     }
 
     /// Runs queued work up to the next event.
-    pub fn next(&mut self) -> Option<ClientEvent> {
+    pub fn next_event(&mut self) -> Option<ClientEvent> {
         while let Some(work) = self.work.pop_front() {
             match work {
                 Work::Emit(event) => return Some(event),
@@ -697,14 +697,30 @@ fn write_at(file: &mut File, data: &[u8], position: u64) -> Result<(), String> {
         .map_err(|e| io_error(&e, "write"))
 }
 
-trait ParseIp {
-    fn parse_ip(&self) -> Option<IpAddr>;
-}
-
-impl ParseIp for String {
-    #[allow(clippy::disallowed_methods)]
-    fn parse_ip(&self) -> Option<IpAddr> {
-        self.parse().ok()
+/// `net.isIP`: the address `dns.lookup` hands back without looking anything up.
+fn literal_ip(host: &str) -> Option<IpAddr> {
+    if host.contains(':') {
+        return match url::Host::parse(&format!("[{host}]")) {
+            Ok(url::Host::Ipv6(ip)) => Some(IpAddr::V6(ip)),
+            _ => None,
+        };
+    }
+    let mut octets = [0u8; 4];
+    let mut parts = host.split('.');
+    for octet in &mut octets {
+        let part = parts.next()?;
+        let digits = (1..=3).contains(&part.len()) && part.bytes().all(|b| b.is_ascii_digit());
+        if !digits || (part.len() > 1 && part.starts_with('0')) {
+            return None;
+        }
+        let value = part
+            .bytes()
+            .fold(0, |value, digit| value * 10 + u32::from(digit - b'0'));
+        *octet = u8::try_from(value).ok()?;
+    }
+    match parts.next() {
+        None => Some(IpAddr::from(octets)),
+        Some(_) => None,
     }
 }
 

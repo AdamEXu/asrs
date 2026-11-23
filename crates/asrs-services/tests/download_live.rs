@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)]
+
 //! Runs the scenarios of `files/download-live` against the port and compares what happened with the
 //! recording of upstream's main.ts and the real ssh2 package against the same fixture. Scenarios
 //! with a scripted server run everywhere; the ones on a real sshd need one on this machine.
@@ -323,6 +325,11 @@ fn run_main(scenario: &Json, fixture: &Fixture, tools: Option<&Tools>) -> Vec<Js
         }
     }
     let mut session = session.lock().expect("session");
+    let last = array(scenario, "steps").last().expect("a step");
+    if text(last, "op") == "await" {
+        let count = number(last, "count").map_or(1, |count| count as usize);
+        session.effects.stop_at(&text(last, "name"), count);
+    }
     session
         .effects
         .push(Json::object([k("saved"), ("files", fixture.saved())]));
@@ -389,7 +396,7 @@ fn run_client(scenario: &Json, fixture: &Fixture, tools: Option<&Tools>) -> Vec<
             };
             let deadline = tokio::time::Instant::now() + deadline;
             loop {
-                while let Some(event) = clients.next() {
+                while let Some(event) = clients.next_event() {
                     match event {
                         ClientEvent::Error(id, message) => {
                             let message = effects.text(&message);

@@ -727,7 +727,7 @@ impl Sftp {
     fn read_next(&mut self, id: u32) -> bool {
         let transfer = self.transfer(id);
         let position = transfer.next;
-        if !(position < transfer.size) {
+        if position >= transfer.size || transfer.size.is_nan() {
             return false;
         }
         let chunk = if position + CHUNK_SIZE > transfer.size {
