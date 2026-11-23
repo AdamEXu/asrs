@@ -928,9 +928,17 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
             .iter()
             .map(|v| v.join("inputs"))
             .find(|i| i.is_dir());
-        let work_area = variants
+        let mut work_areas: Vec<String> = variants
             .iter()
-            .find_map(|v| primary_work_area(&v.join("run.json")));
+            .filter_map(|v| {
+                let run = v.join("run.json");
+                let scale = read_json(&run).ok()?.get("scale")?.as_f64()?;
+                let (x, y) = primary_work_area(&run)?;
+                Some(format!("{scale}:{x},{y}"))
+            })
+            .collect();
+        work_areas.sort();
+        work_areas.dedup();
         let file = scenarios.join(format!("{name}.json"));
         let robot = Robot::start(&Paths::new()?, &file)?;
         let status = Command::new(&exe)
@@ -946,9 +954,9 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
             .arg("--bundled-assets")
             .arg(workspace_root().join("reference/AdvantageScope/bundledAssets"))
             .args(
-                work_area
-                    .iter()
-                    .flat_map(|(x, y)| ["--work-area".to_owned(), format!("{x},{y}")]),
+                work_areas
+                    .into_iter()
+                    .flat_map(|area| ["--work-area".to_owned(), area]),
             )
             .args(
                 robot
