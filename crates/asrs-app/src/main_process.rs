@@ -364,7 +364,7 @@ impl MainProcess {
             platform: Platform::current(),
             arch: process_arch(),
             identity: crate::IDENTITY,
-            repository: RELEASE_PROFILE.repository,
+            profile: RELEASE_PROFILE,
             fs: &RealFs,
             paths: &main.state.paths,
             windows: Windows::manager(cx),

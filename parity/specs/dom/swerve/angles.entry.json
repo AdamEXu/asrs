@@ -1,0 +1,249 @@
+{
+ "entry": "dom",
+ "fixture": {
+  "geometry": "real",
+  "steps": [
+   {
+    "main": "new-tab",
+    "data": 9
+   },
+   {
+    "eval": "(() => {\n  const w = window;\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const view = new DataView(new ArrayBuffer(8));\n  const bits = (x) => {\n    view.setFloat64(0, Number.isNaN(x) ? NaN : x);\n    return view.getUint32(0).toString(16).padStart(8, \"0\") + view.getUint32(4).toString(16).padStart(8, \"0\");\n  };\n  const tree = (v) => {\n    if (v === undefined) return { u: null };\n    if (v === null || typeof v === \"boolean\" || typeof v === \"string\") return v;\n    if (typeof v === \"number\") return { n: bits(v) };\n    if (Array.isArray(v)) {\n      const out = [];\n      for (let i = 0; i < v.length; i++) out.push(tree(v[i]));\n      return out;\n    }\n    return { o: Object.keys(v).map((k) => [k, tree(v[k])]) };\n  };\n  const errorText = (e) => (e instanceof Error || e instanceof frame.contentWindow.DOMException ? e.name + \": \" + e.message : String(e));\n  const dark = () => w.matchMedia(\"(prefers-color-scheme: dark)\").matches;\n  const frame = document.body.appendChild(document.createElement(\"iframe\"));\n  frame.style.display = \"none\";\n  const real = frame.contentDocument.createElement(\"canvas\").getContext(\"2d\");\n  if (!(real instanceof frame.contentWindow.CanvasRenderingContext2D)) throw new Error(\"no real 2D context\");\n  const mirror = (canvas) => {\n    canvas.getContext(\"2d\");\n    const ctx = canvas.__oracleContext;\n    const method = ctx.method;\n    ctx.method = function (name, args) {\n      if (name === \"arc\" || name === \"ellipse\") real[name](...args);\n      return method.call(this, name, args);\n    };\n  };\n\n  let lastAssets;\n  const assets = () => {\n    if (w.assets === lastAssets) return;\n    lastAssets = w.assets;\n    write({ r07: \"assets\", assets: tree(w.assets) });\n  };\n\n  const renderers = [];\n  const hook = (kind, r) => {\n    if (renderers.includes(r)) return;\n    const id = renderers.length;\n    renderers.push(r);\n    const canvas = r.CANVAS;\n    mirror(canvas);\n    const ctx = canvas.__oracleContext;\n    let active = null;\n    const sized = kind === \"swerve\" ? r.CONTAINER : canvas;\n    for (const name of [\"clientWidth\", \"clientHeight\"]) {\n      const getter = Object.getOwnPropertyDescriptor(Element.prototype, name).get;\n      Object.defineProperty(sized, name, {\n        configurable: true,\n        get() {\n          const value = getter.call(this);\n          if (active !== null) active.reads.push([name, tree(value)]);\n          return value;\n        }\n      });\n    }\n    for (const name of [\"width\", \"height\"]) {\n      Object.defineProperty(canvas.style, name, {\n        configurable: true,\n        get() {\n          return this.getPropertyValue(name);\n        },\n        set(value) {\n          if (active !== null) active.style.push([name, tree(value)]);\n          this.setProperty(name, value);\n        }\n      });\n    }\n    if (kind === \"joysticks\") {\n      r.IMAGES.forEach((image, index) => {\n        image.addEventListener(\"load\", () => write({ r07: \"load\", id: tree(id), index: tree(index) }));\n      });\n    }\n    write({ r07: \"create\", kind, id: tree(id), aspect: tree(r.getAspectRatio()), state: tree(r.saveState()) });\n\n    const render = r.render;\n    r.render = function (command) {\n      if (kind === \"joysticks\") assets();\n      const record = { r07: \"render\", kind, id: tree(id), command: tree(command), dark: tree(dark()), dpr: tree(w.devicePixelRatio), reads: [], style: [] };\n      const before = ctx.frames;\n      const loads = r.imageLoadCount;\n      active = record;\n      try {\n        return render.apply(this, arguments);\n      } catch (e) {\n        record.threw = tree(errorText(e));\n        throw e;\n      } finally {\n        active = null;\n        if (kind === \"joysticks\") record.loads = tree(loads);\n        record.aspect = tree(r.getAspectRatio());\n        if (ctx.frames !== before) {\n          record.size = tree([canvas.width, canvas.height]);\n          record.calls = tree(ctx.calls);\n        } else if (record.style.length > 0) throw new Error(\"style without a frame\");\n        write(record);\n      }\n    };\n  };\n  const hookAll = () => {\n    w.tabs.tabList.forEach((t) => {\n      if (t.type === 8) hook(\"joysticks\", t.renderer);\n      if (t.type === 9) hook(\"swerve\", t.renderer);\n    });\n  };\n  hookAll();\n  const addTab = w.tabs.addTab;\n  w.tabs.addTab = function (...args) {\n    const result = addTab.apply(this, args);\n    hookAll();\n    return result;\n  };\n\n  w.__r07Render = (type, index, command) => {\n    const tab = w.tabs.tabList.filter((t) => t.type === type)[index];\n    try {\n      tab.renderer.render(command);\n    } catch (e) {}\n  };\n  w.__r07Size = (width, height) =>\n    w.__oracleQuiet(() => {\n      const content = document.querySelector(\"div.renderer-content\");\n      content.style.width = width;\n      content.style.height = height;\n      content.style.bottom = \"auto\";\n    });\n})()"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-0.5235987755982988,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0},{\"velocity\":-0.5,\"angle\":0},{\"velocity\":1,\"angle\":-0},{\"velocity\":-1,\"angle\":3.141592653589793}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-3.141592653589793,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":-0},{\"velocity\":-0.5,\"angle\":-0},{\"velocity\":1,\"angle\":0},{\"velocity\":-1,\"angle\":3.141592653589793}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-6.283185307179586,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.5235987755982988},{\"velocity\":-0.5,\"angle\":0.5235987755982988},{\"velocity\":1,\"angle\":-0.5235987755982988},{\"velocity\":-1,\"angle\":3.665191429188092}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":100,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":-0.5235987755982988},{\"velocity\":-0.5,\"angle\":-0.5235987755982988},{\"velocity\":1,\"angle\":0.5235987755982988},{\"velocity\":-1,\"angle\":2.6179938779914944}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":1e+300,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.7853981633974483},{\"velocity\":-0.5,\"angle\":0.7853981633974483},{\"velocity\":1,\"angle\":-0.7853981633974483},{\"velocity\":-1,\"angle\":3.9269908169872414}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":1.5707963267948966},{\"velocity\":-0.5,\"angle\":1.5707963267948966},{\"velocity\":1,\"angle\":-1.5707963267948966},{\"velocity\":-1,\"angle\":4.71238898038469}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":1.5707963267948966,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":-1.5707963267948966},{\"velocity\":-0.5,\"angle\":-1.5707963267948966},{\"velocity\":1,\"angle\":1.5707963267948966},{\"velocity\":-1,\"angle\":1.5707963267948966}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-2.6179938779914944,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":3.141592653589793},{\"velocity\":-0.5,\"angle\":3.141592653589793},{\"velocity\":1,\"angle\":-3.141592653589793},{\"velocity\":-1,\"angle\":6.283185307179586}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-9.42477796076938,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":-3.141592653589793},{\"velocity\":-0.5,\"angle\":-3.141592653589793},{\"velocity\":1,\"angle\":3.141592653589793},{\"velocity\":-1,\"angle\":0}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":1000000,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":2.6179938779914944},{\"velocity\":-0.5,\"angle\":2.6179938779914944},{\"velocity\":1,\"angle\":-2.6179938779914944},{\"velocity\":-1,\"angle\":5.759586531581288}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-0.5235987755982987,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":-2.6179938779914944},{\"velocity\":-0.5,\"angle\":-2.6179938779914944},{\"velocity\":1,\"angle\":2.6179938779914944},{\"velocity\":-1,\"angle\":0.5235987755982987}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.5235987755982988,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":5.759586531581287},{\"velocity\":-0.5,\"angle\":5.759586531581287},{\"velocity\":1,\"angle\":-5.759586531581287},{\"velocity\":-1,\"angle\":8.901179185171081}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":3.141592653589793,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":6.283185307179586},{\"velocity\":-0.5,\"angle\":6.283185307179586},{\"velocity\":1,\"angle\":-6.283185307179586},{\"velocity\":-1,\"angle\":9.42477796076938}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":6.283185307179586,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":-6.283185307179586},{\"velocity\":-0.5,\"angle\":-6.283185307179586},{\"velocity\":1,\"angle\":6.283185307179586},{\"velocity\":-1,\"angle\":-3.141592653589793}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-7.5,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":9.42477796076938},{\"velocity\":-0.5,\"angle\":9.42477796076938},{\"velocity\":1,\"angle\":-9.42477796076938},{\"velocity\":-1,\"angle\":12.566370614359172}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":12345.678,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":-9.42477796076938},{\"velocity\":-0.5,\"angle\":-9.42477796076938},{\"velocity\":1,\"angle\":9.42477796076938},{\"velocity\":-1,\"angle\":-6.283185307179586}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":2.6179938779914944,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":7.5},{\"velocity\":-0.5,\"angle\":7.5},{\"velocity\":1,\"angle\":-7.5},{\"velocity\":-1,\"angle\":10.641592653589793}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.7853981633974483,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":-7.5},{\"velocity\":-0.5,\"angle\":-7.5},{\"velocity\":1,\"angle\":7.5},{\"velocity\":-1,\"angle\":-4.358407346410207}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":2.6179938779914944,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":100},{\"velocity\":-0.5,\"angle\":100},{\"velocity\":1,\"angle\":-100},{\"velocity\":-1,\"angle\":103.1415926535898}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":9.42477796076938,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":-100},{\"velocity\":-0.5,\"angle\":-100},{\"velocity\":1,\"angle\":100},{\"velocity\":-1,\"angle\":-96.8584073464102}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-100,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":1000000},{\"velocity\":-0.5,\"angle\":1000000},{\"velocity\":1,\"angle\":-1000000},{\"velocity\":-1,\"angle\":1000003.1415926536}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.5235987755982987,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":1e-9},{\"velocity\":-0.5,\"angle\":1e-9},{\"velocity\":1,\"angle\":-1e-9},{\"velocity\":-1,\"angle\":3.141592654589793}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-0,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":12345.678},{\"velocity\":-0.5,\"angle\":12345.678},{\"velocity\":1,\"angle\":-12345.678},{\"velocity\":-1,\"angle\":12348.81959265359}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-1.5707963267948966,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":1e+300},{\"velocity\":-0.5,\"angle\":1e+300},{\"velocity\":1,\"angle\":-1e+300},{\"velocity\":-1,\"angle\":1e+300}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":5.759586531581287,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.5235987755982987},{\"velocity\":-0.5,\"angle\":0.5235987755982987},{\"velocity\":1,\"angle\":-0.5235987755982987},{\"velocity\":-1,\"angle\":3.665191429188092}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":7.5,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":-0.5235987755982987},{\"velocity\":-0.5,\"angle\":-0.5235987755982987},{\"velocity\":1,\"angle\":0.5235987755982987},{\"velocity\":-1,\"angle\":2.6179938779914944}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":1e-9,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":1e-320},{\"velocity\":-0.5,\"angle\":1e-320},{\"velocity\":1,\"angle\":-1e-320},{\"velocity\":-1,\"angle\":3.141592653589793}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":1e-320,\"frameAspectRatio\":1,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":2.6179938779914944},{\"velocity\":-0.5,\"angle\":2.6179938779914944},{\"velocity\":1,\"angle\":-2.6179938779914944},{\"velocity\":-1,\"angle\":5.759586531581288}],\"color\":\"#ff00ff\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":1,\"vy\":0,\"omega\":0},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-0,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":1,\"vy\":-0,\"omega\":-0},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.5235987755982988,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.8660254037844387,\"vy\":0.49999999999999994,\"omega\":0.5235987755982988},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-0.5235987755982988,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.8660254037844387,\"vy\":-0.49999999999999994,\"omega\":-0.5235987755982988},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.7853981633974483,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.7071067811865476,\"vy\":0.7071067811865475,\"omega\":0.7853981633974483},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":1.5707963267948966,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":6.123233995736766e-17,\"vy\":1,\"omega\":1.5707963267948966},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-1.5707963267948966,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":6.123233995736766e-17,\"vy\":-1,\"omega\":-1.5707963267948966},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":3.141592653589793,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":-1,\"vy\":1.2246467991473532e-16,\"omega\":3.141592653589793},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-3.141592653589793,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":-1,\"vy\":-1.2246467991473532e-16,\"omega\":-3.141592653589793},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":2.6179938779914944,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.8660254037844387,\"vy\":0.49999999999999994,\"omega\":2.6179938779914944},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-2.6179938779914944,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.8660254037844387,\"vy\":-0.49999999999999994,\"omega\":-2.6179938779914944},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":5.759586531581287,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.8660254037844384,\"vy\":-0.5000000000000004,\"omega\":5.759586531581287},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":6.283185307179586,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":1,\"vy\":-2.4492935982947064e-16,\"omega\":6.283185307179586},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-6.283185307179586,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":1,\"vy\":2.4492935982947064e-16,\"omega\":-6.283185307179586},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":9.42477796076938,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":-1,\"vy\":3.6739403974420594e-16,\"omega\":9.42477796076938},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-9.42477796076938,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":-1,\"vy\":-3.6739403974420594e-16,\"omega\":-9.42477796076938},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":7.5,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.3466353178350258,\"vy\":0.9379999767747389,\"omega\":7.5},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-7.5,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.3466353178350258,\"vy\":-0.9379999767747389,\"omega\":-7.5},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":100,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.8623188722876839,\"vy\":-0.5063656411097588,\"omega\":100},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-100,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.8623188722876839,\"vy\":0.5063656411097588,\"omega\":-100},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":1000000,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.9367521275331447,\"vy\":-0.34999350217129294,\"omega\":1000000},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":1e-9,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":1,\"vy\":1e-9,\"omega\":1e-9},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":12345.678,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.7101193587160628,\"vy\":-0.7040813137533816,\"omega\":12345.678},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":1e+300,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.5753861119575491,\"vy\":-0.8178819121159085,\"omega\":1e+300},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.5235987755982987,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.8660254037844387,\"vy\":0.49999999999999983,\"omega\":0.5235987755982987},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":-0.5235987755982987,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":0.8660254037844387,\"vy\":-0.49999999999999983,\"omega\":-0.5235987755982987},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":1e-320,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":1,\"vy\":1e-320,\"omega\":1e-320},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":2.6179938779914944,\"frameAspectRatio\":0.75,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.5,\"angle\":0.3},{\"velocity\":-0.25,\"angle\":1.2},{\"velocity\":1,\"angle\":-2.8},{\"velocity\":0,\"angle\":0.7}],\"color\":\"#ff0000\"},{\"values\":[{\"velocity\":0.75,\"angle\":-0.3},{\"velocity\":0.1,\"angle\":3.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":0.04,\"angle\":0}],\"color\":\"#0000ff\"}],\"robotVelocities\":[{\"value\":{\"vx\":-0.8660254037844387,\"vy\":0.49999999999999994,\"omega\":2.6179938779914944},\"color\":\"#00ffff\"}]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":0,\"angle\":0.1},{\"velocity\":-0,\"angle\":2},{\"velocity\":0,\"angle\":-2},{\"velocity\":0,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0,\"angle\":0.1},{\"velocity\":0,\"angle\":2},{\"velocity\":-0,\"angle\":-2},{\"velocity\":-0,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.001,\"angle\":0.1},{\"velocity\":-0.001,\"angle\":2},{\"velocity\":0.001,\"angle\":-2},{\"velocity\":0.0005,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.001,\"angle\":0.1},{\"velocity\":0.001,\"angle\":2},{\"velocity\":-0.001,\"angle\":-2},{\"velocity\":-0.0005,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.0010000000000000002,\"angle\":0.1},{\"velocity\":-0.0010000000000000002,\"angle\":2},{\"velocity\":0.0010000000000000002,\"angle\":-2},{\"velocity\":0.0005000000000000001,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.0010000000000000002,\"angle\":0.1},{\"velocity\":0.0010000000000000002,\"angle\":2},{\"velocity\":-0.0010000000000000002,\"angle\":-2},{\"velocity\":-0.0005000000000000001,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.0009999999999999998,\"angle\":0.1},{\"velocity\":-0.0009999999999999998,\"angle\":2},{\"velocity\":0.0009999999999999998,\"angle\":-2},{\"velocity\":0.0004999999999999999,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.05,\"angle\":0.1},{\"velocity\":-0.05,\"angle\":2},{\"velocity\":0.05,\"angle\":-2},{\"velocity\":0.025,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.05,\"angle\":0.1},{\"velocity\":0.05,\"angle\":2},{\"velocity\":-0.05,\"angle\":-2},{\"velocity\":-0.025,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.049999999999999996,\"angle\":0.1},{\"velocity\":-0.049999999999999996,\"angle\":2},{\"velocity\":0.049999999999999996,\"angle\":-2},{\"velocity\":0.024999999999999998,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.049999999999999996,\"angle\":0.1},{\"velocity\":0.049999999999999996,\"angle\":2},{\"velocity\":-0.049999999999999996,\"angle\":-2},{\"velocity\":-0.024999999999999998,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.05,\"angle\":0.1},{\"velocity\":-0.05,\"angle\":2},{\"velocity\":0.05,\"angle\":-2},{\"velocity\":0.025,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":1,\"angle\":0.1},{\"velocity\":-1,\"angle\":2},{\"velocity\":1,\"angle\":-2},{\"velocity\":0.5,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":-1,\"angle\":0.1},{\"velocity\":1,\"angle\":2},{\"velocity\":-1,\"angle\":-2},{\"velocity\":-0.5,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":0.3333333333333333,\"angle\":0.1},{\"velocity\":-0.3333333333333333,\"angle\":2},{\"velocity\":0.3333333333333333,\"angle\":-2},{\"velocity\":0.16666666666666666,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":-0.6666666666666666,\"angle\":0.1},{\"velocity\":0.6666666666666666,\"angle\":2},{\"velocity\":-0.6666666666666666,\"angle\":-2},{\"velocity\":-0.3333333333333333,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":2.5,\"angle\":0.1},{\"velocity\":-2.5,\"angle\":2},{\"velocity\":2.5,\"angle\":-2},{\"velocity\":1.25,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":-40,\"angle\":0.1},{\"velocity\":40,\"angle\":2},{\"velocity\":-40,\"angle\":-2},{\"velocity\":-20,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":1e-300,\"angle\":0.1},{\"velocity\":-1e-300,\"angle\":2},{\"velocity\":1e-300,\"angle\":-2},{\"velocity\":5e-301,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "eval": "window.__r07Render(9, 0, {\"rotation\":0.3,\"frameAspectRatio\":1.2,\"moduleVelocities\":[{\"values\":[{\"velocity\":1e+300,\"angle\":0.1},{\"velocity\":-1e+300,\"angle\":2},{\"velocity\":1e+300,\"angle\":-2},{\"velocity\":5e+299,\"angle\":4}],\"color\":\"#ff8800\"}],\"robotVelocities\":[]})"
+   },
+   {
+    "advance": 1
+   }
+  ]
+ }
+}

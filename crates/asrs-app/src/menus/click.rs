@@ -20,6 +20,7 @@ use asrs_services::fs::Fs;
 use asrs_services::historical_start::HOOT_UNSUPPORTED;
 use asrs_services::layout::{self, Import};
 use asrs_services::lifecycle::AppPaths;
+use asrs_services::update::ReleaseProfile;
 use asrs_services::window_manager::{Platform, WindowId, WindowKind, WindowManager};
 
 use super::model::{Command, HelpLink};
@@ -42,8 +43,7 @@ pub struct ClickEnv<'a> {
     /// `process.arch`.
     pub arch: &'a str,
     pub identity: AppIdentity,
-    /// `GITHUB_REPOSITORY`.
-    pub repository: &'a str,
+    pub profile: ReleaseProfile,
     pub fs: &'a dyn Fs,
     pub paths: &'a AppPaths,
     pub windows: &'a WindowManager,
@@ -457,9 +457,14 @@ pub fn click(
             out.extend(window.map(Effect::MoveTop));
         }
         Command::Help(link) => out.push(Effect::OpenExternal(match link {
-            HelpLink::ReportProblem => format!("https://github.com/{}/issues", env.repository),
-            HelpLink::ContactUs => "mailto:software@team6328.org".to_owned(),
-            HelpLink::GitHubRepository => format!("https://github.com/{}", env.repository),
+            HelpLink::ReportProblem => issues_url(env.profile.repository),
+            HelpLink::ContactUs => match env.profile.contact_email {
+                Some(email) => format!("mailto:{email}"),
+                None => issues_url(env.profile.repository),
+            },
+            HelpLink::GitHubRepository => {
+                format!("https://github.com/{}", env.profile.repository)
+            }
             HelpLink::WpilibDocumentation => "https://docs.wpilib.org".to_owned(),
             HelpLink::LittletonRobotics => "https://littletonrobotics.org".to_owned(),
         })),
@@ -468,6 +473,10 @@ pub fn click(
         }
     }
     Ok(())
+}
+
+fn issues_url(repository: &str) -> String {
+    format!("https://github.com/{repository}/issues")
 }
 
 fn finish_custom_assets(

@@ -1,0 +1,63 @@
+{
+ "entry": "dom",
+ "inputs": [
+  "../logs/c05.json"
+ ],
+ "fixture": {
+  "seed": 707,
+  "steps": [
+   {
+    "log": "../logs/c05.json"
+   },
+   {
+    "main": "new-tab",
+    "data": 9
+   },
+   {
+    "eval": "/*r07:mirror*/(() => {\n  const frame = document.body.appendChild(document.createElement(\"iframe\"));\n  frame.style.display = \"none\";\n  const real = frame.contentDocument.createElement(\"canvas\").getContext(\"2d\");\n  if (!(real instanceof frame.contentWindow.CanvasRenderingContext2D)) throw new Error(\"no real 2D context\");\n  const mirror = (canvas) => {\n    canvas.getContext(\"2d\");\n    const ctx = canvas.__oracleContext;\n    const method = ctx.method;\n    ctx.method = function (name, args) {\n      if (name === \"arc\" || name === \"ellipse\") real[name](...args);\n      return method.call(this, name, args);\n    };\n  };\n  mirror(window.tabs.tabList[window.tabs.selectedTab].renderer.CANVAS);\n})()"
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[{\"type\":\"moduleVelocities\",\"logKey\":\"/Drive/Velocities\",\"logType\":\"SwerveModuleVelocity[]\",\"visible\":true,\"options\":{\"color\":\"#ff0000\",\"arrangement\":\"0,1,2,3\"}},{\"type\":\"robotVelocities\",\"logKey\":\"/Drive/ChassisSpeeds\",\"logType\":\"ChassisSpeeds\",\"visible\":true,\"options\":{\"color\":\"#00ff00\"}}],\"maxSpeed\":5,\"sizeX\":0.5,\"sizeY\":0.65,\"orientation\":1})"
+   },
+   {
+    "eval": "window.selection.setSelectedTime(1)"
+   },
+   {
+    "advance": 100
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "drawn"
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[{\"type\":\"moduleVelocities\",\"logKey\":\"/Drive/Velocities\",\"logType\":\"SwerveModuleVelocity[]\",\"visible\":true,\"options\":{\"color\":\"#ff0000\",\"arrangement\":\"0,1,2,3\"}},{\"type\":\"robotVelocities\",\"logKey\":\"/Drive/ChassisSpeeds\",\"logType\":\"ChassisSpeeds\",\"visible\":true,\"options\":{\"color\":\"#00ff00\"}}],\"maxSpeed\":5,\"sizeX\":-0.5,\"sizeY\":0.65,\"orientation\":1})"
+   },
+   {
+    "advance": 100
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "threw"
+   },
+   {
+    "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState({\"sources\":[{\"type\":\"robotVelocities\",\"logKey\":\"/Drive/ChassisSpeeds\",\"logType\":\"ChassisSpeeds\",\"visible\":true,\"options\":{\"color\":\"#00ff00\"}}],\"maxSpeed\":5,\"sizeX\":0.5,\"sizeY\":0.65,\"orientation\":1})"
+   },
+   {
+    "advance": 100
+   },
+   {
+    "capture": [
+     "commands",
+     "state"
+    ],
+    "label": "stopped"
+   }
+  ]
+ }
+}

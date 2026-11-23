@@ -16,6 +16,7 @@
     "src/canvas/lineGraphTraces.json",
     "src/canvas/page.ts",
     "src/canvas/png.ts",
+    "src/canvas/r07Traces.json",
     "src/canvas/scenes.ts",
     "src/canvas/timelineTraces.json",
     "src/canvas/ui.ts",

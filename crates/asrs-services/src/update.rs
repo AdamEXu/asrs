@@ -22,6 +22,8 @@ pub struct ReleaseProfile {
     pub update_check: bool,
     /// Whether a hub's dom-ready runs the beta block (expired alert, welcome, survey prompt).
     pub beta_survey: bool,
+    /// Where "Contact Us" sends mail; without an address it opens the repository's issues page.
+    pub contact_email: Option<&'static str>,
 }
 
 impl ReleaseProfile {
@@ -29,12 +31,14 @@ impl ReleaseProfile {
         repository: "Mechanical-Advantage/AdvantageScope",
         update_check: true,
         beta_survey: true,
+        contact_email: Some("software@team6328.org"),
     };
 
     pub const RELEASE: ReleaseProfile = ReleaseProfile {
         repository: "AdamEXu/asrs",
         update_check: false,
         beta_survey: false,
+        contact_email: None,
     };
 }
 
