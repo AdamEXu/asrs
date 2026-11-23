@@ -73,7 +73,7 @@ impl Page {
         });
         let events = {
             let host = Rc::downgrade(&host);
-            let window = window.window_handle();
+            let window = Window::window_handle(window);
             cx.spawn(async move |cx| {
                 while let Ok(message) = receiver.recv().await {
                     let Some(host) = host.upgrade() else {
