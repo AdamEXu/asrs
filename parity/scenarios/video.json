@@ -1,0 +1,103 @@
+{
+  "about": "draft",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 7,
+              "title": "Match",
+              "controller": null,
+              "controllerUUID": "video000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 85
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "empty",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000"
+      }
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000",
+        "imgFolder": {
+          "$clip": "wide"
+        },
+        "fps": 30,
+        "totalFrames": 12,
+        "completedFrames": 12,
+        "autoEndFrame": -1
+      }
+    },
+    {
+      "wait": 300
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "first",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".video-container",
+        ".video-container > img",
+        ".video-source",
+        ".video-source > button",
+        ".video-timeline-section > button",
+        ".video-timeline-container",
+        "input.video-timeline-slider",
+        ".video-timeline-marker-container > div",
+        ".video-timeline-controls > button"
+      ]
+    }
+  ]
+}
