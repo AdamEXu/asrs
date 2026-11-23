@@ -920,3 +920,9 @@ file = "crates/asrs-ui/tests/icon_capture.rs"
 function = "*"
 rule = "no-tally"
 reason = "every probe selected is checked, and each scene asserts it has some"
+
+[[allow]]
+file = "crates/asrs-services/tests/files_vectors.rs"
+function = "emit"
+rule = "skipped-kind"
+reason = "opens a menu, which touches no file; its clicks are operations of their own, and an unknown message fails"

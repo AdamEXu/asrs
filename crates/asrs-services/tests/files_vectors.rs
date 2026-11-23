@@ -386,6 +386,7 @@ impl Env {
             "save-type-memory" => {
                 let _ = type_memory::save(&self.fs, &self.tm_file, data);
             }
+            "ask-edit-axis" => {}
             other => panic!("message {other} is not modeled"),
         }
         Ok(())
