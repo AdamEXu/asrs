@@ -1952,6 +1952,18 @@ fn walk_edges(
 /// `SkScan::AntiFillPath` for a canvas-sized rect clip: the blits Skia's analytic AA makes for
 /// `path` (device space, nonzero or even-odd), in order.
 pub fn fill_path(path: &SkPath, width: u32, height: u32, even_odd: bool, out: &mut Spans) {
+    let clip = [0, 0, width as i32, height as i32];
+    fill_path_clipped(path, clip, false, even_odd, out);
+}
+
+/// `SkScan::AntiFillPath` for the rect clip `[left, top, right, bottom)`.
+pub fn fill_path_clipped(
+    path: &SkPath,
+    clip: [i32; 4],
+    force_rle: bool,
+    even_odd: bool,
+    out: &mut Spans,
+) {
     let bounds = path.bounds();
     if !path.is_finite() {
         return;
@@ -1962,7 +1974,6 @@ pub fn fill_path(path: &SkPath, width: u32, height: u32, even_odd: bool, out: &m
     if ir[0] >= ir[2] || ir[1] >= ir[3] {
         return;
     }
-    let clip = [0, 0, width as i32, height as i32];
     let sect = [
         ir[0].max(clip[0]),
         ir[1].max(clip[1]),
@@ -1975,7 +1986,7 @@ pub fn fill_path(path: &SkPath, width: u32, height: u32, even_odd: bool, out: &m
     let contained = clip[0] <= ir[0] && clip[1] <= ir[1] && clip[2] >= ir[2] && clip[3] >= ir[3];
     let convex = path.is_convex();
     let (iw, ih) = (ir[2] - ir[0], ir[3] - ir[1]);
-    let can_mask = iw <= 32 && i64::from((iw + 3) & !3) * i64::from(ih) <= 1024;
+    let can_mask = !force_rle && iw <= 32 && i64::from((iw + 3) & !3) * i64::from(ih) <= 1024;
     if can_mask {
         if try_blit_fat_anti_rect(path, clip, out) {
             return;

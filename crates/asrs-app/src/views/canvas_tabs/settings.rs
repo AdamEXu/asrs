@@ -5,7 +5,6 @@ use std::collections::{HashMap, HashSet};
 
 use asrs_hub::hub::HubModel;
 use asrs_js::math;
-use asrs_js::string::JsString;
 use asrs_tabs::form::{self, NumberInput};
 use asrs_tabs::joysticks::JoysticksController;
 use asrs_tabs::points::{Dimension, PointsController, PointsSelect};
@@ -25,8 +24,8 @@ use asrs_ui::text::{self, LineHeight, Text, TextStyle, WhiteSpace, snap_remainde
 use asrs_ui::theme::{Appearance, FONT_FAMILY};
 
 use super::super::frame::{FrameHost, HubFrame};
+use super::super::number::FormNumber;
 use super::super::select::FormSelect;
-use super::super::sidebar::NumberValue;
 use super::super::source_list::{centred_offset, place_in};
 use super::{local, lu, tab_index, tab_key, with_controller};
 
@@ -146,7 +145,7 @@ struct SelectView {
 }
 
 struct NumberView {
-    field: Entity<TextField<NumberValue>>,
+    field: Entity<TextField<FormNumber>>,
     _subscription: Subscription,
 }
 
@@ -274,17 +273,13 @@ impl<H: FrameHost> HubFrame<H> {
         &mut self,
         key: usize,
         control: Control,
-        value: JsString,
+        value: NumberInput,
         commit: bool,
         cx: &mut Context<'_, Self>,
     ) {
         self.host_mut().input(cx, |hub| {
             let index = tab_index(hub, key)?;
-            control.number(hub, index, commit, |input| {
-                if !commit {
-                    input.set_value(value);
-                }
-            })
+            control.number(hub, index, commit, |input| *input = value)
         });
         cx.notify();
     }
@@ -298,7 +293,7 @@ impl<H: FrameHost> HubFrame<H> {
         scale: f32,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
-    ) -> Option<Entity<TextField<NumberValue>>> {
+    ) -> Option<Entity<TextField<FormNumber>>> {
         let wanted = self.host_mut().input(cx, |hub| {
             let index = tab_index(hub, key)?;
             control.number(hub, index, false, |input| input.clone())
@@ -311,7 +306,7 @@ impl<H: FrameHost> HubFrame<H> {
             .or_insert_with(|| {
                 let field = cx.new(|cx| {
                     TextField::new(
-                        NumberValue(wanted.clone()),
+                        FormNumber(wanted.clone()),
                         FieldKind::Number,
                         FieldStyle::setting_block(),
                         window,
@@ -326,7 +321,7 @@ impl<H: FrameHost> HubFrame<H> {
                             FieldEvent::Change => true,
                             FieldEvent::Enter | FieldEvent::Focus | FieldEvent::Blur => return,
                         };
-                        let value = JsString::from(field.read(cx).value().as_str());
+                        let value = field.read(cx).model().0.clone();
                         frame.number_changed(key, control, value, commit, cx);
                     },
                 );

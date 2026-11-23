@@ -59,6 +59,35 @@ pub fn over(dst: &mut Pixmap, src: &Pixmap) {
     }
 }
 
+/// `PaintTextField`'s background, which it draws without antialiasing: a pixel is in when its
+/// centre is, with the straight edges rounded as `SkScan::FillRect` rounds them.
+pub fn fill_aliased_rrect(pixmap: &mut Pixmap, [x, y, w, h]: [f64; 4], radius: f64, rgba: u32) {
+    let alpha = rgba & 0xff;
+    let rgb = [(rgba >> 24) & 0xff, (rgba >> 16) & 0xff, (rgba >> 8) & 0xff];
+    let round = |v: f64| (v + 0.5).floor() as i64;
+    let (left, top, right, bottom) = (round(x), round(y), round(x + w), round(y + h));
+    let width = i64::from(pixmap.width());
+    let height = i64::from(pixmap.height());
+    let data = pixmap.data_mut();
+    for py in top.max(0)..bottom.min(height) {
+        for px in left.max(0)..right.min(width) {
+            let (cx, cy) = (px as f64 + 0.5, py as f64 + 0.5);
+            let dx = (x + radius - cx).max(cx - (x + w - radius)).max(0.0);
+            let dy = (y + radius - cy).max(cy - (y + h - radius)).max(0.0);
+            if dx > 0.0 && dy > 0.0 && dx * dx + dy * dy > radius * radius {
+                continue;
+            }
+            let p = ((py * width + px) * 4) as usize;
+            let inverse = 255 - alpha;
+            for (c, &v) in rgb.iter().enumerate() {
+                let src = (v * alpha + 127) / 255;
+                data[p + c] = (src + (u32::from(data[p + c]) * inverse + 127) / 255) as u8;
+            }
+            data[p + 3] = (alpha + (u32::from(data[p + 3]) * inverse + 127) / 255) as u8;
+        }
+    }
+}
+
 const CACHE_ENTRIES: usize = 512;
 
 #[derive(Default)]

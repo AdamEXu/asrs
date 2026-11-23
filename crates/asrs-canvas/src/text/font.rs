@@ -7,6 +7,8 @@ pub enum Family {
     Monospace,
     /// The family of Chromium's `-webkit-small-control` font on macOS, which form controls use.
     Arial,
+    /// The first family of Chart.js's default font, which only macOS has.
+    HelveticaNeue,
 }
 
 /// A canvas `font` resolved to what the glyph backends need. Size and weight are `f32`, as
@@ -186,6 +188,7 @@ fn families(list: &str) -> Option<Family> {
             "times" => Some(Family::Serif),
             "courier" => Some(Family::Monospace),
             "arial" => Some(Family::Arial),
+            "helvetica neue" if cfg!(target_os = "macos") => Some(Family::HelveticaNeue),
             _ => None,
         };
         first = first.or(family);

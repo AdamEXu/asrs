@@ -25,12 +25,14 @@ use asrs_ui::gpui::{
 use super::canvas_tabs::JoysticksTab;
 use super::field3d::Field3dTab;
 use super::frame::{FrameGeometry, FrameHost, FrameSlot, HubFrame};
+use super::prompts;
 use super::sidebar::{self, SidebarView, ViewGeometry};
 use super::source_list::ListsGeometry;
 use crate::hub::{FrameClock, Hub, HubConfig, HubEvent};
 use crate::main_process::MainProcess;
 use crate::menus::bridge::{self, EffectHandler};
 use crate::menus::context::{self, Effect, MenuEnv};
+use crate::windows::Windows;
 
 struct FrameView {
     geometry: FrameGeometry,
@@ -296,8 +298,50 @@ impl HubEntityHost {
     }
 }
 
-/// The context menu `main.ts` pops up for `message`, if any, with each click's messages sent
-/// back to the hub. Prompt windows and the source list help window are not wired yet.
+/// What a click in a context menu of the hub window `handle` does: messages sent back to the
+/// hub, and prompts whose reply has further effects. The source list help window is not wired
+/// yet.
+fn menu_effects(handle: AnyWindowHandle, hub: WeakEntity<Hub>) -> EffectHandler {
+    Rc::new(move |effects, cx| {
+        for effect in effects {
+            run_effect(effect, handle, &hub, cx);
+        }
+    })
+}
+
+fn run_effect(effect: Effect, handle: AnyWindowHandle, hub: &WeakEntity<Hub>, cx: &mut App) {
+    if let Some(message) = effect.to_hub() {
+        if let Some(hub) = hub.upgrade() {
+            hub.update(cx, |hub, cx| hub.handle_main_message(message, cx));
+        }
+        return;
+    }
+    match effect {
+        Effect::WriteClipboard(JsValue::String(ref text)) => {
+            cx.write_to_clipboard(ClipboardItem::new_string(text.to_string_lossy()))
+        }
+        Effect::UpdateRecentUnits(preset) => MainProcess::update_recent_units(cx, &preset),
+        Effect::Prompt(prompt) => {
+            let Some(parent) = Windows::id_of(cx, handle) else {
+                return;
+            };
+            let effects = menu_effects(handle, hub.clone());
+            let request = prompt.clone();
+            let opened = prompts::ask(cx, parent, &request, move |value, cx| {
+                match prompt.reply(value) {
+                    Ok(replied) => effects(replied, cx),
+                    Err(error) => eprintln!("asrs: {:?}: {error:?}", prompt.window()),
+                }
+            });
+            if let Err(error) = opened {
+                eprintln!("asrs: opening a prompt: {error}");
+            }
+        }
+        other => eprintln!("asrs: context menu effect not available yet: {other:?}"),
+    }
+}
+
+/// The context menu `main.ts` pops up for `message`, if any.
 fn show_context_menu(
     handle: AnyWindowHandle,
     hub: WeakEntity<Hub>,
@@ -324,26 +368,7 @@ fn show_context_menu(
             return;
         }
     };
-    let on_effects: EffectHandler = Rc::new(move |effects, cx| {
-        for effect in effects {
-            match (&effect, effect.to_hub()) {
-                (_, Some(message)) => {
-                    if let Some(hub) = hub.upgrade() {
-                        hub.update(cx, |hub, cx| hub.handle_main_message(message, cx));
-                    }
-                }
-                (Effect::WriteClipboard(JsValue::String(text)), None) => {
-                    cx.write_to_clipboard(ClipboardItem::new_string(text.to_string_lossy()))
-                }
-                (Effect::UpdateRecentUnits(preset), None) => {
-                    MainProcess::update_recent_units(cx, preset)
-                }
-                (other, None) => {
-                    eprintln!("asrs: context menu effect not available yet: {other:?}")
-                }
-            }
-        }
-    });
+    let on_effects = menu_effects(handle, hub);
     let platform = Platform::current();
     let _ = handle.update(cx, |_, window, cx| {
         bridge::popup_context(window, cx, platform, &menu, on_effects)

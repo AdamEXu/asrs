@@ -15,7 +15,7 @@ pub use run::{run, run_from_args};
 
 use asrs_js::value::JsValue;
 use asrs_model::messages::MainToHub;
-use asrs_services::window_manager::WindowManager;
+use asrs_services::window_manager::{WindowKind, WindowManager};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Page {
@@ -99,6 +99,15 @@ pub enum Action {
         key: String,
         modifiers: Vec<String>,
     },
+    /// Clicks the item at this label path of the context menu that popped up.
+    Menu {
+        path: Vec<String>,
+    },
+    /// Sends input and captures to the prompt window of this page, or back to the hub once the
+    /// prompt has closed.
+    Prompt {
+        page: Option<WindowKind>,
+    },
     Capture {
         name: String,
         probes: Vec<String>,
@@ -162,7 +171,7 @@ pub fn default_window() -> (f64, f64) {
 const TOP_KEYS: [&str; 9] = [
     "page", "window", "scales", "themes", "gl", "prefs", "userData", "actions", "about",
 ];
-const ACTION_KEYS: [&str; 11] = [
+const ACTION_KEYS: [&str; 13] = [
     "main",
     "open",
     "eval",
@@ -173,6 +182,8 @@ const ACTION_KEYS: [&str; 11] = [
     "wheel",
     "key",
     "dialog",
+    "menu",
+    "prompt",
     "capture",
 ];
 
@@ -285,6 +296,20 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
         "key" => Action::Key {
             key: text().ok_or("key is not a string")?,
             modifiers: strings(action.get("modifiers"), "modifiers")?,
+        },
+        "menu" => Action::Menu {
+            path: strings(Some(value), "menu")?,
+        },
+        "prompt" => Action::Prompt {
+            page: match text().as_deref() {
+                Some("editRange") => Some(WindowKind::EditRange),
+                Some("editFov") => Some(WindowKind::EditFov),
+                Some("renameTab") => Some(WindowKind::RenameTab),
+                Some("unitConversion") => Some(WindowKind::UnitConversion),
+                Some("export") => Some(WindowKind::Export),
+                None if value.is_null() => None,
+                other => return Err(format!("unknown prompt page {other:?}")),
+            },
         },
         "capture" => {
             let name = text().ok_or("capture is not a name")?;
@@ -444,6 +469,9 @@ mod tests {
                 {"mouse": "click", "x": 3, "y": 4, "button": "right", "clickCount": 2},
                 {"wheel": {"x": 1, "y": 2, "deltaY": -40, "wheelTicksY": -1}},
                 {"key": "a", "modifiers": ["shift"]},
+                {"menu": ["Manual Units", "Edit Conversion..."]},
+                {"prompt": "unitConversion"},
+                {"prompt": null},
                 {"capture": "c", "masks": [".side-bar"]}
             ]}"#,
         )
@@ -500,6 +528,19 @@ mod tests {
                 modifiers: vec!["shift".into()]
             }
         );
+        assert_eq!(
+            s.actions[8],
+            Action::Menu {
+                path: vec!["Manual Units".into(), "Edit Conversion...".into()]
+            }
+        );
+        assert_eq!(
+            s.actions[9],
+            Action::Prompt {
+                page: Some(WindowKind::UnitConversion)
+            }
+        );
+        assert_eq!(s.actions[10], Action::Prompt { page: None });
         assert_eq!(s.prefs.get("theme"), Some(&JsValue::string("dark")));
     }
 

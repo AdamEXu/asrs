@@ -161,6 +161,7 @@ fn create_font(spec: &FontSpec) -> Face {
                 Family::SansSerif => "Helvetica",
                 Family::Monospace => "Courier",
                 Family::Arial => "Arial",
+                Family::HelveticaNeue => "Helvetica Neue",
                 _ => "Times",
             };
             if spec.weight >= 600.0 {

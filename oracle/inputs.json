@@ -13,6 +13,7 @@
   "canvasMain": [
     "src/canvas/dom.ts",
     "src/canvas/field2dTraces.json",
+    "src/canvas/histogramTraces.json",
     "src/canvas/lineGraphTraces.json",
     "src/canvas/page.ts",
     "src/canvas/png.ts",
@@ -402,6 +403,10 @@
     "src/genMsgpack.ts",
     "src/shims.ts"
   ],
+  "genNumberInsert": [
+    "src/environment.ts",
+    "src/genNumberInsert.ts"
+  ],
   "genPath": [
     "src/genPath.ts"
   ],
@@ -421,6 +426,12 @@
     "src/logFieldRun.ts",
     "src/logRun.ts",
     "src/registry.ts",
+    "src/shims.ts"
+  ],
+  "genPrompts": [
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/genPrompts.ts",
     "src/shims.ts"
   ],
   "genProto": [

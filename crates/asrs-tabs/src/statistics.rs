@@ -543,7 +543,7 @@ fn value_to_number(s: &JsString) -> f64 {
     number::to_number(s.units())
 }
 
-fn clean_float(x: f64) -> f64 {
+pub(crate) fn clean_float(x: f64) -> f64 {
     let output = math::round(x * 1e6) / 1e6;
     if output == 0.0 { 0.0 } else { output }
 }

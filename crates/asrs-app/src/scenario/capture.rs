@@ -92,6 +92,8 @@ pub fn kind(action: &Action) -> &'static str {
         Action::Mouse { .. } => "mouse",
         Action::Wheel(_) => "wheel",
         Action::Key { .. } => "key",
+        Action::Menu { .. } => "menu",
+        Action::Prompt { .. } => "prompt",
         Action::Capture { .. } => "capture",
     }
 }

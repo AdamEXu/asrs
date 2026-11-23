@@ -1,5 +1,5 @@
 import "./environment";
-import { app, BrowserWindow, dialog, net, screen, session } from "electron";
+import { app, BrowserWindow, dialog, Menu, net, screen, session, type MenuItem } from "electron";
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import * as os from "node:os";
@@ -35,6 +35,8 @@ const STABLE_CAPTURES = 3;
 const STABLE_GAP_MS = 120;
 const SAVE_SETTLE_MS = 1500;
 const STATE_SAVE_TIMEOUT_MS = 5000;
+const MENU_TIMEOUT_MS = 10_000;
+const PROMPT_SETTLE_MS = 300;
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
 function fail(message: string): never {
@@ -191,7 +193,51 @@ async function until<T>(what: string, timeoutMs: number, probe: () => Promise<T 
 }
 
 let target: BrowserWindow | null = null;
+// The prompt window a "prompt" action waited for: input and captures go to it until it closes.
+let prompt: BrowserWindow | null = null;
 let scriptedInput = false;
+
+function active(): BrowserWindow {
+  if (prompt !== null && prompt.isDestroyed()) prompt = null;
+  return prompt ?? target!;
+}
+
+// Popping a menu up natively would block on a menu no script can click, so menus are kept for a
+// "menu" action instead.
+let popped: { menu: Menu; window: BrowserWindow } | null = null;
+Menu.prototype.popup = function (this: Menu, options?: Electron.PopupOptions) {
+  popped = { menu: this, window: (options?.window as BrowserWindow | undefined) ?? target! };
+};
+
+async function clickMenu(labels: string[]) {
+  const { menu, window } = await until("a menu to pop up", MENU_TIMEOUT_MS, async () => popped ?? false);
+  popped = null;
+  let items: MenuItem[] = menu.items;
+  for (const [i, label] of labels.entries()) {
+    const item = items.find((it) => it.label === label);
+    if (item === undefined) throw new Error(`no menu item ${JSON.stringify(label)} among ${JSON.stringify(items.map((it) => it.label))}`);
+    if (i === labels.length - 1) {
+      if (!item.enabled) throw new Error(`menu item ${JSON.stringify(label)} is disabled`);
+      (item.click as any)({}, window, window.webContents);
+    } else {
+      items = item.submenu!.items;
+    }
+  }
+}
+
+async function switchPrompt(name: string | null) {
+  if (name === null) {
+    await until("the prompt to close", READY_TIMEOUT_MS, async () => prompt === null || prompt.isDestroyed());
+    prompt = null;
+    return;
+  }
+  prompt = await until(`the ${name} prompt`, READY_TIMEOUT_MS, async () => {
+    const win = windows.find((w) => !w.isDestroyed() && new URL(w.webContents.getURL() || "about:blank").pathname.endsWith(`/www/${name}.html`));
+    if (win === undefined || win.webContents.isLoading() || !win.isVisible()) return false;
+    return win;
+  });
+  await sleep(PROMPT_SETTLE_MS);
+}
 
 function sendScripted(contents: Electron.WebContents, input: Parameters<Electron.WebContents["sendInputEvent"]>[0]) {
   scriptedInput = true;
@@ -215,7 +261,9 @@ app.on("browser-window-created", (_event, win) => {
   // and ignore the real pointer, which would otherwise move the hover state when it passes over
   // them; sendInputEvent goes straight to the renderer and is unaffected.
   win.webContents.openDevTools = () => {};
-  win.show = () => win.showInactive();
+  // A modal prompt's show() begins a sheet on its parent, which activates nothing;
+  // showInactive() never shows it.
+  if (!win.isModal()) win.show = () => win.showInactive();
   win.setIgnoreMouseEvents(true);
   // macOS still hands the page a move from the physical cursor when the window appears under
   // it, so every mouse event the scenario did not send is dropped.
@@ -230,14 +278,22 @@ app.on("browser-window-created", (_event, win) => {
   });
 });
 
-async function exec<T = unknown>(code: string): Promise<T> {
-  return target!.webContents.executeJavaScript(code);
+async function exec<T = unknown>(code: string, win: BrowserWindow = target!): Promise<T> {
+  return win.webContents.executeJavaScript(code);
 }
 
 const call = (fn: Function, ...args: unknown[]) => `(${fn.toString()})(${args.map((a) => JSON.stringify(a)).join(", ")})`;
 
 async function nextFrames(count = 2) {
-  await exec(`new Promise((r) => { let n = ${count}; const f = () => (--n <= 0 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); })`);
+  const win = active();
+  let onClosed = () => {};
+  const closed = new Promise<void>((resolve) => win.once("closed", (onClosed = resolve)));
+  const frames = exec(`new Promise((r) => { let n = ${count}; const f = () => (--n <= 0 ? r() : requestAnimationFrame(f)); requestAnimationFrame(f); })`, win).catch((e) => {
+    if (!win.isDestroyed()) throw e;
+  });
+  // A prompt that input closed never answers.
+  await Promise.race(win === target ? [frames] : [frames, closed]);
+  if (!win.isDestroyed()) win.off("closed", onClosed);
 }
 
 async function waitIdle() {
@@ -289,7 +345,8 @@ let displayId: number | null = null;
 
 async function capture(name: string, probes: string[], maskSelectors: string[]) {
   await waitIdle();
-  const win = target!;
+  const win = active();
+  const onPage = <T = unknown>(code: string) => exec<T>(code, win);
   const display = screen.getDisplayMatching(win.getBounds());
   if (displayId === null) {
     displayId = display.id;
@@ -306,11 +363,11 @@ async function capture(name: string, probes: string[], maskSelectors: string[]) 
   let glReads = -1;
   await until(`capture ${name} to be stable`, STABLE_TIMEOUT_MS, async () => {
     attempts++;
-    const nextDom = await exec<any>(call(domDump, probes, maskSelectors));
+    const nextDom = await onPage<any>(call(domDump, probes, maskSelectors));
     const image = await win.webContents.capturePage();
     const nextSize = image.getSize(scale);
     const next = bgraToRgba(image.toBitmap({ scaleFactor: scale }));
-    const nextGlReads = await exec<number>("window.__asrsParity.glReads()");
+    const nextGlReads = await onPage<number>("window.__asrsParity.glReads()");
     const masks = nextDom.masks.map((m: { rect: Rect }) => m.rect);
     const same =
       rgba !== null &&
@@ -328,7 +385,8 @@ async function capture(name: string, probes: string[], maskSelectors: string[]) 
     return false;
   });
 
-  const expected = { width: scenario.window.width * scale, height: scenario.window.height * scale };
+  const content = win === target ? scenario.window : { width: win.getContentSize()[0], height: win.getContentSize()[1] };
+  const expected = { width: content.width * scale, height: content.height * scale };
   if (size.width !== expected.width || size.height !== expected.height) {
     throw new Error(`capture ${name}: content is ${size.width}x${size.height}, expected ${expected.width}x${expected.height}`);
   }
@@ -353,21 +411,21 @@ async function capture(name: string, probes: string[], maskSelectors: string[]) 
     scenario.page === "colour-patch"
       ? await exec("Array.from(document.querySelectorAll('.patch'), (el) => { const r = el.getBoundingClientRect(); return { rgb: el.dataset.rgb.split(',').map(Number), rect: [r.x, r.y, r.width, r.height] }; })")
       : undefined;
-  const contexts: any[] = await exec("window.__asrsParity.contexts()");
+  const contexts: any[] = await onPage("window.__asrsParity.contexts()");
   const canvases = [];
   const gl = [];
   const glFrames: Record<string, number> = {};
   for (const context of contexts) {
     if (!context.visible) continue;
     if (context.kind === "2d") {
-      const pixels: any = await exec(`window.__asrsParity.canvasPixels(${context.index})`);
+      const pixels: any = await onPage(`window.__asrsParity.canvasPixels(${context.index})`);
       if (pixels.width === 0 || pixels.height === 0) continue;
       const file = `${name}.canvas-${context.index}.png`;
       fs.writeFileSync(path.join(capturesDir, file), encodePng(pixels.width, pixels.height, Buffer.from(pixels.rgba)));
       canvases.push({ ...context, file, colorSpace: pixels.colorSpace });
     } else if (context.kind === "webgl" || context.kind === "webgl2") {
       if (!scenario.gl) continue;
-      const pixels: any = await exec(`window.__asrsParity.glPixels(${context.index})`);
+      const pixels: any = await onPage(`window.__asrsParity.glPixels(${context.index})`);
       if (pixels.rgba === null) throw new Error(`capture ${name}: WebGL canvas ${context.path} has not drawn since the page loaded`);
       const file = `${name}.gl-${context.index}.png`;
       fs.writeFileSync(path.join(capturesDir, file), encodePng(pixels.width, pixels.height, Buffer.from(pixels.rgba)));
@@ -383,7 +441,7 @@ async function capture(name: string, probes: string[], maskSelectors: string[]) 
       glFrames[file] = pixels.frame;
     }
   }
-  if (scenario.gl && gl.length === 0) throw new Error(`capture ${name}: the scenario is a 3D scenario but no WebGL canvas is visible`);
+  if (scenario.gl && win === target && gl.length === 0) throw new Error(`capture ${name}: the scenario is a 3D scenario but no WebGL canvas is visible`);
 
   fs.writeFileSync(
     `${base}.json`,
@@ -403,7 +461,7 @@ async function capture(name: string, probes: string[], maskSelectors: string[]) 
         patches,
         hubState,
         timelineRange,
-        timing: { stableAfter: attempts, glFrames, frame: await exec<number>("window.__asrsParity.frame()") }
+        timing: { stableAfter: attempts, glFrames, frame: await onPage<number>("window.__asrsParity.frame()") }
       },
       null,
       1
@@ -439,7 +497,7 @@ let pressedButton: string | null = null;
 const MOUSE_TYPES = { move: ["mouseMove"], down: ["mouseDown"], up: ["mouseUp"], click: ["mouseDown", "mouseUp"] } as const;
 
 async function perform(action: Action) {
-  const contents = target!.webContents;
+  const contents = active().webContents;
   if ("main" in action) {
     await exec(call(sendMainMessage, action.main, action.data));
   } else if ("open" in action) {
@@ -477,11 +535,18 @@ async function perform(action: Action) {
     } as any);
   } else if ("key" in action) {
     const modifiers = (action.modifiers ?? []) as any;
-    contents.sendInputEvent({ type: "keyDown", keyCode: action.key, modifiers });
-    if ([...action.key].length === 1) contents.sendInputEvent({ type: "char", keyCode: action.key, modifiers });
-    contents.sendInputEvent({ type: "keyUp", keyCode: action.key, modifiers });
+    const send = (type: "keyDown" | "char" | "keyUp") => {
+      if (!contents.isDestroyed()) contents.sendInputEvent({ type, keyCode: action.key, modifiers });
+    };
+    send("keyDown");
+    if ([...action.key].length === 1) send("char");
+    send("keyUp");
   } else if ("dialog" in action) {
     dialogQueue.push(action.dialog);
+  } else if ("menu" in action) {
+    await clickMenu(action.menu);
+  } else if ("prompt" in action) {
+    await switchPrompt(action.prompt);
   } else if ("capture" in action) {
     await capture(action.capture, action.probes ?? [], action.masks ?? []);
   }

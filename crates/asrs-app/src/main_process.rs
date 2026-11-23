@@ -223,6 +223,21 @@ fn file_paths(urls: Vec<String>) -> Vec<String> {
 }
 
 impl MainProcess {
+    /// Main in a parity scenario, which opens its hub window itself.
+    #[cfg(feature = "parity")]
+    pub(crate) fn headless(state: MainState) -> MainProcess {
+        MainProcess {
+            state,
+            menu: Vec::new(),
+            hubs: Vec::new(),
+        }
+    }
+
+    #[cfg(feature = "parity")]
+    pub(crate) fn state_mut(&mut self) -> &mut MainState {
+        &mut self.state
+    }
+
     fn send(cx: &mut App, hub: &WeakEntity<Hub>, name: MainToHub, data: JsValue) {
         if let Some(hub) = hub.upgrade() {
             hub.update(cx, |hub, cx| {
@@ -349,7 +364,7 @@ impl MainProcess {
             platform: Platform::current(),
             arch: process_arch(),
             identity: crate::IDENTITY,
-            repository: RELEASE_PROFILE.repository,
+            profile: RELEASE_PROFILE,
             fs: &RealFs,
             paths: &main.state.paths,
             windows: Windows::manager(cx),

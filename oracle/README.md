@@ -1026,6 +1026,23 @@ stays 0). On either backend: workers and historical or live sources (logs are bu
 steps), drag sessions other than through dispatched events, the documentation iframe's
 content, and 3D rendering.
 
+### Histogram
+
+`tools/histogramSpecs.mjs` writes `dom/histogram/*`: upstream's StatisticsRenderer with its real
+Chart.js 4.4.0, on Blink with scripted geometry. Its first step installs a recorder that hooks
+each chart as its tab opens and writes one record per outermost entry into it, with the canvas
+calls that entry made (`reset` when it set the canvas size, which drops the calls before):
+`create`, `resize` (the attach, or a throttled ResizeObserver or scale change), `render`, `event`
+(a throttled mouse event) and `draw` (an animation frame). After a layout the record also holds
+the chart area, both scales with their tick values and labels, every bar's
+`[x, y, base, width, height]` and the legend. `observe`, `dpr` and `dom` are the inputs, and
+`frame` marks an animation frame. Commands reach the renderer through the hub's tab loop by
+replacing the controller's `getCommand`, except in `controller`, which uses a log.
+`crates/asrs-tabs/tests/histogram_dom.rs` replays them, throws included.
+
+`tools/histogramTraces.mjs` extracts painted frames from those vectors into
+`src/canvas/histogramTraces.json`, the `histogram-*` canvas scenes.
+
 ### Blink backend
 
 `src/domBlink.ts` (entry `domBlink`, chosen by `"backend": "blink"`) runs the same fixture and
@@ -1131,6 +1148,15 @@ loop, so fixtures leave them out. Modifiers are `ctrl`, `alt`, `meta` and `shift
 can reach Electron's menu, so fixtures avoid them. The entry's generator hash also covers
 `selectKeysMain` (`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
 
+### Number insertion vectors
+
+`form/number-insert` (`src/genNumberInsert.ts`) records what Chromium lets the user insert into an
+en-US `<input type="number">` in an offscreen window: each record is the shown text, the selection
+(UTF-16 offsets), the inserted text, the text shown afterwards and the `value` then read. The
+insertions are `execCommand("insertText")`, which takes typing's and pasting's route through
+`BeforeTextInsertedEvent`. Fixed starting texts with every caret position come first, then seeded
+random ones.
+
 ## Hub sessions
 
 `hubSession` (`src/hubSession.ts`) runs a `dom` fixture on the same page bundle (`domPage.js`:
@@ -1174,7 +1200,7 @@ script runs (the driver exits naming the expected set when one is missing):
 `--enable-unsafe-swiftshader`, plus `--use-angle=d3d11-warp` with `--gl d3d11-warp`.
 
 What the driver pins besides switches: windows are shown inactive (`show` becomes
-`showInactive`) at the primary display's work-area origin plus 16 px with the scenario's content
+`showInactive`, except for modal prompts, whose `show` begins a sheet) at the primary display's work-area origin plus 16 px with the scenario's content
 size, ignore the real pointer, and never open DevTools; `fetch` and `net.fetch` in the main
 process and non-loopback HTTP and WebSocket requests from pages are refused (the refused URLs
 are in `run.json`); every `dialog` call is answered from the scenario's `dialog` actions, and an
@@ -1195,7 +1221,7 @@ Scenario file:
 | `window` | `{"width":1100,"height":650}` | content size in CSS px |
 | `scales`, `themes` | `[1,2]`, `["light","dark"]` | variants; one launch each |
 | `gl` | `false` | 3D scenario: GL switches and drawing-buffer dumps |
-| `prefs`, `userData` | `{}` | prefs merged by upstream over its defaults; extra JSON files seeded into userData |
+| `prefs`, `userData` | `{}` | prefs merged by upstream over its defaults; extra files seeded into userData: JSON values, or `{"$file": path}` for a file under `parity/scenarios` |
 | `actions` | | in order, below |
 
 Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-files` message;
@@ -1205,7 +1231,11 @@ Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-fi
 `{"selection": [method, ...args]}`, `{"mouse": "move"|"down"|"up"|"click", "x", "y"}`,
 `{"wheel": {"x", "y", "deltaX", "deltaY", "wheelTicksX", "wheelTicksY", "precise"}}`,
 `{"key": keyCode, "modifiers": [...]}`, `{"dialog": button index | file name | null}` (queued
-answer for the next dialog), `{"wait": ms}`, `{"idle": true}` and
+answer for the next dialog), `{"menu": [label, ...]}` (clicks the item at that label path of the
+context menu that popped up; neither side shows menus natively), `{"prompt": page | null}`
+(`editRange`, `editFov`, `renameTab`, `unitConversion` or `export`: later input and captures go to
+that prompt window, whose content size is its own; `null` waits until it has closed),
+`{"wait": ms}`, `{"idle": true}` and
 `{"capture": name, "probes": [selectors], "masks": [selectors]}`.
 
 A capture waits until the page is idle (fonts loaded, no log or field loading, no playback) and
@@ -1230,8 +1260,9 @@ port` runs it). It reads the same files and writes the same layout headless. Act
 the hub's model APIs (`main` and `open` as main messages, `selection` on the model's
 `SelectionImpl`) and the window's input dispatch (`mouse`, `wheel`, `key`; a notched wheel event
 becomes GPUI's line delta, so its `deltaY` must be 40 px a tick on macOS and Linux); `eval`,
-`dialog` and a non-empty `userData` are refused because the port has no page script and no main
-yet. Before the window opens it seeds `prefs.json` as the driver does and runs main's own
+`dialog` and any `userData` outside `userAssets/` are refused because the port has no page script
+and no dialogs yet. Before the window opens it seeds `prefs.json` and the scenario's user assets as
+the driver does and runs main's own
 startup (`asrs_services::lifecycle::MainState`) in the variant's `userData/`: the preferences
 rewrite, `createAssetFolders()` and `loadAssets()` over upstream's `bundledAssets`
 (`--bundled-assets`), and boots the hub with main's assets and preferences file. The hub's
