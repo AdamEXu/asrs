@@ -340,6 +340,7 @@ mod tests {
         };
         [
             "12px system-ui",
+            "200 12px system-ui",
             "bold 12px system-ui",
             "10px sans-serif",
             "italic 10px sans-serif",
