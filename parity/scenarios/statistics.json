@@ -1,5 +1,5 @@
 {
-  "about": "draft",
+  "about": "Interaction (U14): the generated drive log on a restored empty Statistics tab; /Drive/LeftVelocity and /Drive/RightVelocity dragged from the sidebar into the source list with the pointer, the data range and step size typed into their fields (committed by a click elsewhere), the minimum stepped with the arrow keys, a negative step size that upstream replaces, a bar hovered (tooltip and hover colours), the tab left for Documentation and shown again, trackpad scrolling of the values table to its end, then a restored tab with reference, relative and absolute error sources over the visible range, whose table is wider than half the tab, scrolled sideways. Saved HubState is compared at each capture. Nothing is masked but the focused field (gate 5)",
   "actions": [
     {
       "open": [
@@ -36,8 +36,8 @@
                 "sources": [],
                 "timeRange": "full",
                 "rangeMin": 0,
-                "rangeMax": 5,
-                "stepSize": 0.25
+                "rangeMax": 10,
+                "stepSize": 1
               },
               "controllerUUID": "statistics0000000000000000000000",
               "renderer": null,
@@ -46,6 +46,9 @@
           ]
         }
       }
+    },
+    {
+      "wait": 400
     },
     {
       "idle": true
@@ -61,7 +64,468 @@
         "table.stats-values",
         ".stats-histogram-container",
         ".stats-histogram-container > canvas",
-        ".stats-sources",
+        ".stats-settings",
+        "select.time-range",
+        "input.range-min",
+        "input.range-max",
+        "input.step-size"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 156
+    },
+    {
+      "mouse": "move",
+      "x": 320,
+      "y": 380
+    },
+    {
+      "mouse": "move",
+      "x": 498,
+      "y": 557
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 560
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 560
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 430
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 242
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 242
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 246
+    },
+    {
+      "mouse": "move",
+      "x": 320,
+      "y": 380
+    },
+    {
+      "mouse": "move",
+      "x": 498,
+      "y": 557
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 560
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 560
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 430
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "fields",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas",
+        ".stats-settings",
+        "select.time-range",
+        "input.range-min",
+        "input.range-max",
+        "input.step-size"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1080,
+      "y": 550
+    },
+    {
+      "mouse": "click",
+      "x": 1080,
+      "y": 550
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "4"
+    },
+    {
+      "mouse": "move",
+      "x": 1060,
+      "y": 610
+    },
+    {
+      "mouse": "click",
+      "x": 1060,
+      "y": 610
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "0"
+    },
+    {
+      "key": "."
+    },
+    {
+      "key": "2"
+    },
+    {
+      "key": "5"
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 582
+    },
+    {
+      "mouse": "click",
+      "x": 1000,
+      "y": 582
+    },
+    {
+      "wait": 400
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 430
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "typed",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas",
+        ".stats-settings",
+        "select.time-range",
+        "input.range-min",
+        "input.range-max",
+        "input.step-size"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 980,
+      "y": 550
+    },
+    {
+      "mouse": "click",
+      "x": 980,
+      "y": 550
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "key": "Down"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 430
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "stepped",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas",
+        ".stats-settings",
+        "select.time-range",
+        "input.range-min",
+        "input.range-max",
+        "input.step-size"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1060,
+      "y": 610
+    },
+    {
+      "mouse": "click",
+      "x": 1060,
+      "y": 610
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "Backspace"
+    },
+    {
+      "key": "-"
+    },
+    {
+      "key": "1"
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 582
+    },
+    {
+      "mouse": "click",
+      "x": 1000,
+      "y": 582
+    },
+    {
+      "wait": 400
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 430
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "clamped",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas",
+        ".stats-settings",
+        "select.time-range",
+        "input.range-min",
+        "input.range-max",
+        "input.step-size"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 760,
+      "y": 380
+    },
+    {
+      "wait": 700
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "hover",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas",
+        ".stats-settings",
+        "select.time-range",
+        "input.range-min",
+        "input.range-max",
+        "input.step-size"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 330,
+      "y": 64
+    },
+    {
+      "mouse": "click",
+      "x": 330,
+      "y": 64
+    },
+    {
+      "wait": 400
+    },
+    {
+      "mouse": "move",
+      "x": 393,
+      "y": 64
+    },
+    {
+      "mouse": "click",
+      "x": 393,
+      "y": 64
+    },
+    {
+      "wait": 700
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 125
+    },
+    {
+      "wait": 700
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "returned",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas",
+        ".stats-settings",
+        "select.time-range",
+        "input.range-min",
+        "input.range-max",
+        "input.step-size"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 430,
+      "y": 300
+    },
+    {
+      "wheel": {
+        "x": 430,
+        "y": 300,
+        "deltaX": 0,
+        "deltaY": -90,
+        "precise": true
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "scrolled",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas",
+        ".stats-settings",
+        "select.time-range",
+        "input.range-min",
+        "input.range-max",
+        "input.step-size"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 430,
+      "y": 300
+    },
+    {
+      "wheel": {
+        "x": 430,
+        "y": 300,
+        "deltaX": 0,
+        "deltaY": -9000,
+        "precise": true
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "bottom",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas",
         ".stats-settings",
         "select.time-range",
         "input.range-min",
@@ -95,7 +559,7 @@
               "controller": {
                 "sources": [
                   {
-                    "type": "independent",
+                    "type": "reference",
                     "logKey": "/Drive/LeftVelocity",
                     "logType": "Number",
                     "visible": true,
@@ -104,19 +568,55 @@
                     }
                   },
                   {
-                    "type": "independent",
+                    "type": "relativeError",
                     "logKey": "/Drive/RightVelocity",
                     "logType": "Number",
                     "visible": true,
                     "options": {
                       "color": "#e5b31b"
                     }
+                  },
+                  {
+                    "type": "absoluteError",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#af2437"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Odometry/Robot/translation/x",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Odometry/Robot/translation/y",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#858584"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#5f4528"
+                    }
                   }
                 ],
-                "timeRange": "full",
-                "rangeMin": 0,
-                "rangeMax": 5,
-                "stepSize": 0.25
+                "timeRange": "visible",
+                "rangeMin": -2,
+                "rangeMax": 12.5,
+                "stepSize": 0.5
               },
               "controllerUUID": "statistics0000000000000000000000",
               "renderer": null,
@@ -130,10 +630,18 @@
       "idle": true
     },
     {
-      "wait": 600
+      "wait": 400
     },
     {
-      "capture": "two",
+      "mouse": "move",
+      "x": 500,
+      "y": 430
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "many",
       "probes": [
         ".side-bar",
         ".tab-bar",
@@ -143,7 +651,44 @@
         "table.stats-values",
         ".stats-histogram-container",
         ".stats-histogram-container > canvas",
-        ".stats-sources",
+        ".stats-settings",
+        "select.time-range",
+        "input.range-min",
+        "input.range-max",
+        "input.step-size"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 430,
+      "y": 300
+    },
+    {
+      "wheel": {
+        "x": 430,
+        "y": 300,
+        "deltaX": -60,
+        "deltaY": 0,
+        "precise": true
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "sideways",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".stats-values-container",
+        "table.stats-values",
+        ".stats-histogram-container",
+        ".stats-histogram-container > canvas",
         ".stats-settings",
         "select.time-range",
         "input.range-min",

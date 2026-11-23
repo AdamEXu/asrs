@@ -23,7 +23,8 @@ const TOLERANCE: f64 = 2e-3;
 type Rect = [f64; 4];
 
 fn scale(family: &str, name: &str) -> f32 {
-    let path = vectors::workspace_root().join(format!("parity/specs/dom/{family}/{name}.entry.json"));
+    let path =
+        vectors::workspace_root().join(format!("parity/specs/dom/{family}/{name}.entry.json"));
     let spec = json::parse(&std::fs::read_to_string(&path).unwrap()).unwrap();
     let window = spec.get("fixture").unwrap().get("window").unwrap();
     let ratio = window.get("devicePixelRatio").and_then(Json::as_f64);
@@ -205,7 +206,11 @@ fn statistics_tables_lay_out_as_in_blink() {
             let end = numbers(get(blink, "end"));
             out.check(|| at("scroll end"), &layout.scroll(), &end);
             let histogram = layout.histogram(Some(offset_width + 10.0), 0.0);
-            out.check(|| at("histogram"), &histogram, &rect(get(blink, "histogram")));
+            out.check(
+                || at("histogram"),
+                &histogram,
+                &rect(get(blink, "histogram")),
+            );
             let rows = items(get(blink, "rows"));
             assert_eq!(placed.rows.len(), rows.len(), "{}", at("rows"));
             for (r, (row, blink)) in placed.rows.iter().zip(rows).enumerate() {

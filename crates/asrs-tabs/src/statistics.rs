@@ -42,6 +42,9 @@ const TIME_RANGE_OPTIONS: [(&str, &str); 7] = [
     ("live-10", "Live: 10 Seconds"),
 ];
 
+/// `option.live-only` in [`TIME_RANGE_OPTIONS`].
+const LIVE_OPTIONS: std::ops::Range<usize> = 5..7;
+
 /// What the controller reads besides [`SourceListCx`].
 pub trait StatisticsCx: SourceListCx {
     /// `new Date().getTime()`.
@@ -71,7 +74,6 @@ pub struct StatisticsController {
     last_source_str: String,
     last_timeline_range: [f64; 2],
     last_update_time: f64,
-    live_options_disabled: bool,
 }
 
 impl StatisticsController {
@@ -98,7 +100,6 @@ impl StatisticsController {
             last_source_str: String::new(),
             last_timeline_range: [0.0, 0.0],
             last_update_time: 0.0,
-            live_options_disabled: false,
         };
         controller.update_histogram_inputs();
         controller
@@ -135,7 +136,29 @@ impl StatisticsController {
 
     /// `option.disabled` of the `live-only` time range options, which `getCommand` sets.
     pub fn live_options_disabled(&self) -> bool {
-        self.live_options_disabled
+        self.time_range
+            .option(LIVE_OPTIONS.start)
+            .is_some_and(SelectOption::is_disabled)
+    }
+
+    /// `.time-range`.
+    pub fn time_range(&self) -> &Select {
+        &self.time_range
+    }
+
+    /// `.range-min`.
+    pub fn range_min(&self) -> &NumberInput {
+        &self.range_min
+    }
+
+    /// `.range-max`.
+    pub fn range_max(&self) -> &NumberInput {
+        &self.range_max
+    }
+
+    /// `.step-size`.
+    pub fn step_size(&self) -> &NumberInput {
+        &self.step_size
     }
 
     /// One run of the source list's own `requestAnimationFrame` loop, which the hub schedules
@@ -812,7 +835,10 @@ impl<Cx: StatisticsCx + ?Sized> TabController<Cx> for StatisticsController {
     }
 
     fn command(&mut self, cx: &mut Cx, _uuid: &JsValue) -> Result<Command, JsError> {
-        self.live_options_disabled = cx.tab_selection().get_current_live_time().is_none();
+        let not_live = cx.tab_selection().get_current_live_time().is_none();
+        for option in LIVE_OPTIONS {
+            self.time_range.set_option_disabled(option, not_live);
+        }
         let sources_js = JsValue::Array(self.source_list.state().iter().map(ToJs::to_js).collect());
         let sources_str = json::stringify(&sources_js)
             .map_err(|e| JsError {

@@ -138,6 +138,12 @@ impl Histogram {
         self.chart.surface.canvas()
     }
 
+    /// Differs whenever the canvas may show something else.
+    pub fn revision(&self) -> u64 {
+        self.chart.surface.revision()
+    }
+
+    /// The canvas's CSS width and height.
     pub fn size(&self) -> (f64, f64) {
         (self.chart.width, self.chart.height)
     }

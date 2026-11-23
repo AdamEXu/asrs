@@ -46,7 +46,12 @@ impl Step {
 }
 
 /// The value after one step `up` or down from `value`.
-pub fn stepped(value: &JsString, value_attribute: &JsString, step: &JsString, up: bool) -> JsString {
+pub fn stepped(
+    value: &JsString,
+    value_attribute: &JsString,
+    step: &JsString,
+    up: bool,
+) -> JsString {
     let range = Step::new(step, value_attribute);
     let current = parse_to_decimal_for_number_type(value.units(), Decimal::from(0));
     let mismatch = range.mismatch(&current);

@@ -434,7 +434,12 @@ fn arrow_keys_step_number_inputs_as_in_blink() {
         .as_array()
         .unwrap()
         .iter()
-        .map(|s| s.get("markup").and_then(Json::as_str).unwrap().to_string_lossy())
+        .map(|s| {
+            s.get("markup")
+                .and_then(Json::as_str)
+                .unwrap()
+                .to_string_lossy()
+        })
         .collect();
     let attribute = |step: usize, name: &str| {
         let rest = markup[step].split_once(&format!(" {name}=\""))?.1;

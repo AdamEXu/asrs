@@ -1,5 +1,5 @@
 {
-  "about": "draft",
+  "about": "The Metadata tab (U14): the no-data alert, the generated metadata log's table (real and replay columns, values that wrap, break inside words, hold line breaks or are missing, more rows than fit), a wheel event over it, which scrolls nothing because the container's height: 100% resolves to auto, the same log merged in beside it, and a log without metadata opened in its place. Saved HubState is compared at each capture. Nothing is masked",
   "actions": [
     {
       "main": "restore-state",
@@ -78,16 +78,57 @@
       }
     },
     {
+      "wait": 1500
+    },
+    {
       "idle": true
     },
     {
-      "capture": "scrolled",
+      "capture": "wheel",
       "probes": [
         ".side-bar",
         ".tab-bar",
         ".renderer-content",
         ".metadata-table-container",
         "table.metadata-table th"
+      ]
+    },
+    {
+      "open": [
+        "app:metadata"
+      ],
+      "merge": true
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "merged",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".metadata-table-container",
+        "table.metadata-table th"
+      ]
+    },
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "cleared",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".metadata-table-container",
+        "table.metadata-table th",
+        ".tab-centered"
       ]
     }
   ]

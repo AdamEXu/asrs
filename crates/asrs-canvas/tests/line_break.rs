@@ -92,7 +92,11 @@ fn strings_break_where_blink_breaks_them() {
                 a.retain(|i| !b.contains(i));
                 at(&a)
             };
-            failures.push((string.clone(), only(&expected, &actual), only(&actual, &expected)));
+            failures.push((
+                string.clone(),
+                only(&expected, &actual),
+                only(&actual, &expected),
+            ));
         }
     }
     assert!(

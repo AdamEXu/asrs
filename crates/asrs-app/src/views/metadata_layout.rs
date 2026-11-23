@@ -27,7 +27,10 @@ pub fn cell_style(kind: CellKind) -> TextStyle {
         CellKind::Header => (format!("bold 16px {family}"), "left"),
         CellKind::Key => (format!("bold 16px {family}"), "right"),
         CellKind::Value => (format!("14px {}", MONOSPACE_FAMILY.join(", ")), "left"),
-        CellKind::NoData => (format!("italic 14px {}", MONOSPACE_FAMILY.join(", ")), "left"),
+        CellKind::NoData => (
+            format!("italic 14px {}", MONOSPACE_FAMILY.join(", ")),
+            "left",
+        ),
     };
     TextStyle::from_css([
         ("font", font.as_str()),
@@ -74,10 +77,7 @@ impl Placed {
             0
         };
         let free = row.height - 2 * self.padding - bottom - cell.text.height;
-        [
-            cell.left + self.padding,
-            row.top + self.padding + free / 2,
-        ]
+        [cell.left + self.padding, row.top + self.padding + free / 2]
     }
 }
 
@@ -176,7 +176,11 @@ impl MetadataLayout {
             let height = cells
                 .iter()
                 .map(|c| {
-                    let bottom = if c.kind == CellKind::Header { border } else { 0 };
+                    let bottom = if c.kind == CellKind::Header {
+                        border
+                    } else {
+                        0
+                    };
                     c.text.height + 2 * padding + bottom
                 })
                 .max()

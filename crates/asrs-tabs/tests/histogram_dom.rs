@@ -309,12 +309,18 @@ impl Replay {
     }
 
     fn attached(&self) -> bool {
-        let histogram = self.renderer.as_ref().and_then(StatisticsRenderer::histogram);
+        let histogram = self
+            .renderer
+            .as_ref()
+            .and_then(StatisticsRenderer::histogram);
         histogram.is_some_and(Histogram::is_attached)
     }
 
     fn callbacks(&self) -> usize {
-        let histogram = self.renderer.as_ref().and_then(StatisticsRenderer::histogram);
+        let histogram = self
+            .renderer
+            .as_ref()
+            .and_then(StatisticsRenderer::histogram);
         histogram.map_or(0, Histogram::callbacks)
     }
 

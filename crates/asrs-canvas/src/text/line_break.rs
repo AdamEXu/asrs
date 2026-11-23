@@ -9,8 +9,8 @@ const NBSP: char = '\u{a0}';
 /// `kAsciiLineBreakTable`, less the digits after a hyphen.
 fn ascii_pair(before: char, after: char) -> bool {
     match before {
-        '!' | '"' | '#' | '%' | '&' | ')' | '*' | '+' | ',' | '.' | ':' | ';' | '=' | '>' | '\\'
-        | ']' | '|' | '}' | '~' => matches!(after, '(' | '<' | '[' | '{'),
+        '!' | '"' | '#' | '%' | '&' | ')' | '*' | '+' | ',' | '.' | ':' | ';' | '=' | '>'
+        | '\\' | ']' | '|' | '}' | '~' => matches!(after, '(' | '<' | '[' | '{'),
         '-' => !matches!(
             after,
             '!' | '$' | ')' | ',' | '.' | '/' | ':' | ';' | '?' | ']' | '}'
