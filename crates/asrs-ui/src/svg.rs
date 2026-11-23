@@ -260,7 +260,9 @@ impl Document {
                         path.line_to(P { x: x2, y: y2 });
                         (Geometry::Path(path), None)
                     }
-                    ElementShape::Circle { radius, .. } if !(radius > 0.0) => return None,
+                    ElementShape::Circle { radius, .. } if radius.is_nan() || radius <= 0.0 => {
+                        return None;
+                    }
                     ElementShape::Circle {
                         center: [cx, cy],
                         radius: r,
