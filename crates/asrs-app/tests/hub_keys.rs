@@ -22,9 +22,10 @@ use asrs_ui::gpui::{
 use hub_page::Page;
 
 const KEY: &str = "/Value";
-const JUMP_INPUT: (f32, f32) = (330.0, 103.0);
-const JUMP_BUTTON: (f32, f32) = (382.0, 103.0);
-const BODY: (f32, f32) = (700.0, 500.0);
+/// In the table's container.
+const JUMP_INPUT: (f32, f32) = (30.0, 15.0);
+const JUMP_BUTTON: (f32, f32) = (82.0, 15.0);
+const BODY: (f32, f32) = (400.0, 412.0);
 
 impl Page<'_> {
     fn press(&mut self, key: &'static str) {
@@ -39,7 +40,8 @@ impl Page<'_> {
     }
 
     fn click(&mut self, (x, y): (f32, f32)) {
-        let position = point(px(x), px(y));
+        let container = self.table(|table| table.dom().borrow().layout.container);
+        let position = point(px(container.x as f32 + x), px(container.y as f32 + y));
         self.dispatch(PlatformInput::MouseDown(MouseDownEvent {
             button: MouseButton::Left,
             position,
@@ -64,13 +66,16 @@ impl Page<'_> {
         assert_eq!(self.mode(), SelectionMode::Static);
     }
 
-    fn scroll_top(&mut self) -> f64 {
+    fn table<R>(&mut self, f: impl FnOnce(&TableRenderer) -> R) -> R {
         self.model(|model| {
             let mut tabs = model.tabs().tabs();
             let table = tabs.find_map(|tab| tab.renderer().downcast_ref::<TableRenderer>());
-            let dom = table.expect("a table").dom().clone();
-            dom.borrow_mut().layout.scroll()[1]
+            f(table.expect("a table"))
         })
+    }
+
+    fn scroll_top(&mut self) -> f64 {
+        self.table(|table| table.dom().borrow_mut().layout.scroll()[1])
     }
 }
 
