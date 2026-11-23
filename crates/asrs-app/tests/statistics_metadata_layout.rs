@@ -269,6 +269,9 @@ fn metadata_tables_lay_out_as_in_blink() {
             let container = rect(get(blink, "container"));
             let ours = [0.0, 0.0, width, px(placed.height)];
             out.check(|| at("container"), &ours, &container);
+            let [w, h] = [width, px(placed.height)].map(|v| (v + 0.5).floor());
+            let sizes = numbers(get(blink, "sizes"));
+            out.check(|| at("sizes"), &[w, w, h, w, h], &sizes);
             let rows = items(get(blink, "rows"));
             assert_eq!(placed.rows.len(), rows.len(), "{}", at("rows"));
             for (r, (row, blink)) in placed.rows.iter().zip(rows).enumerate() {

@@ -193,6 +193,16 @@ function flows(): Flow[] {
   add("unitConversion", "numpad enter", [length], [select("extraFactor"), text("3"), key("NumpadEnter"), click("confirm")]);
   add("unitConversion", "type change", [length], [pick("unitType", "none"), pick("unitType", "length"), click("confirm")]);
   add("unitConversion", "focus messages", [length], [focused(false), focused(true), click("confirm")]);
+
+  const arrows = (...names: string[]) => names.map((name) => key(`Arrow${name}`));
+  add("editRange", "arrow keys", [[-10, 10]], [...arrows("Up", "Up", "Down"), text("5"), key("Tab"), ...arrows("Down"), click("confirm")]);
+  add("editRange", "arrow keys on fractions", [[-0.25, 1e21]], [...arrows("Down"), select("min"), ...arrows("Up", "Down", "Down"), key("Enter")]);
+  add("editRange", "arrow keys on bad input", [[0, 1]], [text("1e"), ...arrows("Up"), key("Backspace"), ...arrows("Up"), key("Enter")]);
+  add("editFov", "arrow keys", [72.5], [...arrows("Up", "Down"), text("1"), key("ArrowLeft"), ...arrows("Up"), text("2"), click("confirm")]);
+  const fixed = [pick("samplingMode", "fixed"), select("samplingPeriod")];
+  add("export", "arrow keys", akit, [...fixed, ...arrows("Up", "Up", "Down"), text("0"), ...arrows("Down"), click("confirm")]);
+  add("export", "arrow keys to zero", akit, [...fixed, text("2"), ...arrows("Down", "Down", "Down"), key("Tab"), key("Enter")]);
+  add("export", "arrow keys on fractions", akit, [...fixed, text("0.5"), ...arrows("Down"), text(".5"), ...arrows("Up"), key("Enter")]);
   return list;
 }
 
@@ -243,6 +253,8 @@ const KEYS = {
   Backspace: { code: "Backspace", keyCode: 8 },
   ArrowLeft: { code: "ArrowLeft", keyCode: 37 },
   ArrowRight: { code: "ArrowRight", keyCode: 39 },
+  ArrowUp: { code: "ArrowUp", keyCode: 38 },
+  ArrowDown: { code: "ArrowDown", keyCode: 40 },
   " ": { code: "Space", keyCode: 32, text: " " }
 };
 app.setPath("userData", request.userData);

@@ -4,7 +4,7 @@
 //! it: after spaces, between two ASCII characters by its pair table, and elsewhere by ICU.
 
 use icu_segmenter::LineSegmenter;
-use icu_segmenter::options::LineBreakOptions;
+use icu_segmenter::options::{LineBreakOptions, LineBreakStrictness};
 
 const NBSP: char = '\u{a0}';
 
@@ -26,14 +26,16 @@ fn ascii_pair(before: char, after: char) -> bool {
 }
 
 fn needs_icu(c: char) -> bool {
-    c > '\u{7f}' && c != NBSP
+    !c.is_ascii()
 }
 
 /// The byte offsets at which the next line may start when one starts at `text`'s own start: Blink
 /// breaks each line with no regard for the text before it. Spaces are collapsed.
 pub fn opportunities(text: &str) -> Vec<usize> {
     let icu: Vec<usize> = if text.chars().any(needs_icu) {
-        let segmenter = LineSegmenter::new_for_non_complex_scripts(LineBreakOptions::default());
+        let mut options = LineBreakOptions::default();
+        options.strictness = Some(LineBreakStrictness::Normal);
+        let segmenter = LineSegmenter::new_dictionary(options);
         segmenter.segment_str(text).collect()
     } else {
         Vec::new()
