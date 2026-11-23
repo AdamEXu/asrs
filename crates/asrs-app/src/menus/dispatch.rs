@@ -17,6 +17,7 @@ use super::bridge::{self, MenuAction};
 use super::click::{self, ClickEnv, Effect, Failure, Reply, Then};
 use super::context;
 use super::model::Command;
+use crate::download_flow;
 use crate::export_flow;
 use crate::main_process::{MainProcess, SatelliteConfig};
 use crate::windows::{
@@ -171,7 +172,10 @@ fn open_window(kind: WindowKind, parent: WindowId, cx: &mut App) -> Result<(), U
             }
             return Ok(());
         }
-        WindowKind::Download => "Downloading logs",
+        WindowKind::Download => {
+            download_flow::open(parent, cx);
+            return Ok(());
+        }
         WindowKind::Licenses => "The licenses window",
         other => panic!("{other:?} does not open from the application menu"),
     }))
@@ -309,16 +313,20 @@ fn path_text(path: &Path) -> String {
     path.to_string_lossy().into_owned()
 }
 
+pub(crate) fn message_box_type(kind: &str) -> MessageBoxType {
+    match kind {
+        "info" => MessageBoxType::Info,
+        "warning" => MessageBoxType::Warning,
+        "error" => MessageBoxType::Error,
+        "question" => MessageBoxType::Question,
+        _ => MessageBoxType::None,
+    }
+}
+
 pub(crate) fn message_box_options(options: &MessageBox) -> MessageBoxOptions {
     let index = |id: Option<f64>| id.map(|id| id as usize);
     MessageBoxOptions {
-        kind: match options.kind {
-            "info" => MessageBoxType::Info,
-            "warning" => MessageBoxType::Warning,
-            "error" => MessageBoxType::Error,
-            "question" => MessageBoxType::Question,
-            _ => MessageBoxType::None,
-        },
+        kind: message_box_type(options.kind),
         title: options.title.to_owned(),
         message: options.message.to_string_lossy(),
         detail: options.detail.to_string_lossy(),
@@ -341,7 +349,7 @@ fn file_filter(filter: &services::FileFilter) -> FileFilter {
     }
 }
 
-fn open_dialog_options(options: &services::OpenDialog) -> OpenDialogOptions {
+pub(crate) fn open_dialog_options(options: &services::OpenDialog) -> OpenDialogOptions {
     let has = |property| options.properties.contains(&property);
     OpenDialogOptions {
         title: options.title.clone(),

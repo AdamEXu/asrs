@@ -194,7 +194,7 @@ struct TimelinePointer {
     target: ScrollTarget,
 }
 
-pub(super) fn wheel_of(event: &ScrollEvent) -> Wheel {
+pub(crate) fn wheel_of(event: &ScrollEvent) -> Wheel {
     let delta = platform::wheel_delta(event);
     Wheel {
         delta: [f64::from(delta.x), f64::from(delta.y)],

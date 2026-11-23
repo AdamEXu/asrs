@@ -27,6 +27,7 @@ use asrs_ui::gpui::{App, Entity, Global, WeakEntity};
 use asrs_ui::platform;
 use asrs_ui::theme::{Appearance, ThemeSource};
 
+use crate::download_flow;
 use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
 use crate::hub_dialogs;
@@ -663,6 +664,7 @@ impl MainProcess {
             Self::send(cx, &hub, MainToHub::SetPreferences, data.clone());
         }
         Self::send_satellites(cx, MainToSatellite::SetPreferences, &data);
+        download_flow::send_preferences(&prefs, cx);
         let menu = &mut cx.global_mut::<MainProcess>().menu;
         if !menu.is_empty() {
             app_menu::apply_preferences(menu, &prefs);
@@ -692,6 +694,11 @@ impl MainProcess {
             eprintln!("asrs: the preferences window: {e}");
         }
         Ok(())
+    }
+
+    /// `downloadStop`, which a closing licenses or source list help window also calls.
+    pub fn download_stop(cx: &App) {
+        download_flow::stop(cx);
     }
 
     /// `jsonfile.writeFileSync(PREFS_FILENAME, event.data); sendAllPreferences();`
@@ -908,12 +915,12 @@ impl MainProcess {
         }
     }
 
-    fn send_files(cx: &mut App, window: WindowId, files: Vec<String>) {
+    pub(crate) fn send_files(cx: &mut App, window: WindowId, files: Vec<String>) {
         let message = open_files_message(files);
         Self::send_to_hub(cx, window, message.name, message.data);
     }
 
-    fn focus(cx: &mut App, window: WindowId) {
+    pub(crate) fn focus(cx: &mut App, window: WindowId) {
         if let Some(handle) = Windows::handle(cx, window) {
             let _ = handle.update(cx, |_, window, _| window.activate_window());
         }

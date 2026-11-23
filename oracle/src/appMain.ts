@@ -2,11 +2,12 @@ import "./environment";
 import { app, BrowserWindow, dialog, Menu, net, screen, session, type MenuItem } from "electron";
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
+import { Socket } from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import { saveDisplayProfile, type DisplayProfile } from "./app/display";
 import { GENERATED_LOGS } from "./app/logs";
-import { busyReasons, domDump, hubReady, sendMainMessage } from "./app/page";
+import { busyReasons, domDump, downloadShows, hubReady, sendMainMessage } from "./app/page";
 import { patchPageHtml } from "./app/patches";
 import { actionKind, parseScenario, type Action, type GlMode, type Scale, type Theme } from "./app/scenario";
 import { installTap } from "./app/tap";
@@ -15,14 +16,15 @@ import { encodePng } from "./canvas/png";
 declare const __UPSTREAM_DIR__: string;
 
 const USAGE = `usage: electron <switches> appMain.mjs <scenario.json> <out dir> --scale=<1|2> --theme=<light|dark>
-         [--gl=<mode>] [--colour=srgb|display]
+         [--gl=<mode>] [--colour=srgb|display] [--robot=<port>]
 
 Starts upstream's bundles/main.js with an isolated userData directory and drives it through the
 scenario with executeJavaScript and sendInputEvent. --gl picks the GL backend switches of a
 scenario with "gl": true: native (macOS default), swiftshader (Linux and Windows default) or
 d3d11-warp. --colour=srgb (default) has Chromium composite in sRGB; --colour=display keeps the
 display's colour space and stores its ICC profile as display.icc. The driver names the Electron
-switches it needs when they are missing. Results go to <out dir>: run.json, captures/, files/,
+switches it needs when they are missing. --robot is where a scenario's robotServer listens: main's
+connections to port 22 of 127.0.0.1 go there. Results go to <out dir>: run.json, captures/, files/,
 inputs/ and, with --colour=display, display.icc.`;
 
 const WINDOW_ORIGIN = 16;
@@ -56,12 +58,15 @@ if (scale !== 1 && scale !== 2) fail(USAGE);
 if (theme !== "light" && theme !== "dark") fail(USAGE);
 const glMode = (options.gl ?? (process.platform === "darwin" ? "native" : "swiftshader")) as GlMode;
 if (!["native", "swiftshader", "d3d11-warp"].includes(glMode)) fail(USAGE);
+const robotPort = Number(options.robot);
 const colour = options.colour ?? "srgb";
 if (colour !== "srgb" && colour !== "display") fail(USAGE);
 const scenario = parseScenario(path.basename(scenarioFile, ".json"), fs.readFileSync(scenarioFile, "utf8"));
 if (scenario.page === "app" && (scenario.window.width < 800 || scenario.window.height < 400)) {
   fail(`scenario ${scenario.name}: the hub window has a minimum size of 800x400`);
 }
+
+if (scenario.robot && !Number.isInteger(robotPort)) fail(`scenario ${scenario.name} needs --robot`);
 
 const switches: [string, string?][] = [
   ["force-device-scale-factor", String(scale)],
@@ -126,6 +131,13 @@ function refuseNetwork(input: unknown): Promise<never> {
 globalThis.fetch = refuseNetwork as typeof fetch;
 net.fetch = refuseNetwork as typeof net.fetch;
 
+const connect = Socket.prototype.connect;
+Socket.prototype.connect = function (this: Socket, ...args: any[]) {
+  const target = args[0];
+  if (scenario.robot && target?.host === "127.0.0.1" && target.port === 22) return connect.call(this, { ...target, port: robotPort });
+  return (connect as any).apply(this, args);
+} as any;
+
 function nextDialogResponse(kind: string, options: any): { value: number | string | null; scripted: boolean } {
   if (dialogQueue.length > 0) return { value: dialogQueue.shift()!, scripted: true };
   errors.push(`unscripted ${kind}: ${JSON.stringify(options)}`);
@@ -155,7 +167,7 @@ function scriptDialogs() {
     const options = optionsOf(args);
     const { value, scripted } = nextDialogResponse(kind, options);
     const file = dialogPath(value);
-    if (file !== null) fs.mkdirSync(path.dirname(file), { recursive: true });
+    if (file !== null) fs.mkdirSync(String(value).endsWith("/") ? file : path.dirname(file), { recursive: true });
     dialogs.push({ kind, options, response: file, scripted });
     return file;
   };
@@ -238,11 +250,15 @@ function clickAppMenu(labels: string[]) {
   (found[0].click as any)({}, target, target!.webContents);
 }
 
+function hostModifiers(names: string[] = []): string[] {
+  return names.map((name) => (name !== "commandOrControl" ? name : process.platform === "darwin" ? "meta" : "control"));
+}
+
 function isSatellite(win: BrowserWindow): boolean {
   return new URL(win.webContents.getURL() || "about:blank").pathname.endsWith("/www/satellite.html");
 }
 
-async function switchPrompt(name: string | null, index: number) {
+async function switchPrompt(name: string | null, index: number, width?: number, height?: number) {
   if (name === "hub") {
     if (prompt !== null && !prompt.isDestroyed() && !isSatellite(prompt)) throw new Error("the prompt is still open");
     prompt = null;
@@ -258,6 +274,7 @@ async function switchPrompt(name: string | null, index: number) {
     if (win === undefined || win.webContents.isLoading() || !win.isVisible()) return false;
     return win;
   });
+  if (width !== undefined && height !== undefined) prompt.setContentSize(width, height);
   await sleep(PROMPT_SETTLE_MS);
 }
 
@@ -545,7 +562,7 @@ async function perform(action: Action) {
       // A real mouse reports the held button on its down and moves (PointerEvent.buttons).
       if (type === "mouseDown") pressedButton = button;
       if (type === "mouseUp") pressedButton = null;
-      const modifiers = pressedButton === null ? [] : [`${pressedButton}ButtonDown`];
+      const modifiers = [...hostModifiers(action.modifiers), ...(pressedButton === null ? [] : [`${pressedButton}ButtonDown`])];
       sendScripted(contents, { type, x: action.x, y: action.y, button, clickCount: action.clickCount ?? 1, modifiers } as any);
     }
   } else if ("wheel" in action) {
@@ -562,7 +579,7 @@ async function perform(action: Action) {
       canScroll: true
     } as any);
   } else if ("key" in action) {
-    const modifiers = (action.modifiers ?? []) as any;
+    const modifiers = hostModifiers(action.modifiers) as any;
     const send = (type: "keyDown" | "char" | "keyUp", keyCode = action.key) => {
       if (!contents.isDestroyed()) contents.sendInputEvent({ type, keyCode, modifiers });
     };
@@ -577,7 +594,9 @@ async function perform(action: Action) {
   } else if ("appMenu" in action) {
     clickAppMenu(action.appMenu);
   } else if ("prompt" in action) {
-    await switchPrompt(action.prompt, action.index ?? 0);
+    await switchPrompt(action.prompt, action.index ?? 0, action.width, action.height);
+  } else if ("download" in action) {
+    await until(`the download window to show ${JSON.stringify(action.download)}`, READY_TIMEOUT_MS, () => exec<boolean>(call(downloadShows, action.download), active()));
   } else if ("capture" in action) {
     await capture(action.capture, action.probes ?? [], action.masks ?? []);
   }

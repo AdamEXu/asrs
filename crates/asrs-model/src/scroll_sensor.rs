@@ -77,7 +77,7 @@ fn duration_ms(delta: [f64; 2]) -> f64 {
 }
 
 /// `cubic-bezier(0.42, 0, 0.58, 1)` at `t`.
-fn ease_in_out(t: f64) -> f64 {
+pub fn ease_in_out(t: f64) -> f64 {
     let (x1, y1, x2, y2) = (0.42, 0.0, 0.58, 1.0);
     let bezier = |a: f64, b: f64, s: f64| {
         let r = 1.0 - s;

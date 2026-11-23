@@ -6,6 +6,9 @@
 //! Upstream registers its callbacks on a client without checking, when they run, that the client is
 //! still the current one, and its licenses and help windows also call `downloadStop` when they
 //! close. Both are kept.
+//!
+//! One deviation: upstream saves under whatever name the server sent, and here a save with a name
+//! that is not a plain file name ([`is_plain_name`]) ends in an alert before it writes a file.
 
 use std::collections::HashMap;
 
@@ -171,7 +174,7 @@ struct Task {
 struct SaveMany {
     sftp: SftpId,
     save_path: String,
-    rest: std::vec::IntoIter<String>,
+    rest: std::vec::IntoIter<Option<String>>,
     folder: Option<String>,
     tasks: Vec<Task>,
 }
@@ -192,7 +195,7 @@ enum Pending {
     },
     ListFolder(Listing),
     SaveSftp {
-        files: Vec<String>,
+        files: Vec<Option<String>>,
         save_path: String,
     },
     SaveFolder(SaveMany),
@@ -221,7 +224,7 @@ pub struct Downloader {
     pending: HashMap<Token, Pending>,
     refreshing: HashMap<TimerId, SftpId>,
     batches: Vec<Batch>,
-    selecting: HashMap<Token, Vec<String>>,
+    selecting: HashMap<Token, Vec<Option<String>>>,
     asking: HashMap<Token, String>,
 }
 
@@ -291,14 +294,25 @@ impl Downloader {
         self.stop(host);
     }
 
-    /// The window's `save` message.
-    pub fn save_message(&mut self, files: Vec<String>, host: &mut dyn DownloadHost) {
+    /// The window's `save` message; a `None` is an `undefined` name.
+    pub fn save_message(
+        &mut self,
+        files: Vec<Option<String>>,
+        host: &mut dyn DownloadHost,
+    ) -> Thrown {
         if !self.window_alive() {
-            return;
+            return Ok(());
         }
-        let Some(first) = files.first() else {
-            return;
+        let Some(Some(first)) = files.first() else {
+            return Err(
+                "The \"path\" argument must be of type string. Received undefined".to_owned(),
+            );
         };
+        let mut names = files.iter().flatten();
+        if let Some(name) = names.find(|name| !is_plain_name(name, self.style)) {
+            self.refuse(name, host);
+            return Ok(());
+        }
         let extension = self.extension(first);
         let token = if files.len() > 1 || extension.is_empty() {
             host.show_open_dialog(&OpenDialog {
@@ -330,6 +344,11 @@ impl Downloader {
             })
         };
         self.selecting.insert(token, files);
+        Ok(())
+    }
+
+    fn refuse(&self, name: &str, host: &mut dyn DownloadHost) {
+        self.send(host, WindowMessage::ShowAlert(unsafe_name(name)));
     }
 
     fn extension(&self, name: &str) -> String {
@@ -516,6 +535,15 @@ impl Downloader {
             Some(Pending::SaveFolder(mut save)) => {
                 let folder = save.folder.take().expect("a folder was being read");
                 if let Ok(files) = result {
+                    let saved = |file: &&DirEntry| is_saved(file);
+                    let unsafe_file = files
+                        .iter()
+                        .filter(saved)
+                        .find(|file| !is_plain_name(&file.filename, self.style));
+                    if let Some(file) = unsafe_file {
+                        self.refuse(&file.filename, host);
+                        return;
+                    }
                     self.add_folder(&mut save, &folder, files, host);
                 }
                 self.collect(save, host);
@@ -573,14 +601,16 @@ impl Downloader {
 
     fn save(
         &mut self,
-        files: Vec<String>,
+        files: Vec<Option<String>>,
         save_path: String,
         sftp: SftpId,
         host: &mut dyn DownloadHost,
     ) -> Thrown {
         self.send(host, WindowMessage::SetProgress(Progress::Preparing));
-        if files.len() == 1 && !self.extension(&files[0]).is_empty() {
-            let remote = format!("{}{}", self.path, files[0]);
+        if let [Some(file)] = &files[..]
+            && !self.extension(file).is_empty()
+        {
+            let remote = format!("{}{file}", self.path);
             if let Ok(token) = host.fast_get(sftp, &remote, &save_path) {
                 self.pending.insert(token, Pending::GetSingle { save_path });
             }
@@ -611,7 +641,7 @@ impl Downloader {
             return;
         }
         for file in files {
-            if !file.is_directory() && !file.filename.starts_with('.') {
+            if is_saved(&file) {
                 save.tasks.push(Task {
                     remote: format!("{}{folder}/{}", self.path, file.filename),
                     local: self.join(&local, &file.filename),
@@ -623,6 +653,10 @@ impl Downloader {
 
     fn collect(&mut self, mut save: SaveMany, host: &mut dyn DownloadHost) {
         while let Some(file) = save.rest.next() {
+            // `path.extname(undefined)` throws, which ends the save.
+            let Some(file) = file else {
+                return;
+            };
             let remote = format!("{}{file}", self.path);
             if !self.extension(&file).is_empty() {
                 save.tasks.push(Task {
@@ -779,6 +813,50 @@ impl Downloader {
             host.open_files(&[save_path]);
         }
     }
+}
+
+/// Whether a folder's entry is downloaded with it.
+fn is_saved(file: &DirEntry) -> bool {
+    !file.is_directory() && !file.filename.starts_with('.')
+}
+
+/// Whether `name` names a file in whichever folder it is joined to: no path separator, drive prefix
+/// or NUL, and not empty, `.` or `..`. On Windows it also names neither a device nor a stream of
+/// another file.
+pub fn is_plain_name(name: &str, style: PathStyle) -> bool {
+    let bytes = name.as_bytes();
+    let drive = bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':';
+    let plain = !matches!(name, "" | "." | "..") && !drive && !name.contains(['/', '\\', '\0']);
+    let windows = style == PathStyle::Win32;
+    plain && !(windows && (name.contains(':') || is_windows_device(name)))
+}
+
+/// `CON` and the like, which Windows opens as devices in any folder and with any extension.
+fn is_windows_device(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or_default();
+    let stem = stem.trim_end_matches(' ').to_ascii_uppercase();
+    let port = |prefix| {
+        let number = stem.strip_prefix(prefix).unwrap_or_default();
+        matches!(number, "\u{b9}" | "\u{b2}" | "\u{b3}")
+            || number.len() == 1 && number.as_bytes()[0].is_ascii_digit()
+    };
+    let named = ["CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$"].contains(&stem.as_str());
+    named || port("COM") || port("LPT")
+}
+
+/// The `show-alert` message for a refused name; the window reads it as HTML.
+fn unsafe_name(name: &str) -> String {
+    let mut shown = String::new();
+    for c in name.chars() {
+        match c {
+            '&' => shown.push_str("&amp;"),
+            '<' => shown.push_str("&lt;"),
+            '>' => shown.push_str("&gt;"),
+            c if c.is_control() => shown.push('\u{fffd}'),
+            c => shown.push(c),
+        }
+    }
+    format!("Not saved: the robot sent an unsafe file name ({shown})")
 }
 
 fn folder_item(name: String, size: f64) -> ListItem {

@@ -120,8 +120,10 @@ jobs:
           cargo clippy -p asrs-ui -p asrs-app --all-targets --locked
           --features asrs-ui/parity,asrs-app/parity -- -D warnings
       - name: Test
+        timeout-minutes: 30
         run: cargo test --workspace --locked --no-fail-fast
       - name: Test (parity features)
+        timeout-minutes: 30
         run: >-
           cargo test -p asrs-ui -p asrs-app --locked
           --features asrs-ui/parity,asrs-app/parity --no-fail-fast

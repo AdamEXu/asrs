@@ -93,6 +93,7 @@ pub enum Action {
         y: f64,
         button: Button,
         click_count: usize,
+        modifiers: Vec<String>,
     },
     Wheel(Wheel),
     Key {
@@ -114,9 +115,13 @@ pub enum Action {
     Prompt {
         page: Option<WindowKind>,
         index: usize,
+        /// The content size the prompt is given.
+        size: Option<(f64, f64)>,
     },
     /// Sends input and captures back to the hub, with satellites left open.
     Hub,
+    /// Waits until the download window shows this.
+    Download(DownloadShows),
     Capture {
         name: String,
         probes: Vec<String>,
@@ -124,11 +129,21 @@ pub enum Action {
     },
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub enum DownloadShows {
+    /// The list, and no alert or progress.
+    Listed,
+    /// An alert or progress text that starts so.
+    Text(String),
+    /// The value of the progress bar.
+    Progress(f64),
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum DialogReply {
     /// A message box's button.
     Button(usize),
-    /// A save dialog's file, under `files/dialog/` of the run.
+    /// A dialog's file under `files/dialog/` of the run; a folder when it ends in `/`.
     File(String),
     Cancel,
 }
@@ -146,6 +161,8 @@ pub struct Scenario {
     pub prefs: JsValue,
     /// Files under `userAssets/` seeded into userData before main starts.
     pub user_assets: Vec<(String, Seed)>,
+    /// Whether connections go to the scenario's robot.
+    pub robot: bool,
     pub actions: Vec<Action>,
 }
 
@@ -186,10 +203,10 @@ pub fn default_window() -> (f64, f64) {
     (options.width, options.height)
 }
 
-const TOP_KEYS: [&str; 9] = [
-    "page", "window", "scales", "themes", "gl", "prefs", "userData", "actions", "about",
+const TOP_KEYS: [&str; 10] = [
+    "page", "window", "scales", "themes", "gl", "prefs", "userData", "robot", "actions", "about",
 ];
-const ACTION_KEYS: [&str; 14] = [
+const ACTION_KEYS: [&str; 15] = [
     "main",
     "open",
     "eval",
@@ -203,6 +220,7 @@ const ACTION_KEYS: [&str; 14] = [
     "menu",
     "appMenu",
     "prompt",
+    "download",
     "capture",
 ];
 
@@ -299,6 +317,7 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
                 },
             },
             click_count: number(action, "clickCount", Some(1.0))? as usize,
+            modifiers: strings(action.get("modifiers"), "modifiers")?,
         },
         "wheel" => Action::Wheel(Wheel {
             x: number(value, "x", None)?,
@@ -332,11 +351,25 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
                 Some("unitConversion") => Some(WindowKind::UnitConversion),
                 Some("export") => Some(WindowKind::Export),
                 Some("preferences") => Some(WindowKind::Preferences),
+                Some("download") => Some(WindowKind::Download),
                 Some("satellite") => Some(WindowKind::Satellite),
                 None if value.is_null() => None,
                 other => return Err(format!("unknown prompt page {other:?}")),
             },
+            size: match (action.get("width"), action.get("height")) {
+                (None, None) => None,
+                _ => Some((
+                    number(action, "width", None)?,
+                    number(action, "height", None)?,
+                )),
+            },
         },
+        "download" => Action::Download(match value {
+            JsValue::Number(n) => DownloadShows::Progress(*n),
+            JsValue::String(s) if s.to_string_lossy() == "listed" => DownloadShows::Listed,
+            JsValue::String(s) => DownloadShows::Text(s.to_string_lossy()),
+            _ => return Err("download is not a text or a number".into()),
+        }),
         "capture" => {
             let name = text().ok_or("capture is not a name")?;
             Action::Capture {
@@ -438,6 +471,7 @@ impl Scenario {
                 .cloned()
                 .unwrap_or_else(|| JsValue::Object(Default::default())),
             user_assets,
+            robot: root.get("robot").is_some(),
             actions,
         })
     }
@@ -494,6 +528,11 @@ mod tests {
                 {"wait": 300},
                 {"idle": true},
                 {"mouse": "click", "x": 3, "y": 4, "button": "right", "clickCount": 2},
+                {"download": "listed"},
+                {"download": "Saved 2"},
+                {"download": 0.5},
+                {"prompt": "download", "width": 500, "height": 472},
+                {"mouse": "click", "x": 3, "y": 4, "modifiers": ["shift"]},
                 {"wheel": {"x": 1, "y": 2, "deltaY": -40, "wheelTicksY": -1}},
                 {"key": "a", "modifiers": ["shift"]},
                 {"menu": ["Manual Units", "Edit Conversion..."]},
@@ -534,9 +573,35 @@ mod tests {
                 x: 3.0,
                 y: 4.0,
                 button: Button::Right,
-                click_count: 2
+                click_count: 2,
+                modifiers: vec![]
             }
         );
+        let (first, rest) = s.actions.split_at(6);
+        let (download, rest) = rest.split_at(5);
+        let actions = [first, rest].concat();
+        assert_eq!(
+            download,
+            [
+                Action::Download(DownloadShows::Listed),
+                Action::Download(DownloadShows::Text("Saved 2".into())),
+                Action::Download(DownloadShows::Progress(0.5)),
+                Action::Prompt {
+                    page: Some(WindowKind::Download),
+                    index: 0,
+                    size: Some((500.0, 472.0))
+                },
+                Action::Mouse {
+                    kind: MouseKind::Click,
+                    x: 3.0,
+                    y: 4.0,
+                    button: Button::Left,
+                    click_count: 1,
+                    modifiers: vec!["shift".into()]
+                },
+            ]
+        );
+        let s = Scenario { actions, ..s };
         assert_eq!(
             s.actions[6],
             Action::Wheel(Wheel {
@@ -566,14 +631,16 @@ mod tests {
             s.actions[9],
             Action::Prompt {
                 page: Some(WindowKind::UnitConversion),
-                index: 0
+                index: 0,
+                size: None
             }
         );
         assert_eq!(
             s.actions[10],
             Action::Prompt {
                 page: None,
-                index: 0
+                index: 0,
+                size: None
             }
         );
         assert_eq!(

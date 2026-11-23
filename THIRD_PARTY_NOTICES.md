@@ -19,7 +19,7 @@ asrs as a whole is a derived work of AdvantageScope: every crate ports its
 TypeScript, CSS and C sources (including the WPILOG indexer,
 `src/hub/dataSources/wpilog/indexer/wpilogIndexer.c`). Also taken from upstream:
 
-- `www/symbols` icons, embedded into `asrs-ui` at build time, and `www/textures`,
+- `www/symbols` and `icons/download` icons, embedded into `asrs-ui` at build time, and `www/textures`,
   `icons`, `bundledAssets` and `licenses`, copied into `assets/` by `cargo xtask assets`.
 - `docs`, built by `cargo xtask docs` with upstream's own `docusaurus-embed.config.ts` and
   shipped unmodified as `docs/build` except for two images upstream's license does not cover,

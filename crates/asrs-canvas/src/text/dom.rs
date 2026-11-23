@@ -652,6 +652,40 @@ fn truncate(
     out
 }
 
+/// What an ellipsis that a later inline box draws leaves of an `ltr` text whose box has `room`
+/// before it, and the width of that.
+pub fn cut(layout: &mut Layout, room: Lu) -> Lu {
+    let scale = layout.scale;
+    let mut end = 0;
+    for line in &mut layout.lines {
+        let mut kept = Vec::new();
+        for f in line.fragments.drain(..) {
+            if f.x + f.width <= room {
+                end = f.x + f.width;
+                kept.push(f);
+                continue;
+            }
+            let len = utf16_len(&f.text);
+            let at = boundaries_of(&f, f.width as f32 / 64.0 / scale, len);
+            let limit = (room - f.x) as f32 / 64.0;
+            let fit = (0..=len)
+                .rev()
+                .find(|&k| at[k] * scale <= limit)
+                .unwrap_or(0);
+            end = f.x;
+            if fit > 0 {
+                let width = lu_ceil(at[fit] * scale);
+                end += width;
+                kept.push(sub_fragment(&f, &at, 0, fit, f.x, width));
+            }
+            break;
+        }
+        line.fragments = kept;
+        line.cut_at = Some(0);
+    }
+    end
+}
+
 /// Greedy line breaking of collapsed `white-space: normal` text into lines no wider than
 /// `available`; a word wider than that gets a line of its own, or under
 /// `overflow-wrap: break-word` as many as it takes.

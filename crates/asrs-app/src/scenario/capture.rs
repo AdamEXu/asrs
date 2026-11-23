@@ -71,8 +71,38 @@ pub struct Shot {
 }
 
 impl Shot {
-    pub fn same_as(&self, other: &Shot) -> bool {
-        self.image == other.image && self.recorder == other.recorder
+    /// Whether nothing outside `masks` (CSS px) changed.
+    pub fn same_as(&self, other: &Shot, masks: &[Rect], scale: f64) -> bool {
+        if self.recorder != other.recorder {
+            return false;
+        }
+        if masks.is_empty() || self.image.rgba.len() != other.image.rgba.len() {
+            return self.image == other.image;
+        }
+        let masked = |x: f64, y: f64| {
+            masks.iter().any(|[left, top, width, height]| {
+                (left * scale).floor() <= x
+                    && x < ((left + width) * scale).ceil()
+                    && (top * scale).floor() <= y
+                    && y < ((top + height) * scale).ceil()
+            })
+        };
+        let width = self.image.width as usize;
+        let (ours, _) = self.image.rgba.as_chunks::<4>();
+        let (theirs, _) = other.image.rgba.as_chunks::<4>();
+        ours.iter()
+            .zip(theirs)
+            .enumerate()
+            .all(|(i, (a, b))| a == b || masked((i % width) as f64, (i / width) as f64))
+    }
+
+    /// The painted boxes of a capture's mask selectors.
+    pub fn masks(&self, probes: &Probes, selectors: &[String]) -> Result<Vec<Rect>, String> {
+        let mut out = Vec::new();
+        for selector in selectors {
+            out.extend(probes.rects(&self.recorder, selector)?);
+        }
+        Ok(out)
     }
 }
 
@@ -97,6 +127,7 @@ pub fn kind(action: &Action) -> &'static str {
         Action::Menu { .. } => "menu",
         Action::AppMenu { .. } => "appMenu",
         Action::Prompt { .. } | Action::Hub => "prompt",
+        Action::Download(_) => "download",
         Action::Capture { .. } => "capture",
     }
 }
