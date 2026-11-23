@@ -279,7 +279,7 @@ fn range_value(range: Option<[f64; 2]>) -> Value {
 fn table_real_geometry_replays_through_scripted_reads() {
     let records = load(VECTOR).unwrap_or_else(|e| panic!("{e}"));
     let dom = Rc::new(RefCell::new(TableDom::default()));
-    let mut renderer = TableRenderer::new("uuid".into(), dom);
+    let mut renderer = TableRenderer::new("uuid".into(), dom, true);
     let reads = Rc::new(RefCell::new(ScriptedReads::default()));
     renderer.set_geometry(Box::new(ScriptedTable(reads.clone())));
     let mut host = Host {

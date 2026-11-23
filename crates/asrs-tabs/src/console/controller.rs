@@ -1,5 +1,4 @@
-//! `src/hub/controllers/ConsoleController.ts` and the parts of
-//! `src/shared/renderers/ConsoleRenderer.ts` that reach the selection or the saved state. Line
+//! `src/hub/controllers/ConsoleController.ts` and `src/shared/renderers/ConsoleRenderer.ts`. Line
 //! formatting and filtering are [`super::format_value`] and [`super::line_visible`].
 
 use std::cell::RefCell;
@@ -11,11 +10,18 @@ use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::log::log_util::LogFieldIterator;
 use asrs_log::log::{Log, LoggableType};
+use asrs_log::util::upper_bound;
+use asrs_model::messages::{HubToMain, NamedMessage};
+use asrs_model::preferences::Timestamps;
 use asrs_model::selection::SelectionMode;
 use asrs_model::source_list::Rect;
 use asrs_model::tab_controller::{Command, TabCommand, TabController, TabRenderer};
 
-use crate::cx::{TabCx, display_offset};
+use super::view::{ConsoleRow, ConsoleView};
+use super::{EXPORT_ERROR, export_text, format_value, line_visible};
+use crate::cx::{TabCx, display_offset, display_time};
+use crate::dom_tree::inner_text;
+use crate::form::NumberInput;
 
 const CONSOLE_TYPES: [&str; 4] = [
     "Console",
@@ -37,10 +43,14 @@ pub struct ConsoleDom {
     pub scroll_height: f64,
     /// `DRAG_HIGHLIGHT.hidden`.
     pub drag_highlight_hidden: bool,
+    /// `JUMP_INPUT`, an `<input type="number">`.
+    pub jump_input: NumberInput,
+    /// `clientHeight` of every row after the header.
+    pub row_heights: Vec<f64>,
 }
 
 /// One entry of the command's `lines` array.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ConsoleLine {
     pub timestamp: f64,
     pub value: JsString,
@@ -353,19 +363,88 @@ impl<Cx: TabCx + ?Sized> TabController<Cx> for ConsoleController {
     }
 }
 
+/// The layout reads `ConsoleRenderer` makes and the scroll position it writes, one call per
+/// upstream access and in upstream's order.
+pub trait ConsoleGeometry {
+    /// `TABLE_CONTAINER.scrollTop`.
+    fn scroll_top(&mut self) -> f64;
+    fn set_scroll_top(&mut self, value: f64);
+    /// `TABLE_CONTAINER.scrollHeight`.
+    fn scroll_height(&mut self) -> f64;
+    /// `TABLE_CONTAINER.clientHeight`.
+    fn container_client_height(&mut self) -> f64;
+    /// `TABLE_BODY.children[index + 1].clientHeight`.
+    fn row_client_height(&mut self, index: usize) -> f64;
+}
+
+impl ConsoleGeometry for ConsoleDom {
+    fn scroll_top(&mut self) -> f64 {
+        self.scroll_top
+    }
+
+    fn set_scroll_top(&mut self, value: f64) {
+        self.scroll_top = value;
+    }
+
+    fn scroll_height(&mut self) -> f64 {
+        self.scroll_height
+    }
+
+    fn container_client_height(&mut self) -> f64 {
+        asrs_js::math::round(self.container.height)
+    }
+
+    fn row_client_height(&mut self, index: usize) -> f64 {
+        self.row_heights.get(index).copied().unwrap_or(0.0)
+    }
+}
+
 pub struct ConsoleRenderer {
     dom: Rc<RefCell<ConsoleDom>>,
-    highlight: bool,
+    geometry: Option<Box<dyn ConsoleGeometry>>,
+    view: ConsoleView,
+    /// `FILTER_INPUT.value`.
+    filter: JsString,
+    key: JsValue,
+    key_available: bool,
+    lines: Vec<ConsoleLine>,
+    rendered_timestamps: Vec<f64>,
+    /// Never shortened: upstream's array keeps the values of rows a filter removed, and a row
+    /// added later is pushed behind them.
+    rendered_values: Vec<Rc<JsString>>,
+    rendered_raw_values: Vec<JsString>,
+    last_filter: JsString,
     last_scroll_position: Option<f64>,
+    selection_mode: SelectionMode,
+    selected_time: Option<f64>,
+    hovered_time: Option<f64>,
+    last_display_offset: Option<f64>,
+    last_original: Option<bool>,
+    display_offset: f64,
 }
 
 impl ConsoleRenderer {
     /// `new ConsoleRenderer(element, hasController)`.
-    pub fn new(dom: Rc<RefCell<ConsoleDom>>) -> Self {
+    pub fn new(dom: Rc<RefCell<ConsoleDom>>, has_controller: bool) -> Self {
         Self {
             dom,
-            highlight: false,
+            geometry: None,
+            view: ConsoleView::new(has_controller),
+            filter: JsString::new(),
+            key: JsValue::Null,
+            key_available: false,
+            lines: Vec::new(),
+            rendered_timestamps: Vec::new(),
+            rendered_values: Vec::new(),
+            rendered_raw_values: Vec::new(),
+            last_filter: JsString::new(),
             last_scroll_position: None,
+            selection_mode: SelectionMode::Idle,
+            selected_time: None,
+            hovered_time: None,
+            last_display_offset: None,
+            last_original: None,
+            display_offset: 0.0,
         }
     }
 
@@ -373,24 +452,200 @@ impl ConsoleRenderer {
         &self.dom
     }
 
+    pub fn view(&self) -> &ConsoleView {
+        &self.view
+    }
+
+    /// `FILTER_INPUT.value`.
+    pub fn filter(&self) -> &JsString {
+        &self.filter
+    }
+
+    /// Answers the renderer's layout reads from `geometry` instead of the shared `ConsoleDom`.
+    pub fn set_geometry(&mut self, geometry: Box<dyn ConsoleGeometry>) {
+        self.geometry = Some(geometry);
+    }
+
+    fn geometry<R>(&mut self, f: impl FnOnce(&mut dyn ConsoleGeometry) -> R) -> R {
+        match self.geometry.as_deref_mut() {
+            Some(geometry) => f(geometry),
+            None => f(&mut *self.dom.borrow_mut()),
+        }
+    }
+
     /// The `HIGHLIGHT_BUTTON` click.
-    pub fn highlight_click(&mut self) {
-        self.highlight = !self.highlight;
+    pub fn highlight_click(&mut self, cx: &(impl TabCx + ?Sized)) -> Result<(), JsError> {
+        self.view.highlight_active = !self.view.highlight_active;
+        self.update_data(cx)
+    }
+
+    /// `FILTER_INPUT`'s `input` event with `value` in the input, which strips line breaks from
+    /// what it is given.
+    pub fn filter_input(
+        &mut self,
+        cx: &(impl TabCx + ?Sized),
+        value: &JsString,
+    ) -> Result<(), JsError> {
+        let units = value.units().iter().copied();
+        self.filter = JsString::from_units(units.filter(|c| !matches!(c, 0x0a | 0x0d)).collect());
+        self.update_data(cx)
+    }
+
+    /// Row `index`'s `mouseenter`.
+    pub fn row_mouse_enter(&self, cx: &mut (impl TabCx + ?Sized), index: usize) {
+        let time = self.rendered_timestamps.get(index).copied();
+        cx.tab_selection().set_hovered_time(time);
+    }
+
+    /// A row's `mouseleave`.
+    pub fn row_mouse_leave(&self, cx: &mut (impl TabCx + ?Sized)) {
+        cx.tab_selection().set_hovered_time(None);
+    }
+
+    /// Row `index`'s `click`.
+    pub fn row_click(&self, cx: &mut (impl TabCx + ?Sized), index: usize) {
+        if let Some(time) = self.rendered_timestamps.get(index) {
+            cx.tab_selection().set_selected_time(*time);
+        }
+    }
+
+    /// A row's `contextmenu`.
+    pub fn row_context_menu(&self, cx: &mut (impl TabCx + ?Sized)) {
+        cx.tab_selection().go_idle();
+    }
+
+    /// The jump input's Enter handler and jump-button click. The target row is found among all
+    /// lines, also the ones the filter hides.
+    pub fn jump(&mut self) {
+        let value = self.dom.borrow().jump_input.value().clone();
+        let target = if !value.is_empty() {
+            asrs_js::number::to_number(value.units()) - self.display_offset
+        } else if self.selection_mode != SelectionMode::Idle {
+            self.selected_time.unwrap_or(0.0)
+        } else {
+            0.0
+        };
+        let row = self
+            .lines
+            .iter()
+            .position(|line| line.timestamp > target)
+            .unwrap_or(self.lines.len());
+        let above = row.saturating_sub(1).min(self.view.rows.len());
+        self.geometry(|g| {
+            let height = (0..above).fold(0.0, |sum, index| sum + g.row_client_height(index));
+            g.set_scroll_top(height);
+        });
+    }
+
+    /// The `EXPORT_BUTTON` click.
+    pub fn export_click(&self, cx: &mut (impl TabCx + ?Sized)) {
+        let message = match export_text(self.lines.iter().map(|line| &line.value)) {
+            Some(text) => NamedMessage::new(HubToMain::ExportConsole, JsValue::String(text)),
+            None => NamedMessage::new(
+                HubToMain::Error,
+                ops::object([
+                    ("title", JsValue::string(EXPORT_ERROR.0)),
+                    ("content", JsValue::string(EXPORT_ERROR.1)),
+                ]),
+            ),
+        };
+        cx.send_main_message(message);
+    }
+
+    /// `updateData()`.
+    fn update_data(&mut self, cx: &(impl TabCx + ?Sized)) -> Result<(), JsError> {
+        let has_controller = self.view.has_controller;
+        self.view.field_text = match &self.key {
+            JsValue::Null => JsString::new(),
+            key => inner_text(&ops::to_string(key)),
+        };
+        let has_key = !matches!(self.key, JsValue::Null);
+        self.view.field_line_through = has_key && !self.key_available;
+        self.view.field_delete_hidden = !(has_key && has_controller);
+        self.view.show_hand = has_controller && !self.key_available;
+
+        let filter = self.filter.to_lower_case();
+        let lines: Vec<&ConsoleLine> = self
+            .lines
+            .iter()
+            .filter(|line| line_visible(&line.value, &self.filter))
+            .collect();
+
+        let rows = &mut self.view.rows;
+        rows.resize_with(lines.len(), ConsoleRow::new);
+
+        let display = display_time(cx, self.display_offset);
+        for (i, (line, row)) in lines.iter().zip(rows.iter_mut()).enumerate() {
+            let was_rendered = i < self.rendered_timestamps.len();
+            let same_time = was_rendered && self.rendered_timestamps[i] == line.timestamp;
+            let formatted = if self.last_filter == filter
+                && same_time
+                && self.rendered_raw_values.get(i) == Some(&line.value)
+            {
+                self.rendered_values[i].clone()
+            } else {
+                Rc::new(format_value(&line.value, &self.filter)?)
+            };
+
+            row.error = self.view.highlight_active && line.is_error;
+            row.warning = self.view.highlight_active && line.is_warning;
+
+            let mut has_changed = false;
+            if !was_rendered {
+                has_changed = true;
+                self.rendered_values.push(formatted.clone());
+            } else if !same_time || self.rendered_values[i] != formatted {
+                has_changed = true;
+                self.rendered_values[i] = formatted.clone();
+            }
+
+            row.timestamp = display(line.timestamp);
+            if has_changed {
+                row.html = formatted;
+            }
+        }
+        self.rendered_timestamps = lines.iter().map(|line| line.timestamp).collect();
+        self.rendered_raw_values = lines.iter().map(|line| line.value.clone()).collect();
+        self.last_filter = filter;
+        Ok(())
+    }
+
+    /// `updateHighlights()`.
+    fn update_highlights(&mut self) {
+        if self.rendered_timestamps.is_empty() {
+            return;
+        }
+        let row_at = |time: Option<f64>| {
+            let time = time.filter(|t| *t != 0.0 && !t.is_nan())?;
+            Some(upper_bound(&self.rendered_timestamps, time, 0).saturating_sub(1))
+        };
+        let (selected, hovered) = match self.selection_mode {
+            SelectionMode::Idle => (None, row_at(self.hovered_time)),
+            SelectionMode::Static | SelectionMode::Playback => {
+                (row_at(self.selected_time), row_at(self.hovered_time))
+            }
+            SelectionMode::Locked => (None, None),
+        };
+        for (index, row) in self.view.rows.iter_mut().enumerate() {
+            row.selected = selected == Some(index);
+            row.hovered = hovered == Some(index);
+        }
     }
 }
 
 impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for ConsoleRenderer {
     fn save_state(&self, _cx: &Cx) -> JsValue {
         let mut o = JsObject::new();
-        o.insert("highlight", JsValue::Bool(self.highlight));
+        o.insert("highlight", JsValue::Bool(self.view.highlight_active));
         JsValue::Object(o)
     }
 
-    fn restore_state(&mut self, _cx: &mut Cx, state: &JsValue) -> Result<(), JsError> {
+    fn restore_state(&mut self, cx: &mut Cx, state: &JsValue) -> Result<(), JsError> {
         if matches!(state, JsValue::Object(_) | JsValue::Array(_))
             && let JsValue::Bool(b) = ops::get(state, "highlight")?
         {
-            self.highlight = b;
+            self.view.highlight_active = b;
+            self.update_data(cx)?;
         }
         Ok(())
     }
@@ -405,19 +660,47 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for ConsoleRenderer {
                 "Cannot read properties of undefined (reading 'lines')",
             ));
         };
+        self.selection_mode = command.selection_mode;
+        self.selected_time = command.selected_time;
+        self.hovered_time = command.hovered_time;
+
+        let data_changed = command.lines != self.lines;
+        let original = cx
+            .tab_preferences()
+            .is_some_and(|p| p.timestamps == Timestamps::Original);
+        let format_changed = self.last_display_offset != Some(command.display_offset)
+            || self.last_original != Some(original);
+        self.last_display_offset = Some(command.display_offset);
+        self.last_original = Some(original);
+
+        if !ops::strict_equals(&command.key, &self.key)
+            || command.key_available != self.key_available
+            || data_changed
+            || format_changed
+        {
+            self.key = command.key.clone();
+            self.key_available = command.key_available;
+            self.lines = command.lines.clone();
+            self.display_offset = command.display_offset;
+            self.update_data(cx)?;
+        }
+
+        self.update_highlights();
+        self.view.jump_placeholder =
+            display_time(cx, command.display_offset)(self.selected_time.unwrap_or(0.0));
+
         if command.selection_mode == SelectionMode::Locked {
-            let scroll_top = self.dom.borrow().scroll_top;
-            if self
-                .last_scroll_position
-                .is_some_and(|last| scroll_top < last)
-            {
+            let last = self.last_scroll_position;
+            if last.is_some_and(|last| self.geometry(|g| g.scroll_top()) < last) {
                 cx.tab_selection().unlock();
             } else {
-                let mut dom = self.dom.borrow_mut();
-                dom.scroll_top = dom.scroll_height - asrs_js::math::round(dom.container.height);
+                self.geometry(|g| {
+                    let bottom = g.scroll_height() - g.container_client_height();
+                    g.set_scroll_top(bottom);
+                });
             }
         }
-        self.last_scroll_position = Some(self.dom.borrow().scroll_top);
+        self.last_scroll_position = Some(self.geometry(|g| g.scroll_top()));
         Ok(())
     }
 }

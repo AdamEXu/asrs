@@ -7,6 +7,7 @@ use std::cell::Ref;
 use asrs_js::time::Rng;
 use asrs_js::value::JsValue;
 use asrs_log::log::{Log, TimestampDisplay};
+use asrs_log::util::format_time_with_ms;
 use asrs_model::assets::AdvantageScopeAssets;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::{Preferences, Timestamps};
@@ -48,4 +49,16 @@ pub fn display_offset<C: TabCx + ?Sized>(cx: &C) -> f64 {
         Timestamps::Original => TimestampDisplay::Original,
     });
     cx.tab_log().get_timestamp_display_offset(timestamps)
+}
+
+/// The text Table and Console show for a time: `formatTimeWithMS(time + offset)`, with a `+`
+/// unless `window.preferences?.timestamps` is `"original"`.
+pub fn display_time<C: TabCx + ?Sized>(cx: &C, offset: f64) -> impl Fn(f64) -> String + use<C> {
+    let original = cx
+        .tab_preferences()
+        .is_some_and(|p| p.timestamps == Timestamps::Original);
+    move |time| {
+        let text = format_time_with_ms(time + offset);
+        if original { text } else { format!("+{text}") }
+    }
 }

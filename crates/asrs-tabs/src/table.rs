@@ -12,14 +12,19 @@ use asrs_js::ops;
 use asrs_js::sort::array_sort;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsObject, JsValue, ToJs};
+use asrs_log::log::log_util::get_log_value_text_at;
 use asrs_log::log::{LogValueSetAny, LoggableType};
-use asrs_log::util::{arrays_equal, check_array_type, lower_bound, upper_bound};
+use asrs_log::util::{check_array_type, lower_bound, upper_bound};
 use asrs_model::selection::SelectionMode;
 use asrs_model::source_list::Rect;
 use asrs_model::tab_controller::{Command, TabCommand, TabController, TabRenderer};
 
-use crate::cx::{TabCx, display_offset};
+use crate::cx::{TabCx, display_offset, display_time};
+use crate::dom_tree::inner_text;
 use crate::form::NumberInput;
+
+pub mod view;
+use view::{TableHeader, TableRow, TableView, boolean_icon};
 
 const DRAG_THRESHOLD_PX: f64 = 5.0;
 const DEFAULT_ROW_HEIGHT_PX: f64 = 25.0;
@@ -601,12 +606,11 @@ pub struct TableRenderer {
     uuid: JsString,
     dom: Rc<RefCell<TableDom>>,
     geometry: Option<Box<dyn TableGeometry>>,
+    view: TableView,
     row_height_px: f64,
-    data_rows: usize,
-    row_hidden: Vec<bool>,
     data_row_timestamps: Vec<f64>,
     timestamps: Vec<f64>,
-    last_fields: Vec<JsString>,
+    last_fields: Vec<JsValue>,
     last_fields_available: Vec<bool>,
     last_scroll_position: Option<f64>,
     did_clear_hovered_time: bool,
@@ -620,15 +624,14 @@ pub struct TableRenderer {
 impl TableRenderer {
     /// `new TableRenderer(element, hasController)`; `uuid` is its `createUUID()`, drawn after
     /// the controller's. `updateFields([])` leaves the single jump-input header cell.
-    pub fn new(uuid: JsString, dom: Rc<RefCell<TableDom>>) -> Self {
+    pub fn new(uuid: JsString, dom: Rc<RefCell<TableDom>>, has_controller: bool) -> Self {
         dom.borrow_mut().header_count = 1;
         Self {
             uuid,
             dom,
             geometry: None,
+            view: TableView::new(has_controller),
             row_height_px: DEFAULT_ROW_HEIGHT_PX,
-            data_rows: 0,
-            row_hidden: Vec::new(),
             data_row_timestamps: Vec::new(),
             timestamps: Vec::new(),
             last_fields: Vec::new(),
@@ -645,6 +648,10 @@ impl TableRenderer {
 
     pub fn dom(&self) -> &Rc<RefCell<TableDom>> {
         &self.dom
+    }
+
+    pub fn view(&self) -> &TableView {
+        &self.view
     }
 
     /// Answers the renderer's layout reads from `geometry` instead of the shared `TableDom`.
@@ -722,6 +729,86 @@ impl TableRenderer {
             }
         });
     }
+
+    fn update_fields(&mut self, fields: &[TableCommandField]) {
+        self.view.show_hand = self.view.has_controller && fields.iter().all(|f| !f.is_available);
+        self.view.headers = fields
+            .iter()
+            .map(|field| {
+                let title = ops::to_string(&field.key);
+                TableHeader {
+                    text: match field.key {
+                        JsValue::Null => JsString::new(),
+                        _ => inner_text(&title),
+                    },
+                    title,
+                    available: field.is_available,
+                }
+            })
+            .collect();
+        self.dom.borrow_mut().header_count = 1 + fields.len();
+    }
+
+    /// The rows' text for `timestamps[start..end]`.
+    fn cell_text(
+        &self,
+        command: &TableCommand,
+        start: usize,
+        end: usize,
+        display: impl Fn(f64) -> String,
+    ) -> Vec<Vec<String>> {
+        let shown = &self.timestamps[start..end];
+        let mut rows: Vec<Vec<String>> = shown.iter().map(|t| vec![display(*t)]).collect();
+        for field in &command.fields {
+            let data = match (&field.data, field.field_type) {
+                (Some(data), Some(_)) if field.is_available => data,
+                _ => {
+                    for row in &mut rows {
+                        row.push("null".to_owned());
+                    }
+                    continue;
+                }
+            };
+            let mut next = 0;
+            for (row, time) in rows.iter_mut().zip(shown) {
+                next = upper_bound(data.timestamps(), *time, next);
+                row.push(match next.checked_sub(1) {
+                    None => "null".to_owned(),
+                    Some(index) => {
+                        let text = get_log_value_text_at(data, index).unwrap_or_default();
+                        match data {
+                            LogValueSetAny::Boolean(set) => {
+                                format!("{} {text}", boolean_icon(set.values[index]))
+                            }
+                            _ => text,
+                        }
+                    }
+                });
+            }
+        }
+        rows
+    }
+
+    fn update_highlights(&mut self) {
+        if self.timestamps.is_empty() {
+            return;
+        }
+        let rows = &mut self.view.rows;
+        let row_at = |time: Option<f64>| {
+            let time = time.filter(|t| *t != 0.0 && !t.is_nan())?;
+            upper_bound(&self.data_row_timestamps, time, 0).checked_sub(1)
+        };
+        let selected = match self.selection_mode {
+            SelectionMode::Idle => None,
+            SelectionMode::Static | SelectionMode::Playback => row_at(self.selected_time),
+            SelectionMode::Locked => rows.iter().rposition(|row| !row.hidden),
+        };
+        let hovered = row_at(self.hovered_time);
+        for (index, row) in rows.iter_mut().enumerate() {
+            row.selected = selected == Some(index);
+            row.hovered = hovered == Some(index);
+        }
+    }
 }
 
 impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
@@ -757,30 +844,22 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
         self.selected_time = command.selected_time;
         self.hovered_time = command.hovered_time;
 
-        let fields: Vec<JsString> = command
-            .fields
-            .iter()
-            .filter_map(|f| match &f.key {
-                JsValue::String(s) => Some(s.clone()),
-                _ => None,
-            })
-            .collect();
-        let fields_available: Vec<bool> = command.fields.iter().map(|f| f.is_available).collect();
-        if !arrays_equal(&fields, &self.last_fields)
-            || !arrays_equal(&fields_available, &self.last_fields_available)
-        {
-            self.dom.borrow_mut().header_count = 1 + command.fields.len();
-            self.last_fields = fields;
-            self.last_fields_available = fields_available;
+        let same_fields = self.last_fields.len() == command.fields.len()
+            && (command.fields.iter().zip(&self.last_fields))
+                .all(|(field, last)| ops::strict_equals(&field.key, last))
+            && (command.fields.iter().zip(&self.last_fields_available))
+                .all(|(field, last)| field.is_available == *last);
+        if !same_fields {
+            self.update_fields(&command.fields);
+            self.last_fields = command.fields.iter().map(|f| f.key.clone()).collect();
+            self.last_fields_available = command.fields.iter().map(|f| f.is_available).collect();
         }
 
         let client_height = self.geometry(|g| g.container_client_height());
         let data_row_count =
             math::ceil(client_height / self.row_height_px) as usize + DATA_ROW_BUFFER * 2;
-        self.data_rows = data_row_count;
-        self.row_hidden.resize(data_row_count, false);
-        if self.data_rows > 0 {
-            let hidden = self.row_hidden[0];
+        self.view.rows.resize_with(data_row_count, TableRow::new);
+        if let Some(hidden) = self.view.rows.first().map(|row| row.hidden) {
             let row_height = self.geometry(|g| g.data_row_rect(0, hidden)).height;
             if row_height > 0.0 && row_height != self.row_height_px {
                 self.row_height_px = row_height;
@@ -808,9 +887,11 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
         let (data_row_start, data_row_end);
         if self.timestamps.len() < data_row_count {
             let shown = self.timestamps.len();
-            for (index, hidden) in self.row_hidden.iter_mut().enumerate() {
-                *hidden = index >= shown;
+            for (index, row) in self.view.rows.iter_mut().enumerate() {
+                row.hidden = index >= shown;
             }
+            self.view.filler_upper_px = 0.0;
+            self.view.filler_lower_px = 0.0;
             data_row_start = 0;
             data_row_end = self.timestamps.len();
         } else {
@@ -822,8 +903,13 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
             if filler_upper + data_row_count as f64 > self.timestamps.len() as f64 {
                 filler_upper = self.timestamps.len() as f64 - data_row_count as f64;
             }
+            let filler_lower = self.timestamps.len() as f64 - data_row_count as f64 - filler_upper;
             let scroll_top = self.geometry(|g| g.scroll_top());
-            self.row_hidden.fill(false);
+            self.view.filler_upper_px = filler_upper * self.row_height_px;
+            self.view.filler_lower_px = filler_lower * self.row_height_px;
+            for row in &mut self.view.rows {
+                row.hidden = false;
+            }
             self.geometry(|g| g.set_scroll_top(scroll_top));
             data_row_start = filler_upper as usize;
             data_row_end = data_row_start + data_row_count;
@@ -834,6 +920,11 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
             .data_row_timestamps
             .first()
             .map(|first| [*first, *self.data_row_timestamps.last().unwrap()]);
+        let display = display_time(cx, command.display_offset);
+        let text = self.cell_text(command, data_row_start, data_row_end, &display);
+        for (row, cells) in self.view.rows.iter_mut().zip(text) {
+            row.cells = cells;
+        }
 
         match self.selection_mode {
             SelectionMode::Playback => self.scroll_to_selected(),
@@ -858,8 +949,8 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
         };
         match hover_y {
             Some(y) if y > header_bottom => {
-                for index in 0..self.data_rows {
-                    let hidden = self.row_hidden[index];
+                for index in 0..self.view.rows.len() {
+                    let hidden = self.view.rows[index].hidden;
                     let rect = self.geometry(|g| g.data_row_rect(index, hidden));
                     if y >= rect.top() && y < rect.bottom() {
                         let time = self.data_row_timestamps.get(index).copied();
@@ -874,6 +965,8 @@ impl<Cx: TabCx + ?Sized> TabRenderer<Cx> for TableRenderer {
             }
             _ => {}
         }
+        self.update_highlights();
+        self.view.jump_placeholder = display(self.selected_time.unwrap_or(0.0));
         Ok(())
     }
 }

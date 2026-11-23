@@ -25,6 +25,8 @@ use crate::form::{NumberInput, Select, SelectOption};
 use crate::list_cx::{self, SourceListCx, js_error, with_env};
 use crate::simple_statistics as stats;
 
+pub mod values;
+
 const UPDATE_PERIOD_MS: f64 = 100.0;
 const DEFAULT_DT: f64 = 0.02;
 const MAX_BINS: f64 = 1000.0;
@@ -670,20 +672,22 @@ fn field_stats(
     Ok(out)
 }
 
-#[derive(Clone, Default)]
+/// `StatisticsRendererCommand`.
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct StatisticsCommand {
-    change_counter: f64,
-    bins: Vec<f64>,
-    step_size: f64,
-    fields: Vec<StatisticsField>,
+    pub change_counter: f64,
+    pub bins: Vec<f64>,
+    pub step_size: f64,
+    pub fields: Vec<StatisticsField>,
 }
 
-#[derive(Clone)]
-struct StatisticsField {
-    title: JsString,
-    color: JsValue,
-    histogram_counts: Vec<f64>,
-    stats: JsObject,
+#[derive(Clone, Debug, PartialEq)]
+pub struct StatisticsField {
+    pub title: JsString,
+    pub color: JsValue,
+    pub histogram_counts: Vec<f64>,
+    /// `StatisticsRendererCommand_Stats`.
+    pub stats: JsObject,
 }
 
 impl TabCommand for StatisticsCommand {

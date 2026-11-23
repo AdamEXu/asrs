@@ -2,7 +2,25 @@
 //! style declaration list and children, kept the way Blink keeps them so the attribute strings
 //! a renderer leaves behind equal upstream's.
 
-use asrs_js::string::JsError;
+use asrs_js::string::{JsError, JsString};
+
+/// The text an `element.innerText = value` assignment shows: every CR, LF or CRLF becomes a
+/// `<br>`, written here as `\n`.
+pub fn inner_text(value: &JsString) -> JsString {
+    let units = value.units();
+    let mut out = Vec::with_capacity(units.len());
+    let mut i = 0;
+    while i < units.len() {
+        if units[i] == 0x0d {
+            out.push(0x0a);
+            i += usize::from(units.get(i + 1) == Some(&0x0a));
+        } else {
+            out.push(units[i]);
+        }
+        i += 1;
+    }
+    JsString::from_units(out)
+}
 
 /// An element's inline style (`element.style`): declarations in insertion order, each holding
 /// Blink's serialized value.
