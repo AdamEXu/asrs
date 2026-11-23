@@ -168,7 +168,8 @@ const RECORDER = String.raw`(() => {
     w.dispatchEvent(new Event("resize"));
   };
   w.__histMouse = (type, x, y) => {
-    const e = new MouseEvent(type, { bubbles: true, cancelable: true });
+    const rect = last().canvas.getBoundingClientRect();
+    const e = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: rect.left + x, clientY: rect.top + y });
     Object.defineProperty(e, "offsetX", { value: x });
     Object.defineProperty(e, "offsetY", { value: y });
     last().canvas.dispatchEvent(e);
@@ -382,6 +383,29 @@ spec("hover-flat", [
   ...range(20, (i) => hover(0, 19 - i, 0.5, 0, 48)).flat()
 ]);
 
+// Bars without a height at one pixel of a flat chart area are all active, and stay so when the
+// chart grows, with a tooltip tall enough to open upwards.
+const zeros = (n) => command(bins(0, 10, 1), 1, range(n, (k) => field("/Zero" + k, COLORS[k], range(10, () => 0))));
+spec("hover-bottom", [
+  ...START,
+  ...draw(zeros(6)),
+  ...[0, 1, 3, 5, 8, 9].flatMap((i) => [
+    ...size(300, 40, 48),
+    ...hover(0, i, 0.5, 0, 48),
+    ...size(300, 400, 300),
+    ...size(260, 380, 48),
+    ...mouse("mouseout", -1, -1, 300)
+  ]),
+  ...draw(zeros(3)),
+  ...[0, 5, 9].flatMap((i) => [
+    ...size(120, 40, 48),
+    ...hover(0, i, 0.5, 0, 48),
+    ...size(220, 300, 48),
+    ...mouse("mousemove", 5, 5, 48),
+    ...mouse("mouseout", -1, -1, 100)
+  ])
+]);
+
 spec("hover-colors", [...START, ...draw(BLACK), ...colorHover, ...theme("dark"), ...draw(BLACK), ...colorHover, ...mouse("mouseout", -1, -1, 600)], {
   window: { framePeriod: 20 }
 });
@@ -450,6 +474,33 @@ spec("throw-resize", [
     } else steps.push(...theme(pick(["light", "dark"]), ms));
   }
   spec("random-hover", steps);
+}
+
+{
+  const rand = mulberry32(90001);
+  const pick = (a) => a[Math.floor(rand() * a.length)];
+  const steps = [...START, ...draw(THREE)];
+  let [w, h] = [560, 348];
+  for (let i = 0; i < 160; i++) {
+    const r = rand();
+    const ms = pick([0, 1, 16, 16, 33, 70, 180, 450]);
+    const [x, y] = [Math.round(rand() * w), Math.round(rand() * h)];
+    if (r < 0.5) steps.push(...mouse("mousemove", x, y, ms));
+    else if (r < 0.58) steps.push(...mouse(pick(["mouseout", "click"]), x, y, ms));
+    else if (r < 0.78) {
+      const step = pick([1, 1, 0.5, 0.1, 3, 0.037, rand() * 5]);
+      const min = pick([0, 0, -5, rand() * 10 - 5, 0.1]);
+      const b = range(pick([1, 3, 10, 20]), (k) => min + k * step);
+      const top = pick([2, 5, 40, 3000]);
+      const count = () => (rand() < 0.3 ? 0 : Math.floor(rand() * top));
+      steps.push(...draw(command(b, step, range(Math.floor(rand() * 5), (k) => field("/S" + k, COLORS[(k + i) % 10], b.map(count)))), ms));
+    } else if (r < 0.88) {
+      [w, h] = pick([[Math.round(150 + rand() * 600), Math.round(120 + rand() * 400)], [300, 40], [rand() * 700, rand() * 90], [0, 0], [560, 348]]);
+      steps.push(...size(w, h, ms));
+    } else if (r < 0.93) steps.push(...dpr(pick([1, 1.25, 1.5, 1.75, 2, 2.5, 0.8]), ms));
+    else steps.push(...theme(pick(["light", "dark"]), ms));
+  }
+  spec("random-mix", steps);
 }
 
 spec(

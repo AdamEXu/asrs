@@ -383,10 +383,12 @@ enum Callback {
     Animate,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Work {
-    Resize,
-    Event,
+    /// The observed size, or `None` to measure the container.
+    Resize(Option<(f64, f64)>),
+    /// The event's position on the chart.
+    Event(EventKind, f64, f64),
     Draw,
     /// An animation frame that had nothing to draw.
     Idle,
@@ -632,12 +634,15 @@ impl Chart {
         Some(match self.callbacks.pop_front()? {
             Callback::Resize => {
                 let size = self.pending_resize;
-                (Work::Resize, self.resize(size, env))
+                (Work::Resize(size), self.resize(size, env))
             }
             Callback::Event(kind) => {
                 let (x, y) = self.pending_events.remove(kind.name()).unwrap_or_default();
                 let event = self.relative(kind, x, y);
-                (Work::Event, self.event_handler(event, false, env))
+                (
+                    Work::Event(kind, event.x, event.y),
+                    self.event_handler(event, false, env),
+                )
             }
             Callback::Animate => {
                 if !self.animator.tick(env.now) {

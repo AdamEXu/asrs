@@ -20,8 +20,6 @@ use asrs_tabs::histogram::{
     Env, EventKind, Histogram, HistogramCommand, HistogramField, ScaleLayout, Work,
 };
 
-const OTHER_KINDS: &[&str] = &["main", "exception"];
-
 fn case_ids() -> Vec<String> {
     let dir = vectors_dir().join("dom/histogram");
     let mut ids: Vec<String> = std::fs::read_dir(&dir)
@@ -195,6 +193,15 @@ fn json_kind(json: &Json) -> String {
         .expect("a string")
 }
 
+fn event_kind(value: &Value) -> EventKind {
+    match string(value).to_string_lossy().as_str() {
+        "mousemove" => EventKind::MouseMove,
+        "mouseout" => EventKind::MouseOut,
+        "click" => EventKind::Click,
+        other => panic!("unknown event {other}"),
+    }
+}
+
 fn boolean(record: &Record, key: &str) -> bool {
     record
         .value(key)
@@ -207,7 +214,17 @@ fn error_text(e: &JsError) -> String {
     format!("{}: {}", e.name, e.message)
 }
 
-type Callback = (Work, Result<(), JsError>, bool, Vec<Call>);
+struct Callback {
+    work: Work,
+    result: Result<(), JsError>,
+    calls: (bool, Vec<Call>),
+    canvas: (f64, f64),
+}
+
+fn canvas_size(chart: &Histogram) -> (f64, f64) {
+    let canvas = chart.canvas();
+    (f64::from(canvas.width), f64::from(canvas.height))
+}
 
 struct Replay {
     id: String,
@@ -221,6 +238,8 @@ struct Replay {
     rest: usize,
     first: usize,
     work: Vec<Callback>,
+    /// An exception the page has not reported yet.
+    thrown: Option<String>,
     tally: BTreeMap<&'static str, usize>,
     calls: usize,
     /// Every call since the canvas was last reset.
@@ -247,25 +266,29 @@ impl Replay {
         record: &Record,
         result: &Result<(), JsError>,
         (reset, calls): (bool, Vec<Call>),
+        canvas: (f64, f64),
         what: &str,
     ) {
         let what = format!("{} {what}", self.id);
         let threw = record.value("threw").ok().map(|v| string(&v));
+        let error = result.as_ref().err().map(error_text);
         assert_eq!(
             threw.map(|t| t.to_string_lossy()),
-            result.as_ref().err().map(error_text),
+            error,
             "{what}: exception"
         );
+        assert_eq!(self.thrown, None, "{what}: an exception was not reported");
+        self.thrown = error;
         let expected_reset = boolean(record, "reset");
         assert_eq!(expected_reset, reset, "{what}: canvas reset");
-        self.check_calls(record, &calls, &what);
+        self.check_calls(record, &calls, canvas, &what);
         if reset {
             self.since_reset.clear();
         }
         self.since_reset.extend(calls);
     }
 
-    fn check_calls(&mut self, record: &Record, calls: &[Call], what: &str) {
+    fn check_calls(&mut self, record: &Record, calls: &[Call], size: (f64, f64), what: &str) {
         let recorded = record
             .field("calls")
             .and_then(Json::as_array)
@@ -286,11 +309,6 @@ impl Replay {
         }
         self.calls += calls.len();
         let canvas = pair(&record.value("canvas").expect("canvas"));
-        let chart = self.chart();
-        let size = (
-            f64::from(chart.canvas().width),
-            f64::from(chart.canvas().height),
-        );
         assert_eq!(canvas, size, "{what}: canvas size");
     }
 
@@ -303,7 +321,7 @@ impl Replay {
     }
 
     fn no_pending_work(&self, what: &str) {
-        let left: Vec<Work> = self.work.iter().map(|w| w.0).collect();
+        let left: Vec<Work> = self.work.iter().map(|w| w.work).collect();
         assert!(
             left.is_empty(),
             "{} {what}: port also ran {left:?}",
@@ -316,33 +334,45 @@ impl Replay {
             let (work, result) = self
                 .run(|chart, env| chart.run_callback(env))
                 .expect("a queued callback");
-            let (reset, calls) = self.chart().take_calls();
+            let calls = self.chart().take_calls();
             if work == Work::Idle {
-                assert!(calls.is_empty(), "{} {what}: idle frame drew", self.id);
+                assert!(calls.1.is_empty(), "{} {what}: idle frame drew", self.id);
                 continue;
             }
-            self.work.push((work, result, reset, calls));
+            let canvas = canvas_size(self.chart());
+            self.work.push(Callback {
+                work,
+                result,
+                calls,
+                canvas,
+            });
         }
     }
 
-    fn frame_work(&mut self, record: &Record, kind: Work, what: &str) {
+    fn frame_work(&mut self, record: &Record, what: &str) -> Work {
         assert!(
             !self.work.is_empty(),
             "{} {what}: port did nothing",
             self.id
         );
-        let (work, result, reset, calls) = self.work.remove(0);
-        assert_eq!(work, kind, "{} {what}", self.id);
-        self.check(record, &result, (reset, calls), what);
+        let done = self.work.remove(0);
+        self.check(record, &done.result, done.calls, done.canvas, what);
+        done.work
     }
 
     fn record(&mut self, n: usize, record: &Record) {
         let Some(kind) = record.field("hist") else {
-            self.no_pending_work(&format!("record {n}"));
-            let key = OTHER_KINDS
-                .iter()
-                .find(|k| record.field(k).is_some())
-                .unwrap_or_else(|| panic!("{} record {n}: unknown record", self.id));
+            let key = if record.field("exception").is_some() {
+                let error = string(&record.value("error").expect("error")).to_string_lossy();
+                let thrown = self.thrown.take();
+                assert_eq!(Some(error), thrown, "{} record {n}: exception", self.id);
+                "exception"
+            } else if record.field("main").is_some() {
+                self.no_pending_work(&format!("record {n}"));
+                "main"
+            } else {
+                panic!("{} record {n}: unknown record", self.id);
+            };
             *self.tally.entry(key).or_default() += 1;
             return;
         };
@@ -380,8 +410,9 @@ impl Replay {
                 let calls = chart.canvas().calls.clone();
                 chart.record_calls();
                 self.chart = Some(chart);
+                let canvas = canvas_size(self.chart());
                 let what = format!("{} {what}", self.id);
-                self.check_calls(record, &calls, &what);
+                self.check_calls(record, &calls, canvas, &what);
                 "create"
             }
             "resize" if attach => {
@@ -393,21 +424,39 @@ impl Replay {
                 let container = pair(&value("container"));
                 let result = self.run(|chart, env| chart.attach(container, env));
                 let calls = self.chart().take_calls();
-                self.check(record, &result, calls, &what);
+                let canvas = canvas_size(self.chart());
+                self.check(record, &result, calls, canvas, &what);
                 self.check_state(record, &what);
                 "attach"
             }
             "resize" => {
-                self.frame_work(record, Work::Resize, &what);
+                let Work::Resize(size) = self.frame_work(record, &what) else {
+                    panic!("{} {what}: port did something else", self.id);
+                };
+                let args = value("args");
+                let [width, height] = items(&args) else {
+                    panic!("{what}: args");
+                };
+                let args = match (width, height) {
+                    (Value::Undefined, Value::Undefined) => None,
+                    (width, height) => Some((number(width), number(height))),
+                };
+                assert_eq!(size, args, "{} {what}: args", self.id);
                 self.check_state(record, &what);
                 "resize"
             }
             "event" => {
-                self.frame_work(record, Work::Event, &what);
+                let Work::Event(kind, x, y) = self.frame_work(record, &what) else {
+                    panic!("{} {what}: port did something else", self.id);
+                };
+                assert_eq!(event_kind(&value("type")), kind, "{} {what}", self.id);
+                let at = numbers(&value("at"));
+                assert_numbers(&at, &[x, y], &format!("{} {what}: at", self.id));
                 "event"
             }
             "draw" => {
-                self.frame_work(record, Work::Draw, &what);
+                let work = self.frame_work(record, &what);
+                assert_eq!(work, Work::Draw, "{} {what}", self.id);
                 "draw"
             }
             "render" => {
@@ -418,7 +467,8 @@ impl Replay {
                 let command = self.command.clone().expect("a command");
                 let result = self.run(|chart, env| chart.render(&command, dark, env));
                 let calls = self.chart().take_calls();
-                self.check(record, &result, calls, &what);
+                let canvas = canvas_size(self.chart());
+                self.check(record, &result, calls, canvas, &what);
                 if result.is_ok() {
                     self.check_state(record, &what);
                 }
@@ -435,12 +485,7 @@ impl Replay {
                 "dpr"
             }
             "dom" => {
-                let kind = match json_kind(record.field("type").expect("type")).as_str() {
-                    "mousemove" => EventKind::MouseMove,
-                    "mouseout" => EventKind::MouseOut,
-                    "click" => EventKind::Click,
-                    other => panic!("{what}: unknown event {other}"),
-                };
+                let kind = event_kind(&value("type"));
                 let (x, y) = pair(&value("at"));
                 self.chart().pointer(kind, x, y);
                 "dom"
@@ -471,6 +516,7 @@ fn replay(id: &str) -> Replay {
         rest: 0,
         first: 0,
         work: Vec::new(),
+        thrown: None,
         tally: BTreeMap::new(),
         calls: 0,
         since_reset: Vec::new(),
@@ -479,6 +525,7 @@ fn replay(id: &str) -> Replay {
         replay.record(n, record);
     }
     replay.no_pending_work("end");
+    assert_eq!(replay.thrown, None, "{id}: an exception was not reported");
     let compared: usize = replay.tally.values().sum();
     let states = vector
         .iter()
