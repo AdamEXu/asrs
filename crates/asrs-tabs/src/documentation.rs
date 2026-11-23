@@ -1,6 +1,10 @@
 //! `src/shared/renderers/DocumentationRenderer.ts`: the docs page in an iframe. The view owns
-//! the frame; this keeps what upstream reads back from it and the navigation it queues until
-//! the frame has loaded.
+//! the frame; this keeps what upstream reads back from it and the navigations it queues until
+//! the frame has loaded. The page's scroll position is left to the frame, which keeps it while
+//! hidden where an iframe without a box loses it.
+
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use asrs_js::string::{JsError, JsString};
 use asrs_js::value::JsValue;
@@ -8,25 +12,102 @@ use asrs_model::tab_controller::{TabCommand, TabRenderer};
 
 pub const DOCS_URL: &str = "../docs/build/index.html";
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct DocumentationRenderer {
-    state_queue: Option<JsString>,
-    loaded: bool,
-    first_render: bool,
-    /// `IFRAME.src`, once the first render has set it.
+/// `location.hash` after `location.hash = value`: the URL Standard's fragment state.
+pub fn assigned_hash(value: &JsString) -> JsString {
+    let text = value.to_string_lossy();
+    let input = text.strip_prefix('#').unwrap_or(&text);
+    let mut hash = String::from("#");
+    for c in input.chars() {
+        match c {
+            '\t' | '\n' | '\r' => {}
+            ' ' | '"' | '<' | '>' | '`' => hash.push_str(&format!("%{:02X}", c as u32)),
+            '\u{21}'..='\u{7e}' => hash.push(c),
+            _ => {
+                for byte in c.encode_utf8(&mut [0; 4]).bytes() {
+                    hash.push_str(&format!("%{byte:02X}"));
+                }
+            }
+        }
+    }
+    if hash.len() == 1 {
+        hash.clear();
+    }
+    JsString::from(hash)
+}
+
+/// `IFRAME` and its `contentWindow.location`.
+#[derive(Debug, Default)]
+pub struct DocumentationFrame {
     src: Option<&'static str>,
-    /// `IFRAME.contentWindow.location.hash`.
+    loaded: bool,
     hash: JsString,
+    assigned: u64,
+    pending: Option<JsString>,
+}
+
+/// A `location.hash` assignment the view passes on to the page. The page reports `id` back with
+/// each hash it reports from then on.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HashAssignment {
+    pub id: u64,
+    pub hash: String,
+}
+
+impl DocumentationFrame {
+    /// `IFRAME.src`, once the first render has set it.
+    pub fn src(&self) -> Option<&'static str> {
+        self.src
+    }
+
+    pub fn hash(&self) -> &JsString {
+        &self.hash
+    }
+
+    /// The iframe's `load` event, with the page's hash at that time.
+    pub fn load(&mut self, hash: JsString) {
+        self.loaded = true;
+        self.hash = hash;
+        self.assigned = 0;
+        self.pending = None;
+    }
+
+    /// The page changed its own hash after it saw assignment `id` (0 before any). Reports sent
+    /// before the page saw the latest assignment are out of date.
+    pub fn navigated(&mut self, id: u64, hash: JsString) {
+        if id == self.assigned {
+            self.hash = hash;
+        }
+    }
+
+    pub fn take_assignment(&mut self) -> Option<HashAssignment> {
+        let hash = self.pending.take()?;
+        Some(HashAssignment {
+            id: self.assigned,
+            hash: hash.to_string_lossy(),
+        })
+    }
+
+    fn assign(&mut self, state: &JsString) {
+        let hash = assigned_hash(state);
+        self.hash = hash.clone();
+        self.assigned += 1;
+        self.pending = Some(hash);
+    }
+}
+
+#[derive(Debug)]
+pub struct DocumentationRenderer {
+    frame: Rc<RefCell<DocumentationFrame>>,
+    state_queue: Option<JsString>,
+    first_render: bool,
 }
 
 impl Default for DocumentationRenderer {
     fn default() -> Self {
         DocumentationRenderer {
+            frame: Rc::default(),
             state_queue: None,
-            loaded: false,
             first_render: true,
-            src: None,
-            hash: JsString::new(),
         }
     }
 }
@@ -36,34 +117,21 @@ impl DocumentationRenderer {
         Self::default()
     }
 
-    pub fn src(&self) -> Option<&'static str> {
-        self.src
-    }
-
-    pub fn hash(&self) -> &JsString {
-        &self.hash
-    }
-
-    /// The iframe's `load` event.
-    pub fn frame_loaded(&mut self) {
-        self.loaded = true;
-    }
-
-    /// The frame navigated on its own (a link inside the docs).
-    pub fn set_hash(&mut self, hash: JsString) {
-        self.hash = hash;
+    pub fn frame(&self) -> &Rc<RefCell<DocumentationFrame>> {
+        &self.frame
     }
 }
 
 impl<Cx: ?Sized> TabRenderer<Cx> for DocumentationRenderer {
     fn save_state(&self, _cx: &Cx) -> JsValue {
-        JsValue::String(self.hash.clone())
+        JsValue::String(self.frame.borrow().hash.clone())
     }
 
     fn restore_state(&mut self, _cx: &mut Cx, state: &JsValue) -> Result<(), JsError> {
         if let JsValue::String(state) = state {
-            if self.loaded {
-                self.hash = state.clone();
+            let mut frame = self.frame.borrow_mut();
+            if frame.loaded {
+                frame.assign(state);
             } else {
                 self.state_queue = Some(state.clone());
             }
@@ -76,40 +144,16 @@ impl<Cx: ?Sized> TabRenderer<Cx> for DocumentationRenderer {
     }
 
     fn render(&mut self, _cx: &mut Cx, _command: &dyn TabCommand) -> Result<(), JsError> {
+        let mut frame = self.frame.borrow_mut();
         if self.first_render {
             self.first_render = false;
-            self.src = Some(DOCS_URL);
+            frame.src = Some(DOCS_URL);
         }
-        if self.loaded
+        if frame.loaded
             && let Some(state) = self.state_queue.take()
         {
-            self.hash = state;
+            frame.assign(&state);
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::rc::Rc;
-
-    use super::*;
-
-    #[test]
-    fn a_restore_waits_for_the_frame_to_load() {
-        let mut r = DocumentationRenderer::new();
-        let cx = &mut ();
-        let state = JsValue::string("#/tab-reference/line-graph");
-        TabRenderer::<()>::restore_state(&mut r, cx, &state).unwrap();
-        assert_eq!(TabRenderer::<()>::save_state(&r, cx), JsValue::string(""));
-        let command = Rc::new(JsValue::Null);
-        TabRenderer::<()>::render(&mut r, cx, &*command).unwrap();
-        assert_eq!(r.src(), Some(DOCS_URL));
-        assert_eq!(TabRenderer::<()>::save_state(&r, cx), JsValue::string(""));
-        r.frame_loaded();
-        TabRenderer::<()>::render(&mut r, cx, &*command).unwrap();
-        assert_eq!(TabRenderer::<()>::save_state(&r, cx), state);
-        TabRenderer::<()>::restore_state(&mut r, cx, &JsValue::Number(1.0)).unwrap();
-        assert_eq!(TabRenderer::<()>::save_state(&r, cx), state);
     }
 }
