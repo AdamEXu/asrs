@@ -4,7 +4,7 @@
 //! and answers the model's layout reads ([`ViewGeometry`]) from the same arithmetic, so the
 //! active fields follow what is on screen.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
@@ -287,13 +287,20 @@ impl SidebarGeometry for ViewGeometry {
     }
 }
 
+struct TuningField {
+    field: Entity<TextField<FormNumber>>,
+    /// The field's row, which moves as a live log gains fields.
+    index: Rc<Cell<usize>>,
+    _subscription: Subscription,
+}
+
 pub struct SidebarView {
     hub: Entity<Hub>,
     layout: Rc<RefCell<SidebarLayout>>,
     scroll: ScrollHandle,
     results_scroll: ScrollHandle,
     search: Option<(Entity<TextField<PlainText>>, Subscription)>,
-    tuning: HashMap<JsString, (Entity<TextField<FormNumber>>, Subscription)>,
+    tuning: HashMap<JsString, TuningField>,
     rendered: Range<usize>,
 }
 
@@ -405,7 +412,6 @@ impl SidebarView {
         else {
             return None;
         };
-        let index = row.index;
         let entry = self.tuning.entry(key).or_insert_with(|| {
             let field = cx.new(|cx| {
                 TextField::new(
@@ -416,7 +422,10 @@ impl SidebarView {
                     cx,
                 )
             });
+            let index = Rc::new(Cell::new(row.index));
+            let current = index.clone();
             let subscription = cx.subscribe(&field, move |view, field, event: &FieldEvent, cx| {
+                let index = current.get();
                 let value = JsString::from(field.read(cx).value().as_str());
                 view.input(cx, |sidebar, _| match event {
                     FieldEvent::Input => sidebar.number_input_value(index, value),
@@ -426,9 +435,14 @@ impl SidebarView {
                     FieldEvent::Change => {}
                 });
             });
-            (field, subscription)
+            TuningField {
+                field,
+                index,
+                _subscription: subscription,
+            }
         });
-        let field = entry.0.clone();
+        entry.index.set(row.index);
+        let field = entry.field.clone();
         let wanted = input_value.to_string_lossy();
         let placeholder = placeholder
             .as_ref()

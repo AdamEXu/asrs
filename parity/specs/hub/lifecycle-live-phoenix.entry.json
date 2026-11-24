@@ -1,0 +1,502 @@
+{
+ "entry": "hubSession",
+ "inputs": [
+  "logs/match.csv"
+ ],
+ "fixture": {
+  "seed": 105,
+  "live": {
+   "protocol": "phoenix",
+   "seed": 1,
+   "epochMs": 1767225600000,
+   "latencyMs": 2,
+   "endMs": 600000,
+   "client": {
+    "source": "phoenix",
+    "address": "10.63.28.2"
+   },
+   "server": {
+    "busUtil": 12.5,
+    "startUs": 5000000,
+    "points": 3,
+    "stepUs": 20000,
+    "devices": [
+     {
+      "device": {
+       "CANbus": "rio",
+       "CANivoreDevName": "",
+       "ID": 1,
+       "Model": "Talon FX",
+       "Name": "Talon FX (Device ID 1)",
+       "IsPROApplication": true
+      },
+      "signals": [
+       {
+        "Id": 12,
+        "Name": "Position",
+        "Summary": "Rotor position",
+        "Units": "rotations"
+       },
+       {
+        "Id": 3,
+        "Name": "BridgeOutput",
+        "Summary": "Bridge",
+        "Units": ""
+       },
+       {
+        "Id": 40,
+        "Name": "Velocity",
+        "Summary": "Rotor velocity",
+        "Units": "rps"
+       }
+      ],
+      "values": {
+       "12": [
+        0.5,
+        0.75,
+        1.25
+       ],
+       "3": [
+        1,
+        6,
+        99,
+        7.5
+       ],
+       "40": [
+        2
+       ]
+      }
+     },
+     {
+      "device": {
+       "CANbus": "canivore 1",
+       "CANivoreDevName": "canivore 1",
+       "ID": 5,
+       "Model": "CANcoder",
+       "Name": "Front Left",
+       "IsPROApplication": true
+      },
+      "signals": [
+       {
+        "Id": 7,
+        "Name": "Velocity",
+        "Summary": "Velocity",
+        "Units": "rps"
+       },
+       {
+        "Id": 2,
+        "Name": "MagnetHealth",
+        "Summary": "Magnet health",
+        "Units": ""
+       }
+      ],
+      "values": {
+       "7": [
+        -0.125,
+        0.000125
+       ]
+      }
+     },
+     {
+      "device": {
+       "CANbus": "rio",
+       "CANivoreDevName": "",
+       "ID": 9,
+       "Model": "Talon SRX",
+       "Name": "Talon SRX 9",
+       "IsPROApplication": false
+      },
+      "signals": [
+       {
+        "Id": 1,
+        "Name": "Output",
+        "Summary": "",
+        "Units": "%"
+       }
+      ]
+     }
+    ]
+   },
+   "steps": [
+    {
+     "t": 0,
+     "server": [
+      "down",
+      "refuse"
+     ]
+    },
+    {
+     "t": 1500,
+     "server": [
+      "up"
+     ]
+    },
+    {
+     "t": 4500,
+     "server": [
+      "error",
+      "getdevices",
+      3
+     ]
+    },
+    {
+     "t": 6200,
+     "server": [
+      "error",
+      "getdevices",
+      0
+     ]
+    },
+    {
+     "t": 8000,
+     "server": [
+      "down",
+      "hang"
+     ]
+    },
+    {
+     "t": 9500,
+     "server": [
+      "up"
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "(() => { const t = document.getElementsByTagName('title')[0]; window.__titles = []; let last = t.textContent; new MutationObserver(() => { if (t.textContent !== last) { last = t.textContent; window.__titles.push(last); } }).observe(t, { childList: true, characterData: true, subtree: true }); return last; })()"
+     }
+    ],
+    "label": "watch"
+   },
+   {
+    "main": "set-preferences",
+    "data": {
+     "theme": "system",
+     "robotAddress": "10.63.28.2",
+     "remotePath": "/U/logs",
+     "liveMode": "phoenix",
+     "liveSubscribeMode": "low-bandwidth",
+     "liveDiscard": 1200,
+     "publishFilter": "",
+     "rlogPort": 5800,
+     "coordinateSystem": "automatic",
+     "field3dModeAc": "standard",
+     "field3dModeBattery": "",
+     "field3dAntialiasing": true,
+     "tbaApiKey": "",
+     "userAssetsFolder": null,
+     "skipHootNonProWarning": false,
+     "skipFRCCoordinateSystemWarning": false,
+     "skipFTCCoordinateSystemWarning": false,
+     "ctreLicenseAccepted": false,
+     "systemcoreStaticAddress": "",
+     "hasScrolledLineGraph": false,
+     "hasScrolledTimeline": false,
+     "prefersFTC": false,
+     "timestamps": "start-zero"
+    }
+   },
+   {
+    "main": "start-live",
+    "data": "robot"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "searching"
+   },
+   {
+    "advance": 1400
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "refused"
+   },
+   {
+    "advance": 1000
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "active"
+   },
+   {
+    "main": "restore-state",
+    "data": {
+     "sidebar": {
+      "width": 300,
+      "expanded": []
+     },
+     "tabs": {
+      "selected": 1,
+      "tabs": [
+       {
+        "type": 0,
+        "title": "",
+        "controller": null,
+        "controllerUUID": "aaaa",
+        "renderer": "",
+        "controlsHeight": 0
+       },
+       {
+        "type": 4,
+        "title": "Values",
+        "controller": [
+         "Phoenix6/TalonFX-1/Position",
+         "Phoenix6/CANivore-canivore 1/CANcoder-Front Left/Velocity"
+        ],
+        "controllerUUID": "bbbb",
+        "renderer": null,
+        "controlsHeight": 0
+       }
+      ]
+     }
+    }
+   },
+   {
+    "advance": 800
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "plotting"
+   },
+   {
+    "advance": 1800
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "error reply"
+   },
+   {
+    "advance": 1500
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "recovered"
+   },
+   {
+    "advance": 3000
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "hanging"
+   },
+   {
+    "advance": 3990
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "back"
+   },
+   {
+    "main": "start-live",
+    "data": "sim"
+   },
+   {
+    "advance": 30
+   },
+   {
+    "main": "open-files",
+    "data": {
+     "files": [
+      "logs/match.csv"
+     ],
+     "merge": false
+    }
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "opened"
+   },
+   {
+    "advance": 1200
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "log"
+   }
+  ]
+ }
+}

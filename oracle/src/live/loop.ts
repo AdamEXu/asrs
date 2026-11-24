@@ -65,7 +65,7 @@ export class LiveLoop {
   private tasks: Task[] = [];
   private nextId = 1;
   private nextSeq = 0;
-  private runningLevel = 0;
+  protected runningLevel = 0;
   private saved: { [name: string]: unknown } | null = null;
   server: ServerSide | null = null;
 
@@ -125,7 +125,7 @@ export class LiveLoop {
     this.saved = null;
   }
 
-  private add(callback: Callback, delay: number | undefined, repeat: boolean, args: unknown[], nested = true): number {
+  protected add(callback: Callback, delay: number | undefined, repeat: boolean, args: unknown[], nested = true): number {
     const id = this.nextId++;
     let wait = Math.max(0, Number(delay) | 0);
     if (nested && this.runningLevel > MAX_UNCLAMPED_LEVEL && wait < MIN_DELAY_MS) wait = MIN_DELAY_MS;
@@ -145,7 +145,7 @@ export class LiveLoop {
     return this.add(callback, delay, false, [], false);
   }
 
-  private clear(id: number): void {
+  protected clear(id: number): void {
     this.timers = this.timers.filter((t) => t.id !== id);
   }
 
@@ -170,6 +170,33 @@ export class LiveLoop {
     return best;
   }
 
+  /** When the server, a delivery or a timer next has something to do. */
+  protected nextDue(): number | null {
+    const due = [this.server?.nextTime() ?? null, this.earliestTask()?.due ?? null, this.earliestTimer()?.due ?? null];
+    const times = due.filter((t): t is number => t !== null);
+    return times.length === 0 ? null : Math.min(...times);
+  }
+
+  /** The client task to run next at this time, if one is due. */
+  protected takeDue(): (() => void) | null {
+    const task = this.earliestTask();
+    if (task !== undefined && task.due <= this.now) {
+      this.tasks.splice(this.tasks.indexOf(task), 1);
+      this.runningLevel = 0;
+      return task.run;
+    }
+    const timer = this.earliestTimer();
+    if (timer === undefined || timer.due > this.now) return null;
+    this.runningLevel = timer.level;
+    if (timer.repeat === null) {
+      this.clear(timer.id);
+    } else {
+      timer.due = this.now + (timer.repeat - ((this.now - timer.due) % timer.repeat));
+      timer.level++;
+    }
+    return () => timer.callback(...timer.args);
+  }
+
   private async runTask(run: () => void): Promise<void> {
     try {
       run();
@@ -180,12 +207,9 @@ export class LiveLoop {
   async run(endMs: number, steps: ClientStep[]): Promise<void> {
     let nextStep = 0;
     for (;;) {
-      const candidates = [
-        this.server?.nextTime() ?? null,
-        nextStep < steps.length ? steps[nextStep].t : null,
-        this.earliestTask()?.due ?? null,
-        this.earliestTimer()?.due ?? null
-      ].filter((t): t is number => t !== null);
+      const candidates = [nextStep < steps.length ? steps[nextStep].t : null, this.nextDue()].filter(
+        (t): t is number => t !== null
+      );
       if (candidates.length === 0) break;
       const t = Math.min(...candidates);
       if (t > endMs) break;
@@ -197,26 +221,9 @@ export class LiveLoop {
         await this.runTask(steps[nextStep++].run);
       }
       for (;;) {
-        const task = this.earliestTask();
-        if (task !== undefined && task.due <= this.now) {
-          this.tasks.splice(this.tasks.indexOf(task), 1);
-          this.runningLevel = 0;
-          await this.runTask(task.run);
-          continue;
-        }
-        const timer = this.earliestTimer();
-        if (timer !== undefined && timer.due <= this.now) {
-          this.runningLevel = timer.level;
-          if (timer.repeat === null) {
-            this.clear(timer.id);
-          } else {
-            timer.due = this.now + (timer.repeat - ((this.now - timer.due) % timer.repeat));
-            timer.level++;
-          }
-          await this.runTask(() => timer.callback(...timer.args));
-          continue;
-        }
-        break;
+        const run = this.takeDue();
+        if (run === null) break;
+        await this.runTask(run);
       }
     }
     if (endMs > this.now) this.now = endMs;

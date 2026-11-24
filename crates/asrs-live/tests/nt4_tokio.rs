@@ -9,9 +9,10 @@ use std::time::{Duration, Instant};
 use asrs_js::time::{SystemClock, V8MathRandom};
 use asrs_js::value::JsValue;
 use asrs_live::nt4::{
-    NT4_PORTS_DEFAULT, Nt4Client, Nt4Context, Nt4Handler, Nt4Topic, TokioTransport,
+    NT4_PORTS_DEFAULT, Nt4Client, Nt4Context, Nt4Handler, Nt4Topic, Nt4Transport, ReadyState,
+    TokioTransport, WsMessage,
 };
-use asrs_live::{LiveRuntime, MonotonicClock, Thrown, TimerQueue};
+use asrs_live::{LiveRuntime, MonotonicClock, NetOptions, Thrown, TimerQueue};
 use asrs_log::msgpack::{self, KeyCache};
 use asrs_log::realm::JsRealm;
 use futures_util::{SinkExt, StreamExt};
@@ -145,7 +146,7 @@ fn connects_syncs_and_receives_over_real_sockets() {
     assert!(!NT4_PORTS_DEFAULT.contains(&port));
 
     let mut timers = TimerQueue::new(Rc::new(MonotonicClock::new()));
-    let mut net = TokioTransport::new(runtime.handle().clone());
+    let mut net = TokioTransport::new(NetOptions::new(runtime.handle().clone()));
     let mut realm = JsRealm::new(Box::new(V8MathRandom::from_seed(7)));
     let clock = SystemClock;
     let mut seen = Seen::default();
@@ -197,4 +198,44 @@ fn connects_syncs_and_receives_over_real_sockets() {
         "no time sync"
     );
     assert!(client.is_connected());
+}
+
+/// A server that accepts the websocket and then neither reads nor closes it.
+async fn stall(listener: TcpListener) {
+    let (stream, _) = listener.accept().await.unwrap();
+    let ws = tokio_tungstenite::accept_async(stream).await.unwrap();
+    std::future::pending::<()>().await;
+    drop(ws);
+}
+
+#[test]
+fn a_dropped_transport_gives_up_on_a_stalled_server() {
+    let runtime = LiveRuntime::new().unwrap();
+    let server = LiveRuntime::new().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    listener.set_nonblocking(true).unwrap();
+    let _task = server.spawn(async move { stall(TcpListener::from_std(listener).unwrap()).await });
+
+    let mut net = TokioTransport::new(NetOptions::new(runtime.handle().clone()));
+    let id = net.ws_open(&format!("ws://127.0.0.1:{port}"), &[]).unwrap();
+    let start = Instant::now();
+    while net.ws_ready_state(id) != ReadyState::Open {
+        assert!(start.elapsed() < Duration::from_secs(10));
+        net.next_event();
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    for _ in 0..64 {
+        net.ws_send(id, WsMessage::Binary(vec![0; 1024 * 1024]))
+            .unwrap();
+    }
+    drop(net);
+    let start = Instant::now();
+    while runtime.alive_tasks() > 0 {
+        assert!(
+            start.elapsed() < Duration::from_secs(20),
+            "the connection outlives its transport"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
 }

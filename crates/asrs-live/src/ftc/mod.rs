@@ -4,4 +4,4 @@
 pub mod config;
 mod source;
 
-pub use source::{FtcContext, FtcSource, FtcTransport};
+pub use source::{FtcContext, FtcSource};
