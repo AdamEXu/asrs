@@ -1188,9 +1188,10 @@ impl Variant<'_> {
         let scale = self.scale as f32;
         match self.scenario.page {
             Page::App => {
-                // `windows::open` makes the hub window transparent on macOS, for the vibrancy.
+                // `windows::open` makes the hub window transparent for the vibrancy on macOS and
+                // the acrylic on Windows.
                 self.headless
-                    .set_transparent_windows(cfg!(target_os = "macos"));
+                    .set_transparent_windows(cfg!(target_os = "macos") || platform::has_acrylic());
                 let (assets, preferences) = self.start_main()?;
                 if let Some(root) = self.bundled_assets.and_then(Path::parent) {
                     let root = std::path::absolute(root).map_err(|e| e.to_string())?;

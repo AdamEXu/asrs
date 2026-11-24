@@ -41,7 +41,7 @@ mod desktop {
     use asrs_ui::selection::colors::ForcedActive;
     use asrs_ui::theme::ThemeSource;
 
-    const ELECTRON_MAIN: &str = r#"
+    const ELECTRON_MAIN: &str = r##"
 const { app, BrowserWindow, Menu } = require("electron");
 const readline = require("readline");
 const out = (line) => process.stdout.write(line + "\n");
@@ -95,7 +95,7 @@ app.whenReady().then(() => {
     }
   });
 });
-"#;
+"##;
 
     fn electron_binary() -> PathBuf {
         if let Some(path) = std::env::var_os("ASRS_ELECTRON") {

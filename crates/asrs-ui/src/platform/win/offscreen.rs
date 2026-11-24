@@ -104,6 +104,18 @@ impl ShownWindow {
     }
 }
 
+/// Transparent windows hold premultiplied colours.
+fn straighten(image: &mut image::RgbaImage) {
+    for pixel in image.pixels_mut() {
+        let alpha = u32::from(pixel[3]);
+        if alpha != 0 && alpha != 255 {
+            for c in &mut pixel.0[..3] {
+                *c = ((u32::from(*c) * 255 + alpha / 2) / alpha).min(255) as u8;
+            }
+        }
+    }
+}
+
 impl PlatformHeadlessRenderer for ShownWindow {
     fn render_scene_to_image(
         &mut self,
@@ -112,7 +124,9 @@ impl PlatformHeadlessRenderer for ShownWindow {
     ) -> Result<image::RgbaImage> {
         self.resize(size)?;
         self.window.draw(scene);
-        self.window.render_to_image(scene)
+        let mut image = self.window.render_to_image(scene)?;
+        straighten(&mut image);
+        Ok(image)
     }
 
     fn render_scene(&mut self, scene: &Scene, size: Size<DevicePixels>) -> Result<()> {

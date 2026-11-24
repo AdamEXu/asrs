@@ -375,6 +375,15 @@ function bgraToRgba(bitmap: Buffer): Buffer {
   return rgba;
 }
 
+// toBitmap gives premultiplied colours, which the acrylic sidebar's half transparent ones show.
+function straighten(rgba: Buffer) {
+  for (let i = 0; i < rgba.length; i += 4) {
+    const alpha = rgba[i + 3];
+    if (alpha === 0 || alpha === 255) continue;
+    for (let c = i; c < i + 3; c++) rgba[c] = Math.min(255, Math.floor((rgba[c] * 255 + (alpha >> 1)) / alpha));
+  }
+}
+
 type Rect = number[];
 
 function maskedEqual(a: Buffer, b: Buffer, width: number, masks: Rect[]): boolean {
@@ -471,6 +480,7 @@ async function capture(name: string, probes: string[], maskSelectors: string[]) 
     const image = await win.webContents.capturePage();
     const nextSize = image.getSize(scale);
     const next = bgraToRgba(image.toBitmap({ scaleFactor: scale }));
+    if (process.platform === "win32") straighten(next);
     if (win === target) await drawCaptionButtons(next, nextSize.width);
     const nextGlReads = await onPage<number>("window.__asrsParity.glReads()");
     const masks = nextDom.masks.map((m: { rect: Rect }) => m.rect);

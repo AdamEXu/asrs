@@ -233,9 +233,7 @@ fn load_scenarios(paths: &Paths, only: &[String]) -> Result<Vec<Scenario>> {
             let file = dir.join(format!("{name}.json"));
             read_json(&file).map(|value| (name, file, value))
         })
-        .filter(|read| {
-            !only.is_empty() || !matches!(read, Ok((_, _, value)) if !runs_here(value))
-        })
+        .filter(|read| !only.is_empty() || !matches!(read, Ok((_, _, value)) if !runs_here(value)))
         .map(|read| {
             let (name, file, value) = read?;
             let numbers = |key: &str, default: &[u32]| -> Vec<u32> {
