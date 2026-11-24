@@ -136,6 +136,16 @@
       "wait": 500
     },
     {
+      "capture": "one-40",
+      "probes": [
+        ".timeline"
+      ],
+      "masks": [
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
       "pointer": "wheel",
       "x": 620,
       "y": 105,
@@ -157,7 +167,7 @@
       "pointer": "wheel",
       "x": 560,
       "y": 105,
-      "unitsY": 80
+      "unitsY": -40
     },
     {
       "wait": 500
@@ -165,6 +175,24 @@
     {
       "pointer": "wheel",
       "x": 700,
+      "y": 105,
+      "unitsY": -80
+    },
+    {
+      "wait": 500
+    },
+    {
+      "pointer": "wheel",
+      "x": 700,
+      "y": 105,
+      "unitsY": 40
+    },
+    {
+      "wait": 500
+    },
+    {
+      "pointer": "wheel",
+      "x": 500,
       "y": 105,
       "unitsY": -40
     },
