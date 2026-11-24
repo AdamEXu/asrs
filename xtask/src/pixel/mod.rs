@@ -12,7 +12,7 @@ use asrs_parity::pixel::{self, Rgba};
 
 use crate::app::Robot;
 use crate::oracle::Paths;
-use crate::{Result, app, cargo, workspace_root};
+use crate::{Result, app, cargo, gl, workspace_root};
 pub(crate) use gates::TIMELINE_TOLERANCE;
 use gates::{Capture, Dump, GlDump, Outcome, Patch, PlatformMask, Rect, RenderMode};
 
@@ -947,8 +947,13 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
         work_areas.sort();
         work_areas.dedup();
         let file = scenarios.join(format!("{name}.json"));
-        let robot = Robot::start(&Paths::new()?, &file)?;
-        let status = Command::new(&exe)
+        let paths = Paths::new()?;
+        let robot = Robot::start(&paths, &file)?;
+        let mut command = Command::new(&exe);
+        if read_json(&file)?.get("gl") == Some(&Json::Bool(true)) {
+            gl::pair_port(&paths, gl::default_mode()?, &mut command)?;
+        }
+        let status = command
             .arg("--parity-scenario")
             .arg(&file)
             .arg("--out")

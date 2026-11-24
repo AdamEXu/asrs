@@ -702,7 +702,7 @@ fn ops_specs() -> (Spec, Spec) {
 }
 
 #[test]
-#[ignore = "rewrites parity/specs/js/math*; regenerate vectors after with `cargo xtask oracle gen js/math js/math-ops js/math-rem` and `cargo xtask host windows gen js/math-rem/windows-aarch64` (likewise linux)"]
+#[ignore = "rewrites parity/specs/js/math*; regenerate vectors after with `cargo xtask oracle gen js/math js/math-ops js/math-rem` and `cargo xtask host windows-arm gen js/math-rem/windows-aarch64` (likewise linux)"]
 fn write_math_specs() {
     math_spec().write("js/math");
     let (ops, rem) = ops_specs();

@@ -2,8 +2,9 @@
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
+sudo systemctl mask --now -q apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service || true
 sudo -E apt-get update -q
-sudo -E apt-get install -y -q --no-install-recommends \
+sudo -E apt-get install -y -q --no-install-recommends --no-upgrade \
   xserver-xorg-core xserver-xorg-input-libinput xinit x11-xserver-utils x11-utils xauth \
   xfce4-session xfwm4 xfdesktop4 xfce4-panel xfce4-settings xfconf xfce4-terminal \
   lightdm lightdm-gtk-greeter dbus-x11 at-spi2-core gnome-themes-extra \
@@ -14,8 +15,8 @@ sudo -E apt-get install -y -q --no-install-recommends \
   libvulkan-dev libx11-dev libx11-xcb-dev libxcb1-dev libxcb-xkb-dev libxi-dev libxrandr-dev \
   libxcursor-dev libasound2-dev libzstd-dev \
   libnss3 libgtk-3-0t64 libasound2t64 libgbm1 libxss1 libxtst6 libatk-bridge2.0-0t64 libdrm2 \
-  libnotify4 libsecret-1-0 libcups2t64 \
-  fontconfig fonts-dejavu-core fonts-liberation fonts-noto-color-emoji
+  libnotify4 libsecret-1-0 libcups2t64 binutils \
+  fontconfig
 
 if ! command -v node >/dev/null || [[ "$(node --version)" != v24.* ]]; then
   curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -

@@ -10,6 +10,7 @@ mod coverage;
 mod docs;
 mod dom;
 mod field3d;
+mod gl;
 mod glb;
 mod gpui;
 mod harness;

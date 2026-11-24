@@ -8,7 +8,7 @@ use asrs_parity::pixel3d;
 
 use crate::canvas::{platform, write};
 use crate::oracle::{self, Paths};
-use crate::{Result, cargo};
+use crate::{Result, cargo, gl};
 
 const USAGE: &str = "usage: cargo xtask field3d <command>
 
@@ -17,13 +17,16 @@ and read back from the WebGL drawing buffer, against the port's wgpu renderer, a
 dark and light. Files land in target/parity/field3d/<os>/.
 
 commands:
-  ref [<scene>...]    capture the references (ref/<scene>@<n>x-<theme>.png)
+  ref [<scene>...]    capture the references (ref/<scene>@<n>x-<theme>.png) with the 3D switches
+                      of ASRS_GL (native, swiftshader or d3d11-warp; default native on macOS,
+                      swiftshader elsewhere)
   run [<scene>...]    render with the port (example field3d_scenes) into port/ and apply gate 4:
                       SSIM >= 0.995, interior pixels (over 2 px from an edge of the port's id and
                       depth buffers) within 2 levels and at most 0.05 % differing, at most 1 %
                       of all pixels differing, no blob of over 4 px (edge zone included) more
                       than 32 levels off. Shadow maps must be equal texel for texel, and line
-                      widths at the scene's widthProbes within 0.05 px
+                      widths at the scene's widthProbes within 0.05 px. On Linux under swiftshader
+                      the port runs on Electron's SwiftShader (VK_ICD_FILENAMES)
   bench [<args>...]   frame-time benchmark of the render thread (example field3d_bench)";
 
 const SCALES: [u32; 2] = [1, 2];
@@ -50,18 +53,20 @@ fn scenes_dir(paths: &Paths) -> PathBuf {
     paths.root.join("parity/field3d/scenes")
 }
 
-fn generator_hash(paths: &Paths) -> Result<String> {
-    oracle::hash_tree(
+fn stamp_text(paths: &Paths, gl: &str) -> Result<String> {
+    let generator = oracle::hash_tree(
         &paths.root,
         &[
             "oracle/field3d",
             "oracle/src/canvas/png.ts",
             "parity/field3d/scenes",
         ],
-    )
+    )?;
+    Ok(format!("{generator} {gl}\n"))
 }
 
 fn reference(paths: &Paths, scenes: &[String]) -> Result {
+    let gl = gl::default_mode()?;
     let out = paths.out.join("field3d");
     oracle::step("build 3D harness");
     let status = Command::new("node")
@@ -84,6 +89,7 @@ fn reference(paths: &Paths, scenes: &[String]) -> Result {
     }
     let mut command = Command::new(paths.electron()?);
     command
+        .args(gl::electron_switches(gl))
         .arg(out.join("field3dMain.mjs"))
         .arg(scenes_dir(paths))
         .arg(&ref_dir)
@@ -98,7 +104,7 @@ fn reference(paths: &Paths, scenes: &[String]) -> Result {
         return Err(format!("3D reference capture failed ({status})"));
     }
     if scenes.is_empty() {
-        write(&stamp, format!("{}\n", generator_hash(paths)?).as_bytes())?;
+        write(&stamp, stamp_text(paths, gl)?.as_bytes())?;
     }
     eprintln!("3D references in {}", ref_dir.display());
     Ok(())
@@ -221,7 +227,8 @@ fn diff_image(reference: &Rgba, port: &Rgba, edges: &[bool]) -> Rgba {
 fn run_port(paths: &Paths, wanted: &[String]) -> Result {
     let base = base_dir(paths);
     let current = fs::read_to_string(base.join(STAMP)).unwrap_or_default();
-    if current.trim() != generator_hash(paths)? {
+    let gl = gl::default_mode()?;
+    if current != stamp_text(paths, gl)? {
         reference(paths, &[])?;
     }
     let exe = example("field3d_scenes")?;
@@ -229,7 +236,9 @@ fn run_port(paths: &Paths, wanted: &[String]) -> Result {
     if port.exists() {
         fs::remove_dir_all(&port).map_err(|e| format!("{}: {e}", port.display()))?;
     }
-    let status = Command::new(&exe)
+    let mut command = Command::new(&exe);
+    gl::pair_port(paths, gl, &mut command)?;
+    let status = command
         .arg(scenes_dir(paths))
         .arg(&port)
         .args(wanted)
