@@ -1,11 +1,11 @@
 {
   "host": {
     "os": "windows",
-    "arch": "aarch64",
+    "arch": "x86_64",
     "osRelease": "10.0.26300",
-    "osVersion": "Windows 11 Pro",
+    "osVersion": "Windows 11 Enterprise Evaluation",
     "cpus": 6,
-    "memoryBytes": 8580235264,
+    "memoryBytes": 10666553344,
     "electron": "39.2.7",
     "chrome": "142.0.7444.235",
     "darkTheme": false,
@@ -22,7 +22,7 @@
       }
     ],
     "chromiumRasterizer": {
-      "glRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (LLVM 10.0.0) (0x0000C0DE)), SwiftShader driver-5.0.0)",
+      "glRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver-5.0.0)",
       "glVendor": "Google Inc. (Google)",
       "glImplementation": "(gl=egl-angle,angle=swiftshader)",
       "featureStatus": {
@@ -51,7 +51,13 @@
     },
     "displayProfile": {
       "logPixels": "96",
-      "iccProfiles": "RSWOP.icm,sRGB Color Space Profile.icm"
+      "iccProfiles": "RSWOP.icm,sRGB Color Space Profile.icm",
+      "dwrite": "10.0.26100.9444",
+      "clearTypeTunerDisplays": "",
+      "FontSmoothing": "2",
+      "FontSmoothingType": "2",
+      "FontSmoothingOrientation": "1",
+      "FontSmoothingGamma": "0"
     },
     "fonts": {
       "C:/Windows/Fonts/segoeui.ttf": "8134dbcd09e7b123c9a7f229d49cffbcb01352cc72ea5e1076b65d0dca9f73cd",
@@ -65,13 +71,111 @@
       "C:/Windows/Fonts/SegUIVar.ttf": "27ca1ab4bd5ad3b0404ee6a9a03b143408dbd7e5a4c9e4b2054639c03fc0f682",
       "C:/Windows/Fonts/seguiemj.ttf": "451df9bb5546055af625ff86aa72695df43e8e170b4c6c1316fe44e9c7a22f7c",
       "C:/Windows/Fonts/seguisym.ttf": "a4a35dcc62cd30e1a6c97b695ecef83e59d2b149e3af834f6a49f11851d56b37",
+      "C:/Windows/Fonts/seguibl.ttf": "be191c94a0c7172870c3c87a136bd5aa67cdca7bc091de89242fb64ecb0f8fae",
       "C:/Windows/Fonts/arial.ttf": "b3658eadae55e682b5f69eb64c439c1ecc8f196c0bb8d4756d145d13bc86476a",
       "C:/Windows/Fonts/arialbd.ttf": "e8f4e3baf6cc35fed6fcce3a540e8b39e8f6cda1d22a28f2ec8f526fef7a43f5",
+      "C:/Windows/Fonts/ariali.ttf": "86b32db9a06f9694e2a3760c42e5117bcdc5cc1255bb5186ca8ce0305e22f288",
       "C:/Windows/Fonts/cour.ttf": "e4a66a0259718d0c8f4b6e14319b4803ced45afbddf3abba8b8c3e2006856206",
       "C:/Windows/Fonts/courbd.ttf": "11e629cef937cd08f942aa1bd994a71302dbe2819c72c6d4c183a623acbb421a",
       "C:/Windows/Fonts/consola.ttf": "cf00b507b3286870cc5064ebd0633c303f70b491a4af25eec2d32df413db0179",
       "C:/Windows/Fonts/consolab.ttf": "7e8de70c92a891722bd3fbd623db005caab2bfe267e5dab5be46b95a44e0c7f1",
-      "C:/Windows/Fonts/times.ttf": "931c5de5c70401d9324d5014c123802b4fb753000360ceb2f56c589403cd58c5"
+      "C:/Windows/Fonts/times.ttf": "931c5de5c70401d9324d5014c123802b4fb753000360ceb2f56c589403cd58c5",
+      "C:/Windows/Fonts/timesbd.ttf": "54fbe2c70af7c85a97bed0573227e3ccc4b2486012e3ca2a40c6bc77065846f5",
+      "C:/Windows/Fonts/timesi.ttf": "e7f7a88b65188328aea58670f955022e23c712f55679524729da1e4e03c49d88",
+      "C:/Windows/Fonts/tahoma.ttf": "9af03d4ad44a3b413d92f7de48b94aa7cc8a1471a75d498406eae837f62ee1d1",
+      "C:/Windows/Fonts/tahomabd.ttf": "b16ed1a15e0cabea8d41d9f8899c253cd61ac466af5e3980d02bd0cf311c2267",
+      "C:/Windows/Fonts/malgun.ttf": "7a183cf1c6c56b9609fcc16eda8b5229fbc11758a21e669ec00343239b02192f",
+      "C:/Windows/Fonts/malgunbd.ttf": "e8cbc0b2afcc14fb45dfb6086d5102c0b23a96e7b6e708f3122acde1b86c9082",
+      "C:/Windows/Fonts/simsunb.ttf": "2a476ca00b5fbbbc12a4c5335634722b11a495ed87429284325701f1e36b596a",
+      "C:/Windows/Fonts/l_10646.ttf": "97226e81f19eff8c8fb191745748bab920472c005d3ec4e23d9a50a12c471d92",
+      "C:/Windows/Fonts/cambria.ttc": "84e70ccc1664482f4a960442c7a166c91a1b2cf98ff88c33cb73f79403f66d7b",
+      "C:/Windows/Fonts/msyh.ttc": "d79c55e68b1131eea0cc1c47be4f572d964f28c682e143db2ad09c1e4cb07a3f",
+      "C:/Windows/Fonts/msyhbd.ttc": "4508821b3dffe01f0ef5e5326a3e60df705a44633858811f67b6982dce3f6ee6",
+      "C:/Windows/Fonts/msyhl.ttc": "7e9bdf90bb5d3fe1b5975fc8ae31944b8fa674122261f92c28d4ec0b9c482fa1",
+      "C:/Windows/Fonts/YuGothB.ttc": "d923a57f781f06198167da4f58287be7ac64a954a47aff4295e078a42b4b68b2",
+      "C:/Windows/Fonts/YuGothL.ttc": "0acf409fc61e1560ea0384f8c72bf87c6fa7282077420657979680ee21dad2a4",
+      "C:/Windows/Fonts/YuGothR.ttc": "cd24b5617c1e26572b0a7fe7e558f7121ca42c36f7b50e8d9216ac222a1c0a93"
     }
-  }
+  },
+  "electron": "39.2.7",
+  "chrome": "142.0.7444.235",
+  "platform": "win32",
+  "arch": "x64",
+  "osRelease": "10.0.26300",
+  "generator": "cb67ef40c8c4ed04",
+  "lut": {
+    "file": "lut-windows.bin",
+    "content": "126da49e80e8c6fd"
+  },
+  "measure": {
+    "file": "measure-windows.jsonl.zst",
+    "cases": 7656,
+    "content": "a0e33056c48488cf"
+  },
+  "scenes": [
+    {
+      "scene": "text-light-1x",
+      "content": "f2dd6f4677cab0c8"
+    },
+    {
+      "scene": "text-dark-1x",
+      "content": "05ff91f23cbda64c"
+    },
+    {
+      "scene": "text-light-2x",
+      "content": "0498b24b0f072854"
+    },
+    {
+      "scene": "textstyles-light-1x",
+      "content": "288294cfecbff49f"
+    },
+    {
+      "scene": "textstyles-dark-1x",
+      "content": "ccd4d5e4934e373a"
+    },
+    {
+      "scene": "textstyles-light-2x",
+      "content": "98d0da0fea992447"
+    },
+    {
+      "scene": "textemoji-light-1x",
+      "content": "392e6a3b41e8cd4e"
+    },
+    {
+      "scene": "textemoji-dark-1x",
+      "content": "2b8974f0a1e43de4"
+    },
+    {
+      "scene": "textemoji-light-2x",
+      "content": "d205127b7cc198e2"
+    },
+    {
+      "scene": "gradienttext-light-1x",
+      "content": "1801b424db0b3a96"
+    },
+    {
+      "scene": "transforms-1x",
+      "content": "1f10b4e9cdc1d741"
+    },
+    {
+      "scene": "transforms-2x",
+      "content": "61e6a6d2dbfa4e90"
+    },
+    {
+      "scene": "dom-text-light@1x",
+      "content": "2dcdab8713fee00b"
+    },
+    {
+      "scene": "dom-text-light@2x",
+      "content": "0e65e0ca52079cf5"
+    },
+    {
+      "scene": "dom-text-dark@1x",
+      "content": "03f56a06e8d6719f"
+    },
+    {
+      "scene": "dom-text-dark@2x",
+      "content": "6f21a788022e512e"
+    }
+  ]
 }
