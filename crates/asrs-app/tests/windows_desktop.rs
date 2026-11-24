@@ -747,11 +747,11 @@ app.whenReady().then(() => {
         }
     }
 
-    /// Leaves a pair of strips in the temp folder as PPM, for whoever looks at a difference.
+    /// Leaves two differing images in the temp folder as PPM, for whoever looks at them.
     fn dump(name: &str, mine: &Rgb, other: &Rgb) {
         let dir = std::env::temp_dir().join("asrs-captions");
         std::fs::create_dir_all(&dir).expect("temp dir");
-        for (side, image) in [("ours", mine), ("electron", other)] {
+        for (side, image) in [("ours", mine), ("other", other)] {
             let mut ppm = format!("P6 {} {} 255\n", image.width, image.height).into_bytes();
             ppm.extend(image.data.iter().flatten());
             let name = name.replace([' ', ','], "-");
@@ -986,6 +986,7 @@ app.whenReady().then(() => {
         for scale in [1u32, 2] {
             probe::change_scale(number, scale);
             with_window(cx, handle, |w| w.resize(size(px(1100.0), px(650.0))));
+            probe::post_mouse(MouseAction::Drag, 2870.0, 10.0);
             sleep(cx, 6000).await;
             let own = with_window(cx, handle, |w| w.render_to_image()).expect("render_to_image");
             let own = straight(own.width(), own.height(), own.as_raw());
@@ -1057,10 +1058,6 @@ app.whenReady().then(() => {
                     .expect("hub")
                     .0;
                 sleep(cx, 1500).await;
-                if std::env::var_os("X04_OWN").is_some() {
-                    own_window(cx, &mut report).await;
-                    std::process::exit(0);
-                }
                 captions(cx, &electron, &mut report).await;
                 menus(cx, &mut report, hub).await;
                 accelerators(cx, &mut report, hub).await;
