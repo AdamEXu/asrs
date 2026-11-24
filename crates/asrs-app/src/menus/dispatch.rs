@@ -305,6 +305,23 @@ pub(crate) fn show_message_box(
     });
 }
 
+/// Electron's `uncaughtException` handler in the main process. `error` is `name: message`: the
+/// stack under it has no counterpart here.
+pub(crate) fn show_uncaught(
+    error: &str,
+    cx: &mut App,
+    on_done: impl FnOnce(&mut App) + 'static,
+) {
+    let options = MessageBoxOptions {
+        kind: MessageBoxType::Error,
+        title: "Error".to_owned(),
+        message: "A JavaScript error occurred in the main process".to_owned(),
+        detail: format!("Uncaught Exception:\n{error}"),
+        ..MessageBoxOptions::default()
+    };
+    show_message_box(None, options, cx, move |_, cx| on_done(cx));
+}
+
 pub(crate) fn with_window(
     window: Option<WindowId>,
     cx: &mut App,

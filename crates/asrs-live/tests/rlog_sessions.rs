@@ -13,6 +13,7 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 use asrs_js::time::Clock;
+use asrs_js::value::JsValue;
 use asrs_live::rlog::{
     Ipc, MainCall, MainContext, RlogContext, RlogMain, RlogPreferences, RlogSource,
 };
@@ -190,7 +191,9 @@ impl Driver for RlogDriver {
                 self.main.handle_net_event(&event, &mut mcx(env));
             }
             SessionEvent::Ipc(Ipc::ToMain(call)) => {
-                self.main.handle(&call, &mut mcx(env));
+                if let Err(thrown) = self.main.handle(&call, &mut mcx(env)) {
+                    env.app("uncaught", Some(&support::js_value(&JsValue::String(thrown.0))));
+                }
             }
             SessionEvent::Ipc(Ipc::ToSource(data)) => {
                 if let Some(source) = self.sources.last_mut() {

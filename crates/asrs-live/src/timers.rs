@@ -4,9 +4,11 @@
 //! It follows Blink's `DOMTimer`/`TimerBase` as measured in Electron 39's renderer:
 //! - The delay is a WebIDL `long`, so it is truncated toward zero (`1000 / 60` runs every
 //!   16 ms, measured mean 16.01 ms) and negative delays become 0.
-//! - Timers due at the same time run in creation order. An interval keeps the position of its
-//!   `setInterval` call on every repeat, because its repeats stay on the grid of its first due
-//!   time, which real time puts before any timer created later with the same nominal due time.
+//! - At the same due time, precise timers (a delay under 32 ms) run before flexible ones (longer
+//!   delays and the delayed tasks below), and each group runs in creation order. An interval keeps
+//!   the position of its `setInterval` call on every repeat, because its repeats stay on the grid
+//!   of its first due time, which real time puts before any timer created later with the same
+//!   nominal due time.
 //! - A repeating timer is rescheduled before its callback runs, drift free: when it fires late
 //!   it fires once and the next fire returns to its grid, at least a 20th of its period later
 //!   (one of 250 ms fired 235 ms late fires again after 15 ms, 240 ms late after 260 ms).
@@ -42,6 +44,7 @@ struct Timer {
     due: f64,
     repeat: Option<f64>,
     level: u32,
+    flexible: bool,
 }
 
 pub struct TimerQueue {
@@ -54,6 +57,7 @@ pub struct TimerQueue {
 
 const MIN_DELAY_MS: f64 = 4.0;
 const MAX_UNCLAMPED_LEVEL: u32 = 5;
+const FLEXIBLE_DELAY_MS: f64 = 32.0;
 
 fn webidl_delay(delay: f64) -> f64 {
     f64::from(to_int32(delay).max(0))
@@ -102,6 +106,7 @@ impl TimerQueue {
                 delay
             }),
             level,
+            flexible: !nested || delay >= FLEXIBLE_DELAY_MS,
         });
         id
     }
@@ -150,7 +155,11 @@ impl TimerQueue {
         self.timers
             .iter()
             .enumerate()
-            .min_by(|(_, a), (_, b)| a.due.total_cmp(&b.due).then(a.id.cmp(&b.id)))
+            .min_by(|(_, a), (_, b)| {
+                a.due
+                    .total_cmp(&b.due)
+                    .then((a.flexible, a.id).cmp(&(b.flexible, b.id)))
+            })
             .map(|(i, _)| i)
     }
 

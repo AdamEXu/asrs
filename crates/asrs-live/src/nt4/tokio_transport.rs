@@ -11,6 +11,7 @@
 //! handshake the server has five seconds to answer.
 
 use std::collections::{BTreeMap, VecDeque};
+use std::fmt;
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
@@ -18,12 +19,12 @@ use tokio::net::TcpStream;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::sync::oneshot;
 use tokio_tungstenite::tungstenite::Message;
-use tokio_tungstenite::tungstenite::client::IntoClientRequest;
-use tokio_tungstenite::tungstenite::http::HeaderValue;
+use tokio_tungstenite::tungstenite::handshake::client::{Request, generate_key};
 
 use super::transport::{NetEvent, Nt4Transport, ReadyState, SocketId, WsMessage};
 use crate::channel::{EventReceiver, EventSender, event_channel_notifying};
-use crate::http::{FetchTasks, FetchTransport, RequestId, host_port, percent_encode};
+use crate::http::{FetchTasks, FetchTransport, RequestId};
+use crate::live_url::LiveUrl;
 use crate::net_options::{Backlog, NetOptions, Waiting};
 use crate::thrown::Thrown;
 
@@ -36,9 +37,18 @@ enum Command {
 
 struct Socket {
     state: ReadyState,
-    commands: UnboundedSender<Command>,
+    /// `None` when there is no connection to make.
+    commands: Option<UnboundedSender<Command>>,
     /// Gone once the socket is closing: what it still has to send gets five seconds.
     open: Option<oneshot::Sender<()>>,
+}
+
+impl Socket {
+    fn command(&self, command: Command) {
+        if let Some(commands) = &self.commands {
+            let _ = commands.send(command);
+        }
+    }
 }
 
 struct Event {
@@ -144,46 +154,70 @@ impl TokioTransport {
     }
 }
 
-fn invalid_url(url: &str) -> Thrown {
+fn invalid_url(problem: impl fmt::Display) -> Thrown {
     Thrown::error(
         "SyntaxError",
-        format!("Failed to construct 'WebSocket': The URL '{url}' is invalid."),
+        format!("Failed to construct 'WebSocket': The URL {problem}"),
     )
+}
+
+fn socket_url(url: &str) -> Result<LiveUrl, Thrown> {
+    let parsed = LiveUrl::parse(url)
+        .filter(|url| url.scheme == "ws")
+        .ok_or_else(|| invalid_url(format!("'{url}' is invalid.")))?;
+    match &parsed.fragment {
+        Some(fragment) => Err(invalid_url(format!(
+            "contains a fragment identifier ('{fragment}'). \
+             Fragment identifiers are not allowed in WebSocket URLs."
+        ))),
+        None => Ok(parsed),
+    }
+}
+
+/// The request line has only the path and query, so the URI's host stands in for names that
+/// `http::Uri` does not take.
+fn handshake_request(url: &LiveUrl, protocols: &[&str]) -> Option<Request> {
+    let mut request = Request::builder()
+        .uri(format!("ws://localhost{}", url.target))
+        .header("Host", &url.authority)
+        .header("Connection", "Upgrade")
+        .header("Upgrade", "websocket")
+        .header("Sec-WebSocket-Version", "13")
+        .header("Sec-WebSocket-Key", generate_key());
+    if !protocols.is_empty() {
+        request = request.header("Sec-WebSocket-Protocol", protocols.join(", "));
+    }
+    request.body(()).ok()
 }
 
 impl Nt4Transport for TokioTransport {
     fn ws_open(&mut self, url: &str, protocols: &[&str]) -> Result<SocketId, Thrown> {
-        let mut request = percent_encode(url)
-            .into_client_request()
-            .map_err(|_| invalid_url(url))?;
-        let (host, port) = host_port(request.uri(), 80).ok_or_else(|| invalid_url(url))?;
-        if !protocols.is_empty() {
-            let value =
-                HeaderValue::from_str(&protocols.join(", ")).map_err(|_| invalid_url(url))?;
-            request
-                .headers_mut()
-                .insert("Sec-WebSocket-Protocol", value);
-        }
+        let url = socket_url(url)?;
         let id = self.next_id();
-        let (commands, rx) = unbounded_channel();
-        let (open, closing) = oneshot::channel();
-        let connection = Connection {
-            id: SocketId(id),
-            request,
-            address: self.options.dial(&host, port),
-            commands: rx,
-            closing,
-            events: self.events_tx.clone(),
+        let mut socket = Socket {
+            state: ReadyState::Connecting,
+            commands: None,
+            open: None,
         };
-        self.options.handle.spawn(run_socket(connection));
-        self.sockets.insert(
-            id,
-            Socket {
-                state: ReadyState::Connecting,
-                commands,
-                open: Some(open),
-            },
-        );
+        let request = handshake_request(&url, protocols).filter(|_| !url.port_is_blocked());
+        if let Some(request) = request {
+            let (commands, rx) = unbounded_channel();
+            let (open, closing) = oneshot::channel();
+            socket.commands = Some(commands);
+            socket.open = Some(open);
+            self.options.handle.spawn(run_socket(Connection {
+                id: SocketId(id),
+                request,
+                address: self.options.dial(&url.host, url.port),
+                commands: rx,
+                closing,
+                events: self.events_tx.clone(),
+            }));
+        } else {
+            let _ = self.events_tx.send(NetEvent::WsError(SocketId(id)).into());
+            let _ = self.events_tx.send(NetEvent::WsClose(SocketId(id)).into());
+        }
+        self.sockets.insert(id, socket);
         Ok(SocketId(id))
     }
 
@@ -200,7 +234,7 @@ impl Nt4Transport for TokioTransport {
                 "Failed to execute 'send' on 'WebSocket': Still in CONNECTING state.",
             )),
             Some(s) if s.state == ReadyState::Open => {
-                let _ = s.commands.send(Command::Send(data));
+                s.command(Command::Send(data));
                 Ok(())
             }
             _ => Ok(()),
@@ -213,7 +247,7 @@ impl Nt4Transport for TokioTransport {
         {
             s.state = ReadyState::Closing;
             s.open = None;
-            let _ = s.commands.send(Command::Close);
+            s.command(Command::Close);
         }
     }
 }
@@ -241,7 +275,7 @@ fn to_message(data: WsMessage) -> Message {
 
 struct Connection {
     id: SocketId,
-    request: tokio_tungstenite::tungstenite::handshake::client::Request,
+    request: Request,
     address: (String, u16),
     commands: UnboundedReceiver<Command>,
     closing: oneshot::Receiver<()>,

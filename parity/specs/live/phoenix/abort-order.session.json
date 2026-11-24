@@ -1,0 +1,171 @@
+{
+ "protocol": "phoenix",
+ "seed": 83,
+ "latencyMs": 2,
+ "endMs": 1200,
+ "client": {
+  "source": "phoenix",
+  "address": "10.0.0.2",
+  "tabs": [
+   "Phoenix6/TalonFX-1/Position",
+   "Phoenix6/TalonFX-2/Position",
+   "Phoenix6/TalonFX-3/Position",
+   "Phoenix6/TalonFX-4/Position",
+   "Phoenix6/TalonFX-5/Position"
+  ]
+ },
+ "server": {
+  "startUs": 9000000,
+  "points": 2,
+  "stepUs": 10000,
+  "devices": [
+   {
+    "device": {
+     "CANbus": "rio",
+     "CANivoreDevName": "",
+     "ID": 1,
+     "Model": "Talon FX",
+     "Name": "Talon FX (Device ID 1)",
+     "IsPROApplication": true
+    },
+    "signals": [
+     {
+      "Id": 12,
+      "Name": "Position",
+      "Summary": "Rotor position",
+      "Units": "rotations"
+     }
+    ],
+    "values": {
+     "12": [
+      0.25,
+      0.5
+     ]
+    }
+   },
+   {
+    "device": {
+     "CANbus": "rio",
+     "CANivoreDevName": "",
+     "ID": 2,
+     "Model": "Talon FX",
+     "Name": "Talon FX (Device ID 2)",
+     "IsPROApplication": true
+    },
+    "signals": [
+     {
+      "Id": 12,
+      "Name": "Position",
+      "Summary": "Rotor position",
+      "Units": "rotations"
+     }
+    ],
+    "values": {
+     "12": [
+      0.25,
+      0.5
+     ]
+    }
+   },
+   {
+    "device": {
+     "CANbus": "rio",
+     "CANivoreDevName": "",
+     "ID": 3,
+     "Model": "Talon FX",
+     "Name": "Talon FX (Device ID 3)",
+     "IsPROApplication": true
+    },
+    "signals": [
+     {
+      "Id": 12,
+      "Name": "Position",
+      "Summary": "Rotor position",
+      "Units": "rotations"
+     }
+    ],
+    "values": {
+     "12": [
+      0.25,
+      0.5
+     ]
+    }
+   },
+   {
+    "device": {
+     "CANbus": "rio",
+     "CANivoreDevName": "",
+     "ID": 4,
+     "Model": "Talon FX",
+     "Name": "Talon FX (Device ID 4)",
+     "IsPROApplication": true
+    },
+    "signals": [
+     {
+      "Id": 12,
+      "Name": "Position",
+      "Summary": "Rotor position",
+      "Units": "rotations"
+     }
+    ],
+    "values": {
+     "12": [
+      0.25,
+      0.5
+     ]
+    }
+   },
+   {
+    "device": {
+     "CANbus": "rio",
+     "CANivoreDevName": "",
+     "ID": 5,
+     "Model": "Talon FX",
+     "Name": "Talon FX (Device ID 5)",
+     "IsPROApplication": true
+    },
+    "signals": [
+     {
+      "Id": 12,
+      "Name": "Position",
+      "Summary": "Rotor position",
+      "Units": "rotations"
+     }
+    ],
+    "values": {
+     "12": [
+      0.25,
+      0.5
+     ]
+    }
+   }
+  ]
+ },
+ "steps": [
+  {
+   "t": 0,
+   "client": [
+    "connect"
+   ]
+  },
+  {
+   "t": 40,
+   "server": [
+    "down",
+    "hang"
+   ]
+  },
+  {
+   "t": 500,
+   "server": [
+    "up"
+   ]
+  },
+  {
+   "t": 900,
+   "client": [
+    "dump"
+   ]
+  }
+ ]
+}

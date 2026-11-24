@@ -14,6 +14,7 @@ use asrs_ui::gpui::{
 };
 
 use crate::hub::{Hub, HubEvent};
+use crate::menus::dispatch;
 
 struct Runtime(LiveRuntime);
 
@@ -218,7 +219,7 @@ impl RlogBridge {
     fn call(&mut self, call: &MainCall, cx: &mut Context<'_, Self>) {
         self.fire_timers();
         self.timers.begin_task();
-        self.main.handle(
+        let result = self.main.handle(
             call,
             &mut MainContext {
                 timers: &mut self.timers,
@@ -226,6 +227,9 @@ impl RlogBridge {
             },
         );
         self.arm(cx);
+        if let Err(thrown) = result {
+            dispatch::show_uncaught(&thrown.to_string(), cx, |_| {});
+        }
     }
 
     /// Delivers one waiting `live-data`, or else handles one socket event. Each runs in its own

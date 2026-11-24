@@ -15,7 +15,7 @@ use asrs_live::nt4::{
     NetEvent, Nt4Client, Nt4Context, Nt4Handler, Nt4Transport, PublisherPreferences, ReadyState,
     RequestId, SocketId, WsMessage,
 };
-use asrs_live::rlog::{Ipc, RlogNetEvent, RlogTransport, TcpId};
+use asrs_live::rlog::{Ipc, RlogNetEvent, RlogTransport, TcpId, socket_port};
 use asrs_live::{
     LiveDataSourceStatus, LiveLog, LivePreferences, ManualClock, Thrown, TimerId, TimerQueue,
 };
@@ -28,6 +28,12 @@ use asrs_parity::vectors;
 #[path = "../../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code, clippy::all)]
 pub mod js_json;
+
+#[path = "../../../asrs-cli/src/log_dump.rs"]
+#[allow(dead_code)]
+mod log_dump;
+
+pub use log_dump::dump;
 
 #[derive(Clone, Default)]
 pub struct Trace(Rc<RefCell<Vec<String>>>);
@@ -77,8 +83,6 @@ pub enum Delivery {
     TcpDropped(u32),
     /// The socket handle's `close` emission, a later task after `error`/`drop`/`destroy`.
     TcpClose(u32),
-    /// A socket idle timer reaching its deadline; the second field is the arm generation.
-    TcpIdle(u32, u64),
     /// A `sendMainMessage`/`sendMessage` hop between the renderer and the emulated main
     /// process (`loop.deliver(0)` upstream).
     Ipc(Ipc),
@@ -112,17 +116,10 @@ enum TcpState {
 
 /// `net.createConnection`'s socket (net.ts `FakeSocket`): writes while connecting are held
 /// and go out on connect; a refused connection emits `error` at once and `close` as a later
-/// task; a server drop emits `close`; `destroy` emits `close` once; the idle `setTimeout`
-/// fires once per listener while connecting, reads and writes count as activity.
+/// task; a server drop emits `close`; `destroy` emits `close` once. `RlogMain` has its idle timer.
 struct FakeTcpSocket {
     state: TcpState,
     pending: Vec<Vec<u8>>,
-    idle_ms: f64,
-    /// The armed timer's generation; a stale `TcpIdle` delivery does not match it.
-    idle_gen: u64,
-    /// `setTimeout` registers a `once` listener per call: pending until the next `timeout`
-    /// emit consumes them all, so the count is how many callbacks a fire would run.
-    timeout_listeners: u32,
 }
 
 impl FakeTcpSocket {
@@ -130,9 +127,6 @@ impl FakeTcpSocket {
         Self {
             state: TcpState::Connecting,
             pending: Vec::new(),
-            idle_ms: 0.0,
-            idle_gen: 0,
-            timeout_listeners: 0,
         }
     }
 }
@@ -240,20 +234,6 @@ impl FakeNet {
 
     // `net.Socket` semantics, mirrored from net.ts `FakeSocket`.
 
-    fn tcp_touch(&mut self, id: u32) {
-        let Some(socket) = self.tcp_sockets.get_mut(&id) else {
-            return;
-        };
-        // `touch()`: reads and writes while open re-arm the idle timer, including after it
-        // already fired once.
-        if socket.state != TcpState::Open || socket.idle_ms <= 0.0 {
-            return;
-        }
-        socket.idle_gen += 1;
-        let (generation, idle_ms) = (socket.idle_gen, socket.idle_ms);
-        self.deliver(idle_ms, Delivery::TcpIdle(id, generation));
-    }
-
     /// `close()`: closed at once, `close` emitted as a later task.
     fn tcp_close(&mut self, id: u32) {
         let Some(socket) = self.tcp_sockets.get_mut(&id) else {
@@ -261,7 +241,6 @@ impl FakeNet {
         };
         socket.state = TcpState::Closed;
         socket.pending.clear();
-        socket.idle_ms = 0.0;
         self.deliver(0.0, Delivery::TcpClose(id));
     }
 
@@ -334,13 +313,8 @@ impl FakeNet {
             Delivery::TcpAccepted(id) => match self.tcp_sockets.get_mut(&id) {
                 Some(s) if s.state == TcpState::Connecting => {
                     s.state = TcpState::Open;
-                    self.tcp_touch(id);
-                    let held = std::mem::take(
-                        &mut self.tcp_sockets.get_mut(&id).expect("is some").pending,
-                    );
-                    for bytes in held {
+                    for bytes in std::mem::take(&mut s.pending) {
                         self.send_to_server(ClientEvent::TcpSend { id, data: bytes });
-                        self.tcp_touch(id);
                     }
                     return vec![SessionEvent::Tcp(RlogNetEvent::Connect(TcpId(id)))];
                 }
@@ -356,7 +330,6 @@ impl FakeNet {
             },
             Delivery::TcpReceived(id, data) => match self.tcp_sockets.get(&id) {
                 Some(s) if s.state == TcpState::Open => {
-                    self.tcp_touch(id);
                     return vec![SessionEvent::Tcp(RlogNetEvent::Data(TcpId(id), data))];
                 }
                 _ => Vec::new(),
@@ -371,20 +344,6 @@ impl FakeNet {
             Delivery::TcpClose(id) => match self.tcp_sockets.remove(&id) {
                 Some(_) => return vec![SessionEvent::Tcp(RlogNetEvent::Close(TcpId(id)))],
                 None => Vec::new(),
-            },
-            Delivery::TcpIdle(id, generation) => match self.tcp_sockets.get_mut(&id) {
-                Some(s)
-                    if s.state != TcpState::Closed
-                        && s.idle_gen == generation
-                        && s.timeout_listeners > 0 =>
-                {
-                    let listeners = s.timeout_listeners;
-                    s.timeout_listeners = 0;
-                    return (0..listeners)
-                        .map(|_| SessionEvent::Tcp(RlogNetEvent::Timeout(TcpId(id))))
-                        .collect();
-                }
-                _ => Vec::new(),
             },
             Delivery::Ipc(ipc) => return vec![SessionEvent::Ipc(ipc)],
         };
@@ -489,7 +448,8 @@ impl FetchTransport for FakeNet {
 /// `net.createConnection` for the emulated main process, with the Node behaviour `main.ts`
 /// relies on (see `FakeTcpSocket`).
 impl RlogTransport for FakeNet {
-    fn tcp_connect(&mut self, host: &str, port: f64) -> TcpId {
+    fn tcp_connect(&mut self, host: &str, port: f64) -> Result<TcpId, Thrown> {
+        socket_port(port)?;
         let id = self.next_id;
         self.next_id += 1;
         self.tcp_sockets.insert(id, FakeTcpSocket::new());
@@ -498,7 +458,7 @@ impl RlogTransport for FakeNet {
             host: host.to_owned(),
             port,
         });
-        TcpId(id)
+        Ok(TcpId(id))
     }
 
     fn tcp_write(&mut self, id: TcpId, data: &[u8]) {
@@ -509,7 +469,6 @@ impl RlogTransport for FakeNet {
                     id: id.0,
                     data: data.to_vec(),
                 });
-                self.tcp_touch(id.0);
             }
             _ => {}
         }
@@ -524,22 +483,6 @@ impl RlogTransport for FakeNet {
         }
         self.send_to_server(ClientEvent::TcpClose { id: id.0 });
         self.tcp_close(id.0);
-    }
-
-    fn tcp_set_timeout(&mut self, id: TcpId, ms: f64) {
-        let Some(socket) = self.tcp_sockets.get_mut(&id.0) else {
-            return;
-        };
-        // `setTimeout`: the `once` listener registers even on a closed socket, while `armIdle`
-        // only schedules the timer when it is not closed.
-        socket.timeout_listeners += 1;
-        socket.idle_ms = ms;
-        if socket.state == TcpState::Closed {
-            return;
-        }
-        socket.idle_gen += 1;
-        let generation = socket.idle_gen;
-        self.deliver(ms, Delivery::TcpIdle(id.0, generation));
     }
 }
 
@@ -914,109 +857,6 @@ pub fn log_op(
         other => panic!("the driver does not model Log.{other}"),
     }
     Ok(())
-}
-
-/// `dump(log)` from `oracle/src/logRun.ts`: `toSerialized()` spelled out as the trace's
-/// dump payload.
-pub fn dump(log: &asrs_log::log::Log) -> Value {
-    let serialized = log.to_serialized();
-    Value::object([
-        ("keys", strings(serialized.fields.keys())),
-        (
-            "fields",
-            Value::Array(
-                serialized
-                    .fields
-                    .values()
-                    .map(serialized_field_value)
-                    .collect(),
-            ),
-        ),
-        (
-            "generatedParents",
-            strings(serialized.generated_parents.iter()),
-        ),
-        (
-            "timestampRange",
-            serialized
-                .timestamp_range
-                .map_or(Value::Null, |r| numbers(&r)),
-        ),
-        (
-            "timestampZero",
-            serialized.timestamp_zero.map_or(Value::Null, Value::number),
-        ),
-    ])
-}
-
-fn string_value(s: &JsString) -> Value {
-    Value::String(asrs_parity::Utf16String::from_units(s.units().to_vec()))
-}
-
-fn optional_string(s: &Option<JsString>) -> Value {
-    s.as_ref().map_or(Value::Null, string_value)
-}
-
-fn structured_type_value(t: &asrs_log::log::StructuredType) -> Value {
-    use asrs_log::log::StructuredType::*;
-    match t {
-        Null => Value::Null,
-        Undefined => Value::Undefined,
-        Named(s) => string_value(s),
-    }
-}
-
-fn numbers(xs: &[f64]) -> Value {
-    Value::Array(xs.iter().map(|&x| Value::number(x)).collect())
-}
-
-fn strings<'a>(items: impl Iterator<Item = &'a JsString>) -> Value {
-    Value::Array(items.map(string_value).collect())
-}
-
-fn column<T, F>(values: &asrs_log::log::LogValues, item: F) -> Value
-where
-    T: asrs_log::log::LogValue,
-    F: Fn(&T) -> Value,
-{
-    Value::Array(
-        values
-            .as_slice::<T>()
-            .unwrap_or_default()
-            .iter()
-            .map(item)
-            .collect(),
-    )
-}
-
-fn serialized_field_value(s: &asrs_log::log::SerializedLogField) -> Value {
-    use asrs_log::log::LogValues;
-    let values = match &s.values {
-        LogValues::Raw(_) => {
-            column::<std::sync::Arc<[u8]>, _>(&s.values, |v| Value::Bytes(v.to_vec()))
-        }
-        LogValues::Boolean(_) => column::<bool, _>(&s.values, |v| Value::Bool(*v)),
-        LogValues::Number(_) => column::<f64, _>(&s.values, |v| Value::number(*v)),
-        LogValues::String(_) => column::<JsString, _>(&s.values, string_value),
-        LogValues::BooleanArray(_) => column::<Vec<bool>, _>(&s.values, |v| {
-            Value::Array(v.iter().map(|b| Value::Bool(*b)).collect())
-        }),
-        LogValues::NumberArray(_) => column::<Vec<f64>, _>(&s.values, |v| numbers(v)),
-        LogValues::StringArray(_) => column::<Vec<JsString>, _>(&s.values, |v| {
-            Value::Array(v.iter().map(string_value).collect())
-        }),
-        LogValues::Empty(_) => column::<(), _>(&s.values, |_| Value::Undefined),
-    };
-    Value::object([
-        ("type", Value::number(f64::from(s.get_type() as u8))),
-        ("timestamps", numbers(&s.timestamps)),
-        ("values", values),
-        ("structuredType", structured_type_value(&s.structured_type)),
-        ("wpilibType", optional_string(&s.wpilib_type)),
-        ("metadataString", string_value(&s.metadata_string)),
-        ("stripingReference", Value::Bool(s.striping_reference)),
-        ("typeWarning", Value::Bool(s.type_warning)),
-    ])
 }
 
 /// Hands a browser event to the client's listener; exceptions escaping it are dropped.

@@ -17,6 +17,7 @@ use std::time::{Duration, Instant};
 use asrs_app::hub::{FrameClock, Hub, HubConfig, HubEvent};
 use asrs_app::live;
 use asrs_app::main_process::process_platform;
+use asrs_app::windows;
 use asrs_hub::hub::HubView;
 use asrs_hub::sidebar::{NoLayout, SidebarGeometry};
 use asrs_js::ops;
@@ -36,6 +37,7 @@ use asrs_ui::gpui::{
     AnyWindowHandle, App, AppContext, BackgroundExecutor, Context, Entity, HeadlessAppContext,
     IntoElement, NoopTextSystem, Render, Window, div, px, size,
 };
+use asrs_ui::platform::dialog::{Reply, Script, Shown};
 use live_server::LiveServer;
 
 const TIMEOUT: Duration = Duration::from_secs(60);
@@ -811,6 +813,38 @@ fn publisher() {
     });
     page.open_log("end.csv", CSV);
     page.assert_free(&server);
+}
+
+#[test]
+fn an_rlog_port_node_refuses_leaves_the_page_searching() {
+    let server = LiveServer::new("rlog", "{}");
+    let mut page = Page::new(&server);
+    page.cx.update(|cx| {
+        windows::init(cx);
+        cx.set_global(Script {
+            replies: [Reply::Button(0)].into(),
+            ..Script::default()
+        });
+    });
+    page.preferences(|p| {
+        p.live_mode = LiveMode::Rlog;
+        p.rlog_port = 70000.0;
+    });
+    page.start_live("robot");
+    page.advance(5000);
+    let shown = page.cx.update(|cx| cx.global::<Script>().shown.clone());
+    assert!(
+        matches!(&shown[..], [(_, Shown::Message(m))]
+            if m.message == "A JavaScript error occurred in the main process"
+                && m.detail == "Uncaught Exception:\nRangeError [ERR_SOCKET_BAD_PORT]: Port should be >= 0 and < 65536. Received type number (70000)."),
+        "{shown:?}"
+    );
+    assert_eq!(server.connections(), 0);
+    assert_eq!(page.runtime_tasks(), 0);
+
+    page.preferences(|p| p.rlog_port = 5800.0);
+    page.start_live("robot");
+    page.drive_until("the connection", |_| server.connections() > 0);
 }
 
 #[test]

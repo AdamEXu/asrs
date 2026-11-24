@@ -15,10 +15,12 @@ use asrs_parity::{Response, Utf16String, Value};
 
 use crate::functions::{self, arg};
 use crate::js_json;
+use crate::log_dump::{
+    ToValue, dump, numbers, serialized_value, string_value, strings, structured_type_value,
+};
 use crate::log_field::{
-    ToValue, any_set_value, array, boolean, index, js_string, loggable_type, loggable_type_opt,
-    number, numbers, serialized_value, set_value, string_value, structured_type,
-    structured_type_value, type_string,
+    any_set_value, array, boolean, index, js_string, loggable_type, loggable_type_opt, number,
+    set_value, structured_type, type_string,
 };
 
 pub(crate) fn bytes(v: &Value) -> Result<Arc<[u8]>, String> {
@@ -101,10 +103,6 @@ fn optional_js(s: Option<&JsString>) -> Value {
     s.map_or(Value::Null, string_value)
 }
 
-fn strings<'a>(items: impl Iterator<Item = &'a JsString>) -> Value {
-    Value::Array(items.map(string_value).collect())
-}
-
 fn tree_value(children: &JsObject<LogFieldTree>) -> Value {
     Value::Object(
         children
@@ -120,31 +118,6 @@ fn tree_value(children: &JsObject<LogFieldTree>) -> Value {
             })
             .collect(),
     )
-}
-
-pub(crate) fn dump(log: &Log) -> Value {
-    let serialized = log.to_serialized();
-    Value::object([
-        ("keys", strings(serialized.fields.keys())),
-        (
-            "fields",
-            Value::Array(serialized.fields.values().map(serialized_value).collect()),
-        ),
-        (
-            "generatedParents",
-            strings(serialized.generated_parents.iter()),
-        ),
-        (
-            "timestampRange",
-            serialized
-                .timestamp_range
-                .map_or(Value::Null, |r| numbers(&r)),
-        ),
-        (
-            "timestampZero",
-            serialized.timestamp_zero.map_or(Value::Null, Value::number),
-        ),
-    ])
 }
 
 fn queue_value(items: &[QueuedStructure]) -> Value {

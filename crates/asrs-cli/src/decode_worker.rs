@@ -19,7 +19,7 @@ use asrs_parity::Value;
 use asrs_services::historical_start;
 
 use crate::decode::{NEVER_COMPLETES, UNMODELED, WORKER_FROZEN_MS, dump_log};
-use crate::log_field::{serialized_value, string_value};
+use crate::log_dump::{serialized_value, string_value};
 
 const USAGE: &str = "usage: asrs-cli decode-worker <log file>";
 const MISSING_KEY: &str = "/asrs-oracle/missing";

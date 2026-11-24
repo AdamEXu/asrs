@@ -25,7 +25,7 @@ use asrs_parity::json::{self, Json};
 use asrs_services::historical_start;
 
 use crate::decode::{WORKER_FROZEN_MS, dump_log};
-use crate::log_field::string_value;
+use crate::log_dump::string_value;
 
 const USAGE: &str = "usage: asrs-cli historical-session <sessions.jsonl>";
 
