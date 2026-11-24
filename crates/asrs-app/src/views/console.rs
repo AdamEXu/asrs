@@ -34,6 +34,7 @@ use super::console_layout::{
 };
 use super::frame::{FrameHost, HubFrame, wheel_of};
 use super::scrollers::Area;
+use asrs_ui::scroll;
 use super::large_table::{
     BUTTON, Grid, HandFade, HeaderPalette, hand_icon, header_cell, line_through, plain, symbol,
 };
@@ -588,6 +589,7 @@ impl<H: FrameHost> HubFrame<H> {
         let scrolling = layout.animate(now);
         let (_, renderer) = displayed(self.host().hub(cx))?;
         let view = renderer.view();
+        layout.set_scrollbar(scroll::style(cx).reserved());
         layout.sync(rect, scale, &view.rows);
         let top = layout.scroll_top() - HEADER_HEIGHT;
         let visible = layout.rows_between(top, top + rect[3]);

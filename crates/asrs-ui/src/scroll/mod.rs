@@ -3,5 +3,5 @@
 mod bars;
 mod keys;
 
-pub use bars::{Extent, Request, Scrollbars, Style, scrollbars, set_style, style};
+pub use bars::{Extent, Request, Scrollbars, Style, scrollbars, set_style, style, use_system_style};
 pub use keys::{Step, page_step, step};

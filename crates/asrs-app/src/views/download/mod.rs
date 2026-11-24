@@ -600,12 +600,14 @@ impl DownloadWindow {
         if let Some([_, to]) = self.wheel.animate(now) {
             self.scroll_to(to);
         }
+        let bar = scroll::style(cx).reserved();
+        let width = if self.max_scroll() > 0.0 { width - bar } else { width };
         let rows = self.shown_rows(cx);
         let mut content = div()
             .absolute()
             .left_0()
             .top(px(-self.scroll_top() as f32))
-            .w_full()
+            .w(px(width as f32))
             .h(px(self.content_height() as f32));
         for index in rows {
             let row = self.page.rows()[index].clone();

@@ -31,6 +31,8 @@ pub struct PageScroll {
     scale: f32,
     wheel: WheelScroll,
     bars: Scrollbars,
+    /// What the scrollbar takes of the window's width.
+    reserved: Lu,
     /// Whether the document's background is dark.
     dark: bool,
     started: Instant,
@@ -45,6 +47,7 @@ impl PageScroll {
             scale: 1.0,
             wheel: WheelScroll::default(),
             bars: Scrollbars::default(),
+            reserved: 0,
             dark: false,
             started: cx.background_executor().now(),
         }
@@ -68,6 +71,21 @@ impl PageScroll {
         if self.wheel.animating() {
             window.request_animation_frame();
         }
+    }
+
+    /// The document's width in device px, next to its scrollbar.
+    pub fn width(&self, window: &Window) -> Lu {
+        device_width(window) - self.reserved
+    }
+
+    /// Gives the scrollbar the room a document of `height` needs; whether its width changed.
+    pub fn reserve(&mut self, height: Lu, window: &Window, cx: &App) -> bool {
+        let scale = window.scale_factor();
+        let client = f64::from(f32::from(window.viewport_size().height));
+        let overflows = css(snapped(height), scale) > client;
+        let bar = scroll::style(cx).reserved() * f64::from(scale);
+        let reserved = if overflows { asrs_js::math::round(bar) as Lu * 64 } else { 0 };
+        std::mem::replace(&mut self.reserved, reserved) != reserved
     }
 
     /// `document.documentElement.scrollTop`.
@@ -349,7 +367,7 @@ pub fn recording(cx: &App) -> bool {
 }
 
 /// The window's width in whole device px.
-pub fn device_width(window: &Window) -> Lu {
+fn device_width(window: &Window) -> Lu {
     let width = f64::from(f32::from(window.viewport_size().width));
     asrs_js::math::round(width * f64::from(window.scale_factor())) as Lu * 64
 }

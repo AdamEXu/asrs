@@ -213,6 +213,9 @@ struct Block {
 struct State {
     backend: Box<dyn TextBackend>,
     breaker: Breaker,
+    /// What a scrollbar takes, and whether there is one.
+    bar: f64,
+    barred: bool,
     /// `div.console-table-container` in client px.
     container: [f64; 4],
     scale: f32,
@@ -237,6 +240,8 @@ impl Default for ConsoleLayout {
         ConsoleLayout(Rc::new(RefCell::new(State {
             backend: platform_backend().unwrap_or_else(|| Box::new(FixedAdvance)),
             breaker: Breaker::default(),
+            bar: 0.0,
+            barred: false,
             container: [0.0; 4],
             scale: 1.0,
             block: Block::default(),
@@ -286,6 +291,15 @@ impl State {
     /// Lays out the rows that changed. Scroll anchoring keeps the row that was first in view
     /// where it was; Blink keeps the anchor, and where it belongs, until something scrolls.
     fn sync(&mut self, rows: &[ConsoleRow]) {
+        self.sync_rows(rows);
+        let overflows = self.scroll_height() > self.container[3];
+        if self.bar > 0.0 && overflows != self.barred {
+            self.barred = overflows;
+            self.sync_rows(rows);
+        }
+    }
+
+    fn sync_rows(&mut self, rows: &[ConsoleRow]) {
         let scroll_top = self.scroll_top();
         if scroll_top == 0.0 {
             self.anchor = None;
@@ -295,7 +309,7 @@ impl State {
                 .map(|index| (index, self.row_top(index) - scroll_top));
         }
         let block = Block {
-            width: self.container[2],
+            width: self.container[2] - if self.barred { self.bar } else { 0.0 },
             scale: self.scale,
         };
         if block != self.block {
@@ -389,6 +403,11 @@ impl State {
 }
 
 impl ConsoleLayout {
+    /// What a scrollbar takes of the container, which overlay ones do not.
+    pub fn set_scrollbar(&self, bar: f64) {
+        self.0.borrow_mut().bar = bar;
+    }
+
     /// Places the container and lays out the rows that changed.
     pub fn sync(&self, container: [f64; 4], scale: f32, rows: &[ConsoleRow]) {
         let mut state = self.0.borrow_mut();

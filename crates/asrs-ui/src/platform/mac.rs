@@ -831,6 +831,18 @@ fn srgb(color: &NSColor) -> u32 {
         | channel(color.blueComponent())
 }
 
+pub(super) fn scrollbar_preferences() -> (bool, bool) {
+    const LEGACY: isize = 0;
+    let Some(scroller) = AnyClass::get(c"NSScroller") else {
+        return (false, false);
+    };
+    // SAFETY: class method without arguments, returning an NSInteger.
+    let style: isize = unsafe { msg_send![scroller, preferredScrollerStyle] };
+    let defaults = NSUserDefaults::standardUserDefaults();
+    let jump = defaults.boolForKey(&NSString::from_str("AppleScrollerPagingBehavior"));
+    (style == LEGACY, jump)
+}
+
 /// `WebSandboxSupportMac::GetSystemColor`'s `kSelectedTextBackground` and
 /// `kSecondarySelectedControl`.
 pub(super) fn selection_colors() -> SystemSelection {

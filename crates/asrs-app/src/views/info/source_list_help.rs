@@ -60,7 +60,7 @@ impl SourceListHelpPage {
     }
 
     fn laid_out(&mut self, window: &Window) -> (Rc<HelpLayout>, Rc<HelpText>) {
-        let (width, scale) = (page::device_width(window), window.scale_factor());
+        let (width, scale) = (self.scroll.width(window), window.scale_factor());
         match &self.layout {
             Some((w, s, layout, text)) if (*w, *s) == (width, scale) => {
                 (layout.clone(), text.clone())
@@ -286,7 +286,10 @@ impl ScrolledPage for SourceListHelpPage {
 
 impl Render for SourceListHelpPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
-        let (layout, text) = self.laid_out(window);
+        let (mut layout, mut text) = self.laid_out(window);
+        if self.scroll.reserve(layout.height, window, cx) {
+            (layout, text) = self.laid_out(window);
+        }
         self.scroll.lay_out(layout.height, window, cx);
         text::autoscroll(self, window, cx);
         let appearance = Appearance::of(window, cx);

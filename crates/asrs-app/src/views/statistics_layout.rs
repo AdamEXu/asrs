@@ -68,6 +68,8 @@ pub struct Placed {
     pub scale: f32,
     /// The container's border box in the renderer element, whose left and top are 0.
     pub container: [Lu; 2],
+    /// Its box without the scrollbars.
+    pub client: [Lu; 2],
     pub table: [Lu; 2],
     pub margin: Lu,
     pub border: Lu,
@@ -86,7 +88,7 @@ impl Placed {
     }
 
     pub fn scroll_size(&self) -> [Lu; 2] {
-        [0, 1].map(|axis| (self.table[axis] + 2 * self.margin).max(self.container[axis]))
+        [0, 1].map(|axis| (self.table[axis] + 2 * self.margin).max(self.client[axis]))
     }
 
     /// The largest scroll offset per axis, in CSS px: Blink's is whole device px.
@@ -94,7 +96,7 @@ impl Placed {
         let scroll = self.scroll_size();
         [0, 1].map(|axis| {
             css(
-                round(scroll[axis]) - round(self.container[axis]),
+                round(scroll[axis]) - round(self.client[axis]),
                 self.scale,
             )
         })
@@ -128,6 +130,8 @@ struct State {
     /// The renderer element's size in CSS px and the device scale.
     size: [f64; 2],
     scale: f32,
+    /// What a scrollbar takes, in CSS px.
+    bar: f64,
     rows: Vec<StatisticsRow>,
     placed: Option<Rc<Placed>>,
     /// The scroll offset before it is snapped to the device pixel grid.
@@ -146,6 +150,7 @@ impl Default for StatisticsLayout {
             fonts: Fonts::default(),
             size: [0.0; 2],
             scale: 1.0,
+            bar: 0.0,
             rows: Vec::new(),
             placed: None,
             offset: [0.0; 2],
@@ -215,6 +220,16 @@ impl State {
         if let Some(placed) = &self.placed {
             return placed.clone();
         }
+        let placed = self.place_next_to(0);
+        let bar = length(self.bar, self.scale);
+        if bar > 0 && placed.scroll_size()[1] > placed.client[1] {
+            return self.place_next_to(bar);
+        }
+        placed
+    }
+
+    /// Lays out the table next to a vertical scrollbar `bar` wide.
+    fn place_next_to(&mut self, bar: Lu) -> Rc<Placed> {
         let scale = self.scale;
         let [width, height] = self.size.map(|v| (v as f32 * scale * 64.0).round() as Lu);
         let border = border(scale);
@@ -227,8 +242,13 @@ impl State {
             column_widths(self, extra)
         };
         let sum = |k: usize| columns.iter().map(|c| c[k]).sum::<Lu>() + 2 * border;
-        let container = (sum(1) + 2 * margin).min(width / 2);
-        let table_width = (container - 2 * margin).max(sum(0));
+        let container = (sum(1) + 2 * margin + bar).min(width / 2);
+        let table_width = (container - bar - 2 * margin).max(sum(0));
+        let below = if table_width + 2 * margin > container - bar {
+            length(self.bar, scale)
+        } else {
+            0
+        };
         let widths = if columns.is_empty() {
             Vec::new()
         } else {
@@ -286,6 +306,7 @@ impl State {
         let placed = Rc::new(Placed {
             scale,
             container: [container, height],
+            client: [container - bar, height - below],
             table: [table_width, top + border],
             margin,
             border,
@@ -311,6 +332,13 @@ impl State {
 
 impl StatisticsLayout {
     /// Sizes the renderer element.
+    pub fn set_scrollbar(&self, bar: f64) {
+        let mut state = self.0.borrow_mut();
+        if std::mem::replace(&mut state.bar, bar) != bar {
+            state.placed = None;
+        }
+    }
+
     pub fn resize(&self, size: [f64; 2], scale: f32) {
         let mut state = self.0.borrow_mut();
         if (state.size, state.scale) != (size, scale) {
@@ -377,7 +405,7 @@ impl StatisticsLayout {
     /// The container's box without its scrollbars, and the largest offsets.
     pub fn range(&self) -> [[f64; 2]; 2] {
         let placed = self.0.borrow_mut().place();
-        let client = placed.container.map(|v| css(v, placed.scale));
+        let client = placed.client.map(|v| css(v, placed.scale));
         [client, placed.max_scroll()]
     }
 

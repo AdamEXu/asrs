@@ -28,6 +28,7 @@ use asrs_ui::tooltip::{titled_rtl, untitled};
 
 use super::frame::{FrameHost, HubFrame, wheel_of};
 use super::scrollers::{Area, HandleScroller};
+use asrs_ui::scroll;
 
 const TITLE_HEIGHT: f64 = 30.0;
 const BUTTON: f32 = 25.0;
@@ -577,6 +578,7 @@ impl<H: FrameHost> HubFrame<H> {
         let mut layout = geometry.0.borrow_mut();
         layout.body_width = body_width;
         layout.scale = scale;
+        let bar = scroll::style(cx).reserved();
         let mut lists = HashMap::new();
         for (list, root) in displayed_lists(self.host().hub(cx), rect(controls)) {
             let scroll = layout
@@ -585,10 +587,9 @@ impl<H: FrameHost> HubFrame<H> {
                 .or_default();
             scroll.animate(now, f64::from(scale));
             let scroll_top = scroll.top();
-            lists.insert(
-                list.uuid().to_owned(),
-                ListLayout::new(root, list.items(), scroll_top),
-            );
+            let mut placed = ListLayout::new(root, list.items(), scroll_top);
+            placed.scrollbar = bar;
+            lists.insert(list.uuid().to_owned(), placed);
         }
         layout.lists = lists;
     }
@@ -848,7 +849,7 @@ impl<H: FrameHost> HubFrame<H> {
                 if index + 1 == count { 1.0 } else { 0.0 },
             );
             let place = ItemPlace {
-                width: inner,
+                width: inner - layout.taken(),
                 borders,
                 origin_x: left,
                 scale: scale as f32,

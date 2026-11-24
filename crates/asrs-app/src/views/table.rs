@@ -41,7 +41,7 @@ use asrs_ui::tooltip::{titled, untitled};
 use super::cell_text::following;
 use super::frame::{FrameHost, HubFrame, wheel_of};
 use super::scrollers::{Area, smooth};
-use asrs_ui::scroll::Extent;
+use asrs_ui::scroll::{self, Extent};
 use super::large_table::{
     BUTTON, Grid, HandFade, HeaderPalette, hand_icon, header_cell, line_through, plain, symbol,
 };
@@ -585,6 +585,7 @@ impl<H: FrameHost> HubFrame<H> {
         {
             let mut dom = dom.borrow_mut();
             let layout = &mut dom.layout;
+            layout.scrollbar = scroll::style(cx).reserved();
             layout.container = Rect {
                 x,
                 y,

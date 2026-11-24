@@ -483,6 +483,11 @@ fn fallback_wheel_delta(delta: &ScrollDelta) -> WheelDelta {
     }
 }
 
+/// Whether the system's scrollbars take space, and whether a press on their track goes there.
+pub fn scrollbar_preferences() -> (bool, bool) {
+    imp::scrollbar_preferences()
+}
+
 /// The system's light colours of selected text, `0xRRGGBB`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SystemSelection {

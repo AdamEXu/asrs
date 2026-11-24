@@ -36,7 +36,7 @@ use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, Theme};
 use asrs_ui::tooltip::titled;
 
-use asrs_ui::scroll::Extent;
+use asrs_ui::scroll::{self, Extent};
 use super::cell_text::{CellLine, CellText, css};
 use super::frame::{FrameHost, HubFrame, wheel_of};
 use super::large_table::{Grid, mean};
@@ -99,10 +99,15 @@ struct SettingsLayout {
 
 impl SettingsLayout {
     /// `line` is the height of a number input's line of text.
-    fn new([x, y, w, h]: [f64; 4], line: f64) -> SettingsLayout {
+    /// With a scrollbar that takes `bar` px of it where it overflows.
+    fn new([x, y, w, h]: [f64; 4], line: f64, bar: f64) -> SettingsLayout {
         let width = math::min2(lu(w * 0.4), SETTINGS_MAX_WIDTH);
         let panel = [x + w - width - 1.0, y, width + 1.0, h];
         let left = panel[0] + 1.0;
+        let last = math::max2(math::min2(h - LAST_INSET, LAST_MAX), INPUT_HEIGHT);
+        let rows = SETTINGS_TOP + 2.0 * (TITLE_HEIGHT + INPUT_HEIGHT);
+        let content = rows + TITLE_HEIGHT + last;
+        let width = if content > h { width - bar } else { width };
         let half = lu(width * 0.5);
         let title_top = |i: f64| y + SETTINGS_TOP + i * (TITLE_HEIGHT + INPUT_HEIGHT);
         let control_top = |i: f64| title_top(i) + TITLE_HEIGHT + CONTROL_MARGIN;
@@ -115,8 +120,6 @@ impl SettingsLayout {
         let field = |left: f64, available: f64, i: f64| {
             control(left, available, FIELD_CHROME[0], i, line + FIELD_CHROME[1])
         };
-        let last = math::max2(math::min2(h - LAST_INSET, LAST_MAX), INPUT_HEIGHT);
-        let content = title_top(2.0) - y + TITLE_HEIGHT + last;
         SettingsLayout {
             panel,
             titles: [0.0, 1.0, 2.0].map(|i| [left, title_top(i), width, TITLE_HEIGHT]),
@@ -710,6 +713,7 @@ impl<H: FrameHost> HubFrame<H> {
         let picture = chart.canvas().clone();
 
         let now = self.host().frame_time(cx);
+        layout.set_scrollbar(scroll::style(cx).reserved());
         let scrolling = layout.animate(now);
         let placed = layout.place(&rows);
         let [scroll_x, scroll_y] = layout.scroll();
@@ -1140,7 +1144,7 @@ impl<H: FrameHost> HubFrame<H> {
             controller.step_size().clone(),
         ];
         let (_, line) = text::measure(cx, &TextStyle::new(CONTROL_FONT), "0", scale);
-        let layout = SettingsLayout::new(controls, line);
+        let layout = SettingsLayout::new(controls, line, scroll::style(cx).reserved());
         if let Some(shown) = &mut self.statistics.shown {
             shown.settings = Some(layout);
         }
@@ -1329,7 +1333,7 @@ mod tests {
 
     #[test]
     fn settings_boxes_match_blink() {
-        let layout = SettingsLayout::new([300.0, 450.0, 800.0, 200.0], 15.0);
+        let layout = SettingsLayout::new([300.0, 450.0, 800.0, 200.0], 15.0, 0.0);
         assert_eq!(layout.panel, [899.0, 450.0, 201.0, 200.0]);
         assert_eq!(layout.select, [930.0, 480.0, 140.0, 25.0]);
         assert_eq!(
@@ -1342,7 +1346,7 @@ mod tests {
         );
         assert_eq!(layout.max_scroll, 0.0);
         assert_eq!(
-            SettingsLayout::new([300.0, 550.0, 800.0, 100.0], 15.0).max_scroll,
+            SettingsLayout::new([300.0, 550.0, 800.0, 100.0], 15.0, 0.0).max_scroll,
             85.0
         );
     }

@@ -24,6 +24,8 @@ use asrs_ui::text::{self, LineHeight, Text, TextStyle, WhiteSpace, snap_remainde
 use asrs_ui::theme::{Appearance, FONT_FAMILY};
 use asrs_ui::tooltip::titled;
 
+use asrs_ui::scroll;
+
 use super::super::frame::{FrameHost, HubFrame, wheel_of};
 use super::super::number::FormNumber;
 use super::super::scrollers::{Area, HandleScroller};
@@ -214,20 +216,23 @@ struct PanelLayout {
 }
 
 impl PanelLayout {
-    fn new([x, y, w, h]: [f64; 4]) -> PanelLayout {
-        let content_width = math::min2(lu(w * 0.4), MAX_WIDTH);
-        let panel = [x + w - content_width - 1.0, y, content_width + 1.0, h];
+    /// With a scrollbar that takes `bar` px of it where it overflows.
+    fn new([x, y, w, h]: [f64; 4], bar: f64) -> PanelLayout {
+        let width = math::min2(lu(w * 0.4), MAX_WIDTH);
+        let panel = [x + w - width - 1.0, y, width + 1.0, h];
         let tall = math::max2(
             math::min2(math::max2(h - TALL_INSET, 0.0), TALL_MAX_HEIGHT),
             INPUT_MIN_HEIGHT,
         );
         let step = TITLE_HEIGHT + INPUT_MIN_HEIGHT;
         let titles = [0.0, 1.0, 2.0].map(|i| y + TOP_MARGIN + i * step);
+        let content_height = TOP_MARGIN + 3.0 * TITLE_HEIGHT + 2.0 * INPUT_MIN_HEIGHT + tall;
+        let content_width = if content_height > h { width - bar } else { width };
         PanelLayout {
             panel,
             content_x: panel[0] + 1.0,
             content_width,
-            content_height: TOP_MARGIN + 3.0 * TITLE_HEIGHT + 2.0 * INPUT_MIN_HEIGHT + tall,
+            content_height,
             titles,
             inputs: titles.map(|t| t + TITLE_HEIGHT),
             tall,
@@ -455,7 +460,7 @@ impl<H: FrameHost> HubFrame<H> {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
-        let layout = PanelLayout::new(controls);
+        let layout = PanelLayout::new(controls, scroll::style(cx).reserved());
         let dark = appearance == Appearance::Dark;
         let theme = appearance.theme();
         let line = editor_line(scale, cx);
@@ -522,7 +527,7 @@ impl<H: FrameHost> HubFrame<H> {
                 ));
             }
         }
-        let [_, _, _, height] = layout.panel;
+        let [_, _, outer, height] = layout.panel;
         let now = self.host().frame_time(cx);
         let views = &mut self.canvas_tabs.settings;
         let scroller = views.scrollers.entry(key).or_default();
@@ -547,7 +552,7 @@ impl<H: FrameHost> HubFrame<H> {
                     .absolute()
                     .left(px(1.0))
                     .top_0()
-                    .w(px(layout.content_width as f32))
+                    .w(px((outer - 1.0) as f32))
                     .h(px(height as f32))
                     .overflow_hidden()
                     .track_scroll(&handle)
@@ -564,7 +569,7 @@ impl<H: FrameHost> HubFrame<H> {
                     .absolute()
                     .left(px(1.0))
                     .top_0()
-                    .w(px(layout.content_width as f32))
+                    .w(px((outer - 1.0) as f32))
                     .h(px(height as f32))
                     .child(bars),
             );
@@ -667,7 +672,7 @@ mod tests {
 
     #[test]
     fn panel_boxes_match_blink() {
-        let layout = PanelLayout::new([300.0, 450.0, 800.0, 200.0]);
+        let layout = PanelLayout::new([300.0, 450.0, 800.0, 200.0], 0.0);
         let [title, _, _] = layout.inputs;
         assert_eq!(layout.panel, [899.0, 450.0, 201.0, 200.0]);
         assert_eq!(
@@ -693,9 +698,9 @@ mod tests {
             [930.0, 600.0, 140.0, 25.0]
         );
 
-        let taller = PanelLayout::new([300.0, 400.0, 800.0, 250.0]);
+        let taller = PanelLayout::new([300.0, 400.0, 800.0, 250.0], 0.0);
         assert_eq!(taller.split(taller.inputs[2]), [920.0, 553.0, 160.0, 68.25]);
-        let shorter = PanelLayout::new([300.0, 470.0, 800.0, 180.0]);
+        let shorter = PanelLayout::new([300.0, 470.0, 800.0, 180.0], 0.0);
         assert_eq!(
             shorter.split(shorter.inputs[2]),
             [920.0, 623.0, 160.0, 26.0]

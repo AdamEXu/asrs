@@ -76,6 +76,13 @@ pub fn set_style(style: Style, jump: bool, cx: &mut App) {
     cx.refresh_windows();
 }
 
+/// Takes the system's style.
+pub fn use_system_style(cx: &mut App) {
+    let (classic, jump) = crate::platform::scrollbar_preferences();
+    let style = if classic { Style::Classic } else { Style::Overlay };
+    set_style(style, jump, cx);
+}
+
 /// A scroller's content in CSS px. Its box is the element's.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Extent {
