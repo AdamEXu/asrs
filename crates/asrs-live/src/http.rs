@@ -221,6 +221,7 @@ async fn get(url: &LiveUrl, read_body: bool, options: &NetOptions) -> Option<Res
     };
     let body = if read_body {
         let body = reader.body(framing(&head)).await?;
+        // Blink strips one BOM. Node's fetch, which main uses, strips two.
         let body = body.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&body);
         String::from_utf8_lossy(body).into_owned()
     } else {
@@ -306,14 +307,18 @@ mod tests {
     async fn bodies_follow_content_length_and_chunked_framing() {
         let url =
             serve_once(b"HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\n\xEF\xBB\xBF{\"a\":1}").await;
-        let response = get(&request_url(&url).unwrap(), true, &options()).await.unwrap();
+        let response = get(&request_url(&url).unwrap(), true, &options())
+            .await
+            .unwrap();
         assert_eq!((response.status, response.body.as_str()), (200, "{\"a\""));
 
         let url = serve_once(
             b"HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3;x=1\r\n{\"a\r\n4\r\n\":1}\r\n0\r\n\r\n",
         )
         .await;
-        let response = get(&request_url(&url).unwrap(), true, &options()).await.unwrap();
+        let response = get(&request_url(&url).unwrap(), true, &options())
+            .await
+            .unwrap();
         assert_eq!(
             (response.status, response.body.as_str()),
             (200, "{\"a\":1}")
@@ -321,7 +326,9 @@ mod tests {
         assert_eq!(response.url, url);
 
         let url = serve_once(b"HTTP/1.1 404 Not Found\r\nContent-Length: 5\r\n\r\nnope!").await;
-        let response = get(&request_url(&url).unwrap(), false, &options()).await.unwrap();
+        let response = get(&request_url(&url).unwrap(), false, &options())
+            .await
+            .unwrap();
         assert_eq!((response.status, response.body.as_str()), (404, ""));
     }
 }

@@ -46,7 +46,8 @@ impl LiveUrl {
             .into_iter()
             .find(|s| scheme.eq_ignore_ascii_case(s))?;
         let rest = rest.trim_start_matches(['/', '\\']);
-        let (authority, tail) = rest.split_at(rest.find(['/', '\\', '?', '#']).unwrap_or(rest.len()));
+        let (authority, tail) =
+            rest.split_at(rest.find(['/', '\\', '?', '#']).unwrap_or(rest.len()));
         let (user_info, host_port) = authority.rsplit_once('@').unwrap_or(("", authority));
         let (host, port) = split_port(host_port);
         let host = canonical_host(host)?;
@@ -100,13 +101,10 @@ fn split_port(host_port: &str) -> (&str, &str) {
 }
 
 fn parse_port(digits: &str) -> Option<u16> {
-    if !digits.bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-    match digits.trim_start_matches('0') {
-        "" => Some(0),
-        significant => significant.parse().ok(),
-    }
+    digits.bytes().try_fold(0u16, |port, b| {
+        let digit = b.is_ascii_digit().then(|| u16::from(b - b'0'))?;
+        port.checked_mul(10)?.checked_add(digit)
+    })
 }
 
 fn percent_decode(text: &str) -> Vec<u8> {
@@ -151,12 +149,14 @@ fn canonical_host(host: &str) -> Option<String> {
             .ok()?;
         name = canonical_bytes(&percent_decode(&ascii))?;
     }
-    let name = String::from_utf8(name).ok().filter(|name| name.is_ascii())?;
+    let name = String::from_utf8(name)
+        .ok()
+        .filter(|name| name.is_ascii())?;
     if !ends_in_a_number(&name) {
         return Some(name);
     }
     match Host::parse(&name) {
-        Ok(Host::Ipv4(address)) => Some(address.to_string()),
+        Ok(Host::Ipv4(address)) => Some(format!("{address}")),
         _ => None,
     }
 }
@@ -202,7 +202,7 @@ fn canonical_ipv6(host: &str) -> Option<String> {
         host = format!("{}{address}]", &host[..start]);
     }
     match Host::parse(&host) {
-        Ok(Host::Ipv6(address)) => Some(Host::<&str>::Ipv6(address).to_string()),
+        Ok(Host::Ipv6(address)) => Some(format!("{}", Host::<&str>::Ipv6(address))),
         _ => None,
     }
 }

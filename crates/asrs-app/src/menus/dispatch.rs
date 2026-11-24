@@ -307,11 +307,7 @@ pub(crate) fn show_message_box(
 
 /// Electron's `uncaughtException` handler in the main process. `error` is `name: message`: the
 /// stack under it has no counterpart here.
-pub(crate) fn show_uncaught(
-    error: &str,
-    cx: &mut App,
-    on_done: impl FnOnce(&mut App) + 'static,
-) {
+pub(crate) fn show_uncaught(error: &str, cx: &mut App, on_done: impl FnOnce(&mut App) + 'static) {
     let options = MessageBoxOptions {
         kind: MessageBoxType::Error,
         title: "Error".to_owned(),

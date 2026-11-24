@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)]
+
 //! The transports against `live/net/*`, recorded in Electron's renderer: what the URLs built from
 //! an address connect to and how the calls settle, what a response body decodes to and which
 //! ports are blocked. One loopback server stands behind every host and port.
@@ -157,7 +159,11 @@ fn records(id: &str) -> Vec<Json> {
 
 fn recorded_heads(record: &Json) -> Vec<Head> {
     let requests = record.get("requests").and_then(Json::as_array).unwrap();
-    let optional = |json: &Json, key| json.get(key).and_then(Json::as_str).map(|s| s.to_string_lossy());
+    let optional = |json: &Json, key| {
+        json.get(key)
+            .and_then(Json::as_str)
+            .map(|s| s.to_string_lossy())
+    };
     requests
         .iter()
         .map(|request| Head {
@@ -190,13 +196,20 @@ enum Settled {
 
 fn recorded(result: &Json) -> Settled {
     if let Some(threw) = result.get("threw") {
-        Settled::Threw(format!("{}: {}", text(threw, "name"), text(threw, "message")))
+        Settled::Threw(format!(
+            "{}: {}",
+            text(threw, "name"),
+            text(threw, "message")
+        ))
     } else if result.get("rejected").is_some() {
         Settled::Rejected
     } else if let Some(events) = result.get("events").and_then(Json::as_array) {
         let known = |event: &Json| {
             let event = event.as_str().unwrap().to_string_lossy();
-            *["open", "error", "close"].iter().find(|e| **e == event).unwrap()
+            *["open", "error", "close"]
+                .iter()
+                .find(|e| **e == event)
+                .unwrap()
         };
         Settled::Socket(text(result, "protocol"), events.iter().map(known).collect())
     } else {
@@ -272,7 +285,9 @@ fn urls_connect_where_chromium_does() {
             failures.push(format!("{url:?}: {settled:?}, recorded {expected:?}"));
         }
         if made != connections {
-            failures.push(format!("{url:?}: dialed {made:?}, recorded {connections:?}"));
+            failures.push(format!(
+                "{url:?}: dialed {made:?}, recorded {connections:?}"
+            ));
         } else if reached != heads {
             failures.push(format!("{url:?}: sent {reached:?}, recorded {heads:?}"));
         }
@@ -308,12 +323,23 @@ fn blocked_ports_are_chromiums() {
         }
         for _ in ports {
             let event = next(&mut net);
-            assert!(matches!(event, NetEvent::Fetch(FetchEvent::Failed(_))), "{event:?}");
+            assert!(
+                matches!(event, NetEvent::Fetch(FetchEvent::Failed(_))),
+                "{event:?}"
+            );
         }
     }
-    let mut dialed: Vec<u16> = dialed.lock().unwrap().iter().map(|(_, port)| *port).collect();
+    let mut dialed: Vec<u16> = dialed
+        .lock()
+        .unwrap()
+        .iter()
+        .map(|(_, port)| *port)
+        .collect();
     dialed.sort_unstable();
-    let open: Vec<u16> = ports.into_iter().filter(|port| !blocked.contains(port)).collect();
+    let open: Vec<u16> = ports
+        .into_iter()
+        .filter(|port| !blocked.contains(port))
+        .collect();
     assert_eq!(dialed, open);
 }
 
@@ -337,7 +363,10 @@ fn bodies_decode_like_the_renderers_response() {
         match json::parse_str(&response.body) {
             Ok(value) => {
                 let value = json::stringify(&value).unwrap().unwrap();
-                let expected = recorded.get("value").expect("recorded a SyntaxError").to_compact();
+                let expected = recorded
+                    .get("value")
+                    .expect("recorded a SyntaxError")
+                    .to_compact();
                 assert_eq!(value, expected, "{hex}");
             }
             Err(e) => assert_eq!(e.name, text(recorded, "rejected"), "{hex}"),

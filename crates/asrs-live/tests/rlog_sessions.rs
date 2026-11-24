@@ -192,7 +192,10 @@ impl Driver for RlogDriver {
             }
             SessionEvent::Ipc(Ipc::ToMain(call)) => {
                 if let Err(thrown) = self.main.handle(&call, &mut mcx(env)) {
-                    env.app("uncaught", Some(&support::js_value(&JsValue::String(thrown.0))));
+                    env.app(
+                        "uncaught",
+                        Some(&support::js_value(&JsValue::String(thrown.0))),
+                    );
                 }
             }
             SessionEvent::Ipc(Ipc::ToSource(data)) => {

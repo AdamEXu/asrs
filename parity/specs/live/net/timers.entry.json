@@ -521,28 +521,50 @@
    ],
    [
     {
+     "name": "J",
+     "kind": "interval",
+     "delay": 100,
+     "repeats": 2
+    },
+    {
+     "name": "I",
+     "kind": "interval",
+     "delay": 20,
+     "repeats": 10
+    }
+   ],
+   [
+    {
+     "name": "I",
+     "kind": "interval",
+     "delay": 20,
+     "repeats": 10
+    },
+    {
+     "name": "J",
+     "kind": "interval",
+     "delay": 100,
+     "repeats": 2
+    }
+   ],
+   [
+    {
+     "name": "J",
+     "kind": "interval",
+     "delay": 250,
+     "repeats": 2
+    },
+    {
+     "name": "K",
+     "kind": "interval",
+     "delay": 500,
+     "repeats": 1
+    },
+    {
      "name": "I",
      "kind": "interval",
      "delay": 50,
-     "repeats": 3
-    },
-    {
-     "name": "A",
-     "kind": "abort",
-     "delay": 50,
-     "after": [
-      "I",
-      1
-     ]
-    },
-    {
-     "name": "Z",
-     "kind": "timeout",
-     "delay": 0,
-     "after": [
-      "I",
-      2
-     ]
+     "repeats": 10
     }
    ]
   ]

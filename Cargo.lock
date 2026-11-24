@@ -491,6 +491,7 @@ dependencies = [
  "asrs-log",
  "asrs-parity",
  "futures-util",
+ "idna",
  "tokio",
  "tokio-tungstenite",
  "url",

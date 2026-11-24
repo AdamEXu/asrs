@@ -367,6 +367,15 @@
     "src/logRun.ts",
     "src/shims.ts"
   ],
+  "genLiveNet": [
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/genLiveNet.ts",
+    "src/shims.ts"
+  ],
+  "genLiveNetMain": [
+    "src/genLiveNetMain.ts"
+  ],
   "genLog": [
     "src/corpus/bytes.ts",
     "src/corpus/corpus.ts",
