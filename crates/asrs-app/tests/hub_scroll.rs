@@ -4,6 +4,7 @@
 //! `scroll/keys`' for a scroller of the view's height, and what shows where it goes is read off
 //! the boxes of the rendered text.
 
+#[allow(dead_code)]
 #[path = "support/hub_page.rs"]
 mod hub_page;
 
@@ -28,6 +29,8 @@ use hub_page::Page;
 
 const SETTLE_FRAMES: usize = 40;
 const ROWS: usize = 400;
+/// The `scrollTop` the recorded keys scroll from.
+const RECORDED_FROM: f64 = 700.0;
 
 fn items(value: Option<&Json>) -> &[Json] {
     value.and_then(Json::as_array).expect("an array")
@@ -38,21 +41,16 @@ fn recorded(key: &str, height: f64, scale: f32) -> f64 {
     let host = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
     let records = vectors::load(&format!("scroll/keys/{host}")).expect("vectors");
     let step = format!("page{height}");
-    let mut before = None;
-    for record in &records {
-        let at = record.string("step") == Some(step.clone())
-            && record.field("scale").and_then(Json::as_f64) == Some(f64::from(scale));
-        let Some(op) = record.field("op").filter(|_| at) else {
-            continue;
-        };
-        let op = items(Some(op));
-        let top = items(Some(&items(record.field("scroll"))[1]))[1].as_f64();
-        if op[1].as_str().is_some_and(|k| k.to_string_lossy() == key) {
-            return top.expect("a number") - before.unwrap_or(700.0);
-        }
-        before = None;
-    }
-    panic!("no record of {key} in a scroller {height} px high");
+    let text = |value: &Json| value.as_str().map(|s| s.to_string_lossy());
+    let found = records.iter().find(|record| {
+        record.string("step").as_deref() == Some(&step)
+            && record.field("scale").and_then(Json::as_f64) == Some(f64::from(scale))
+            && (record.field("op"))
+                .is_some_and(|op| text(&items(Some(op))[1]).as_deref() == Some(key))
+    });
+    let found = found.unwrap_or_else(|| panic!("no {key} in a scroller {height} px high"));
+    let top = items(Some(&items(found.field("scroll"))[1]))[1].as_f64();
+    top.expect("a number") - RECORDED_FROM
 }
 
 impl Page<'_> {

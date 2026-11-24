@@ -8,6 +8,12 @@ rule = "open-chain"
 reason = "walks the fixture's own steps (the input), and every recorded scroll position must be consumed"
 
 [[allow]]
+file = "crates/asrs-app/tests/hub_scroll.rs"
+function = "*"
+rule = "no-tally"
+reason = "looks up how far a key goes in a scroller of a view's height and fails without a record; scroll_vectors replays every record of the vector"
+
+[[allow]]
 file = "crates/asrs-app/tests/hub_entity.rs"
 function = "expected"
 rule = "default-slot"

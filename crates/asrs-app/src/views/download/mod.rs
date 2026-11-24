@@ -282,10 +282,10 @@ impl DownloadWindow {
                     }
                 }
                 _ => {
-                    if let Some(step) = scroll::step(&event.keystroke) {
-                        if view.scroll_key(step, window, cx) {
-                            cx.stop_propagation();
-                        }
+                    if let Some(step) = scroll::step(&event.keystroke)
+                        && view.scroll_key(step, window, cx)
+                    {
+                        cx.stop_propagation();
                     }
                 }
             });

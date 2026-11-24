@@ -122,6 +122,8 @@ pub enum Request {
     By([f64; 2]),
 }
 
+type Requests = Rc<dyn Fn(Request, &mut Window, &mut App)>;
+
 /// The delay and length of an overlay bar's fade, in ms.
 const FADE_DELAY: f64 = 500.0;
 const FADE: f64 = 250.0;
@@ -401,15 +403,7 @@ impl Frame {
             let Some(bar) = self.bars[axis] else {
                 continue;
             };
-            self.paint_bar(
-                axis,
-                &bar,
-                state.axes[axis].over_thumb || state.held(axis),
-                state,
-                dark,
-                window,
-                cx,
-            );
+            self.paint_bar(axis, &bar, state, dark, window, cx);
         }
         if self.style == Style::Fluent && self.bars.iter().all(Option::is_some) {
             let thickness = self.style.thickness() * self.scale;
@@ -466,13 +460,13 @@ impl Frame {
         &self,
         axis: usize,
         bar: &Bar,
-        active: bool,
         state: &State,
         dark: bool,
         window: &mut Window,
         cx: &mut App,
     ) {
         let scale = self.scale;
+        let active = state.axes[axis].over_thumb || state.held(axis);
         let alpha = self.alpha[axis];
         if alpha <= 0.0 {
             return;
@@ -573,7 +567,7 @@ pub fn scrollbars<F: Fn(Request, &mut Window, &mut App) + 'static>(
     extent: Extent,
     request: F,
 ) -> impl IntoElement + use<F> {
-    let request: Rc<dyn Fn(Request, &mut Window, &mut App)> = Rc::new(request);
+    let request: Requests = Rc::new(request);
     let (laid_out, painted) = (bars.0.clone(), bars.0.clone());
     let advance = request.clone();
     canvas(
@@ -660,7 +654,7 @@ fn listen(
     frame: Rc<Frame>,
     state: Rc<RefCell<State>>,
     extent: Extent,
-    request: Rc<dyn Fn(Request, &mut Window, &mut App)>,
+    request: Requests,
     window: &mut Window,
 ) {
     let client = |p: Point<Pixels>| [p.x, p.y].map(|v| mouse_client(f32::from(v)));
