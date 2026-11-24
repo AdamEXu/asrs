@@ -244,55 +244,6 @@ fn quirky_color(value: &str) -> Option<Parsed> {
         .flatten()
 }
 
-/// The colour keywords Blink accepts in author style besides the named colours, probed over
-/// every keyword of Chromium m142's `css_value_keywords.json5`.
-const COLOR_KEYWORDS: [&str; 44] = [
-    "-webkit-activelink",
-    "-webkit-link",
-    "activeborder",
-    "activecaption",
-    "activetext",
-    "appworkspace",
-    "background",
-    "buttonborder",
-    "buttonface",
-    "buttonhighlight",
-    "buttonshadow",
-    "buttontext",
-    "canvas",
-    "canvastext",
-    "captiontext",
-    "currentcolor",
-    "field",
-    "fieldtext",
-    "graytext",
-    "highlight",
-    "highlighttext",
-    "inactiveborder",
-    "inactivecaption",
-    "inactivecaptiontext",
-    "infobackground",
-    "infotext",
-    "linktext",
-    "mark",
-    "marktext",
-    "menu",
-    "menutext",
-    "scrollbar",
-    "selecteditem",
-    "selecteditemtext",
-    "threeddarkshadow",
-    "threedface",
-    "threedhighlight",
-    "threedlightshadow",
-    "threedshadow",
-    "transparent",
-    "visitedtext",
-    "window",
-    "windowframe",
-    "windowtext",
-];
-
 const PAINT_KEYWORDS: [&str; 3] = ["context-fill", "context-stroke", "none"];
 
 fn is_name_char(b: u8) -> bool {
@@ -310,85 +261,40 @@ fn is_ident(s: &str) -> bool {
 }
 
 /// A `stroke`/`fill` (`paint`) or colour value: `Some(Ok)` as Blink serializes it, `Some(None)`
-/// when Blink rejects it, `None` when it is outside the modelled subset: keywords, `#` hex,
-/// `rgb[a]()` and `hsl[a]()` in the fast path's syntax, `rgb[a]()` of plain number and
-/// percentage tokens, and quirky hashless hex.
+/// when Blink rejects it, `None` when it is outside the modelled subset. Plain idents take the
+/// keyword early path, everything else goes through the full CSS colour parser.
 fn color_value(value: &str, quirky: bool, paint: bool) -> Option<Option<String>> {
     let trimmed = trim(value);
     let lower = trimmed.to_ascii_lowercase();
     if is_ident(trimmed) {
         let keyword = color::named(&lower).is_some()
-            || COLOR_KEYWORDS.contains(&lower.as_str())
+            || color::COLOR_KEYWORDS.contains(&lower.as_str())
             || (paint && PAINT_KEYWORDS.contains(&lower.as_str()));
         if keyword {
             return Some(Some(lower));
         }
-        return Some(
-            quirky
-                .then(|| quirky_color(value))
-                .flatten()
-                .map(serialize_color),
-        );
+        return Some(quirky.then(|| quirky_color(value)).flatten().map(css));
     }
     if let Some(parsed) = color::parse_fast(value) {
-        return Some(Some(serialize_color(parsed)));
+        return Some(Some(css(parsed)));
     }
     if let Some(parsed) = quirky.then(|| quirky_color(value)).flatten() {
-        return Some(Some(serialize_color(parsed)));
+        return Some(Some(css(parsed)));
     }
     if let Some(hex) = trimmed
         .strip_prefix('#')
         .filter(|hex| hex.bytes().all(is_name_char))
     {
-        return Some(color::parse_hex(hex).map(serialize_color));
+        return Some(color::parse_hex(hex).map(css));
     }
-    let blocks_or_escapes =
-        trimmed.contains(['(', ')', '[', ']', '{', '}', '"', '\'', '\\']) || trimmed.contains("/*");
-    if !blocks_or_escapes {
-        return Some(None);
-    }
-    let open = trimmed.find('(')?;
-    let name = &trimmed[..open];
-    if name.contains(is_space) && !name.contains("/*") {
-        return Some(None);
-    }
-    if !matches!(name.to_ascii_lowercase().as_str(), "rgb" | "rgba") {
-        return None;
-    }
-    match color::parse_rgb_tokens(&trimmed[open + 1..]) {
-        Slow::Valid(parsed) => Some(Some(serialize_color(parsed))),
+    match color::parse_style_value(trimmed, paint) {
+        Slow::Valid(node) => Some(Some(color::serialize_css(&node))),
         Slow::Invalid => Some(None),
         Slow::Unmodeled => None,
     }
 }
 
-/// `Color::SerializeLegacyColorAsCSSColor`. Every value it rounds is non-negative, where C's
-/// `round` and `Math.round` agree.
-fn serialize_color(parsed: Parsed) -> String {
-    let [r, g, b] = parsed.css_channels();
-    let a = parsed.alpha();
-    if a >= 1.0 {
-        return format!("rgb({r}, {g}, {b})");
-    }
-    let int_alpha = math::min2(math::round(f64::from(a + 1e-7) * 255.0), 255.0);
-    let hundredths = math::round(int_alpha * 100.0 / 255.0);
-    let two_decimal = (hundredths / 100.0) as f32;
-    let alpha = if math::round(f64::from(two_decimal * 255.0)) == int_alpha {
-        decimal(hundredths as u32, 2)
-    } else {
-        decimal(math::round(int_alpha * 1000.0 / 255.0) as u32, 3)
-    };
-    format!("rgba({r}, {g}, {b}, {alpha})")
-}
-
-/// `units / 10^places` without trailing zeros, for `units` in `0..=10^places`.
-fn decimal(units: u32, places: usize) -> String {
-    let scale = 10u32.pow(places as u32);
-    let fraction = format!("{:0places$}", units % scale);
-    let fraction = fraction.trim_end_matches('0');
-    if fraction.is_empty() {
-        format!("{}", units / scale)
-    } else {
-        format!("{}.{fraction}", units / scale)
-    }
+/// `SerializeAsCSSColor` of a fast-path colour.
+fn css(parsed: Parsed) -> String {
+    color::serialize_css(&color::Node::Color(parsed))
 }
