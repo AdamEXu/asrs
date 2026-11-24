@@ -1,5 +1,5 @@
-//! The dialogs `main.ts`'s `handleHubMessage` shows for `error` and `export-console`, and the
-//! file the latter writes.
+//! The dialogs `main.ts`'s `handleHubMessage` shows for `alert`, `error`, `export-console` and the
+//! coordinate system warnings, and the files it writes after them.
 
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
@@ -9,12 +9,21 @@ use asrs_js::value::JsValue;
 use crate::dialog::{FileFilter, MessageBox, SaveDialog};
 use crate::fs::Fs;
 
+/// `alert`.
+pub fn alert(data: &JsValue) -> Result<MessageBox, JsError> {
+    titled("info", "Alert", data)
+}
+
 /// `error`.
 pub fn error(data: &JsValue) -> Result<MessageBox, JsError> {
+    titled("error", "Error", data)
+}
+
+fn titled(kind: &'static str, title: &'static str, data: &JsValue) -> Result<MessageBox, JsError> {
     let text = |key: &str| Ok::<_, JsError>(ops::to_string(&ops::get(data, key)?));
     Ok(MessageBox {
-        kind: "error",
-        title: "Error",
+        kind,
+        title,
         message: text("title")?,
         detail: text("content")?,
         buttons: None,
@@ -23,6 +32,76 @@ pub fn error(data: &JsValue) -> Result<MessageBox, JsError> {
         icon: true,
         modal: true,
     })
+}
+
+/// The URL `open-link` opens: the page's, if it is `http:` or `https:`. Upstream hands whatever
+/// an asset's `sourceUrl` says to `shell.openExternal` (#402).
+pub fn link(data: &JsValue) -> Option<String> {
+    let url = url::Url::parse(&data.as_str()?.to_string_lossy()).ok()?;
+    matches!(url.scheme(), "http" | "https").then(|| url.into())
+}
+
+/// The `checkboxLabel` of a [`CoordinateWarning`].
+pub const DONT_SHOW_AGAIN: &str = "Don't Show Again";
+
+/// `frc-coordinate-system-warning` and `ftc-coordinate-system-warning`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CoordinateWarning {
+    Frc,
+    Ftc,
+}
+
+impl CoordinateWarning {
+    /// The preference that skips it.
+    fn skip(self) -> &'static str {
+        match self {
+            CoordinateWarning::Frc => "skipFRCCoordinateSystemWarning",
+            CoordinateWarning::Ftc => "skipFTCCoordinateSystemWarning",
+        }
+    }
+
+    /// Whether `prefs.json`'s `prefs` skip it.
+    pub fn skipped(self, prefs: &JsValue) -> Result<bool, JsError> {
+        Ok(ops::to_boolean(&ops::get(prefs, self.skip())?))
+    }
+
+    pub fn message_box(self) -> MessageBox {
+        let (message, detail) = match self {
+            CoordinateWarning::Frc => (
+                "Legacy Coordinate System",
+                "This field uses a legacy coordinate system by default for compatibility with \
+                 pre-2027 WPILib. If your robot code uses 2027 WPILib, you can change the \
+                 \"Coordinate System\" option in the AdvantageScope preferences. See the \
+                 documentation for details.",
+            ),
+            CoordinateWarning::Ftc => (
+                "Systemcore Coordinate System",
+                "This field uses the Systemcore coordinate system by default. If your robot code \
+                 uses the traditional FTC coordinate system, you can change the \"Coordinate \
+                 System\" option in the AdvantageScope preferences. See the documentation for \
+                 details.",
+            ),
+        };
+        MessageBox {
+            kind: "info",
+            title: "Alert",
+            message: message.into(),
+            detail: detail.into(),
+            buttons: Some(vec!["OK"]),
+            default_id: None,
+            cancel_id: None,
+            icon: true,
+            modal: true,
+        }
+    }
+
+    /// What is written once the box closes with its checkbox checked: the preferences as they
+    /// were when it opened, with the warning skipped.
+    pub fn skip_in(self, prefs: &mut JsValue) {
+        if let Some(prefs) = prefs.as_object_mut() {
+            prefs.insert(self.skip(), JsValue::Bool(true));
+        }
+    }
 }
 
 /// `export-console`'s save dialog.

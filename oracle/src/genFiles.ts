@@ -24,6 +24,8 @@ import { toTree } from "./cve1";
 //     trees (see files/assetLoader.ts).
 //   genFiles routing 0 0 dev <scenario>
 //     main.ts's Driver Station log routing and export flow (see files/routing.ts).
+//   genFiles hub-messages
+//     main.ts's hub dialogs, links, focus and battery sends (see files/hubMessages.ts).
 //
 // `main.ts` is bundled as strict ESM here and sloppy CJS in the real app, but the window
 // bounds reset assigns inside the StateTracker class body, which is strict in both.
@@ -913,5 +915,6 @@ else if (mode === "flows") {
 } else if (mode === "beta") await betaMode(count);
 else if (mode === "historical") await (await import("./files/historicalStart")).run();
 else if (mode === "assets") await (await import("./files/assetLoader")).run(count, Number(seedArg));
+else if (mode === "hub-messages") await (await import("./files/hubMessages")).run();
 else if (mode === "routing") await (await import("./files/routing")).run(process.argv[6]);
 else throw new Error(`genFiles: unknown mode ${mode}`);

@@ -209,6 +209,10 @@ name = "canvas_frames"
 required-features = ["parity"]
 
 [[test]]
+name = "message_box"
+required-features = ["parity"]
+
+[[test]]
 name = "menu_view"
 harness = false
 

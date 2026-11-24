@@ -467,6 +467,10 @@ impl HubHost for GpuiHost<'_, '_> {
     }
 
     fn set_interval(&mut self, interval: HubInterval, period_ms: f64) {
+        // Nothing here has a Touch Bar to show what it sends (#402).
+        if interval == HubInterval::TouchBarSlider {
+            return;
+        }
         self.clear_interval(&interval);
         let id = self.state.timers.set_interval(period_ms);
         let timer = PageTimer::Interval(interval);

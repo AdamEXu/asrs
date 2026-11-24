@@ -20,6 +20,7 @@ use win as imp;
 pub mod dialog;
 #[cfg(not(target_os = "linux"))]
 pub mod parent;
+pub mod power;
 pub mod probe;
 mod startup_error;
 
@@ -170,6 +171,17 @@ pub fn add_recent_document(cx: &mut App, path: &Path) {
     }
     let _ = cx;
     imp::add_recent_document(path);
+}
+
+/// Electron's `shell.openExternal(url)`.
+pub fn open_external(cx: &mut App, url: &str) {
+    #[cfg(feature = "parity")]
+    if cx.has_global::<dialog::Script>() {
+        let script = cx.global_mut::<dialog::Script>();
+        script.opened_urls.push(url.to_owned());
+        return;
+    }
+    cx.open_url(url);
 }
 
 /// Shows an error in a native box and waits for it to close. Only before the app runs.
@@ -541,4 +553,31 @@ pub fn observe_full_screen(
     on_change: impl Fn(bool, &mut App) + 'static,
 ) -> Option<FullScreenObserver> {
     imp::observe_full_screen(window, cx, on_change).map(FullScreenObserver)
+}
+
+pub struct FocusObserver(
+    #[cfg(target_os = "macos")]
+    #[allow(dead_code)]
+    objc2::rc::Retained<mac::focus::FocusObserver>,
+);
+
+impl FocusObserver {
+    pub fn stop(self) {}
+}
+
+/// Electron's window `focus` (true) and `blur` events, until the observer is dropped, where they
+/// are not GPUI's activation: on macOS they follow the main window, which an alert or a file panel
+/// on the window leaves as it is, and GPUI the key window. `None` elsewhere.
+pub fn observe_focus(
+    window: &Window,
+    cx: &App,
+    on_change: impl Fn(bool, &mut App) + 'static,
+) -> Option<FocusObserver> {
+    #[cfg(target_os = "macos")]
+    return mac::focus::observe(window, cx, on_change).map(FocusObserver);
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = (window, cx, on_change);
+        None
+    }
 }
