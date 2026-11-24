@@ -62,7 +62,7 @@ mod tabs_console {
 }
 
 use std::cell::{Cell, Ref, RefCell};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::rc::Rc;
 
 use asrs_canvas::text::FixedAdvance;
@@ -505,36 +505,70 @@ fn encode(v: &JsValue) -> String {
     js_json::from_js(v).encode()
 }
 
-/// Kinds this replay does not model, with the suite that compares them. `state`, `command`
-/// and `selection` are window-level captures spanning tabs and widgets outside this harness;
-/// the fixtures' only `eval` is `window.tabs.getActiveFields()`, likewise across every tab.
+/// Kinds no replay compares whole for these vectors (#397), with the suite that compares the same
+/// code on its own.
 const COVERED: [(&str, &str); 5] = [
-    ("state", "asrs-hub's dom_tabs"),
-    ("command", "asrs-hub's dom_tabs"),
-    ("eval", "asrs-hub's dom_tabs"),
-    ("selection", "asrs-hub's selection harnesses"),
-    ("main:show", "the hub window replay (asrs-hub's dom_tabs)"),
+    (OTHER_LISTS, "asrs-model's source_list_vectors"),
+    (
+        "state",
+        "the line graph controllers here, the rest of it tabs_dom",
+    ),
+    (
+        "eval",
+        "the line graphs' active fields here, the rest of the set dom_tabs",
+    ),
+    ("selection", "asrs-hub's selection_traces"),
+    ("main:show", "asrs-hub's dom_tabs"),
 ];
 
-fn kind_of(record: &Record) -> String {
+const OTHER_LISTS: &str = "sl of another tab";
+
+/// The ids of the default Field2d and Field3d tabs' source lists.
+fn other_lists(records: &[Record]) -> Result<BTreeSet<usize>, String> {
+    let mut ours = BTreeSet::new();
+    for record in records {
+        if record.string("lg").as_deref() == Some("create") {
+            for uuid in js(record, "uuids")?.as_array().ok_or("uuids")? {
+                ours.insert(text(uuid)?);
+            }
+        }
+    }
+    let mut others = BTreeSet::new();
+    for record in records.iter().filter(|r| r.field("create").is_some()) {
+        if !ours.contains(&text(member(&js(record, "create")?, "uuid")?)?) {
+            others.insert(index(&js(record, "sl")?)?);
+        }
+    }
+    Ok(others)
+}
+
+fn kind_of(record: &Record, others: &BTreeSet<usize>) -> String {
     for key in ["lg", "main"] {
         if let Some(name) = record.string(key) {
             return format!("{key}:{name}");
         }
     }
+    if let Ok(id) = js(record, "sl").and_then(|id| index(&id))
+        && others.contains(&id)
+    {
+        return OTHER_LISTS.to_owned();
+    }
     match &record.json {
         Json::Object(pairs) if !pairs.is_empty() => pairs[0].0.to_string_lossy(),
-        _ => format!("line {}", record.line),
+        _ => panic!("line {}: the record has no first key", record.line),
     }
 }
 
-/// Counts a record the harness consumed as compared, unless its kind is [`COVERED`].
-fn mark(tally: &mut Tally, record: &Record) {
-    let kind = kind_of(record);
-    if !COVERED.iter().any(|(k, _)| *k == kind) {
-        tally.compared(&kind);
-    }
+fn strings(list: &[JsString]) -> JsValue {
+    JsValue::Array(list.iter().cloned().map(JsValue::String).collect())
 }
+
+fn member<'a>(value: &'a JsValue, key: &str) -> Result<&'a JsValue, String> {
+    value.get(key).ok_or_else(|| format!("no {key}"))
+}
+
+/// `TabType.LineGraph`.
+const LINE_GRAPH: JsValue = JsValue::Number(1.0);
 
 fn rect_js(rect: Rect) -> JsValue {
     let mut o = JsObject::new();
@@ -689,12 +723,21 @@ struct Stats {
 struct Harness {
     host: Host,
     realm: JsRealm,
+    others: BTreeSet<usize>,
     controllers: Vec<LineGraphController>,
     previews: Vec<VecDeque<Preview>>,
     list_uuids: HashMap<usize, String>,
     bound: HashMap<String, (usize, ListId)>,
     pending_prompt: Option<JsValue>,
     pending_errors: VecDeque<String>,
+    /// What the previous record threw, which the port's throw equalled.
+    last_threw: Option<String>,
+    /// The commands rendered since the last capture, by controller.
+    rendered: BTreeMap<usize, JsValue>,
+    /// What `saveState` and `getActiveFields` returned since the last capture read them.
+    saved: Vec<JsValue>,
+    active: Vec<Vec<JsString>>,
+    tabs: usize,
     painters: Vec<Painter>,
     clock: Rc<Cell<f64>>,
     text: Rc<RefCell<FixedAdvance>>,
@@ -718,8 +761,9 @@ fn lg_id(record: &Record) -> Result<usize, String> {
 }
 
 impl Harness {
-    fn new() -> Harness {
+    fn new(others: BTreeSet<usize>) -> Harness {
         Harness {
+            others,
             host: Host {
                 log: RefCell::new(Log::new(true)),
                 memory: JsObject::new(),
@@ -737,10 +781,23 @@ impl Harness {
             bound: HashMap::new(),
             pending_prompt: None,
             pending_errors: VecDeque::new(),
+            last_threw: None,
+            rendered: BTreeMap::new(),
+            saved: Vec::new(),
+            active: Vec::new(),
+            tabs: 0,
             painters: Vec::new(),
             clock: Rc::new(Cell::new(0.0)),
             text: Rc::new(RefCell::new(FixedAdvance)),
             stats: Stats::default(),
+        }
+    }
+
+    /// Counts a record as compared, unless its kind is [`COVERED`].
+    fn mark(&self, tally: &mut Tally, record: &Record) {
+        let kind = kind_of(record, &self.others);
+        if !COVERED.iter().any(|(k, _)| *k == kind) {
+            tally.compared(&kind);
         }
     }
 
@@ -1136,6 +1193,7 @@ impl Harness {
             .clone()
             .ok_or("upstream rendered a command the port never built")?;
         let mut log = WriteLog::default();
+        self.rendered.insert(id, command.to_js());
         let result =
             painter
                 .renderer
@@ -1357,24 +1415,22 @@ impl Harness {
                 let id = lg_id(record)?;
                 self.stats.saves += 1;
                 let expected = encode(&js(record, "value")?);
-                let actual = encode(&TabController::save_state(
-                    &self.controllers[id],
-                    &self.host,
-                ));
+                let state = TabController::save_state(&self.controllers[id], &self.host);
+                let actual = encode(&state);
                 if expected != actual {
                     return Err(format!(
                         "saved state\n upstream {expected}\n port     {actual}"
                     ));
                 }
+                self.saved.push(state);
                 Ok(())
             }
             "activeFields" => {
                 let id = lg_id(record)?;
                 let expected = encode(&js(record, "value")?);
                 let fields = TabController::active_fields(&self.controllers[id], &self.host);
-                let actual = encode(&JsValue::Array(
-                    fields.into_iter().map(JsValue::String).collect(),
-                ));
+                let actual = encode(&strings(&fields));
+                self.active.push(fields);
                 if expected != actual {
                     return Err(format!(
                         "active fields\n upstream {expected}\n port     {actual}"
@@ -1439,7 +1495,7 @@ impl Harness {
                     let next = records
                         .next()
                         .ok_or_else(|| format!("{name} never ended"))?;
-                    mark(tally, next);
+                    self.mark(tally, next);
                     if next.string("lg").as_deref() == Some(name)
                         && next.string("phase").as_deref() == Some("end")
                         && next.field("id").cloned() == id
@@ -1448,9 +1504,83 @@ impl Harness {
                     }
                     inner.push(next.clone());
                 };
-                self.bracket(record, inner, end, tally)
+                self.bracket(record, inner, end, tally)?;
+                self.last_threw = threw(end);
+                Ok(())
             }
         }
+    }
+
+    /// The command the last frame of a tab drew; its `index`, `title` and `uuid` are `Tabs`'s.
+    fn captured_command(&mut self, record: &Record) -> Result<(), String> {
+        if *member(&js(record, "command")?, "type")? != LINE_GRAPH {
+            return Err("a command of another tab".to_owned());
+        }
+        let expected = encode(&js(record, "value")?);
+        let drawn = self.rendered.iter().find(|(_, c)| encode(c) == expected);
+        match drawn.map(|(id, _)| *id) {
+            Some(id) => {
+                self.rendered.remove(&id);
+                Ok(())
+            }
+            None => Err(format!(
+                "no controller's last rendered command is {expected}"
+            )),
+        }
+    }
+
+    /// The controllers' part of `tabs.saveState()`, which called `saveState` on each in turn.
+    fn captured_state(&mut self, record: &Record) -> Result<(), String> {
+        let state = js(record, "state")?;
+        let tabs = member(member(&state, "tabs")?, "tabs")?;
+        let mut expected = Vec::new();
+        for tab in tabs.as_array().ok_or("tabs is a list")? {
+            if *member(tab, "type")? == LINE_GRAPH {
+                expected.push(member(tab, "controller")?.clone());
+            }
+        }
+        self.tabs = expected.len();
+        let saved = std::mem::take(&mut self.saved);
+        let last = &saved[saved.len().saturating_sub(self.tabs)..];
+        let (expected, actual) = (
+            encode(&JsValue::Array(expected)),
+            encode(&JsValue::Array(last.to_vec())),
+        );
+        if expected != actual {
+            return Err(format!(
+                "captured controllers\n upstream {expected}\n port     {actual}"
+            ));
+        }
+        Ok(())
+    }
+
+    /// `[...window.tabs.getActiveFields()]`: a set over the tabs in turn, the line graphs first,
+    /// then the log's mode keys.
+    fn captured_active_fields(&mut self, record: &Record) -> Result<(), String> {
+        let expr = record.string("eval").ok_or("eval is a string")?;
+        if expr != "[...window.tabs.getActiveFields()]" {
+            return Err(format!("eval {expr} is not modeled"));
+        }
+        let active = std::mem::take(&mut self.active);
+        let mut fields: Vec<JsString> = Vec::new();
+        for field in active[active.len().saturating_sub(self.tabs)..]
+            .iter()
+            .flatten()
+        {
+            if !fields.contains(field) {
+                fields.push(field.clone());
+            }
+        }
+        let expected = js(record, "value")?;
+        let recorded = expected.as_array().ok_or("eval is a list")?;
+        let head = JsValue::Array(recorded.iter().take(fields.len()).cloned().collect());
+        let (expected, actual) = (encode(&head), encode(&strings(&fields)));
+        if expected != actual {
+            return Err(format!(
+                "active fields of every tab\n upstream {expected}\n port     {actual}"
+            ));
+        }
+        Ok(())
     }
 
     fn record(&mut self, record: &Record, tally: &mut Tally) -> Result<(), String> {
@@ -1464,6 +1594,7 @@ impl Harness {
         records: &mut std::slice::Iter<'_, Record>,
         tally: &mut Tally,
     ) -> Result<(), String> {
+        let previous_threw = std::mem::replace(&mut self.last_threw, threw(record));
         if let Some(kind) = record.string("lg") {
             return self.handle_lg(record, &kind, records, tally);
         }
@@ -1548,10 +1679,16 @@ impl Harness {
                 )),
             };
         }
-        if record.field("exception").is_some() {
-            // An upstream async artifact (an unhandled promise rejection after an op
-            // whose `threw` was already compared); the port's surface cannot raise one.
-            return Ok(());
+        if let Some(kind) = record.string("exception") {
+            let error = record.string("error").ok_or("an exception has an error")?;
+            let thrown = previous_threw
+                .ok_or_else(|| format!("{kind} {error:?} after a call that threw nothing"))?;
+            // Upstream throws some strings, and `name` and `message` of a string are undefined.
+            let reported = match kind.as_str() {
+                "unhandledRejection" if !thrown.contains("Error: ") => "undefined: undefined",
+                _ => &thrown,
+            };
+            return same_error(&kind, Some(error), Some(reported.to_owned()));
         }
         if record.field("capture").is_some() {
             if self.pending_prompt.is_some() {
@@ -1565,17 +1702,28 @@ impl Harness {
             }
             return Ok(());
         }
-        if record.field("state").is_some()
-            || record.field("command").is_some()
-            || record.field("eval").is_some()
-            || record.field("selection").is_some()
-        {
+        if record.field("command").is_some() {
+            return self.captured_command(record);
+        }
+        if record.field("state").is_some() {
+            return self.captured_state(record);
+        }
+        if record.field("eval").is_some() {
+            return self.captured_active_fields(record);
+        }
+        if record.field("selection").is_some() {
             return Ok(());
         }
         let Some(sl) = record.field("sl") else {
-            return Err(format!("record kind {:?} is not modeled", kind_of(record)));
+            return Err(format!(
+                "record kind {:?} is not modeled",
+                kind_of(record, &self.others)
+            ));
         };
         let sl = index(&js_json::to_js(&Value::from_json(sl).map_err(|e| e.0)?)?)?;
+        if self.others.contains(&sl) {
+            return Ok(());
+        }
         if record.field("create").is_some() {
             let create = js(record, "create")?;
             let uuid = text(
@@ -1591,7 +1739,17 @@ impl Harness {
             return Err(format!("source list {sl} was never created"));
         };
         let Some((ctrl, list)) = self.bound.get(uuid).copied() else {
-            return Ok(());
+            // A controller's constructor titles its lists before the recorder sees it; the dumps
+            // compare the titles.
+            let op = js(record, "op")?;
+            return match op
+                .as_array()
+                .and_then(|op| op.first())
+                .and_then(JsValue::as_str)
+            {
+                Some(name) if name.to_string_lossy() == "setTitle" => Ok(()),
+                _ => Err(format!("source list {sl} is in no controller")),
+            };
         };
         if record.field("op").is_some() {
             return self.op(record, ctrl, list);
@@ -1719,18 +1877,19 @@ fn case_ids() -> Vec<String> {
 
 fn run_case(id: &str) -> Result<Stats, String> {
     let records = load(id)?;
-    let mut tally = Tally::new(id, &records, kind_of);
+    let others = other_lists(&records)?;
+    let mut tally = Tally::new(id, &records, |r| kind_of(r, &others));
     for (kind, by) in COVERED {
-        if records.iter().any(|r| kind_of(r) == kind) {
+        if records.iter().any(|r| kind_of(r, &others) == kind) {
             tally.covered_elsewhere(kind, by);
         }
     }
-    let mut harness = Harness::new();
+    let mut harness = Harness::new(others);
     let mut iter = records.iter();
     let mut result = Ok(());
     while let Some(record) = iter.next() {
         match harness.record_in(record, &mut iter, &mut tally) {
-            Ok(()) => mark(&mut tally, record),
+            Ok(()) => harness.mark(&mut tally, record),
             Err(e) => {
                 result = Err(format!("{id} line {}: {e}", record.line));
                 break;
