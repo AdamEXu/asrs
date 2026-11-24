@@ -57,6 +57,7 @@ app.whenReady().then(() => {
     if (request.op === "open") {
       const options = { ...request.options };
       if (options.parent) options.parent = parent;
+      if (request.hub) Object.assign(options, { backgroundMaterial: "acrylic", titleBarStyle: "hidden", titleBarOverlay: { color: "#00000000", symbolColor: "#000000", height: 38 } });
       win = new BrowserWindow({ ...options, show: false });
       if (!request.hub) win.setMenu(null);
       win.setMenuBarVisibility(false);
