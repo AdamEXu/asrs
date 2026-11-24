@@ -181,7 +181,7 @@ impl Page<'_> {
         let rect = ["left:", "top:", "width:", "height:"].map(|name| css(outer, name));
         let content = ["width:", "height:"].map(|name| css(inner, name));
         let window = headless
-            .open_window(size(px(500.0), px(500.0)), scale, |_, cx| {
+            .open_window(size(px(500.0), px(700.0)), scale, |_, cx| {
                 use asrs_ui::gpui::AppContext;
                 cx.new(|_| Scroller {
                     rect,

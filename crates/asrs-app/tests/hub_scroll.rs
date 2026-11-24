@@ -9,12 +9,14 @@ mod hub_page;
 
 use std::sync::Arc;
 
+use asrs_app::views::console_layout::ConsoleLayout;
 use asrs_js::ops;
 use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
 use asrs_model::tab_type::TabType;
 use asrs_parity::json::Json;
 use asrs_parity::vectors;
+use asrs_tabs::console::controller::ConsoleRenderer;
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
     KeyDownEvent, KeyUpEvent, Keystroke, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
@@ -45,7 +47,7 @@ fn recorded(key: &str, height: f64, scale: f32) -> f64 {
         };
         let op = items(Some(op));
         let top = items(Some(&items(record.field("scroll"))[1]))[1].as_f64();
-        if op[1].as_str().is_some_and(|k| *k == key) {
+        if op[1].as_str().is_some_and(|k| k.to_string_lossy() == key) {
             return top.expect("a number") - before.unwrap_or(700.0);
         }
         before = None;
@@ -67,10 +69,14 @@ impl Page<'_> {
                 let key = JsString::from(format!("/Field{i:02}").as_str());
                 log.put_number(&key, 0.0, 0.0);
             }
+            drop(log);
+            model
+                .with_sidebar(|sidebar, env| sidebar.refresh(env, false))
+                .expect("refresh");
         });
     }
 
-    fn press(&mut self, key: &str) {
+    fn press(&mut self, key: &'static str) {
         let keystroke = Keystroke::parse(key).expect("a keystroke");
         self.dispatch(PlatformInput::KeyDown(KeyDownEvent {
             keystroke: keystroke.clone(),
@@ -109,6 +115,7 @@ impl Page<'_> {
 
     fn click(&mut self, at: [f64; 2]) {
         self.move_to(at, None);
+        self.frames(2);
         self.down(at);
         self.up(at);
         self.frames(2);
@@ -147,20 +154,22 @@ fn moved(before: &[(String, f64)], after: &[(String, f64)], inside: &str) -> f64
         Some(top - after.1)
     });
     by.next()
-        .unwrap_or_else(|| panic!("no {inside} text in both"))
+        .unwrap_or_else(|| panic!("no {inside} text in both of {before:?}"))
 }
 
 /// The keys in a view whose texts start with `inside`, after a click at `at`.
 fn keys(page: &mut Page<'_>, name: &str, inside: &str, at: [f64; 2], height: f64, scale: f32) {
-    let start = page.tops();
+    let untouched = page.tops();
     page.press("down");
     assert_eq!(
-        moved(&start, &page.tops(), inside),
+        moved(&untouched, &page.tops(), inside),
         0.0,
         "{name}: nothing was pressed"
     );
     page.click(at);
-    let mut before = page.tops();
+    page.press("home");
+    let start = page.tops();
+    let mut before = start.clone();
     for (key, recording) in [
         ("down", "ArrowDown"),
         ("pagedown", "PageDown"),
@@ -192,8 +201,8 @@ fn table(headless: &mut HeadlessCapture, scale: f32) {
     let fields = JsValue::Array(vec![JsValue::string("/Value")]);
     page.open_tab(TabType::Table, &fields);
     page.frames(4);
-    let [x, y, w, h] = page.rect(".renderer-content");
-    keys(&mut page, "table", "0.", [x + w / 2.0, y + 100.0], h, scale);
+    let [x, y, w, h] = page.rect("div.renderer-content");
+    keys(&mut page, "table", "+", [x + w / 2.0, y + 100.0], h, scale);
     page.close();
 }
 
@@ -202,12 +211,6 @@ fn console(headless: &mut HeadlessCapture, scale: f32) {
     page.open_tab(TabType::Console, &JsValue::string("/Messages"));
     page.frames(4);
     let [x, y, w, h] = page.rect(".console-table-container");
-    page.click([x + w / 2.0, y + 100.0]);
-    page.press("home");
-    page.select_documentation();
-    page.select(1);
-    page.frames(4);
-    page.click([10.0, 10.0]);
     keys(
         &mut page,
         "console",
@@ -252,20 +255,21 @@ fn source_list(headless: &mut HeadlessCapture, scale: f32) {
             ])
         })
         .collect();
+    let conversion = || ops::object([("autoTarget", JsValue::Null), ("preset", JsValue::Null)]);
     let state = ops::object([
         ("leftSources", JsValue::Array(sources)),
         ("rightSources", JsValue::Array(Vec::new())),
         ("discreteSources", JsValue::Array(Vec::new())),
         ("leftLockedRange", JsValue::Null),
         ("rightLockedRange", JsValue::Null),
-        ("leftUnitConversion", JsValue::Null),
-        ("rightUnitConversion", JsValue::Null),
+        ("leftUnitConversion", conversion()),
+        ("rightUnitConversion", conversion()),
         ("leftFilter", JsValue::Number(0.0)),
         ("rightFilter", JsValue::Number(0.0)),
     ]);
     page.open_tab(TabType::LineGraph, &state);
     page.frames(4);
-    let [x, y, _, h] = page.rect(".controls-content");
+    let [x, y, _, h] = page.rect("div.controls-content");
     keys(
         &mut page,
         "source list",
@@ -284,9 +288,9 @@ fn scrollbar(headless: &mut HeadlessCapture, scale: f32) {
     let fields = JsValue::Array(vec![JsValue::string("/Value")]);
     page.open_tab(TabType::Table, &fields);
     page.frames(4);
-    let [x, y, w, h] = page.rect(".renderer-content");
+    let [x, y, w, h] = page.rect("div.renderer-content");
     let at = [x + w - 6.0, y + h - 60.0];
-    page.click([x + w / 2.0, y + 100.0]);
+    page.click([x + 200.0, y + 100.0]);
     let selected = page.selection(|s| s.get_selected_time());
     assert!(selected.is_some(), "the row was clicked");
     page.press("down");
@@ -297,7 +301,7 @@ fn scrollbar(headless: &mut HeadlessCapture, scale: f32) {
     page.up(at);
     page.frames(SETTLE_FRAMES);
     let want = recorded("PageDown", h, scale);
-    let got = moved(&before, &page.tops(), "0.");
+    let got = moved(&before, &page.tops(), "+");
     assert!(
         (got - want).abs() < 0.01,
         "scrollbar: {got}, recorded {want}"
@@ -317,11 +321,15 @@ fn classic(headless: &mut HeadlessCapture, scale: f32) {
         let mut page = open(headless, scale);
         page.open_tab(TabType::Console, &JsValue::string("/Messages"));
         page.frames(4);
-        let tops = page.record().boxes;
-        let found = tops
-            .iter()
-            .find(|(id, _)| id.as_ref() == "table.console-table");
-        let [_, _, w, _] = found.expect("the table").1;
+        let w = page.model(|model| {
+            let console = model
+                .tabs()
+                .tabs()
+                .find_map(|tab| tab.renderer().downcast_ref::<ConsoleRenderer>())
+                .expect("a console");
+            let layout = console.geometry_ref::<ConsoleLayout>();
+            layout.expect("a layout").client()[0]
+        });
         page.close();
         w
     };

@@ -7,7 +7,7 @@
  "fixture": {
   "window": [
    500,
-   500
+   700
   ],
   "css": [],
   "styles": [
@@ -20,7 +20,7 @@
   "steps": [
    {
     "name": "clicked",
-    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:150px;overflow:auto;background:#fff'><div style='width:400px;height:2000px'></div></div>",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:150px;overflow:auto;background:#fff'><div style='width:400px;height:4000px'></div></div>",
     "ops": [
      [
       "click",
@@ -396,7 +396,7 @@
    },
    {
     "name": "untouched",
-    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:150px;overflow:auto;background:#fff'><div style='width:400px;height:2000px'></div></div>",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:150px;overflow:auto;background:#fff'><div style='width:400px;height:4000px'></div></div>",
     "ops": [
      [
       "eval",
@@ -423,7 +423,7 @@
    },
    {
     "name": "beside",
-    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:150px;overflow:auto;background:#fff'><div style='width:400px;height:2000px'></div></div>",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:150px;overflow:auto;background:#fff'><div style='width:400px;height:4000px'></div></div>",
     "ops": [
      [
       "click",
@@ -454,7 +454,7 @@
    },
    {
     "name": "page30",
-    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:30px;overflow:auto;background:#fff'><div style='width:100px;height:2000px'></div></div>",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:30px;overflow:auto;background:#fff'><div style='width:100px;height:4000px'></div></div>",
     "ops": [
      [
       "click",
@@ -493,7 +493,7 @@
    },
    {
     "name": "page330",
-    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:330px;overflow:auto;background:#fff'><div style='width:100px;height:2000px'></div></div>",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:330px;overflow:auto;background:#fff'><div style='width:100px;height:4000px'></div></div>",
     "ops": [
      [
       "click",
@@ -532,7 +532,124 @@
    },
    {
     "name": "page401",
-    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:401px;overflow:auto;background:#fff'><div style='width:100px;height:2000px'></div></div>",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:401px;overflow:auto;background:#fff'><div style='width:100px;height:4000px'></div></div>",
+    "ops": [
+     [
+      "click",
+      100,
+      60,
+      "quick"
+     ],
+     [
+      "eval",
+      "a.scrollTop=700;a.scrollLeft=50",
+      "quick"
+     ],
+     [
+      "key",
+      "PageDown"
+     ],
+     [
+      "eval",
+      "a.scrollTop=700;a.scrollLeft=50",
+      "quick"
+     ],
+     [
+      "key",
+      "PageUp"
+     ],
+     [
+      "eval",
+      "a.scrollTop=700;a.scrollLeft=50",
+      "quick"
+     ],
+     [
+      "key",
+      "ArrowDown"
+     ]
+    ]
+   },
+   {
+    "name": "page170",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:170px;overflow:auto;background:#fff'><div style='width:100px;height:4000px'></div></div>",
+    "ops": [
+     [
+      "click",
+      100,
+      60,
+      "quick"
+     ],
+     [
+      "eval",
+      "a.scrollTop=700;a.scrollLeft=50",
+      "quick"
+     ],
+     [
+      "key",
+      "PageDown"
+     ],
+     [
+      "eval",
+      "a.scrollTop=700;a.scrollLeft=50",
+      "quick"
+     ],
+     [
+      "key",
+      "PageUp"
+     ],
+     [
+      "eval",
+      "a.scrollTop=700;a.scrollLeft=50",
+      "quick"
+     ],
+     [
+      "key",
+      "ArrowDown"
+     ]
+    ]
+   },
+   {
+    "name": "page562",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:562px;overflow:auto;background:#fff'><div style='width:100px;height:4000px'></div></div>",
+    "ops": [
+     [
+      "click",
+      100,
+      60,
+      "quick"
+     ],
+     [
+      "eval",
+      "a.scrollTop=700;a.scrollLeft=50",
+      "quick"
+     ],
+     [
+      "key",
+      "PageDown"
+     ],
+     [
+      "eval",
+      "a.scrollTop=700;a.scrollLeft=50",
+      "quick"
+     ],
+     [
+      "key",
+      "PageUp"
+     ],
+     [
+      "eval",
+      "a.scrollTop=700;a.scrollLeft=50",
+      "quick"
+     ],
+     [
+      "key",
+      "ArrowDown"
+     ]
+    ]
+   },
+   {
+    "name": "page612",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:612px;overflow:auto;background:#fff'><div style='width:100px;height:4000px'></div></div>",
     "ops": [
      [
       "click",
@@ -571,7 +688,7 @@
    },
    {
     "name": "repeat",
-    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:150px;overflow:auto;background:#fff'><div style='width:100px;height:2000px'></div></div>",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:150px;overflow:auto;background:#fff'><div style='width:100px;height:4000px'></div></div>",
     "ops": [
      [
       "click",
