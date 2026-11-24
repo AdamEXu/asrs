@@ -34,7 +34,12 @@ pub fn difference(upstream: &Json, port: &Json) -> Option<String> {
     if !close {
         return Some(format!("{upstream:?} upstream, at {ours:?} on the port"));
     }
-    for key in ["ring", "value", "selection"] {
+    // Records from before `stop` was kept have no values either.
+    let keys = match upstream.get("stop") {
+        Some(_) => &["ring", "value", "selection"][..],
+        None => &["ring"],
+    };
+    for key in keys {
         if upstream.get(key) != port.get(key) {
             return Some(format!("{key}: {upstream:?} upstream, {port:?} on the port"));
         }

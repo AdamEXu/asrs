@@ -802,7 +802,7 @@ impl<H: FrameHost> HubFrame<H> {
             ];
             panel = panel.child(titled("Open field image source URL", local(padded)));
             panel = panel.child(untitled(
-                local(r)
+                local(padded)
                     .tab_group()
                     .tab_index(Block::Field as isize)
                     .id("field-source")
@@ -818,12 +818,18 @@ impl<H: FrameHost> HubFrame<H> {
                         });
                     })
                     .child(
-                        Text::new("Source", source_style())
-                            .color(theme.link)
-                            .underline()
-                            .subpixel(
-                                snap_remainder(r[0] as f32, scale),
-                                snap_remainder(r[1] as f32, scale),
+                        div()
+                            .absolute()
+                            .left(px((r[0] - padded[0]) as f32))
+                            .top(px((r[1] - padded[1]) as f32))
+                            .child(
+                                Text::new("Source", source_style())
+                                    .color(theme.link)
+                                    .underline()
+                                    .subpixel(
+                                        snap_remainder(r[0] as f32, scale),
+                                        snap_remainder(r[1] as f32, scale),
+                                    ),
                             ),
                     ),
             ));

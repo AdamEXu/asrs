@@ -506,8 +506,9 @@ impl<H: FrameHost> HubFrame<H> {
             if window.window_handle() != handle || menu {
                 return;
             }
-            cx.stop_propagation();
             let _ = this.update(cx, |frame, cx| frame.tab(back, window, cx));
+            // After the actions that moving the focus dispatches, which begin propagating again.
+            cx.stop_propagation();
         })
     }
 
