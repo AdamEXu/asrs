@@ -836,7 +836,7 @@ impl Reflection {
             {
                 let odd = array.odd.get_or_insert_default();
                 if let Target::Array(length) = &mut odd.target {
-                    array.own.insert(js(&length.to_string()), Val::Bytes(raw));
+                    array.own.insert(js(&format!("{length}")), Val::Bytes(raw));
                     *length += 1;
                 }
             }
@@ -1109,7 +1109,7 @@ impl Reflection {
                         let target = Target::Array(items.len());
                         let mut array = Message::onto(vt, JsObject::new(), target);
                         for (i, v) in items.drain(..).enumerate() {
-                            array.own.insert(js(&i.to_string()), v);
+                            array.own.insert(js(&format!("{i}")), v);
                         }
                         Some(array)
                     }
