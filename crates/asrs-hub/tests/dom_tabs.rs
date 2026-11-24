@@ -2990,7 +2990,7 @@ impl Runner {
     }
 
     /// `.source-list .list .item button.*`: one match per item of every list the selector
-    /// can reach — the selected tab's lists when it is scoped, every tab's in
+    /// can reach: the selected tab's lists when it is scoped, every tab's in
     /// `controls_order` otherwise (the `#controllerN` lists are empty, so they match
     /// nothing). The click goes to the list that owns the match.
     fn source_item_click(
