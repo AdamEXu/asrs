@@ -3,7 +3,7 @@
 //! Blink's parse and serialization of the inline style values the Mechanism and Points
 //! renderers assign (`element.style.<property> = value`).
 
-use asrs_canvas::color::{self, Parsed, Slow};
+use asrs_canvas::color::{self, Function, Parsed, Slow};
 use asrs_js::string::JsError;
 use asrs_js::{math, number};
 
@@ -244,6 +244,55 @@ fn quirky_color(value: &str) -> Option<Parsed> {
         .flatten()
 }
 
+/// The colour keywords Blink accepts in author style besides the named colours, probed over
+/// every keyword of Chromium m142's `css_value_keywords.json5`.
+const COLOR_KEYWORDS: [&str; 44] = [
+    "-webkit-activelink",
+    "-webkit-link",
+    "activeborder",
+    "activecaption",
+    "activetext",
+    "appworkspace",
+    "background",
+    "buttonborder",
+    "buttonface",
+    "buttonhighlight",
+    "buttonshadow",
+    "buttontext",
+    "canvas",
+    "canvastext",
+    "captiontext",
+    "currentcolor",
+    "field",
+    "fieldtext",
+    "graytext",
+    "highlight",
+    "highlighttext",
+    "inactiveborder",
+    "inactivecaption",
+    "inactivecaptiontext",
+    "infobackground",
+    "infotext",
+    "linktext",
+    "mark",
+    "marktext",
+    "menu",
+    "menutext",
+    "scrollbar",
+    "selecteditem",
+    "selecteditemtext",
+    "threeddarkshadow",
+    "threedface",
+    "threedhighlight",
+    "threedlightshadow",
+    "threedshadow",
+    "transparent",
+    "visitedtext",
+    "window",
+    "windowframe",
+    "windowtext",
+];
+
 const PAINT_KEYWORDS: [&str; 3] = ["context-fill", "context-stroke", "none"];
 
 fn is_name_char(b: u8) -> bool {
@@ -261,40 +310,95 @@ fn is_ident(s: &str) -> bool {
 }
 
 /// A `stroke`/`fill` (`paint`) or colour value: `Some(Ok)` as Blink serializes it, `Some(None)`
-/// when Blink rejects it, `None` when it is outside the modelled subset. Plain idents take the
-/// keyword early path, everything else goes through the full CSS colour parser.
+/// when Blink rejects it, `None` when it is outside the modelled subset: keywords, `#` hex,
+/// `rgb[a]()`, `hsl[a]()` and `hwb()` of number, percentage, angle and `none` tokens, and
+/// quirky hashless hex.
 fn color_value(value: &str, quirky: bool, paint: bool) -> Option<Option<String>> {
     let trimmed = trim(value);
     let lower = trimmed.to_ascii_lowercase();
     if is_ident(trimmed) {
         let keyword = color::named(&lower).is_some()
-            || color::COLOR_KEYWORDS.contains(&lower.as_str())
+            || COLOR_KEYWORDS.contains(&lower.as_str())
             || (paint && PAINT_KEYWORDS.contains(&lower.as_str()));
         if keyword {
             return Some(Some(lower));
         }
-        return Some(quirky.then(|| quirky_color(value)).flatten().map(css));
+        return Some(
+            quirky
+                .then(|| quirky_color(value))
+                .flatten()
+                .map(serialize_color),
+        );
     }
     if let Some(parsed) = color::parse_fast(value) {
-        return Some(Some(css(parsed)));
+        return Some(Some(serialize_color(parsed)));
     }
     if let Some(parsed) = quirky.then(|| quirky_color(value)).flatten() {
-        return Some(Some(css(parsed)));
+        return Some(Some(serialize_color(parsed)));
     }
     if let Some(hex) = trimmed
         .strip_prefix('#')
         .filter(|hex| hex.bytes().all(is_name_char))
     {
-        return Some(color::parse_hex(hex).map(css));
+        return Some(color::parse_hex(hex).map(serialize_color));
     }
-    match color::parse_style_value(trimmed, paint) {
-        Slow::Valid(node) => Some(Some(color::serialize_css(&node))),
+    let blocks_or_escapes =
+        trimmed.contains(['(', ')', '[', ']', '{', '}', '"', '\'', '\\']) || trimmed.contains("/*");
+    if !blocks_or_escapes {
+        return Some(None);
+    }
+    if may_substitute(&lower) {
+        return None;
+    }
+    let open = trimmed.find('(')?;
+    let name = &trimmed[..open];
+    if name.contains(is_space) && !name.contains("/*") {
+        return Some(None);
+    }
+    let function = Function::from_name(&name.to_ascii_lowercase())?;
+    match color::parse_function(function, &trimmed[open + 1..]) {
+        Slow::Valid(parsed) => Some(Some(serialize_color(parsed))),
         Slow::Invalid => Some(None),
         Slow::Unmodeled => None,
     }
 }
 
-/// `SerializeAsCSSColor` of a fast-path colour.
-fn css(parsed: Parsed) -> String {
-    color::serialize_css(&color::Node::Color(parsed))
+/// Whether the value may hold an arbitrary substitution function (a name may hide behind an
+/// escape), which makes Blink keep it verbatim whatever surrounds it.
+fn may_substitute(lower: &str) -> bool {
+    ["var(", "env(", "attr(", "if(", "inherit(", "\\"]
+        .iter()
+        .any(|f| lower.contains(f))
+        || (lower.contains("--") && lower.contains('('))
+}
+
+/// `Color::SerializeLegacyColorAsCSSColor`. Every value it rounds is non-negative, where C's
+/// `round` and `Math.round` agree.
+fn serialize_color(parsed: Parsed) -> String {
+    let [r, g, b] = parsed.css_channels();
+    let a = parsed.alpha();
+    if a >= 1.0 {
+        return format!("rgb({r}, {g}, {b})");
+    }
+    let int_alpha = math::min2(math::round(f64::from(a + 1e-7) * 255.0), 255.0);
+    let hundredths = math::round(int_alpha * 100.0 / 255.0);
+    let two_decimal = (hundredths / 100.0) as f32;
+    let alpha = if math::round(f64::from(two_decimal * 255.0)) == int_alpha {
+        decimal(hundredths as u32, 2)
+    } else {
+        decimal(math::round(int_alpha * 1000.0 / 255.0) as u32, 3)
+    };
+    format!("rgba({r}, {g}, {b}, {alpha})")
+}
+
+/// `units / 10^places` without trailing zeros, for `units` in `0..=10^places`.
+fn decimal(units: u32, places: usize) -> String {
+    let scale = 10u32.pow(places as u32);
+    let fraction = format!("{:0places$}", units % scale);
+    let fraction = fraction.trim_end_matches('0');
+    if fraction.is_empty() {
+        format!("{}", units / scale)
+    } else {
+        format!("{}.{fraction}", units / scale)
+    }
 }

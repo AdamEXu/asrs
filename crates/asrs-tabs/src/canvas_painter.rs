@@ -85,18 +85,7 @@ const STYLE_ONLY_KEYWORDS: [&str; 7] = [
 ];
 
 fn is_modeled_color(css: &str) -> Result<bool, JsError> {
-    if css.is_empty() {
-        return Ok(true);
-    }
-    // `ParseSystemColor` answers through the platform `LayoutTheme`, which the
-    // port does not have; the painters report system colours unmodeled.
-    let lower = css
-        .trim_matches(|c: char| matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0c'))
-        .to_ascii_lowercase();
-    if color::is_system_color(&lower) {
-        return Ok(false);
-    }
-    if color::parse_color(css).is_some() {
+    if css.is_empty() || color::parse_color(css).is_some() {
         return Ok(true);
     }
     Ok(
