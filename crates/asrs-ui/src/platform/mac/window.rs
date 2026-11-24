@@ -1,10 +1,17 @@
 //! The parts of Electron's `NativeWindowMac` GPUI's window options do not cover.
 
+use std::ptr::NonNull;
+
+use block2::RcBlock;
 use gpui_kit::Window;
 use objc2::rc::Retained;
+use objc2::runtime::{NSObjectProtocol, ProtocolObject};
 use objc2::{MainThreadMarker, MainThreadOnly};
-use objc2_app_kit::{NSScreen, NSToolbar, NSWindow, NSWindowCollectionBehavior};
-use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
+use objc2_app_kit::{
+    NSScreen, NSToolbar, NSWindow, NSWindowCollectionBehavior, NSWindowDidBecomeMainNotification,
+    NSWindowDidResignMainNotification,
+};
+use objc2_foundation::{NSNotification, NSNotificationCenter, NSPoint, NSRect, NSSize, NSString};
 
 use super::ns_window;
 
@@ -28,6 +35,48 @@ pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
     let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, height));
     let content = NSWindow::contentRectForFrameRect_styleMask(frame, style, mtm);
     (content.size.width, content.size.height)
+}
+
+/// Electron's `windowDidBecomeMain:` and `windowDidResignMain:`.
+pub struct FocusObserver(Vec<Retained<ProtocolObject<dyn NSObjectProtocol>>>);
+
+impl Drop for FocusObserver {
+    fn drop(&mut self) {
+        let center = NSNotificationCenter::defaultCenter();
+        for observer in &self.0 {
+            // SAFETY: what the center returned for these blocks.
+            unsafe { center.removeObserver((**observer).as_ref()) };
+        }
+    }
+}
+
+pub fn focus_changes(window: &Window) -> Option<(FocusObserver, async_channel::Receiver<bool>)> {
+    let window = ns_window(window)?;
+    let center = NSNotificationCenter::defaultCenter();
+    let (send, changes) = async_channel::unbounded();
+    // SAFETY: the notifications' names, which AppKit defines.
+    let names = unsafe {
+        [
+            (NSWindowDidBecomeMainNotification, true),
+            (NSWindowDidResignMainNotification, false),
+        ]
+    };
+    let observers = names.map(|(name, focused)| {
+        let send = send.clone();
+        let block = RcBlock::new(move |_: NonNull<NSNotification>| {
+            let _ = send.try_send(focused);
+        });
+        // SAFETY: the object is the window, and AppKit posts these on the main thread.
+        unsafe {
+            center.addObserverForName_object_queue_usingBlock(
+                Some(name),
+                Some(&window),
+                None,
+                &block,
+            )
+        }
+    });
+    Some((FocusObserver(observers.into()), changes))
 }
 
 impl NativeWindow {

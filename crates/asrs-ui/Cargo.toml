@@ -124,14 +124,17 @@ version = "=0.3.2"
 default-features = false
 features = [
     "std",
+    "block2",
     "objc2-core-foundation",
     "NSArray",
     "NSAttributedString",
     "NSCharacterSet",
     "NSDictionary",
     "NSGeometry",
+    "NSNotification",
     "NSObjCRuntime",
     "NSObject",
+    "NSOperation",
     "NSRunLoop",
     "NSString",
     "NSURL",

@@ -269,14 +269,17 @@ struct Shown {
     uuid: String,
     title: String,
     edit_button: bool,
+    /// The `blurred` classes of the list's own buttons and of its items'.
+    blurred: [bool; 2],
     items: Vec<ItemView>,
     hand_icon: bool,
     highlight: asrs_model::source_list::DragHighlight,
 }
 
 impl Shown {
-    fn of(list: &SourceList) -> Shown {
+    fn of(list: &SourceList, hub: &HubModel) -> Shown {
         Shown {
+            blurred: [hub.list_buttons_blurred(list.uuid()), !hub.is_focused()],
             uuid: list.uuid().to_owned(),
             title: list.title().to_owned(),
             edit_button: list.has_edit_button(),
@@ -328,6 +331,7 @@ struct ItemPlace {
     borders: (f64, f64),
     origin_x: f64,
     scale: f32,
+    blurred: bool,
 }
 
 /// One `div.item` at `index`, `width` wide: the list's, whose buttons `dispatch`, or the drag
@@ -344,6 +348,7 @@ fn item_body(
         borders,
         origin_x,
         scale,
+        blurred,
     } = place;
     let text_dx = |x: f64| snap_remainder((origin_x + x) as f32, scale);
     let theme = appearance.theme();
@@ -509,6 +514,7 @@ fn item_body(
                 "visibilityoff.svg"
             }),
         )
+        .blurred(blurred)
         .on_click(on(dispatch, ListPointer::HideClick(index))),
         origin_x,
         width - 40.0 - 2.0 * half,
@@ -517,6 +523,7 @@ fn item_body(
     ))
     .child(translated_button(
         IconButton::new(("sl-remove", index), symbol("close.svg"))
+            .blurred(blurred)
             .on_click(on(dispatch, ListPointer::RemoveClick(index))),
         origin_x,
         width - 15.0 - 2.0 * half,
@@ -526,7 +533,7 @@ fn item_body(
 }
 
 /// `#dragItem`'s copy of a dragged item: `clientWidth` wide, 30 px tall, without borders.
-pub fn drag_item(item: &ItemView, width: f64, appearance: Appearance) -> AnyElement {
+pub fn drag_item(item: &ItemView, width: f64, blurred: bool, appearance: Appearance) -> AnyElement {
     div()
         .w(px(width as f32))
         .h(px(30.0))
@@ -539,6 +546,7 @@ pub fn drag_item(item: &ItemView, width: f64, appearance: Appearance) -> AnyElem
                 borders: (0.0, 0.0),
                 origin_x: 0.0,
                 scale: 1.0,
+                blurred,
             },
             appearance,
             &None,
@@ -610,7 +618,7 @@ impl<H: FrameHost> HubFrame<H> {
         let geometry = self.host().source_list_geometry();
         let shown: Vec<(Shown, ListRoot)> = displayed_lists(self.host().hub(cx), rect(controls))
             .into_iter()
-            .map(|(list, root)| (Shown::of(list), root))
+            .map(|(list, root)| (Shown::of(list, self.host().hub(cx)), root))
             .collect();
         let mut out = Vec::new();
         for (list, root) in shown {
@@ -710,6 +718,7 @@ impl<H: FrameHost> HubFrame<H> {
             translated_button(
                 IconButton::new((id, uuid_hash(&uuid)), icon)
                     .fit(fit)
+                    .blurred(list.blurred[0])
                     .on_click(on(&dispatch, event)),
                 left,
                 inner - right - 2.0 * half,
@@ -782,6 +791,7 @@ impl<H: FrameHost> HubFrame<H> {
                 borders,
                 origin_x: left,
                 scale: scale as f32,
+                blurred: list.blurred[1],
             };
             let row = item_body(item, index, place, appearance, &dispatch).on_mouse_down(
                 MouseButton::Right,

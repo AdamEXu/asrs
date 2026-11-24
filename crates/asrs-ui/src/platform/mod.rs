@@ -18,6 +18,7 @@ use mac as imp;
 pub mod dialog;
 #[cfg(not(target_os = "linux"))]
 pub mod parent;
+pub mod power;
 pub mod probe;
 
 use std::path::Path;
@@ -167,6 +168,39 @@ pub fn add_recent_document(cx: &mut App, path: &Path) {
     let _ = cx;
     imp::add_recent_document(path);
 }
+
+/// Electron's `shell.openExternal(url)`.
+pub fn open_external(cx: &mut App, url: &str) {
+    #[cfg(feature = "parity")]
+    if cx.has_global::<dialog::Script>() {
+        let script = cx.global_mut::<dialog::Script>();
+        script.opened_urls.push(url.to_owned());
+        return;
+    }
+    cx.open_url(url);
+}
+
+/// The changes behind Electron's window `focus` (true) and `blur` events where those are not
+/// GPUI's activation: on macOS Electron's follow the main window, which a panel on the window does
+/// not change, and GPUI's the key window, which it does. `None` elsewhere and for windows no
+/// platform window stands behind.
+pub fn focus_changes(window: &Window) -> Option<(FocusObserver, async_channel::Receiver<bool>)> {
+    #[cfg(target_os = "macos")]
+    return mac::window::focus_changes(window)
+        .map(|(observer, changes)| (FocusObserver(observer), changes));
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = window;
+        None
+    }
+}
+
+/// Ends [`focus_changes`] when dropped.
+pub struct FocusObserver(
+    #[cfg(target_os = "macos")]
+    #[allow(dead_code)]
+    mac::window::FocusObserver,
+);
 
 /// Installs the process-wide hooks (the raw wheel monitor on macOS). Idempotent.
 pub fn init(_cx: &mut App) {

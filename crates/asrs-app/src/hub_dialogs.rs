@@ -5,28 +5,48 @@ use asrs_js::time::{Clock, NamedZone, SystemClock};
 use asrs_js::value::JsValue;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_services::fs::RealFs;
-use asrs_services::hub_dialogs;
+use asrs_services::hub_dialogs::{self, CoordinateWarning, DONT_SHOW_AGAIN};
 use asrs_services::update::feedback_url;
 use asrs_ui::gpui::{AnyWindowHandle, App, Window};
+use asrs_ui::platform;
 
 use crate::main_process::{MainProcess, RELEASE_PROFILE};
 use crate::menus::dispatch::{message_box_options, save_dialog_options};
-use crate::windows::{self, Windows};
+use crate::windows::{self, MessageBoxOptions, Windows};
 
-/// `handleHubMessage`'s `error`, `export-console`, `source-list-help`, `prompt-update` and
-/// `open-feedback`; other messages show nothing here.
+/// `handleHubMessage`'s `alert`, `error`, `frc-coordinate-system-warning`,
+/// `ftc-coordinate-system-warning`, `open-link`, `export-console`, `source-list-help`,
+/// `prompt-update` and `open-feedback`; other messages show nothing here.
 pub fn show(message: &NamedMessage<HubToMain>, window: AnyWindowHandle, cx: &mut App) {
     match message.name {
-        HubToMain::Error => {
-            let options = match hub_dialogs::error(&message.data) {
+        HubToMain::Alert | HubToMain::Error => {
+            let options = if message.name == HubToMain::Alert {
+                hub_dialogs::alert(&message.data)
+            } else {
+                hub_dialogs::error(&message.data)
+            };
+            let options = match options {
                 Ok(options) => options,
-                Err(e) => return eprintln!("asrs: error: {}: {}", e.name, e.message),
+                Err(e) => {
+                    let name = message.name.name();
+                    return eprintln!("asrs: {name}: {}: {}", e.name, e.message);
+                }
             };
             let options = message_box_options(&options);
             on(window, cx, move |window, cx| {
                 windows::message_box(Some(window), cx, options, |_, _| {});
             });
         }
+        HubToMain::FrcCoordinateSystemWarning => {
+            coordinate_warning(CoordinateWarning::Frc, window, cx);
+        }
+        HubToMain::FtcCoordinateSystemWarning => {
+            coordinate_warning(CoordinateWarning::Ftc, window, cx);
+        }
+        HubToMain::OpenLink => match message.data.as_str() {
+            Some(url) => platform::open_external(cx, &url.to_string_lossy()),
+            None => eprintln!("asrs: open-link: not a string: {:?}", message.data),
+        },
         HubToMain::ExportConsole => {
             let text = match &message.data {
                 JsValue::String(text) => text.clone(),
@@ -60,6 +80,26 @@ pub fn show(message: &NamedMessage<HubToMain>, window: AnyWindowHandle, cx: &mut
         HubToMain::OpenFeedback => cx.open_url(&feedback_url(RELEASE_PROFILE.repository)),
         _ => {}
     }
+}
+
+fn coordinate_warning(warning: CoordinateWarning, window: AnyWindowHandle, cx: &mut App) {
+    let mut prefs = match MainProcess::coordinate_warning_preferences(cx, warning) {
+        Ok(Some(prefs)) => prefs,
+        Ok(None) => return,
+        Err(e) => return eprintln!("asrs: prefs.json: {}: {}", e.name, e.message),
+    };
+    let options = MessageBoxOptions {
+        checkbox_label: DONT_SHOW_AGAIN.to_owned(),
+        ..message_box_options(&warning.message_box())
+    };
+    on(window, cx, move |window, cx| {
+        windows::message_box(Some(window), cx, options, move |result, cx| {
+            if result.checkbox_checked {
+                warning.skip_in(&mut prefs);
+                MainProcess::write_preferences(prefs, cx);
+            }
+        });
+    });
 }
 
 fn on(window: AnyWindowHandle, cx: &mut App, show: impl FnOnce(&mut Window, &mut App) + 'static) {

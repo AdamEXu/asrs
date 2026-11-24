@@ -806,6 +806,7 @@ impl<H: FrameHost> HubFrame<H> {
                 grid.place([*left, y, *w, header_height]),
             ));
         }
+        let blurred = !self.host().hub(cx).is_focused();
         let mut header = div().absolute().inset_0();
         for (index, field) in view.headers.iter().enumerate() {
             let column = index + 1;
@@ -856,6 +857,7 @@ impl<H: FrameHost> HubFrame<H> {
                     y + BUTTON_TOP,
                 ];
                 let button = IconButton::new(("table-close", index), symbol("close.svg"))
+                    .blurred(blurred)
                     .on_click(cx.listener(move |frame, _, _, cx| frame.table_close(index, cx)));
                 th = th.child(grid.button(button, at));
                 probes = probes.child(probed(
@@ -869,6 +871,7 @@ impl<H: FrameHost> HubFrame<H> {
         let [jx, jy, jw, jh] = JUMP_INPUT;
         let jump_at = [first[0] + jx, y + jy, jw, jh];
         let button = IconButton::new("table-jump", symbol("verticalalignbottom.svg"))
+            .blurred(blurred)
             .on_click(cx.listener(|frame, _, _, cx| frame.table_jump(cx)));
         let button_at = [first[0] + JUMP_BUTTON_LEFT, y + BUTTON_TOP];
         header = header

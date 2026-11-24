@@ -21,6 +21,7 @@ use asrs_services::constants::{AKIT_PATH_INPUT_PERIOD_MS, layout_default_path};
 use asrs_services::dialog::MessageBox;
 use asrs_services::ds_layout::default_ds_layout;
 use asrs_services::fs::RealFs;
+use asrs_services::hub_dialogs::CoordinateWarning;
 use asrs_services::lifecycle::{self, AppPaths, HubRestore, MainState, StartupWindow};
 use asrs_services::path::PathStyle;
 use asrs_services::routing::{Action, Hubs, Route};
@@ -28,7 +29,7 @@ use asrs_services::update::{FetchReply, ReleaseProfile, UpdateChecker, UpdateEnv
 use asrs_services::window_manager::Platform;
 use asrs_services::windows::WindowSystem;
 use asrs_ui::gpui::{AnyWindowHandle, App, Entity, Global, WeakEntity};
-use asrs_ui::platform;
+use asrs_ui::platform::{self, power};
 use asrs_ui::theme::{Appearance, ThemeSource};
 
 use crate::download_flow;
@@ -478,7 +479,10 @@ impl MainProcess {
                 MainToSatellite::SetAssets,
                 main.state.assets.set_assets_data(),
             ),
-            NamedMessage::new(MainToSatellite::SetBattery, JsValue::Bool(false)),
+            NamedMessage::new(
+                MainToSatellite::SetBattery,
+                JsValue::Bool(power::is_on_battery_power(cx)),
+            ),
             restore,
         ];
         let key = ops::to_string(&uuid).to_string_lossy();
@@ -596,7 +600,7 @@ impl MainProcess {
             }
             SatelliteToMain::OpenLink => {
                 if let Some(url) = data.as_str() {
-                    cx.open_url(&url.to_string_lossy());
+                    platform::open_external(cx, &url.to_string_lossy());
                 }
             }
         }
@@ -713,7 +717,7 @@ impl MainProcess {
     }
 
     /// `jsonfile.writeFileSync(PREFS_FILENAME, event.data); sendAllPreferences();`
-    fn write_preferences(prefs: JsValue, cx: &mut App) {
+    pub(crate) fn write_preferences(prefs: JsValue, cx: &mut App) {
         let Some(main) = cx.try_global::<MainProcess>() else {
             return;
         };
@@ -953,9 +957,12 @@ impl MainProcess {
             Vec::new(),
         );
         let active = Self::active_satellites(cx);
+        let on_battery = power::is_on_battery_power(cx);
         for message in &mut boot {
-            if message.name == MainToHub::SetActiveSatellites {
-                message.data = active.clone();
+            match message.name {
+                MainToHub::SetActiveSatellites => message.data = active.clone(),
+                MainToHub::SetBattery => message.data = JsValue::Bool(on_battery),
+                _ => {}
             }
         }
         let main = cx.try_global::<MainProcess>()?;
@@ -1021,12 +1028,37 @@ impl MainProcess {
                 });
             });
         }
+        windows::on_focus_change(cx, id, &frame, move |focused, cx| {
+            Self::send_to_hub(cx, id, MainToHub::SetFocused, JsValue::Bool(focused));
+        });
         let weak = hub.downgrade();
         let main = cx.global_mut::<MainProcess>();
         main.hubs.retain(|(_, h)| h.upgrade().is_some());
         main.hubs.push((id, weak));
         Self::beta_init(cx, id);
         Some(id)
+    }
+
+    /// `powerMonitor`'s `on-ac` and `on-battery` listeners, one per window.
+    fn power_changed(cx: &mut App, on_battery: bool) {
+        let data = JsValue::Bool(on_battery);
+        for (_, hub) in Self::hub_windows(cx) {
+            Self::send(cx, &hub, MainToHub::SetBattery, data.clone());
+        }
+        Self::send_satellites(cx, MainToSatellite::SetBattery, &data);
+    }
+
+    /// The preferences as `frc-coordinate-system-warning` and `ftc-coordinate-system-warning` read
+    /// them; `None` where they skip the warning.
+    pub(crate) fn coordinate_warning_preferences(
+        cx: &App,
+        warning: CoordinateWarning,
+    ) -> Result<Option<JsValue>, JsError> {
+        let Some(main) = cx.try_global::<MainProcess>() else {
+            return Ok(None);
+        };
+        let prefs = main.state.preferences(&RealFs)?;
+        Ok((!warning.skipped(&prefs)?).then_some(prefs))
     }
 
     /// `openFilesSmart(files, sourceWindow)`.
@@ -1338,6 +1370,9 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
         Err(e) => eprintln!("asrs: restoring windows: {e:?}"),
     }
 
+    power::on_battery_power_change(cx, |on_battery, cx| {
+        MainProcess::power_changed(cx, on_battery);
+    });
     MainProcess::check_for_update(cx, false);
     every(cx, ASSET_RELOAD_PERIOD, |cx| {
         if MainProcess::load_assets(cx) {
