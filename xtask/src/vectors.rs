@@ -534,7 +534,7 @@ fn check_hashes(paths: &Paths, selected: &[&Vector<'_>], full: bool) -> Result {
 
 /// Keeps `oracle/inputs.json`, the dependency graph the harness build records, committed so
 /// `--check-hashes` can compute generator hashes without building the harness.
-fn sync_entry_inputs(paths: &Paths, check: bool) -> Result {
+pub(crate) fn sync_entry_inputs(paths: &Paths, check: bool) -> Result {
     let built = oracle::read(&paths.dist.join(ENTRY_INPUTS))?;
     let committed_path = paths.oracle_src.join(ENTRY_INPUTS);
     let committed = fs::read(&committed_path).ok();
@@ -581,7 +581,7 @@ fn spec_rel(paths: &Paths, spec: &Spec) -> String {
 }
 
 const SHARED_INPUTS: &[&str] = &["build.mjs", "package-lock.json"];
-const ENTRY_INPUTS: &str = "inputs.json";
+pub(crate) const ENTRY_INPUTS: &str = "inputs.json";
 /// Entries that load another entry's page bundle at runtime, as build.mjs's `runtimeLoads`
 /// records for its own entries. Kept here because any edit to build.mjs changes every
 /// vector's generator hash.
@@ -594,7 +594,7 @@ const BORROWED_INPUTS: &[(&str, &str)] = &[
 ];
 const LAZY_HELPER_PREFIX: &str = "lazyHelpers/";
 
-fn read_entry_inputs(path: &Path) -> Result<Vec<(String, Vec<String>)>> {
+pub(crate) fn read_entry_inputs(path: &Path) -> Result<Vec<(String, Vec<String>)>> {
     let json = read_json(path)?;
     let Json::Object(pairs) = json else {
         return Err(format!("{}: not an object", path.display()));
@@ -640,7 +640,7 @@ fn parse_entry_inputs(
         .collect()
 }
 
-fn entry_hashes(
+pub(crate) fn entry_hashes(
     oracle_src: &Path,
     inputs: &[(String, Vec<String>)],
 ) -> Result<Vec<(String, String)>> {
