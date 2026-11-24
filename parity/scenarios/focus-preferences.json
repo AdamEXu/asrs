@@ -1,0 +1,193 @@
+{
+  "about": "Focus rings (#355) in the active preferences window: selects reached with Tab, the same window inactive, and a pressed button before and after a key",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Speeds",
+              "controller": {
+                "leftSources": [],
+                "rightSources": [],
+                "discreteSources": [],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "idle": true
+    },
+    {
+      "appMenu": [
+        "Settings...",
+        "Show Preferences..."
+      ]
+    },
+    {
+      "prompt": "preferences"
+    },
+    {
+      "focus": true
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "select-1",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "select-2",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "later",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "focus": false
+    },
+    {
+      "capture": "inactive",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "focus": true
+    },
+    {
+      "key": "Tab",
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "capture": "back",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 377,
+      "y": 450
+    },
+    {
+      "mouse": "down",
+      "x": 377,
+      "y": 450
+    },
+    {
+      "mouse": "move",
+      "x": 20,
+      "y": 460
+    },
+    {
+      "mouse": "up",
+      "x": 20,
+      "y": 460
+    },
+    {
+      "capture": "pressed",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "capture": "key",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm"
+      ]
+    }
+  ]
+}

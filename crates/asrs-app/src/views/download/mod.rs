@@ -13,6 +13,7 @@ use asrs_model::scroll_sensor::{WheelScroll, assign_scroll_offset};
 use asrs_services::download::downloader::WindowMessage;
 use asrs_services::download::page::{self, DownloadPage, PageEvent, Row, RowIcon};
 use asrs_ui::button::IconButton;
+use asrs_ui::focus;
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Context, Div, EventEmitter, FocusHandle, Focusable,
     InteractiveElement, IntoElement, MouseButton, MouseDownEvent, ParentElement, Render,
@@ -67,7 +68,6 @@ pub struct DownloadWindow {
     list: FocusHandle,
     exit: FocusHandle,
     download: FocusHandle,
-    list_from_keyboard: bool,
     start: Start,
     offset: f64,
     wheel: WheelScroll,
@@ -109,7 +109,6 @@ impl DownloadWindow {
             list: cx.focus_handle(),
             exit: cx.focus_handle(),
             download: cx.focus_handle(),
-            list_from_keyboard: false,
             start: Start::Document,
             offset: 0.0,
             wheel: WheelScroll::default(),
@@ -311,7 +310,6 @@ impl DownloadWindow {
             _ => &self.download,
         };
         window.focus(handle, cx);
-        self.list_from_keyboard = true;
         cx.notify();
     }
 
@@ -586,20 +584,8 @@ impl DownloadWindow {
             .bg(rgb(appearance.pick(0xeeeeee, 0x111111)))
             .child(shadow)
             .child(list);
-        let focused = self.list.is_focused(window);
-        self.list_from_keyboard = focused && self.list_from_keyboard;
-        if self.list_from_keyboard && window.is_window_active() {
-            boxed = boxed.child(
-                div()
-                    .absolute()
-                    .top(px(-2.0))
-                    .left(px(-2.0))
-                    .right(px(-2.0))
-                    .bottom(px(-2.0))
-                    .border(px(2.0))
-                    .border_color(rgb(appearance.theme().focus_ring))
-                    .rounded(px(5.0)),
-            );
+        if focus::focus_visible(&self.list, window, cx) {
+            boxed = boxed.child(focus::outline(appearance));
         }
         probed("div.file-list", boxed).into_any_element()
     }

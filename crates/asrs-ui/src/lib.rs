@@ -23,6 +23,7 @@ pub mod canvas_view;
 #[cfg(feature = "parity")]
 pub mod capture;
 pub mod filter;
+pub mod focus;
 pub mod icon;
 pub mod image_icon;
 pub mod input;
