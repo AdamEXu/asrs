@@ -4,6 +4,7 @@
 //! and what `TooltipController` and `TooltipAura` make of them where Chromium has those: the
 //! delay, the place, and what hides the tooltip.
 
+#[allow(dead_code)]
 #[path = "support/hub_page.rs"]
 mod hub_page;
 
@@ -127,7 +128,7 @@ fn toggles(headless: &mut HeadlessCapture) {
             .update_window(window, |_, window, cx| tooltip::take_given(window, cx))
             .expect("window")
     };
-    assert_eq!(given(&mut page), [play.clone()]);
+    assert_eq!(given(&mut page), std::slice::from_ref(&play));
     page.selection(|selection| selection.play());
     page.frames(2);
     assert_eq!(given(&mut page), [pause]);
