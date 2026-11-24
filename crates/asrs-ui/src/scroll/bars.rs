@@ -440,8 +440,8 @@ impl Frame {
         };
         let side = ((if pressed { 7.0 } else { 9.0 }) * scale).ceil();
         let rows = (side / 2.0).ceil();
-        let lowered = if axis == 0 && end == 1 { 1.0 } else { 0.0 };
-        let top = ((6.0 + lowered) * scale).floor() + [0.0, bar.track - bar.button][end];
+        let outward = if axis == 0 { [-1.0, 1.0][end] } else { 0.0 };
+        let top = ((6.0 + outward) * scale).floor() + [0.0, bar.track - bar.button][end];
         let thickness = self.style.thickness() * scale;
         for row in 0..rows as usize {
             let wide = if end == 0 {
