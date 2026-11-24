@@ -73,7 +73,8 @@ fn recorded_fonts() -> BTreeMap<String, String> {
 /// The fonts are Microsoft's and cannot be installed for a test, so a machine whose files differ
 /// from the render host's skips, past libtest's output capture.
 fn skipped(reason: &str) {
-    let test = std::thread::current().name().unwrap_or("").to_owned();
+    let test = std::thread::current();
+    let test = test.name().expect("libtest names its threads");
     let line = if std::env::var_os("ASRS_CI").is_some() {
         format!("\n::warning title=Windows text vectors not run::{test}: {reason}\n")
     } else {
