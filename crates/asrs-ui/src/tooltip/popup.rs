@@ -10,15 +10,25 @@ use super::aura;
 use crate::input::style::system_font;
 use crate::platform;
 use crate::text::{self, Text, TextStyle, WhiteSpace};
+use asrs_canvas::text::dom::Direction;
 use crate::theme::Appearance;
 
 const PADDING: [f32; 4] = [4.0, 8.0, 5.0, 8.0];
 const FONT_SIZE: f32 = 12.0;
 
-fn style() -> TextStyle {
+fn style(direction: Direction) -> TextStyle {
     let mut style = TextStyle::new(system_font(FONT_SIZE));
     style.white_space = WhiteSpace::Pre;
+    style.direction = direction;
     style
+}
+
+/// The text inside the marks `GetWrappedTooltipText` puts around a right-to-left title.
+fn unwrapped(text: &str) -> (Direction, &str) {
+    match text.strip_prefix('\u{202b}') {
+        Some(text) => (Direction::Rtl, text.strip_suffix('\u{202c}').unwrap_or(text)),
+        None => (Direction::Ltr, text),
+    }
 }
 
 /// `gfx::RenderText` with `WRAP_LONG_WORDS`: lines end at newlines, at the last space that leaves
@@ -55,6 +65,7 @@ fn colors(appearance: Appearance) -> [u32; 2] {
 
 struct View {
     lines: Vec<String>,
+    direction: Direction,
 }
 
 impl Render for View {
@@ -63,7 +74,7 @@ impl Render for View {
         let [top, right, bottom, left] = PADDING.map(|p| px(p - 1.0));
         let lines = self.lines.iter().map(|line| {
             let line = if line.is_empty() { " " } else { line };
-            Text::new(line.to_owned(), style()).color(foreground)
+            Text::new(line.to_owned(), style(self.direction)).color(foreground)
         });
         div()
             .size_full()
@@ -92,13 +103,15 @@ impl Popup {
         let scale = window.scale_factor();
         let (origin, display) = platform::popup_space(window, pointer, cx)?;
         let room = f32::from(aura::max_width(display));
+        let (direction, text) = unwrapped(text);
+        let style = style(direction);
         let lines = wrap(text, room, |line| {
-            text::measure(cx, &style(), line, scale).0 as f32
+            text::measure(cx, &style, line, scale).0 as f32
         });
         let mut content = (0.0f32, 0.0f32);
         for line in &lines {
             let line = if line.is_empty() { " " } else { line };
-            let (width, height) = text::measure(cx, &style(), line, scale);
+            let (width, height) = text::measure(cx, &style, line, scale);
             content = (
                 content.0.max(width.ceil() as f32),
                 content.1 + height as f32,
@@ -144,7 +157,7 @@ impl Popup {
             if origin.is_some() {
                 platform::popup_window_opened(window, bounds, false, cx);
             }
-            cx.new(|_| View { lines })
+            cx.new(|_| View { lines, direction })
         })
         .ok()?;
         Some(Popup(handle))
@@ -160,6 +173,12 @@ impl Popup {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn right_to_left_titles_lose_their_marks() {
+        assert_eq!(unwrapped("\u{202b}/A\u{202c}"), (Direction::Rtl, "/A"));
+        assert_eq!(unwrapped("/A"), (Direction::Ltr, "/A"));
+    }
 
     fn lines(text: &str) -> Vec<String> {
         wrap(text, 10.0, |line| line.chars().count() as f32)
