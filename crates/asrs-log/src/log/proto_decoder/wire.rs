@@ -470,6 +470,7 @@ enum Case {
 
 const UNKNOWNS: &str = "$unknowns";
 const TYPE: &str = "$type";
+const TYPE_UNITS: [u16; 5] = [0x24, 0x74, 0x79, 0x70, 0x65];
 const HAS_OWN_PROPERTY: &str = "hasOwnProperty";
 
 /// The value of a property read such as `m.x`.
@@ -1362,7 +1363,9 @@ impl Reflection {
         match v {
             Val::Msg(m) if m.odd.is_none() && !self.type_data(m.ty).odd => Ok(Prop::Type(m.ty)),
             Val::Msg(m) => self.read_prop(m, &js(TYPE)),
-            Val::Map(map) => Ok(map.get(TYPE).map_or(Prop::Undefined, Prop::Val)),
+            Val::Map(map) => Ok(map
+                .get_units(&TYPE_UNITS)
+                .map_or(Prop::Undefined, Prop::Val)),
             _ => Ok(Prop::Undefined),
         }
     }
