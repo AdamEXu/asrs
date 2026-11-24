@@ -6,6 +6,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
+use asrs_js::sort::array_sort;
 use asrs_js::string::{JsString, TextDecoder};
 use asrs_js::time::Clock;
 use asrs_log::log::log_key_utils::{PHOTON_PREFIX, PROTO_PREFIX, STRUCT_PREFIX};
@@ -162,7 +163,7 @@ impl CycleWatch {
         let table = |map: &HashMap<i16, JsString>| {
             let mut entries: Vec<(i16, JsString)> =
                 map.iter().map(|(id, value)| (*id, value.clone())).collect();
-            entries.sort();
+            array_sort(&mut entries, |a, b| a.0.cmp(&b.0));
             entries
         };
         let state = ParseState {

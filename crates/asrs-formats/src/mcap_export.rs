@@ -179,15 +179,14 @@ pub fn generate_mcap(
                 let mut next_index = 0;
                 for (i, &timestamp) in timestamps.iter().enumerate() {
                     next_index = upper_bound(field_timestamps, timestamp, next_index);
-                    if next_index != 0 {
-                        if let Some(message) =
+                    if next_index != 0
+                        && let Some(message) =
                             message_at(channel_id, &field_data, timestamp, next_index - 1, i)
-                        {
-                            if finalize_parked {
-                                return Err(ExportError::NeverCompletes);
-                            }
-                            finalize_parked = writer.add_message(message).unwrap_or(false);
+                    {
+                        if finalize_parked {
+                            return Err(ExportError::NeverCompletes);
                         }
+                        finalize_parked = writer.add_message(message).unwrap_or(false);
                     }
                     progress(fraction(field_index, i, timestamps.len(), fields.len()));
                 }
