@@ -2142,6 +2142,50 @@ mod tests {
         }
     }
 
+    #[test]
+    fn quarter_turns_keep_rects_rects() {
+        let rects = [[2.25, 3.5, 6.75, 4.125], [-1.5, 0.5, 0.25, 9.0]];
+        let mut turned = Canvas2d::new(20, 20);
+        turned.translate(14.0, 2.0);
+        turned.rotate(std::f64::consts::FRAC_PI_2);
+        let mut upright = Canvas2d::new(20, 20);
+        upright.translate(14.0, 2.0);
+        for [x, y, w, h] in rects {
+            turned.fill_rect(x, y, w, h);
+            turned.stroke_rect(x, y, w, h);
+            upright.fill_rect(-y - h, x, h, w);
+            upright.stroke_rect(-y - h, x, h, w);
+        }
+        assert!(render(&turned) == render(&upright));
+    }
+
+    #[test]
+    fn translations_past_float_range_lose_the_canvas() {
+        for (far, drawn) in [(1e38, 255), (2e38, 0)] {
+            let mut c = Canvas2d::new(4, 4);
+            c.scale(2.0, 2.0);
+            c.translate(far, 0.0);
+            c.translate(-far, 0.0);
+            c.fill_rect(0.0, 0.0, 2.0, 2.0);
+            assert_eq!(render(&c).pixel(1, 1).unwrap().alpha(), drawn, "{far}");
+        }
+    }
+
+    #[test]
+    fn a_readback_rebuilds_the_matrix_from_doubles() {
+        let mut c = Canvas2d::new(4, 4);
+        c.fill_rect(0.0, 0.0, 1.0, 1.0);
+        c.rotate(std::f64::consts::FRAC_PI_2);
+        let mut raster = Raster::new(4, 4).unwrap();
+        raster.run(&c.calls);
+        assert!(raster.state.ctm.rect_stays_rect());
+        c.get_image_data(0.0, 0.0, 1.0, 1.0, "$a");
+        let mut raster = Raster::new(4, 4).unwrap();
+        raster.run(&c.calls);
+        assert!(!raster.state.ctm.rect_stays_rect());
+        assert_eq!(raster.state.ctm, Matrix::from(&raster.state.transform));
+    }
+
     fn render(canvas: &Canvas2d) -> Pixmap {
         let mut raster = Raster::new(canvas.width, canvas.height).unwrap();
         raster.run(&canvas.calls);

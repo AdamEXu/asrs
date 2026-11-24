@@ -619,3 +619,75 @@ pub fn scale_pixels(level: &Pixmap, base: [u32; 2], size: [u32; 2]) -> Option<Pi
     out.data_mut().copy_from_slice(pixels.as_flattened());
     Some(out)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn columns(width: u32) -> Pixmap {
+        let mut image = Pixmap::new(width, 1).unwrap();
+        for (x, p) in image
+            .data_mut()
+            .as_chunks_mut::<4>()
+            .0
+            .iter_mut()
+            .enumerate()
+        {
+            *p = [x as u8, 0, 0, 255];
+        }
+        image
+    }
+
+    fn shaded(matrix: &Matrix, width: u32, linear: bool, x: i32, len: u32) -> Vec<u8> {
+        let runs = Runs {
+            runs: vec![Run {
+                x,
+                y: 0,
+                len,
+                coverage: Some(255),
+            }],
+            masks: Vec::new(),
+        };
+        let shader = Shader::new(matrix, [0, 0, width, 1], linear, 1.0).unwrap();
+        let pixels = shader.shade(&columns(width), &runs);
+        pixels.iter().map(|p| p[0]).collect()
+    }
+
+    #[test]
+    fn nearest_samples_on_a_boundary_take_the_pixel_before() {
+        let half = Matrix::scale_translate(1.0, 1.0, 0.5, 0.0);
+        assert_eq!(shaded(&half, 4, false, 1, 4), [0, 1, 2, 3]);
+        let field = Matrix::scale_translate(664.0 / 720.0, 1.0, 0.0, 0.0);
+        assert_eq!(shaded(&field, 250, false, 41, 1), [44]);
+        assert_eq!(shaded(&field, 250, false, 42, 1), [46]);
+    }
+
+    #[test]
+    fn filtered_samples_clamp_to_the_image() {
+        let double = Matrix::scale_translate(2.0, 1.0, 0.0, 0.0);
+        assert_eq!(shaded(&double, 2, true, 0, 4), [0, 0, 0, 1]);
+    }
+
+    #[test]
+    fn whole_pixel_offsets_are_sprites() {
+        let part = [0, 0, 24, 16];
+        let at = |x: f32, y: f32| Matrix::scale_translate(1.0, 1.0, x, y);
+        assert_eq!(sprite(&at(10.0, -3.0), part, true, false), Some((10, -3)));
+        assert_eq!(sprite(&at(10.5, -3.0), part, true, false), None);
+        assert_eq!(sprite(&at(10.5, -3.0), part, false, false), Some((11, -3)));
+        let grown = Matrix::scale_translate(1.5, 1.0, 10.0, 0.0);
+        assert_eq!(sprite(&grown, part, true, false), None);
+        let mirrored = Matrix::scale_translate(-1.0, 1.0, 10.0, 0.0);
+        assert_eq!(sprite(&mirrored, part, true, false), None);
+    }
+
+    #[test]
+    fn full_coverage_of_an_opaque_pixel_replaces() {
+        let (s, d) = ([7, 99, 200, 255], [31, 41, 59, 255]);
+        assert_eq!(src_over(s, d), s);
+        assert_eq!(lowp_src_over(s, d, 255), s);
+        assert_eq!(blend_mask(s, d, 255), s);
+        assert_eq!(blend_mask(s, d, 0), d);
+        assert_eq!(src_over([0; 4], d), d);
+    }
+}
