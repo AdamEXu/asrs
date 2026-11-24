@@ -22,7 +22,7 @@ use asrs_ui::gpui::{
     KeyDownEvent, KeyUpEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, PlatformInput,
     point, px,
 };
-use asrs_ui::menu::{PopupEntry, PopupMenu};
+use asrs_ui::platform::{PopupEntry, PopupMenu};
 use asrs_ui::{input, platform};
 use hub_page::Page;
 
@@ -177,7 +177,10 @@ fn title_bar_keeps_the_focus(page: &mut Page<'_>) {
     page.press_at(TITLE_BAR);
     assert!(in_input(page), "the title bar is not the page's");
     page.click_at(CANVAS);
-    assert!(!in_input(page), "a press on the page blurs the search field");
+    assert!(
+        !in_input(page),
+        "a press on the page blurs the search field"
+    );
 }
 
 /// Chromium sends the keys of a window to the menu that popped up for it.
@@ -191,12 +194,23 @@ fn tab_goes_to_an_open_menu(page: &mut Page<'_>) {
         .context()
         .update_window(window, |_, window, cx| {
             let item = PopupEntry::new("Item");
-            platform::popup_menu(window, cx, PopupMenu::new().entry(item), 100, 120, |_, _| {});
+            platform::popup_menu(
+                window,
+                cx,
+                PopupMenu::new().entry(item),
+                100,
+                120,
+                |_, _| {},
+            );
         })
         .expect("window");
     page.frames(2);
     page.press("tab");
     assert!(in_input(page), "Tab with a menu open is the menu's");
+    page.headless
+        .context()
+        .update_window(window, |_, window, _| platform::close_popup_menu(window))
+        .expect("window");
     page.frames(2);
     page.press("tab");
     assert!(!in_input(page), "Tab once the menu closed");

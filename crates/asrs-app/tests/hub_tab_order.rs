@@ -17,8 +17,15 @@ use asrs_parity::{focus, vectors};
 const MACOS: &str = include_str!("data/focus_macos.jsonl");
 const LINUX: &str = include_str!("data/focus_linux.jsonl");
 
-/// Upstream's classic scrollbars on Linux take space the port gives to what they are beside (#268).
+/// Upstream's classic scrollbars on Linux take space the port gives to what they are beside (#268):
+/// a source list, a table, settings and a satellite's statistics.
 const SCROLLBAR: f64 = 15.0;
+const SCROLLBARS: [&str; 4] = [
+    "traverse-satellites",
+    "traverse-settings",
+    "traverse-statistics",
+    "traverse-table",
+];
 
 fn run(root: &Path, inputs: &Path, name: &str, out: &Path) {
     let mut args: Vec<String> = ["--no-captures", "--scale", "1", "--theme", "light"]
@@ -81,7 +88,7 @@ fn main() {
         let name = text(&record, "scenario").unwrap();
         scenarios.entry(name).or_default().push(record);
     }
-    let (mut compared, mut without_assets) = (0, 0);
+    let (mut compared, mut beside, mut without_assets) = (0, 0, 0);
     let mut differences = Vec::new();
     for (name, records) in &scenarios {
         let out = dir.join(name);
@@ -115,13 +122,24 @@ fn main() {
             } else {
                 expected
             };
-            if let Some(difference) = focus::difference(expected, &focused) {
-                differences.push(format!("{name} {traverse} {index}: {difference}"));
-            }
             compared += 1;
+            let Some(difference) = focus::difference(expected, &focused) else {
+                continue;
+            };
+            let beside_scrollbar = cfg!(target_os = "linux")
+                && SCROLLBARS.contains(&name.as_str())
+                && focus::difference_beside(expected, &focused, SCROLLBAR).is_none();
+            match beside_scrollbar {
+                true => beside += 1,
+                false => differences.push(format!("{name} {traverse} {index}: {difference}")),
+            }
         }
     }
     let _ = std::fs::remove_dir_all(&dir);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
-    println!("hub tab order: {compared} equal, {without_assets} not compared without the assets");
+    println!(
+        "hub tab order: {} equal, {beside} but for a scrollbar, {without_assets} not compared \
+         without the assets",
+        compared - beside
+    );
 }

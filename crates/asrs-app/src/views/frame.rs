@@ -268,6 +268,8 @@ pub struct HubFrame<H: FrameHost> {
     host: H,
     shell: HubShell,
     started: Instant,
+    /// `Date.now()` then.
+    opened: f64,
     viewport: Option<(f64, f64)>,
     /// The focus while no element has it, which is `body`'s in a page.
     body: FocusHandle,
@@ -406,6 +408,7 @@ impl<H: FrameHost> HubFrame<H> {
             host,
             shell: HubShell::default(),
             started: Instant::now(),
+            opened: asrs_js::time::Clock::now(&asrs_js::time::SystemClock),
             viewport: None,
             body: cx.focus_handle(),
             places: Places::new(cx),
@@ -593,7 +596,7 @@ impl<H: FrameHost> HubFrame<H> {
     }
 
     fn handle_click(&mut self, handle: Handle, cx: &mut Context<'_, Self>) {
-        let now = self.host.frame_time(cx);
+        let now = self.opened + self.host.frame_time(cx);
         let (shell, geometry) = (&mut self.shell, &self.geometry);
         let result = self.host.input(cx, |hub| {
             geometry.sync(hub);

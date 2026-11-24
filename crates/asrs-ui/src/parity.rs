@@ -5,8 +5,8 @@
 //! global is installed; elsewhere [`Probed`] is a plain wrapper.
 
 use gpui_kit::{
-    AnyElement, App, Bounds, Element, ElementId, Global, GlobalElementId, InspectorElementId,
-    IntoElement, LayoutId, Pixels, SharedString, Window,
+    AnyElement, App, Bounds, Element, ElementId, FocusHandle, Global, GlobalElementId,
+    InspectorElementId, IntoElement, LayoutId, Pixels, SharedString, Window,
 };
 
 /// `[x, y, width, height]` in CSS px of the window content.
@@ -81,8 +81,9 @@ pub fn record_mask(cx: &mut App, reason: &str, bounds: Bounds<Pixels>) {
 }
 
 /// The focused text input's `value`, and its selection in UTF-16 where its type has one.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct FocusedInput {
+    pub handle: FocusHandle,
     pub value: String,
     pub selection: Option<[usize; 2]>,
 }

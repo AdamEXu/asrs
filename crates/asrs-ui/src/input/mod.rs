@@ -41,11 +41,19 @@ const CONTEXT: &str = "HtmlInput";
 
 const NUMBER_CONTEXT: &str = "HtmlInput HtmlNumberInput";
 
+const TEXT_CONTEXT: &str = "HtmlInput HtmlTextInput";
+
 actions!(number_input, [StepUp, StepDown, StepNone]);
+actions!(text_input, [ExtendUp, ExtendDown]);
 
 /// The arrow keys step a number input with any modifiers, some of which the editor binds to
 /// selecting. Alt and the down arrow do nothing.
 pub(crate) fn init(cx: &mut App) {
+    let within = Some("HtmlTextInput > Input");
+    cx.bind_keys([
+        KeyBinding::new("shift-up", ExtendUp, within),
+        KeyBinding::new("shift-down", ExtendDown, within),
+    ]);
     let within = Some("HtmlNumberInput > Input");
     for held in 1..16 {
         let modifiers: String = ["shift-", "ctrl-", "cmd-", "alt-"]

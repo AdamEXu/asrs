@@ -6,7 +6,6 @@ use asrs_canvas::text::dom::Lu;
 use asrs_js::value::JsValue;
 use asrs_tabs::info::BetaWelcome;
 use asrs_tabs::info::beta_welcome::CHECKBOXES;
-use asrs_ui::platform;
 use asrs_ui::focus;
 use asrs_ui::gpui::{
     AnyElement, App, Context, Div, EventEmitter, FocusHandle, Focusable, HoverListenerMode,
@@ -15,6 +14,7 @@ use asrs_ui::gpui::{
 };
 use asrs_ui::input::{Checkbox, PointerState};
 use asrs_ui::parity::probed;
+use asrs_ui::platform;
 use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS};
 use asrs_ui::tooltip::{titled, untitled};
 

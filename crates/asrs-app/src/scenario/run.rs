@@ -19,8 +19,8 @@ use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
     AnyWindowHandle, App, AppContext, ClipboardItem, Context, Entity, IntoElement, KeyUpEvent,
     Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent,
-    MouseUpEvent, ParentElement, PlatformInput, Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div,
-    point, px, rgb, size,
+    MouseUpEvent, ParentElement, PlatformInput, Render, ScrollDelta, ScrollEvent, Styled,
+    TouchPhase, Window, WindowHandle, div, point, px, rgb, size,
 };
 use asrs_ui::parity::Recorder;
 use asrs_ui::platform::dialog::{Reply, Script};
@@ -923,6 +923,15 @@ impl Variant<'_> {
             Button::Right => MouseButton::Right,
             Button::Middle => MouseButton::Middle,
         };
+        if matches!(kind, MouseKind::Down | MouseKind::Click) {
+            // An open menu has the pointer on a desktop and closes at a press outside it.
+            let window = self.active();
+            self.headless
+                .context()
+                .update_window(window, |_, window, _| platform::close_popup_menu(window))
+                .map_err(|e| e.to_string())?;
+            self.settle();
+        }
         let down = PlatformInput::MouseDown(MouseDownEvent {
             button,
             position,
@@ -1159,8 +1168,17 @@ impl Variant<'_> {
                     .map_err(|e| e.to_string())?;
             }
             Action::Focus(active) => {
-                let active = ForcedActive(*active);
-                self.headless.context().update(|cx| cx.set_global(active));
+                let forced = ForcedActive(*active);
+                self.headless.context().update(|cx| cx.set_global(forced));
+                let window = self.active();
+                // GPUI gives an inactive window no focus events, and upstream's page gets them.
+                if *active && window == self.window() {
+                    self.headless
+                        .context()
+                        .update_window(window, |_, window, _| window.activate_window())
+                        .map_err(|e| e.to_string())?;
+                    self.settle();
+                }
                 self.tick()?;
             }
             Action::Capture {

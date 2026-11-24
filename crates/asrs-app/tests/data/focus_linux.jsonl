@@ -1,0 +1,1096 @@
+{"scenario":"focus-order","traverse":"p-tabbarempty","index":0,"focused":{"element":"div.timeline-scroll","title":"","stop":false,"rect":[310,50,780,32],"ring":false}}
+{"scenario":"focus-order","traverse":"p-tabbarempty-f","index":0,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"focus-order","traverse":"p-tabbarempty-b","index":0,"focused":{"element":"div","title":"Small robot size","stop":true,"rect":[1054.15625,543,33.328125,65],"ring":true}}
+{"scenario":"focus-order","traverse":"p-canvas","index":0,"focused":{"element":"div.field-2d-scroll","title":"","stop":false,"rect":[300,66,800,384],"ring":false}}
+{"scenario":"focus-order","traverse":"p-canvas-f","index":0,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[822.5,452.5,25,25],"ring":true}}
+{"scenario":"focus-order","traverse":"p-canvas-b","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,83.984375,32],"ring":true}}
+{"scenario":"focus-order","traverse":"p-srctitle","index":0,"focused":null}
+{"scenario":"focus-order","traverse":"p-srctitle-f","index":0,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[822.5,452.5,25,25],"ring":true}}
+{"scenario":"focus-order","traverse":"p-srctitle-b","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,83.984375,32],"ring":true}}
+{"scenario":"focus-order","traverse":"p-srckey","index":0,"focused":null}
+{"scenario":"focus-order","traverse":"p-srckey-f","index":0,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[797.5,482.5,25,25],"ring":true}}
+{"scenario":"focus-order","traverse":"p-srckey-b","index":0,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"focus-order","traverse":"p-srcempty","index":0,"focused":null}
+{"scenario":"focus-order","traverse":"p-srcempty-f","index":0,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"focus-order","traverse":"p-srcempty-b","index":0,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[797.5,452.5,25,25],"ring":true}}
+{"scenario":"focus-order","traverse":"p-settingtitle","index":0,"focused":null}
+{"scenario":"focus-order","traverse":"p-settingtitle-f","index":0,"focused":{"element":"div","title":"Rotate field counter-clockwise","stop":true,"rect":[862.5,543,50,65],"ring":true}}
+{"scenario":"focus-order","traverse":"p-settingtitle-b","index":0,"focused":{"element":"select.field-select","title":"Select field image","stop":true,"rect":[925.5,483,99,24],"ring":true}}
+{"scenario":"focus-order","traverse":"p-settingblank","index":0,"focused":null}
+{"scenario":"focus-order","traverse":"p-settingblank-f","index":0,"focused":{"element":"select.field-select","title":"Select field image","stop":true,"rect":[925.5,483,99,24],"ring":true}}
+{"scenario":"focus-order","traverse":"p-settingblank-b","index":0,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[822.5,482.5,25,25],"ring":true}}
+{"scenario":"focus-order","traverse":"p-handle","index":0,"focused":null}
+{"scenario":"focus-order","traverse":"p-handle-f","index":0,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"focus-order","traverse":"p-handle-b","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,83.984375,32],"ring":true}}
+{"scenario":"focus-order","traverse":"p-timeline","index":0,"focused":{"element":"div.field-2d-scroll","title":"","stop":false,"rect":[300,66,800,584],"ring":false}}
+{"scenario":"focus-order","traverse":"p-timeline-f","index":0,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"focus-order","traverse":"p-timeline-b","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,83.984375,32],"ring":true}}
+{"scenario":"focus-order","traverse":"e0","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"focus-order","traverse":"e0","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"focus-order","traverse":"e0","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,83.984375,32],"ring":true}}
+{"scenario":"focus-order","traverse":"e0-after","index":0,"focused":null}
+{"scenario":"focus-order","traverse":"e0-f","index":0,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"focus-order","traverse":"e1","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"focus-order","traverse":"e1","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"focus-order","traverse":"e1","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,83.984375,32],"ring":true}}
+{"scenario":"focus-order","traverse":"e1-after","index":0,"focused":null}
+{"scenario":"focus-order","traverse":"e1-b","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"focus-order","traverse":"h0","index":0,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[797.5,482.5,25,25],"ring":true}}
+{"scenario":"focus-order","traverse":"h0-after","index":0,"focused":{"element":"button.hide","title":"Show field","stop":true,"rect":[797.5,482.5,25,25],"ring":true}}
+{"scenario":"focus-order","traverse":"h0-f","index":0,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[822.5,482.5,25,25],"ring":true}}
+{"scenario":"focus-order","traverse":"r0-after","index":0,"focused":null}
+{"scenario":"focus-order","traverse":"r0-b","index":0,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[797.5,452.5,25,25],"ring":true}}
+{"scenario":"focus-order","traverse":"r0-b","index":1,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[822.5,452.5,25,25],"ring":true}}
+{"scenario":"focus-order","traverse":"m","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":" ","selection":[0,1]}}
+{"scenario":"focus-order","traverse":"m-ctrl","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":" ","selection":[0,1]}}
+{"scenario":"focus-order","traverse":"m-alt","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":" ","selection":[0,1]}}
+{"scenario":"focus-order","traverse":"m-meta","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":" ","selection":[0,1]}}
+{"scenario":"pointer-leave","hover":"graph-over","time":5}
+{"scenario":"pointer-leave","hover":"graph-left","time":null}
+{"scenario":"pointer-leave","hover":"timeline-low-over","time":null}
+{"scenario":"pointer-leave","hover":"timeline-low-left","time":null}
+{"scenario":"pointer-leave","hover":"timeline-high-over","time":5}
+{"scenario":"pointer-leave","hover":"timeline-high-left","time":null}
+{"scenario":"traverse-console","traverse":"all","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-console","traverse":"all","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-console","traverse":"all","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,102.640625,32],"ring":true}}
+{"scenario":"traverse-console","traverse":"all","index":3,"focused":{"element":"input.console-table-jump-input","title":"Go to timestamp","stop":true,"rect":[304,54.5,64,21],"ring":false,"value":""}}
+{"scenario":"traverse-console","traverse":"all","index":4,"focused":{"element":"button.console-table-jump-button","title":"Go to timestamp","stop":true,"rect":[370,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"all","index":5,"focused":{"element":"button.console-table-key-delete","title":"Remove from view","stop":true,"rect":[475.21875,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"all","index":6,"focused":{"element":"button.export-button","title":"Export console log","stop":true,"rect":[859,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"all","index":7,"focused":{"element":"button.highlight-button","title":"Highlight warning/error messages","stop":true,"rect":[887,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"all","index":8,"focused":{"element":"input.filter","title":"Filter console log","stop":true,"rect":[915,54,180,22],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-console","traverse":"all","index":9,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all","index":10,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all","index":11,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all","index":12,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all","index":13,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all","index":14,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all","index":15,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all","index":16,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all","index":17,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":0,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":1,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":2,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":3,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":4,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":5,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":6,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":7,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":8,"focused":{"element":"input.filter","title":"Filter console log","stop":true,"rect":[915,54,180,22],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-console","traverse":"all-back","index":9,"focused":{"element":"button.highlight-button","title":"Highlight warning/error messages","stop":true,"rect":[887,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":10,"focused":{"element":"button.export-button","title":"Export console log","stop":true,"rect":[859,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":11,"focused":{"element":"button.console-table-key-delete","title":"Remove from view","stop":true,"rect":[475.21875,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":12,"focused":{"element":"button.console-table-jump-button","title":"Go to timestamp","stop":true,"rect":[370,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":13,"focused":{"element":"input.console-table-jump-input","title":"Go to timestamp","stop":true,"rect":[304,54.5,64,21],"ring":false,"value":""}}
+{"scenario":"traverse-console","traverse":"all-back","index":14,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,102.640625,32],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":15,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-console","traverse":"all-back","index":16,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-console","traverse":"all-back","index":17,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"highlight","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-console","traverse":"highlight","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-console","traverse":"highlight","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,102.640625,32],"ring":true}}
+{"scenario":"traverse-console","traverse":"highlight","index":3,"focused":{"element":"input.console-table-jump-input","title":"Go to timestamp","stop":true,"rect":[304,54.5,64,21],"ring":false,"value":""}}
+{"scenario":"traverse-console","traverse":"highlight","index":4,"focused":{"element":"button.console-table-jump-button","title":"Go to timestamp","stop":true,"rect":[370,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"highlight","index":5,"focused":{"element":"button.console-table-key-delete","title":"Remove from view","stop":true,"rect":[475.21875,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"highlight","index":6,"focused":{"element":"button.export-button","title":"Export console log","stop":true,"rect":[859,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"highlight","index":7,"focused":{"element":"button.highlight-button","title":"Highlight warning/error messages","stop":true,"rect":[887,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"highlighted","index":0,"focused":{"element":"button.highlight-button.active","title":"Highlight warning/error messages","stop":true,"rect":[887,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"filter","index":0,"focused":{"element":"input.filter","title":"Filter console log","stop":true,"rect":[915,54,180,22],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-console","traverse":"filtered","index":0,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-console","traverse":"rows","index":0,"focused":null}
+{"scenario":"traverse-console","traverse":"rows-next","index":0,"focused":{"element":"input.console-table-jump-input","title":"Go to timestamp","stop":true,"rect":[304,54.5,64,21],"ring":false,"value":""}}
+{"scenario":"traverse-console","traverse":"rows-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,102.640625,32],"ring":true}}
+{"scenario":"traverse-console","traverse":"header","index":0,"focused":null}
+{"scenario":"traverse-console","traverse":"header-next","index":0,"focused":{"element":"input.console-table-jump-input","title":"Go to timestamp","stop":true,"rect":[304,54.5,64,21],"ring":false,"value":""}}
+{"scenario":"traverse-console","traverse":"header-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,102.640625,32],"ring":true}}
+{"scenario":"traverse-console","traverse":"to-delete","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-console","traverse":"to-delete","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-console","traverse":"to-delete","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,102.640625,32],"ring":true}}
+{"scenario":"traverse-console","traverse":"to-delete","index":3,"focused":{"element":"input.console-table-jump-input","title":"Go to timestamp","stop":true,"rect":[304,54.5,64,21],"ring":false,"value":""}}
+{"scenario":"traverse-console","traverse":"to-delete","index":4,"focused":{"element":"button.console-table-jump-button","title":"Go to timestamp","stop":true,"rect":[370,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"to-delete","index":5,"focused":{"element":"button.console-table-key-delete","title":"Remove from view","stop":true,"rect":[475.21875,52.5,25,25],"ring":true}}
+{"scenario":"traverse-console","traverse":"deleted","index":0,"focused":null}
+{"scenario":"traverse-console","traverse":"deleted-next","index":0,"focused":{"element":"button.export-button","title":"Export console log","stop":true,"rect":[859,52.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-fields","traverse":"all","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,83.984375,32],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[822.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[797.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":5,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":6,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[797.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":7,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[822.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":8,"focused":{"element":"select.field-select","title":"Select field image","stop":true,"rect":[896.453125,483,99,24],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":9,"focused":{"element":"a.field-source","title":"Open field image source URL","stop":true,"rect":[995.453125,481.5,58.09375,26],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":10,"focused":{"element":"div","title":"Rotate field counter-clockwise","stop":true,"rect":[862.5,543,50,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":11,"focused":{"element":"div","title":"Rotate field clockwise","stop":true,"rect":[912.5,543,50,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":12,"focused":{"element":"div.selected","title":"Large robot size","stop":true,"rect":[987.5,543,33.328125,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":13,"focused":{"element":"div","title":"Medium robot size","stop":true,"rect":[1020.828125,543,33.328125,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":14,"focused":{"element":"div","title":"Small robot size","stop":true,"rect":[1054.15625,543,33.328125,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":15,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":16,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":17,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":18,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":19,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":20,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":21,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":22,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all","index":23,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":0,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":1,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":2,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":3,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":4,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":5,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":6,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":7,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":8,"focused":{"element":"div","title":"Small robot size","stop":true,"rect":[1054.15625,543,33.328125,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":9,"focused":{"element":"div","title":"Medium robot size","stop":true,"rect":[1020.828125,543,33.328125,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":10,"focused":{"element":"div.selected","title":"Large robot size","stop":true,"rect":[987.5,543,33.328125,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":11,"focused":{"element":"div","title":"Rotate field clockwise","stop":true,"rect":[912.5,543,50,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":12,"focused":{"element":"div","title":"Rotate field counter-clockwise","stop":true,"rect":[862.5,543,50,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":13,"focused":{"element":"a.field-source","title":"Open field image source URL","stop":true,"rect":[995.453125,481.5,58.09375,26],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":14,"focused":{"element":"select.field-select","title":"Select field image","stop":true,"rect":[896.453125,483,99,24],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":15,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[822.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":16,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[797.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":17,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":18,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[797.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":19,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[822.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":20,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,83.984375,32],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":21,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-fields","traverse":"all-back","index":22,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-fields","traverse":"all-back","index":23,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"link","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-fields","traverse":"link","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-fields","traverse":"link","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,83.984375,32],"ring":true}}
+{"scenario":"traverse-fields","traverse":"link","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[822.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"link","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[797.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"link","index":5,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"link","index":6,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[797.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"link","index":7,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[822.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"link","index":8,"focused":{"element":"select.field-select","title":"Select field image","stop":true,"rect":[896.453125,483,99,24],"ring":true}}
+{"scenario":"traverse-fields","traverse":"link","index":9,"focused":{"element":"a.field-source","title":"Open field image source URL","stop":true,"rect":[995.453125,481.5,58.09375,26],"ring":true}}
+{"scenario":"traverse-fields","traverse":"orientation","index":0,"focused":{"element":"div","title":"Rotate field counter-clockwise","stop":true,"rect":[862.5,543,50,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"rotated","index":0,"focused":{"element":"div","title":"Rotate field counter-clockwise","stop":true,"rect":[862.5,543,50,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"rotated-again","index":0,"focused":{"element":"div","title":"Rotate field counter-clockwise","stop":true,"rect":[862.5,543,50,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"size","index":0,"focused":{"element":"div","title":"Rotate field clockwise","stop":true,"rect":[912.5,543,50,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"size","index":1,"focused":{"element":"div.selected","title":"Large robot size","stop":true,"rect":[987.5,543,33.328125,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"size","index":2,"focused":{"element":"div","title":"Medium robot size","stop":true,"rect":[1020.828125,543,33.328125,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"sized","index":0,"focused":{"element":"div.selected","title":"Medium robot size","stop":true,"rect":[1020.828125,543,33.328125,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"canvas","index":0,"focused":{"element":"div.field-2d-scroll","title":"","stop":false,"rect":[300,66,800,384],"ring":false}}
+{"scenario":"traverse-fields","traverse":"canvas-next","index":0,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[822.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"canvas-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,83.984375,32],"ring":true}}
+{"scenario":"traverse-fields","traverse":"list-title","index":0,"focused":null}
+{"scenario":"traverse-fields","traverse":"list-title-next","index":0,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[822.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"list-title-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,83.984375,32],"ring":true}}
+{"scenario":"traverse-fields","traverse":"key","index":0,"focused":null}
+{"scenario":"traverse-fields","traverse":"key-next","index":0,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[797.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"key-previous","index":0,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"list-empty","index":0,"focused":null}
+{"scenario":"traverse-fields","traverse":"list-empty-next","index":0,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"list-empty-previous","index":0,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[797.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"setting-title","index":0,"focused":null}
+{"scenario":"traverse-fields","traverse":"setting-title-next","index":0,"focused":{"element":"div","title":"Rotate field counter-clockwise","stop":true,"rect":[862.5,543,50,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"setting-title-previous","index":0,"focused":{"element":"a.field-source","title":"Open field image source URL","stop":true,"rect":[995.453125,481.5,58.09375,26],"ring":true}}
+{"scenario":"traverse-fields","traverse":"setting-blank","index":0,"focused":null}
+{"scenario":"traverse-fields","traverse":"setting-blank-next","index":0,"focused":{"element":"select.field-select","title":"Select field image","stop":true,"rect":[896.453125,483,99,24],"ring":true}}
+{"scenario":"traverse-fields","traverse":"setting-blank-previous","index":0,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[822.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-fields","traverse":"three","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,69.5625,32],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three","index":5,"focused":{"element":"select.field-select","title":"Select field model","stop":true,"rect":[950.5,483,99,24],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three","index":6,"focused":{"element":"div.xr-button","title":"Start XR streaming","stop":true,"rect":[952,543,96,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three","index":7,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three","index":8,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three","index":9,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three","index":10,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three","index":11,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three","index":12,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three","index":13,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three-back","index":0,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three-back","index":1,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three-back","index":2,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three-back","index":3,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three-back","index":4,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three-back","index":5,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three-back","index":6,"focused":{"element":"div.xr-button","title":"Start XR streaming","stop":true,"rect":[952,543,96,65],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three-back","index":7,"focused":{"element":"select.field-select","title":"Select field model","stop":true,"rect":[950.5,483,99,24],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three-back","index":8,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three-back","index":9,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three-back","index":10,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,69.5625,32],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three-back","index":11,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-fields","traverse":"three-back","index":12,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-fields","traverse":"three-back","index":13,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-keys","traverse":"range-min","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"-2"}}
+{"scenario":"traverse-keys","traverse":"min-up","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"-1"}}
+{"scenario":"traverse-keys","traverse":"min-shift-up","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"0"}}
+{"scenario":"traverse-keys","traverse":"min-control-up","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"1"}}
+{"scenario":"traverse-keys","traverse":"min-alt-up","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"2"}}
+{"scenario":"traverse-keys","traverse":"min-meta-up","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"3"}}
+{"scenario":"traverse-keys","traverse":"min-shift-control-up","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"4"}}
+{"scenario":"traverse-keys","traverse":"min-shift-alt-up","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"5"}}
+{"scenario":"traverse-keys","traverse":"min-control-alt-up","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"6"}}
+{"scenario":"traverse-keys","traverse":"min-shift-meta-up","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"7"}}
+{"scenario":"traverse-keys","traverse":"min-control-meta-up","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"8"}}
+{"scenario":"traverse-keys","traverse":"min-alt-meta-up","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"9"}}
+{"scenario":"traverse-keys","traverse":"min-shift-control-alt-up","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"10"}}
+{"scenario":"traverse-keys","traverse":"min-down","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"9"}}
+{"scenario":"traverse-keys","traverse":"min-shift-down","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"8"}}
+{"scenario":"traverse-keys","traverse":"min-control-down","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"7"}}
+{"scenario":"traverse-keys","traverse":"min-alt-down","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"7"}}
+{"scenario":"traverse-keys","traverse":"min-meta-down","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"6"}}
+{"scenario":"traverse-keys","traverse":"min-shift-control-down","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"5"}}
+{"scenario":"traverse-keys","traverse":"min-shift-alt-down","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"5"}}
+{"scenario":"traverse-keys","traverse":"min-control-alt-down","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"5"}}
+{"scenario":"traverse-keys","traverse":"min-shift-meta-down","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"4"}}
+{"scenario":"traverse-keys","traverse":"min-control-meta-down","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"3"}}
+{"scenario":"traverse-keys","traverse":"min-alt-meta-down","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"3"}}
+{"scenario":"traverse-keys","traverse":"min-shift-control-alt-down","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"3"}}
+{"scenario":"traverse-keys","traverse":"max-shift-up","index":0,"focused":{"element":"input.range-max","title":"Maximum histogram value","stop":true,"rect":[1011,540,78,21],"ring":false,"value":"6"}}
+{"scenario":"traverse-keys","traverse":"max-control-down","index":0,"focused":{"element":"input.range-max","title":"Maximum histogram value","stop":true,"rect":[1011,540,78,21],"ring":false,"value":"5"}}
+{"scenario":"traverse-line-graph","traverse":"all","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-line-graph","traverse":"all","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,96.140625,32],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":3,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[539.15625,452.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":4,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":5,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[514.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":6,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[539.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":7,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[1072.484375,452.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":8,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[835.828125,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":9,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[1047.484375,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":10,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[1072.484375,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":11,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[804.8125,452.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":12,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[570.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":13,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[779.8125,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":14,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[804.8125,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":15,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":16,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":17,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":18,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":19,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":20,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":21,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":22,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all","index":23,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":0,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":1,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":2,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":3,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":4,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":5,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":6,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":7,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":8,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[804.8125,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":9,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[779.8125,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":10,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[570.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":11,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[804.8125,452.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":12,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[1072.484375,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":13,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[1047.484375,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":14,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[835.828125,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":15,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[1072.484375,452.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":16,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[539.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":17,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[514.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":18,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":19,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[539.15625,452.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":20,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,96.140625,32],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":21,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":22,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-line-graph","traverse":"all-back","index":23,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"axis","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-line-graph","traverse":"axis","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"axis","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,96.140625,32],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"axis","index":3,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[539.15625,452.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"left-title","index":0,"focused":null}
+{"scenario":"traverse-line-graph","traverse":"left-title-next","index":0,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[539.15625,452.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"left-title-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,96.140625,32],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"left-key","index":0,"focused":null}
+{"scenario":"traverse-line-graph","traverse":"left-key-next","index":0,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[514.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"left-key-previous","index":0,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"left-empty","index":0,"focused":null}
+{"scenario":"traverse-line-graph","traverse":"left-empty-next","index":0,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"left-empty-previous","index":0,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[539.15625,452.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"discrete-empty","index":0,"focused":null}
+{"scenario":"traverse-line-graph","traverse":"discrete-empty-next","index":0,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[570.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"discrete-empty-previous","index":0,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[804.8125,452.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"hide","index":0,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[514.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"hidden","index":0,"focused":{"element":"button.hide","title":"Show field","stop":true,"rect":[514.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"remove","index":0,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[539.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"removed","index":0,"focused":null}
+{"scenario":"traverse-line-graph","traverse":"removed-next","index":0,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[1072.484375,452.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"removed-previous","index":0,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[539.15625,452.5,25,25],"ring":true}}
+{"scenario":"traverse-line-graph","traverse":"removed-previous","index":1,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,96.140625,32],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-metadata","traverse":"all","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,86.78125,32],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all","index":3,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all","index":4,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all","index":5,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all","index":6,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all","index":7,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all","index":8,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all","index":9,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all","index":10,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all","index":11,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all","index":12,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,11,28,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all","index":13,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all-back","index":0,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,11,28,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all-back","index":1,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all-back","index":2,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all-back","index":3,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all-back","index":4,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all-back","index":5,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all-back","index":6,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all-back","index":7,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all-back","index":8,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all-back","index":9,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all-back","index":10,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,86.78125,32],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all-back","index":11,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"all-back","index":12,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-metadata","traverse":"all-back","index":13,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"table","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-metadata","traverse":"table","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"table","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,86.78125,32],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"table","index":3,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"cell","index":0,"focused":null}
+{"scenario":"traverse-metadata","traverse":"cell-next","index":0,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-metadata","traverse":"cell-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,86.78125,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-panels","traverse":"swerve","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,106.03125,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":5,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":6,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[847.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":7,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[872.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":8,"focused":{"element":"input.max-speed","title":"Maximum speed (meters per second)","stop":true,"rect":[926,480,148,21],"ring":false,"value":"4.5"}}
+{"scenario":"traverse-panels","traverse":"swerve","index":9,"focused":{"element":"input.size-x","title":"Robot frame length (meters)","stop":true,"rect":[911,540,78,21],"ring":false,"value":"0.7"}}
+{"scenario":"traverse-panels","traverse":"swerve","index":10,"focused":{"element":"input.size-y","title":"Robot frame width (meters)","stop":true,"rect":[1011,540,78,21],"ring":false,"value":"0.5"}}
+{"scenario":"traverse-panels","traverse":"swerve","index":11,"focused":{"element":"div","title":"Rotate swerve module layout counter-clockwise","stop":true,"rect":[920,603,80,35.75],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":12,"focused":{"element":"div","title":"Rotate swerve module layout clockwise","stop":true,"rect":[1000,603,80,35.75],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":13,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":14,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":15,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":16,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":17,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":18,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve","index":19,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":0,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":1,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":2,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":3,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":4,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":5,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":6,"focused":{"element":"div","title":"Rotate swerve module layout clockwise","stop":true,"rect":[1000,603,80,35.75],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":7,"focused":{"element":"div","title":"Rotate swerve module layout counter-clockwise","stop":true,"rect":[920,603,80,35.75],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":8,"focused":{"element":"input.size-y","title":"Robot frame width (meters)","stop":true,"rect":[1011,540,78,21],"ring":false,"value":"0.5"}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":9,"focused":{"element":"input.size-x","title":"Robot frame length (meters)","stop":true,"rect":[911,540,78,21],"ring":false,"value":"0.7"}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":10,"focused":{"element":"input.max-speed","title":"Maximum speed (meters per second)","stop":true,"rect":[926,480,148,21],"ring":false,"value":"4.5"}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":11,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[872.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":12,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[847.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":13,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":14,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":15,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":16,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,106.03125,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":17,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":18,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-panels","traverse":"swerve-back","index":19,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"speed","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-panels","traverse":"speed","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"speed","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,106.03125,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"speed","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"speed","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"speed","index":5,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"speed","index":6,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[847.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"speed","index":7,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[872.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"speed","index":8,"focused":{"element":"input.max-speed","title":"Maximum speed (meters per second)","stop":true,"rect":[926,480,148,21],"ring":false,"value":"4.5"}}
+{"scenario":"traverse-panels","traverse":"speed-typed","index":0,"focused":{"element":"input.size-x","title":"Robot frame length (meters)","stop":true,"rect":[911,540,78,21],"ring":false,"value":"0.7"}}
+{"scenario":"traverse-panels","traverse":"speed-typed","index":1,"focused":{"element":"input.size-y","title":"Robot frame width (meters)","stop":true,"rect":[1011,540,78,21],"ring":false,"value":"0.5"}}
+{"scenario":"traverse-panels","traverse":"speed-typed","index":2,"focused":{"element":"div","title":"Rotate swerve module layout counter-clockwise","stop":true,"rect":[920,603,80,35.75],"ring":true}}
+{"scenario":"traverse-panels","traverse":"rotated","index":0,"focused":{"element":"div","title":"Rotate swerve module layout counter-clockwise","stop":true,"rect":[920,603,80,35.75],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-canvas","index":0,"focused":null}
+{"scenario":"traverse-panels","traverse":"swerve-canvas-next","index":0,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"swerve-canvas-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,106.03125,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-panels","traverse":"points","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,95.125,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":5,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":6,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[847.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":7,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[872.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":8,"focused":{"element":"input.dimensions-width","title":"Coordinate system width (pixels)","stop":true,"rect":[911,480,78,21],"ring":false,"value":"960"}}
+{"scenario":"traverse-panels","traverse":"points","index":9,"focused":{"element":"input.dimensions-height","title":"Coordinate system height (pixels)","stop":true,"rect":[1011,480,78,21],"ring":false,"value":"720"}}
+{"scenario":"traverse-panels","traverse":"points","index":10,"focused":{"element":"select.orientation","title":"Coordinate system orientation","stop":true,"rect":[930,540,140,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":11,"focused":{"element":"select.origin","title":"Coordinate system origin","stop":true,"rect":[930,600,140,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":12,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":13,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":14,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":15,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":16,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":17,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":18,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points","index":19,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":0,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":1,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":2,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":3,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":4,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":5,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":6,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":7,"focused":{"element":"select.origin","title":"Coordinate system origin","stop":true,"rect":[930,600,140,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":8,"focused":{"element":"select.orientation","title":"Coordinate system orientation","stop":true,"rect":[930,540,140,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":9,"focused":{"element":"input.dimensions-height","title":"Coordinate system height (pixels)","stop":true,"rect":[1011,480,78,21],"ring":false,"value":"720"}}
+{"scenario":"traverse-panels","traverse":"points-back","index":10,"focused":{"element":"input.dimensions-width","title":"Coordinate system width (pixels)","stop":true,"rect":[911,480,78,21],"ring":false,"value":"960"}}
+{"scenario":"traverse-panels","traverse":"points-back","index":11,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[872.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":12,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[847.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":13,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":14,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":15,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":16,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,95.125,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":17,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-back","index":18,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-panels","traverse":"points-back","index":19,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"select","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-panels","traverse":"select","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"select","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,95.125,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"select","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"select","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"select","index":5,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"select","index":6,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[847.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"select","index":7,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[872.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"select","index":8,"focused":{"element":"input.dimensions-width","title":"Coordinate system width (pixels)","stop":true,"rect":[911,480,78,21],"ring":false,"value":"960"}}
+{"scenario":"traverse-panels","traverse":"select","index":9,"focused":{"element":"input.dimensions-height","title":"Coordinate system height (pixels)","stop":true,"rect":[1011,480,78,21],"ring":false,"value":"720"}}
+{"scenario":"traverse-panels","traverse":"select","index":10,"focused":{"element":"select.orientation","title":"Coordinate system orientation","stop":true,"rect":[930,540,140,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-canvas","index":0,"focused":null}
+{"scenario":"traverse-panels","traverse":"points-canvas-next","index":0,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"points-canvas-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,95.125,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,116.484375,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":3,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[329.546875,577.75,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":4,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[595.546875,577.75,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":5,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[861.546875,577.75,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":6,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[329.546875,619.25,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":7,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[595.546875,619.25,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":8,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[861.546875,619.25,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":9,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":10,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":11,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":12,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":13,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":14,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":15,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":16,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":17,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":18,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks","index":19,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":0,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":1,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":2,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":3,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":4,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":5,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":6,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":7,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":8,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":9,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":10,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[861.546875,619.25,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":11,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[595.546875,619.25,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":12,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[329.546875,619.25,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":13,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[861.546875,577.75,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":14,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[595.546875,577.75,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":15,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[329.546875,577.75,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":16,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,116.484375,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":17,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":18,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-panels","traverse":"joysticks-back","index":19,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joystick","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-panels","traverse":"joystick","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joystick","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,116.484375,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joystick","index":3,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[329.546875,577.75,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joystick","index":4,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[595.546875,577.75,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"label","index":0,"focused":null}
+{"scenario":"traverse-panels","traverse":"label-next","index":0,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[595.546875,577.75,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"label-previous","index":0,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[329.546875,577.75,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joystick-canvas","index":0,"focused":null}
+{"scenario":"traverse-panels","traverse":"joystick-canvas-next","index":0,"focused":{"element":"select","title":"Select joystick data source","stop":true,"rect":[329.546875,577.75,232,19],"ring":true}}
+{"scenario":"traverse-panels","traverse":"joystick-canvas-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,116.484375,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,137.953125,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[1072.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[1047.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":5,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":6,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":7,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":8,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":9,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":10,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":11,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":12,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":13,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":14,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":15,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":16,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":17,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":18,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,137.953125,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism","index":19,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[1072.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,137.953125,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":2,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":3,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":4,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":5,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":6,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":7,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":8,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":9,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":10,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":11,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":12,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":13,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":14,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[1047.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":15,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[1072.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":16,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,137.953125,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":17,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":18,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-panels","traverse":"mechanism-back","index":19,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-canvas","index":0,"focused":null}
+{"scenario":"traverse-panels","traverse":"mechanism-canvas-next","index":0,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[1072.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-panels","traverse":"mechanism-canvas-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,137.953125,32],"ring":true}}
+{"scenario":"traverse-satellites","traverse":"table-pressed","index":0,"focused":null}
+{"scenario":"traverse-satellites","traverse":"table","index":0,"focused":{"element":"input.data-table-jump-input","title":"Go to timestamp","stop":true,"rect":[4,4.5,64,21],"ring":false,"value":""}}
+{"scenario":"traverse-satellites","traverse":"table","index":1,"focused":{"element":"button.data-table-jump-button","title":"Go to timestamp","stop":true,"rect":[70,2.5,25,25],"ring":true}}
+{"scenario":"traverse-satellites","traverse":"table","index":2,"focused":{"element":"input.data-table-jump-input","title":"Go to timestamp","stop":true,"rect":[4,4.5,64,21],"ring":false,"value":""}}
+{"scenario":"traverse-satellites","traverse":"table","index":3,"focused":{"element":"button.data-table-jump-button","title":"Go to timestamp","stop":true,"rect":[70,2.5,25,25],"ring":true}}
+{"scenario":"traverse-satellites","traverse":"table-back","index":0,"focused":{"element":"input.data-table-jump-input","title":"Go to timestamp","stop":true,"rect":[4,4.5,64,21],"ring":false,"value":""}}
+{"scenario":"traverse-satellites","traverse":"table-back","index":1,"focused":{"element":"button.data-table-jump-button","title":"Go to timestamp","stop":true,"rect":[70,2.5,25,25],"ring":true}}
+{"scenario":"traverse-satellites","traverse":"table-back","index":2,"focused":{"element":"input.data-table-jump-input","title":"Go to timestamp","stop":true,"rect":[4,4.5,64,21],"ring":false,"value":""}}
+{"scenario":"traverse-satellites","traverse":"table-back","index":3,"focused":{"element":"button.data-table-jump-button","title":"Go to timestamp","stop":true,"rect":[70,2.5,25,25],"ring":true}}
+{"scenario":"traverse-satellites","traverse":"jump","index":0,"focused":{"element":"input.data-table-jump-input","title":"Go to timestamp","stop":true,"rect":[4,4.5,64,21],"ring":false,"value":""}}
+{"scenario":"traverse-satellites","traverse":"button","index":0,"focused":{"element":"button.data-table-jump-button","title":"Go to timestamp","stop":true,"rect":[70,2.5,25,25],"ring":true}}
+{"scenario":"traverse-satellites","traverse":"statistics-pressed","index":0,"focused":null}
+{"scenario":"traverse-satellites","traverse":"statistics","index":0,"focused":{"element":"div.stats-values-container","title":"","stop":true,"rect":[0,0,319.046875,500],"ring":true}}
+{"scenario":"traverse-satellites","traverse":"statistics","index":1,"focused":{"element":"div.stats-values-container","title":"","stop":true,"rect":[0,0,319.046875,500],"ring":true}}
+{"scenario":"traverse-satellites","traverse":"statistics","index":2,"focused":{"element":"div.stats-values-container","title":"","stop":true,"rect":[0,0,319.046875,500],"ring":true}}
+{"scenario":"traverse-satellites","traverse":"statistics","index":3,"focused":{"element":"div.stats-values-container","title":"","stop":true,"rect":[0,0,319.046875,500],"ring":true}}
+{"scenario":"traverse-satellites","traverse":"statistics-back","index":0,"focused":{"element":"div.stats-values-container","title":"","stop":true,"rect":[0,0,319.046875,500],"ring":true}}
+{"scenario":"traverse-satellites","traverse":"statistics-back","index":1,"focused":{"element":"div.stats-values-container","title":"","stop":true,"rect":[0,0,319.046875,500],"ring":true}}
+{"scenario":"traverse-satellites","traverse":"statistics-back","index":2,"focused":{"element":"div.stats-values-container","title":"","stop":true,"rect":[0,0,319.046875,500],"ring":true}}
+{"scenario":"traverse-satellites","traverse":"statistics-back","index":3,"focused":{"element":"div.stats-values-container","title":"","stop":true,"rect":[0,0,319.046875,500],"ring":true}}
+{"scenario":"traverse-satellites","traverse":"field-2d-pressed","index":0,"focused":{"element":"div.field-2d-scroll","title":"","stop":false,"rect":[0,0,1046,431],"ring":false}}
+{"scenario":"traverse-satellites","traverse":"field-2d","index":0,"focused":null}
+{"scenario":"traverse-satellites","traverse":"field-2d","index":1,"focused":null}
+{"scenario":"traverse-satellites","traverse":"field-2d","index":2,"focused":null}
+{"scenario":"traverse-satellites","traverse":"field-2d","index":3,"focused":null}
+{"scenario":"traverse-satellites","traverse":"field-2d-back","index":0,"focused":null}
+{"scenario":"traverse-satellites","traverse":"field-2d-back","index":1,"focused":null}
+{"scenario":"traverse-satellites","traverse":"field-2d-back","index":2,"focused":null}
+{"scenario":"traverse-satellites","traverse":"field-2d-back","index":3,"focused":null}
+{"scenario":"traverse-satellites","traverse":"graph-pressed","index":0,"focused":{"element":"div.line-graph-scroll","title":"","stop":false,"rect":[45,20,810,445],"ring":false}}
+{"scenario":"traverse-satellites","traverse":"graph","index":0,"focused":null}
+{"scenario":"traverse-satellites","traverse":"graph","index":1,"focused":null}
+{"scenario":"traverse-satellites","traverse":"graph","index":2,"focused":null}
+{"scenario":"traverse-satellites","traverse":"graph","index":3,"focused":null}
+{"scenario":"traverse-satellites","traverse":"graph-back","index":0,"focused":null}
+{"scenario":"traverse-satellites","traverse":"graph-back","index":1,"focused":null}
+{"scenario":"traverse-satellites","traverse":"graph-back","index":2,"focused":null}
+{"scenario":"traverse-satellites","traverse":"graph-back","index":3,"focused":null}
+{"scenario":"traverse-search","traverse":"search","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-search","traverse":"typed","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"le","selection":[2,2]}}
+{"scenario":"traverse-search","traverse":"left","index":0,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-search","traverse":"back","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"le","selection":[0,2]}}
+{"scenario":"traverse-search","traverse":"selected-up","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"le","selection":[0,0]}}
+{"scenario":"traverse-search","traverse":"up-typed","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"ale","selection":[1,1]}}
+{"scenario":"traverse-search","traverse":"down","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"ale","selection":[3,3]}}
+{"scenario":"traverse-search","traverse":"down-typed","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"aleb","selection":[4,4]}}
+{"scenario":"traverse-search","traverse":"shift-up","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"aleb","selection":[0,3]}}
+{"scenario":"traverse-search","traverse":"shift-down","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"aleb","selection":[3,4]}}
+{"scenario":"traverse-search","traverse":"up","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"aleb","selection":[0,0]}}
+{"scenario":"traverse-search","traverse":"after-up","index":0,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-search","traverse":"pressed","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"aleb","selection":[4,4]}}
+{"scenario":"traverse-search","traverse":"pressed-elsewhere","index":0,"focused":{"element":"div.line-graph-scroll","title":"","stop":false,"rect":[345,58,710,357],"ring":false}}
+{"scenario":"traverse-search","traverse":"again","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"aleb","selection":[0,4]}}
+{"scenario":"traverse-search","traverse":"results-back","index":0,"focused":null}
+{"scenario":"traverse-search","traverse":"results-hidden","index":0,"focused":null}
+{"scenario":"traverse-search","traverse":"results-next","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"e","selection":[0,1]}}
+{"scenario":"traverse-settings","traverse":"statistics","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-settings","traverse":"statistics","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,87.90625,32],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics","index":5,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,582.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics","index":6,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[847.5,582.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics","index":7,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[872.5,582.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics","index":8,"focused":{"element":"select.time-range","title":"Select time range","stop":true,"rect":[927.75,580,129.5,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics","index":9,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[909.875,629,72.75,21],"ring":false,"value":"-2"}}
+{"scenario":"traverse-settings","traverse":"statistics","index":10,"focused":{"element":"input.range-max","title":"Maximum histogram value","stop":true,"rect":[1002.375,629,72.75,21],"ring":false,"value":"12.5"}}
+{"scenario":"traverse-settings","traverse":"statistics","index":11,"focused":{"element":"input.step-size","title":"Histogram step size","stop":true,"rect":[923.75,615,137.5,21],"ring":false,"value":"0.5"}}
+{"scenario":"traverse-settings","traverse":"statistics-back","index":0,"focused":{"element":"input.range-max","title":"Maximum histogram value","stop":true,"rect":[1002.375,555,72.75,21],"ring":false,"value":"12.5"}}
+{"scenario":"traverse-settings","traverse":"statistics-back","index":1,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[909.875,555,72.75,21],"ring":false,"value":"-2"}}
+{"scenario":"traverse-settings","traverse":"statistics-back","index":2,"focused":{"element":"select.time-range","title":"Select time range","stop":true,"rect":[927.75,580,129.5,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics-back","index":3,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[872.5,582.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics-back","index":4,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[847.5,582.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics-back","index":5,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,582.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics-back","index":6,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics-back","index":7,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics-back","index":8,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,87.90625,32],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics-back","index":9,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-settings","traverse":"statistics-back","index":10,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-settings","traverse":"statistics-back","index":11,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-settings","traverse":"swerve","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,106.03125,32],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve","index":5,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,582.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve","index":6,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[847.5,582.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve","index":7,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[872.5,582.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve","index":8,"focused":{"element":"input.max-speed","title":"Maximum speed (meters per second)","stop":true,"rect":[923.75,580,137.5,21],"ring":false,"value":"4.5"}}
+{"scenario":"traverse-settings","traverse":"swerve","index":9,"focused":{"element":"input.size-x","title":"Robot frame length (meters)","stop":true,"rect":[909.875,629,72.75,21],"ring":false,"value":"0.7"}}
+{"scenario":"traverse-settings","traverse":"swerve","index":10,"focused":{"element":"input.size-y","title":"Robot frame width (meters)","stop":true,"rect":[1002.375,629,72.75,21],"ring":false,"value":"0.5"}}
+{"scenario":"traverse-settings","traverse":"swerve","index":11,"focused":{"element":"div","title":"Rotate swerve module layout counter-clockwise","stop":true,"rect":[918.5,618,74,26],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve","index":12,"focused":{"element":"div","title":"Rotate swerve module layout clockwise","stop":true,"rect":[992.5,618,74,26],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve-back","index":0,"focused":{"element":"div","title":"Rotate swerve module layout counter-clockwise","stop":true,"rect":[918.5,618,74,26],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve-back","index":1,"focused":{"element":"input.size-y","title":"Robot frame width (meters)","stop":true,"rect":[1002.375,555,72.75,21],"ring":false,"value":"0.5"}}
+{"scenario":"traverse-settings","traverse":"swerve-back","index":2,"focused":{"element":"input.size-x","title":"Robot frame length (meters)","stop":true,"rect":[909.875,555,72.75,21],"ring":false,"value":"0.7"}}
+{"scenario":"traverse-settings","traverse":"swerve-back","index":3,"focused":{"element":"input.max-speed","title":"Maximum speed (meters per second)","stop":true,"rect":[923.75,580,137.5,21],"ring":false,"value":"4.5"}}
+{"scenario":"traverse-settings","traverse":"swerve-back","index":4,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[872.5,582.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve-back","index":5,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[847.5,582.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve-back","index":6,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,582.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve-back","index":7,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve-back","index":8,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve-back","index":9,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,106.03125,32],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve-back","index":10,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-settings","traverse":"swerve-back","index":11,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-settings","traverse":"swerve-back","index":12,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-shell","traverse":"all","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":2,"focused":{"element":"div.tab","title":"","stop":true,"rect":[351.96875,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":3,"focused":{"element":"div.tab","title":"","stop":true,"rect":[530.90625,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":4,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[709.84375,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":5,"focused":{"element":"div.tab","title":"","stop":true,"rect":[888.78125,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":6,"focused":{"element":"div.tab","title":"","stop":true,"rect":[519.71875,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":7,"focused":{"element":"div.tab","title":"","stop":true,"rect":[698.65625,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":8,"focused":{"element":"div.tab","title":"","stop":true,"rect":[877.59375,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":9,"focused":{"element":"div.tab","title":"","stop":true,"rect":[729.53125,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":10,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[539.15625,452.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":11,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":12,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[514.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":13,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[539.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":14,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[1072.484375,452.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":15,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[835.828125,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":16,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[1047.484375,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":17,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[1072.484375,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":18,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[804.8125,452.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":19,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[570.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":20,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[779.8125,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":21,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[804.8125,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":22,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":23,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":24,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":25,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":26,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":27,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":28,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":29,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":30,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":31,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":32,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all","index":33,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-shell","traverse":"all-back","index":0,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":1,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":2,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":3,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":4,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":5,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":6,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":7,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":8,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":9,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":10,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":11,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[804.8125,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":12,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[779.8125,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":13,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[570.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":14,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[804.8125,452.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":15,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[1072.484375,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":16,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[1047.484375,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":17,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[835.828125,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":18,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[1072.484375,452.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":19,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[539.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":20,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[514.15625,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":21,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":22,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[539.15625,452.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":23,"focused":{"element":"div.tab","title":"","stop":true,"rect":[729.53125,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":24,"focused":{"element":"div.tab","title":"","stop":true,"rect":[550.59375,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":25,"focused":{"element":"div.tab","title":"","stop":true,"rect":[371.65625,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":26,"focused":{"element":"div.tab","title":"","stop":true,"rect":[192.71875,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":27,"focused":{"element":"div.tab","title":"","stop":true,"rect":[519.78125,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":28,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[340.84375,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":29,"focused":{"element":"div.tab","title":"","stop":true,"rect":[161.90625,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":30,"focused":{"element":"div.tab","title":"","stop":true,"rect":[351.96875,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":31,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"all-back","index":32,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-shell","traverse":"all-back","index":33,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"to-title","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-shell","traverse":"to-title","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"to-title","index":2,"focused":{"element":"div.tab","title":"","stop":true,"rect":[351.96875,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"title-entered","index":0,"focused":null}
+{"scenario":"traverse-shell","traverse":"title-entered-next","index":0,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"title-entered-next","index":1,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"title-entered-previous","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-shell","traverse":"to-end","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-shell","traverse":"to-end","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"to-end","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"to-end","index":3,"focused":{"element":"div.tab","title":"","stop":true,"rect":[530.90625,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"to-end","index":4,"focused":{"element":"div.tab","title":"","stop":true,"rect":[709.84375,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"to-end","index":5,"focused":{"element":"div.tab","title":"","stop":true,"rect":[888.78125,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"to-end","index":6,"focused":{"element":"div.tab","title":"","stop":true,"rect":[519.71875,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"to-end","index":7,"focused":{"element":"div.tab","title":"","stop":true,"rect":[698.65625,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"to-end","index":8,"focused":{"element":"div.tab","title":"","stop":true,"rect":[877.59375,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"to-end","index":9,"focused":{"element":"div.tab","title":"","stop":true,"rect":[729.53125,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"title-space","index":0,"focused":null}
+{"scenario":"traverse-shell","traverse":"search","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-shell","traverse":"control","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-shell","traverse":"command","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-shell","traverse":"alt","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-shell","traverse":"close","index":0,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"close","index":1,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"close","index":2,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"closed","index":0,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"closed-next","index":0,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"play","index":0,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"play","index":1,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"play","index":2,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"play","index":3,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"playing","index":0,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"playing-next","index":0,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"paused","index":0,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"play-enter","index":0,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"play-enter","index":1,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"play-enter","index":2,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"play-enter","index":3,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"play-entered","index":0,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"pause","index":0,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"pause-entered","index":0,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"pause-entered-previous","index":0,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"side-bar","index":0,"focused":null}
+{"scenario":"traverse-shell","traverse":"side-bar-next","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-shell","traverse":"side-bar-previous","index":0,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"field","index":0,"focused":null}
+{"scenario":"traverse-shell","traverse":"field-next","index":0,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"field-previous","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-shell","traverse":"tab-bar","index":0,"focused":{"element":"div.tab-bar-scroll","title":"","stop":false,"rect":[310,0,598,50],"ring":false}}
+{"scenario":"traverse-shell","traverse":"tab-bar-next","index":0,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[539.15625,452.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"tab-bar-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[728.65625,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"timeline","index":0,"focused":{"element":"div.line-graph-scroll","title":"","stop":false,"rect":[345,58,710,357],"ring":false}}
+{"scenario":"traverse-shell","traverse":"timeline-next","index":0,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[539.15625,452.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"timeline-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[728.65625,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"canvas","index":0,"focused":{"element":"div.line-graph-scroll","title":"","stop":false,"rect":[345,58,710,357],"ring":false}}
+{"scenario":"traverse-shell","traverse":"canvas-next","index":0,"focused":{"element":"button.edit","title":"Edit settings","stop":true,"rect":[539.15625,452.5,25,25],"ring":true}}
+{"scenario":"traverse-shell","traverse":"canvas-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,178.9375,32],"ring":true}}
+{"scenario":"traverse-shell","traverse":"handle","index":0,"focused":null}
+{"scenario":"traverse-shell","traverse":"handle-next","index":0,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-shell","traverse":"handle-previous","index":0,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[804.8125,482.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-statistics","traverse":"all","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,87.90625,32],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":5,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":6,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":7,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":8,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,513.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":9,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,513.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":10,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,513.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":11,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,543.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":12,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,543.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":13,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,543.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":14,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,573.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":15,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,573.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":16,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,573.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":17,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,603.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":18,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,603.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":19,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,603.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":20,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,624.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":21,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,624.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":22,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,624.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":23,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,592.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":24,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,592.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":25,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,592.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":26,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,622.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":27,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,622.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":28,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,622.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":29,"focused":{"element":"select.time-range","title":"Select time range","stop":true,"rect":[930,480,140,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":30,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"-2"}}
+{"scenario":"traverse-statistics","traverse":"all","index":31,"focused":{"element":"input.range-max","title":"Maximum histogram value","stop":true,"rect":[1011,540,78,21],"ring":false,"value":"12.5"}}
+{"scenario":"traverse-statistics","traverse":"all","index":32,"focused":{"element":"input.step-size","title":"Histogram step size","stop":true,"rect":[926,600,148,21],"ring":false,"value":"0.5"}}
+{"scenario":"traverse-statistics","traverse":"all","index":33,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":34,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":35,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":36,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":37,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":38,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all","index":39,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":0,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":1,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":2,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":3,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":4,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":5,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":6,"focused":{"element":"input.step-size","title":"Histogram step size","stop":true,"rect":[926,600,148,21],"ring":false,"value":"0.5"}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":7,"focused":{"element":"input.range-max","title":"Maximum histogram value","stop":true,"rect":[1011,540,78,21],"ring":false,"value":"12.5"}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":8,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"-2"}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":9,"focused":{"element":"select.time-range","title":"Select time range","stop":true,"rect":[930,480,140,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":10,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,622.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":11,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,622.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":12,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,622.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":13,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,592.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":14,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,592.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":15,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,592.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":16,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,562.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":17,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,562.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":18,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,562.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":19,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,532.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":20,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,532.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":21,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,532.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":22,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,502.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":23,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,502.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":24,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,502.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":25,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,479.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":26,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,479.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":27,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,479.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":28,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,513.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":29,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,513.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":30,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,513.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":31,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":32,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":33,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":34,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":35,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":36,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,87.90625,32],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":37,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":38,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-statistics","traverse":"all-back","index":39,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"type","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-statistics","traverse":"type","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"type","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,87.90625,32],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"type","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"type","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"type","index":5,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"type","index":6,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"type","index":7,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"type","index":8,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,513.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"type","index":9,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,513.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"type","index":10,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,513.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"type","index":11,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,543.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"type","index":12,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,543.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"type","index":13,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,543.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-statistics","traverse":"last","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,87.90625,32],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":5,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":6,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":7,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":8,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,513.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":9,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,513.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":10,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,513.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":11,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,543.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":12,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,543.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":13,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,543.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":14,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,573.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":15,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,573.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":16,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,573.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":17,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,603.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":18,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,603.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":19,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,603.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":20,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,624.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":21,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,624.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":22,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,624.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":23,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,592.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":24,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,592.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":25,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,592.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":26,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,622.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"last","index":27,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,622.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"range","index":0,"focused":{"element":"button.remove","title":"Remove field","stop":true,"rect":[857.5,622.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"range","index":1,"focused":{"element":"select.time-range","title":"Select time range","stop":true,"rect":[930,480,140,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"typed","index":0,"focused":{"element":"input.range-min","title":"Minimum histogram value","stop":true,"rect":[911,540,78,21],"ring":false,"value":"-2"}}
+{"scenario":"traverse-statistics","traverse":"typed-back","index":0,"focused":{"element":"select.time-range","title":"Select time range","stop":true,"rect":[930,480,140,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"values","index":0,"focused":{"element":"div.stats-values-container","title":"","stop":false,"rect":[300,50,400,400],"ring":false}}
+{"scenario":"traverse-statistics","traverse":"values-next","index":0,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"values-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,87.90625,32],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"histogram","index":0,"focused":null}
+{"scenario":"traverse-statistics","traverse":"histogram-next","index":0,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"histogram-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,87.90625,32],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"setting-title","index":0,"focused":null}
+{"scenario":"traverse-statistics","traverse":"setting-title-next","index":0,"focused":{"element":"input.step-size","title":"Histogram step size","stop":true,"rect":[926,600,148,21],"ring":false,"value":"0.5"}}
+{"scenario":"traverse-statistics","traverse":"setting-title-previous","index":0,"focused":{"element":"input.range-max","title":"Maximum histogram value","stop":true,"rect":[1011,540,78,21],"ring":false,"value":"12.5"}}
+{"scenario":"traverse-statistics","traverse":"clear","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-statistics","traverse":"clear","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"clear","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,87.90625,32],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"clear","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"cleared","index":0,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"cleared-next","index":0,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,452.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"cleared-next","index":1,"focused":{"element":"button.type","title":"Edit field configuration","stop":true,"rect":[302.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-statistics","traverse":"cleared-next","index":2,"focused":{"element":"button.hide","title":"Hide field","stop":true,"rect":[832.5,482.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-table","traverse":"all","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,88.4375,32],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":3,"focused":{"element":"input.data-table-jump-input","title":"Go to timestamp","stop":true,"rect":[304,54.5,64,21],"ring":false,"value":""}}
+{"scenario":"traverse-table","traverse":"all","index":4,"focused":{"element":"button.data-table-jump-button","title":"Go to timestamp","stop":true,"rect":[370,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":5,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[546,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":6,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[722,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":7,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[898,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":8,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[1074,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":9,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[706,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":10,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[882,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":11,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[1058,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":12,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":13,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":14,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":15,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":16,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":17,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":18,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":19,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":20,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":21,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,11,28,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":22,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all","index":23,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-table","traverse":"all-back","index":0,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":1,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,11,28,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":2,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,11,28,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":3,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":4,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":5,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":6,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":7,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":8,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":9,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":10,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":11,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[1058,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":12,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[882,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":13,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[706,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":14,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[530,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":15,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[354,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":16,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[680,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":17,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[504,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":18,"focused":{"element":"button.data-table-jump-button","title":"Go to timestamp","stop":true,"rect":[370,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":19,"focused":{"element":"input.data-table-jump-input","title":"Go to timestamp","stop":true,"rect":[304,54.5,64,21],"ring":false,"value":""}}
+{"scenario":"traverse-table","traverse":"all-back","index":20,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,88.4375,32],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":21,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-table","traverse":"all-back","index":22,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-table","traverse":"all-back","index":23,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"jump","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-table","traverse":"jump","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-table","traverse":"jump","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,88.4375,32],"ring":true}}
+{"scenario":"traverse-table","traverse":"jump","index":3,"focused":{"element":"input.data-table-jump-input","title":"Go to timestamp","stop":true,"rect":[304,54.5,64,21],"ring":false,"value":""}}
+{"scenario":"traverse-table","traverse":"jumped","index":0,"focused":{"element":"input.data-table-jump-input","title":"Go to timestamp","stop":true,"rect":[304,54.5,64,21],"ring":false,"value":"3"}}
+{"scenario":"traverse-table","traverse":"jump-button","index":0,"focused":{"element":"button.data-table-jump-button","title":"Go to timestamp","stop":true,"rect":[370,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"delete","index":0,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[504,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"delete","index":1,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[680,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"delete","index":2,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[856,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"delete","index":3,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[1032,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"delete","index":4,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[706,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"delete","index":5,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[882,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"deleted","index":0,"focused":null}
+{"scenario":"traverse-table","traverse":"deleted-next","index":0,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[546,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"rows","index":0,"focused":null}
+{"scenario":"traverse-table","traverse":"rows-next","index":0,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"rows-previous","index":0,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[1058,52.5,25,25],"ring":true}}
+{"scenario":"traverse-table","traverse":"header","index":0,"focused":null}
+{"scenario":"traverse-table","traverse":"header-next","index":0,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-table","traverse":"header-previous","index":0,"focused":{"element":"button.data-table-key-delete","title":"","stop":true,"rect":[1058,52.5,25,25],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-video","traverse":"empty","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,95.875,32],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty","index":3,"focused":{"element":"button","title":"Open local video file","stop":true,"rect":[312,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty","index":4,"focused":{"element":"button","title":"Paste YouTube video URL","stop":true,"rect":[388,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty","index":5,"focused":{"element":"button","title":"Download match video from The Blue Alliance","stop":true,"rect":[464,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty","index":6,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty","index":7,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty","index":8,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty","index":9,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty","index":10,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty","index":11,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty","index":12,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty","index":13,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,11,28,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty-back","index":0,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty-back","index":1,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty-back","index":2,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty-back","index":3,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty-back","index":4,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty-back","index":5,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty-back","index":6,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty-back","index":7,"focused":{"element":"button","title":"Download match video from The Blue Alliance","stop":true,"rect":[464,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty-back","index":8,"focused":{"element":"button","title":"Paste YouTube video URL","stop":true,"rect":[388,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty-back","index":9,"focused":{"element":"button","title":"Open local video file","stop":true,"rect":[312,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty-back","index":10,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,95.875,32],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty-back","index":11,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-video","traverse":"empty-back","index":12,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-video","traverse":"empty-back","index":13,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-video","traverse":"all","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,95.875,32],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":3,"focused":{"element":"button","title":"Open local video file","stop":true,"rect":[312,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":4,"focused":{"element":"button","title":"Paste YouTube video URL","stop":true,"rect":[388,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":5,"focused":{"element":"button","title":"Download match video from The Blue Alliance","stop":true,"rect":[464,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":6,"focused":{"element":"button","title":"Lock video timeline synchronization","stop":true,"rect":[545,571.25,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":7,"focused":{"element":"input.video-timeline-slider","title":"Video timeline","stop":true,"rect":[580,570,515,25],"ring":false}}
+{"scenario":"traverse-video","traverse":"all","index":8,"focused":{"element":"button","title":"Go back 5 seconds","stop":true,"rect":[734.8125,613.75,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":9,"focused":{"element":"button","title":"Previous frame","stop":true,"rect":[769.90625,613.75,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":10,"focused":{"element":"button","title":"Play video","stop":true,"rect":[805,613.75,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":11,"focused":{"element":"button","title":"Next frame","stop":true,"rect":[840.09375,613.75,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":12,"focused":{"element":"button","title":"Go forward 5 seconds","stop":true,"rect":[875.1875,613.75,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":13,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":14,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":15,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":16,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":17,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":18,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"all","index":19,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,11,28,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":0,"focused":{"element":"button","title":"Help menu","stop":true,"rect":[232.921875,5,38.078125,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":1,"focused":{"element":"button","title":"Window menu","stop":true,"rect":[172.578125,5,60.34375,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":2,"focused":{"element":"button","title":"Tabs menu","stop":true,"rect":[133.71875,5,38.859375,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":3,"focused":{"element":"button","title":"View menu","stop":true,"rect":[94.3125,5,39.40625,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":4,"focused":{"element":"button","title":"File menu","stop":true,"rect":[62.90625,5,31.40625,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":5,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":6,"focused":{"element":"button","title":"Go forward 5 seconds","stop":true,"rect":[875.1875,613.75,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":7,"focused":{"element":"button","title":"Next frame","stop":true,"rect":[840.09375,613.75,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":8,"focused":{"element":"button","title":"Play video","stop":true,"rect":[805,613.75,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":9,"focused":{"element":"button","title":"Previous frame","stop":true,"rect":[769.90625,613.75,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":10,"focused":{"element":"button","title":"Go back 5 seconds","stop":true,"rect":[734.8125,613.75,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":11,"focused":{"element":"input.video-timeline-slider","title":"Video timeline","stop":true,"rect":[580,570,515,25],"ring":false}}
+{"scenario":"traverse-video","traverse":"all-back","index":12,"focused":{"element":"button","title":"Lock video timeline synchronization","stop":true,"rect":[545,571.25,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":13,"focused":{"element":"button","title":"Download match video from The Blue Alliance","stop":true,"rect":[464,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":14,"focused":{"element":"button","title":"Paste YouTube video URL","stop":true,"rect":[388,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":15,"focused":{"element":"button","title":"Open local video file","stop":true,"rect":[312,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":16,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,95.875,32],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":17,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-video","traverse":"all-back","index":18,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-video","traverse":"all-back","index":19,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,11,28,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"lock","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-video","traverse":"lock","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,10,41.96875,32],"ring":true}}
+{"scenario":"traverse-video","traverse":"lock","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,95.875,32],"ring":true}}
+{"scenario":"traverse-video","traverse":"lock","index":3,"focused":{"element":"button","title":"Open local video file","stop":true,"rect":[312,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"lock","index":4,"focused":{"element":"button","title":"Paste YouTube video URL","stop":true,"rect":[388,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"lock","index":5,"focused":{"element":"button","title":"Download match video from The Blue Alliance","stop":true,"rect":[464,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"lock","index":6,"focused":{"element":"button","title":"Lock video timeline synchronization","stop":true,"rect":[545,571.25,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"locked","index":0,"focused":null}
+{"scenario":"traverse-video","traverse":"locked-next","index":0,"focused":{"element":"button","title":"Unlock video timeline synchronization","stop":true,"rect":[545,571.25,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"unlocked","index":0,"focused":null}
+{"scenario":"traverse-video","traverse":"unlocked-previous","index":0,"focused":{"element":"button","title":"Lock video timeline synchronization","stop":true,"rect":[545,571.25,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"slider","index":0,"focused":{"element":"input.video-timeline-slider","title":"Video timeline","stop":true,"rect":[580,570,515,25],"ring":false}}
+{"scenario":"traverse-video","traverse":"frame","index":0,"focused":{"element":"button","title":"Go back 5 seconds","stop":true,"rect":[734.8125,613.75,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"frame","index":1,"focused":{"element":"button","title":"Previous frame","stop":true,"rect":[769.90625,613.75,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"frame-entered","index":0,"focused":{"element":"button","title":"Previous frame","stop":true,"rect":[769.90625,613.75,30,30],"ring":true}}
+{"scenario":"traverse-video","traverse":"video","index":0,"focused":null}
+{"scenario":"traverse-video","traverse":"video-next","index":0,"focused":{"element":"button","title":"Open local video file","stop":true,"rect":[312,577.75,64,59.5],"ring":true}}
+{"scenario":"traverse-video","traverse":"video-previous","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[351.96875,10,95.875,32],"ring":true}}
+{"scenario":"traverse-video","traverse":"video-controls","index":0,"focused":{"element":"button","title":"Go forward 5 seconds","stop":true,"rect":[875.1875,613.75,30,30],"ring":false}}
+{"scenario":"traverse-video","traverse":"video-controls-next","index":0,"focused":{"element":"button","title":"App menu","stop":true,"rect":[29,5,33.90625,28],"ring":true}}
+{"scenario":"traverse-video","traverse":"video-controls-previous","index":0,"focused":{"element":"button","title":"Next frame","stop":true,"rect":[840.09375,613.75,30,30],"ring":true}}

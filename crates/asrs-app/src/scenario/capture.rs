@@ -161,7 +161,7 @@ pub fn focused(window: &Window, cx: &App) -> String {
     ]
     .map(f32::from);
     let input = match cx.try_global::<FocusedInput>() {
-        Some(input) if input::focused(window) => {
+        Some(input) if input.handle == handle => {
             let value = asrs_js::json::stringify(&JsValue::string(&input.value))
                 .ok()
                 .flatten()

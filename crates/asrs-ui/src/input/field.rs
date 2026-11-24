@@ -661,6 +661,13 @@ impl<M: FieldModel> TextField<M> {
     }
 }
 
+/// Runs an action of the editor's, which its crate does not export.
+fn select_to(action: &str, window: &mut Window, cx: &mut App) {
+    if let Ok(action) = cx.build_action(action, None) {
+        window.dispatch_action(action, cx);
+    }
+}
+
 impl<M: FieldModel> Render for TextField<M> {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let scale = window.scale_factor();
@@ -766,7 +773,7 @@ impl<M: FieldModel> Render for TextField<M> {
             .id("text-field")
             .key_context(match self.kind {
                 FieldKind::Number => super::NUMBER_CONTEXT,
-                FieldKind::Text | FieldKind::Search => super::CONTEXT,
+                FieldKind::Text | FieldKind::Search => super::TEXT_CONTEXT,
             })
             .on_action(cx.listener(|this, _: &super::StepUp, window, cx| {
                 this.arrow_key(true, window, cx);
@@ -775,6 +782,12 @@ impl<M: FieldModel> Render for TextField<M> {
                 this.arrow_key(false, window, cx);
             }))
             .on_action(|_: &super::StepNone, _, _| {})
+            .on_action(|_: &super::ExtendUp, window, cx| {
+                select_to("input::SelectToStart", window, cx);
+            })
+            .on_action(|_: &super::ExtendDown, window, cx| {
+                select_to("input::SelectToEnd", window, cx);
+            })
             .capture_action(cx.listener(Self::paste))
             .capture_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::delete_selection))
@@ -848,6 +861,7 @@ impl<M: FieldModel> Render for TextField<M> {
             });
         }
         if focused {
+            let handle = self.focus_handle(cx);
             let value = self.value.value();
             let editor = self.editor.read(cx);
             let (text, selected) = (editor.value(), editor.selected_range());
@@ -859,6 +873,7 @@ impl<M: FieldModel> Render for TextField<M> {
                     move |bounds, _, cx| {
                         crate::parity::record_mask(cx, crate::parity::FOCUSED_INPUT, bounds);
                         crate::parity::record_focused_input(cx, || crate::parity::FocusedInput {
+                            handle,
                             value,
                             selection,
                         });

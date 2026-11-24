@@ -3,12 +3,14 @@
 
 use crate::json::Json;
 
-/// The port's elements sit on whole device pixels.
+/// The port's elements sit on whole device pixels, to which their origins and their sizes or their
+/// far edges are rounded.
 const TOLERANCE: f64 = 0.501;
 
-fn rect(focused: &Json) -> Option<Vec<f64>> {
+fn rect(focused: &Json) -> Option<[f64; 4]> {
     let rect = focused.get("rect")?.as_array()?;
-    rect.iter().map(Json::as_f64).collect()
+    let rect: Option<Vec<f64>> = rect.iter().map(Json::as_f64).collect();
+    rect?.try_into().ok()
 }
 
 /// Whether upstream's record is of an element that only a press focuses, whose focus `body` has in
@@ -19,6 +21,12 @@ fn nothing(upstream: &Json) -> bool {
 
 /// What differs between upstream's record and the port's.
 pub fn difference(upstream: &Json, port: &Json) -> Option<String> {
+    difference_beside(upstream, port, 0.0)
+}
+
+/// The same with the left and right edges up to `scrollbar` off, which is the width of one that
+/// takes space from upstream's layout and not from the port's.
+pub fn difference_beside(upstream: &Json, port: &Json, scrollbar: f64) -> Option<String> {
     if nothing(upstream) || *port == Json::Null {
         let same = nothing(upstream) && *port == Json::Null;
         return (!same).then(|| format!("{upstream:?} upstream, {port:?} on the port"));
@@ -26,13 +34,14 @@ pub fn difference(upstream: &Json, port: &Json) -> Option<String> {
     let (Some(theirs), Some(ours)) = (rect(upstream), rect(port)) else {
         return Some(format!("no box in {upstream:?} or {port:?}"));
     };
-    let close = theirs.len() == ours.len()
-        && theirs
-            .iter()
-            .zip(&ours)
-            .all(|(t, o)| (t - o).abs() <= TOLERANCE);
+    let close = [(0, scrollbar), (1, 0.0)].into_iter().all(|(axis, more)| {
+        let near = |t: f64, o: f64| (t - o).abs() <= TOLERANCE + more;
+        let (t, o) = (theirs[axis], ours[axis]);
+        let (t_size, o_size) = (theirs[axis + 2], ours[axis + 2]);
+        near(t, o) && (near(t_size, o_size) || near(t + t_size, o + o_size))
+    });
     if !close {
-        return Some(format!("{upstream:?} upstream, at {ours:?} on the port"));
+        return Some(format!("{upstream:?} upstream, {port:?} on the port"));
     }
     // Records from before `stop` was kept have no values either.
     let keys = match upstream.get("stop") {
@@ -41,7 +50,9 @@ pub fn difference(upstream: &Json, port: &Json) -> Option<String> {
     };
     for key in keys {
         if upstream.get(key) != port.get(key) {
-            return Some(format!("{key}: {upstream:?} upstream, {port:?} on the port"));
+            return Some(format!(
+                "{key}: {upstream:?} upstream, {port:?} on the port"
+            ));
         }
     }
     None
@@ -67,9 +78,11 @@ mod tests {
         ] {
             assert_eq!(difference(&theirs, &json(ours)).is_none(), same, "{ours}");
         }
-        let field = json(r#"{"stop":true,"rect":[0,1,2,3],"ring":false,"value":"a","selection":[0,1]}"#);
+        let field =
+            json(r#"{"stop":true,"rect":[0,1,2,3],"ring":false,"value":"a","selection":[0,1]}"#);
         for (ours, same) in [(r#"[0,1]"#, true), (r#"[1,1]"#, false)] {
-            let ours = format!(r#"{{"rect":[0,1,2,3],"ring":false,"value":"a","selection":{ours}}}"#);
+            let ours =
+                format!(r#"{{"rect":[0,1,2,3],"ring":false,"value":"a","selection":{ours}}}"#);
             assert_eq!(difference(&field, &json(&ours)).is_none(), same, "{ours}");
         }
         let overlay = json(r#"{"stop":false,"rect":[0,1,2,3],"ring":false}"#);

@@ -832,11 +832,10 @@ impl<H: FrameHost> HubFrame<H> {
         }
         let headers = headers.finish();
         let columns_place = place("columns", window, cx);
-        let mut header = div().absolute().inset_0().child(
-            focus::hidden(&columns_place)
-                .tab_group()
-                .tab_index(2),
-        );
+        let mut header = div()
+            .absolute()
+            .inset_0()
+            .child(focus::hidden(&columns_place).tab_group().tab_index(2));
         let mut deletes = Vec::new();
         let mut cell_places = Vec::new();
         for (index, field) in view.headers.iter().enumerate() {
@@ -897,7 +896,7 @@ impl<H: FrameHost> HubFrame<H> {
                 let id = format!("table-close-{shown_key:?}-{headers:x}-{index}");
                 let delete = focus::place(SharedString::from(format!("{id}-focus")), window, cx);
                 cell_places.push(delete.clone());
-                deletes.push((delete.clone(), [left, w]));
+                deletes.push((delete.clone(), [left, w - cell_border]));
                 let button = IconButton::new(SharedString::from(id), symbol("close.svg"))
                     .title("")
                     .blurred(blurred)

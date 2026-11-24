@@ -905,6 +905,11 @@ impl<H: FrameHost> HubFrame<H> {
                 });
             items = items.child(row);
         }
+        // The last item's texts start below its border, over its bottom by as much.
+        let last = list.items.last().filter(|i| i.preview_shown != Some(true));
+        if last.is_some() && layout.item_border_top(count - 1) > 0.0 {
+            items = items.child(div().flex_none().h(px(1.0)));
+        }
         element = element.child(items);
 
         if list.hand_icon {
