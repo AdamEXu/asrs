@@ -251,12 +251,12 @@ async fn full_screen(check: &Check, cx: &mut AsyncApp) {
         assert_eq!(read, Some(expected), "{name}");
         assert_eq!(*seen.borrow(), changes, "{name}");
     }
-    drop(observer);
+    observer.stop();
     check.update(cx, |_, window, _| {
         probe::post_window_notification(window, steps[1].0);
     });
     settle(cx).await;
-    assert_eq!(*seen.borrow(), [true, false], "after it is dropped");
+    assert_eq!(*seen.borrow(), [true, false], "after it is stopped");
 }
 
 async fn quitting(check: &Check, cx: &mut AsyncApp) {
