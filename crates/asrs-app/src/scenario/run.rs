@@ -1183,8 +1183,11 @@ impl Variant<'_> {
                 let forced = ForcedActive(*active);
                 self.headless.context().update(|cx| cx.set_global(forced));
                 let window = self.active();
-                // GPUI gives an inactive window no focus events, and upstream's page gets them.
-                if *active && window == self.window() {
+                // GPUI gives an inactive window no focus events, and upstream's page gets them. An
+                // active one draws its editor's selection, which captures do not compare.
+                let traverses = |action: &Action| matches!(action, Action::Traverse { .. });
+                let traversed = self.scenario.actions.iter().any(traverses);
+                if *active && traversed && window == self.window() {
                     self.headless
                         .context()
                         .update_window(window, |_, window, _| window.activate_window())
