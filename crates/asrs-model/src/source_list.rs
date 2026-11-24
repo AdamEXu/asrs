@@ -1202,6 +1202,7 @@ impl SourceList {
             }
             None => {
                 self.render(env, &new_state)?;
+                self.remember(env, &new_state)?;
             }
         }
         if prompt.is_child {
@@ -1396,23 +1397,36 @@ impl SourceList {
     }
 
     fn update_item(&mut self, env: &mut Env<'_>, index: usize) -> Result {
-        let (rendered, type_width) = self.render(env, &self.state[index].clone())?;
+        let (rendered, type_width) = self.render(env, &self.state[index])?;
         let view = &mut self.items[index].view;
         view.rendered = Some(rendered);
         view.type_width = Some(type_width);
-        Ok(())
+        self.remember(env, &self.state[index])
     }
 
-    /// `updateItem`'s computation, including its type-memory write; also the `--type-width`.
+    /// The end of `updateItem`, which throws with the item already drawn.
+    fn remember(&self, env: &mut Env<'_>, state: &SourceListItemState) -> Result {
+        let Some(id) = &self.config.type_memory_id else {
+            return Ok(());
+        };
+        let entry = ops::object([
+            ("type", state.member("type")?),
+            ("options", state.member("options")?),
+        ]);
+        remember(env.type_memory, id, &state.log_key, entry)
+    }
+
+    /// `updateItem`'s computation; also the `--type-width`.
     fn render(
         &self,
         env: &mut Env<'_>,
         state: &SourceListItemState,
     ) -> Result<(RenderedItem, f64)> {
-        let item_type = state.member("type")?;
-        let type_config = self
-            .type_config(&state.item_type)
-            .ok_or_else(|| SourceListError::UnknownType(ops::to_string(&item_type)))?;
+        state.require("type")?;
+        let Some(type_config) = self.type_config(&state.item_type) else {
+            let item_type = state.member("type")?;
+            return Err(SourceListError::UnknownType(ops::to_string(&item_type)));
+        };
 
         let color = if type_config.color.starts_with('#') {
             match (&type_config.dark_color, env.dark) {
@@ -1464,11 +1478,6 @@ impl SourceList {
         let mut type_width = env.dom.type_name_width(&type_name);
         if type_width > 0.0 {
             type_width += 3.0;
-        }
-
-        if let Some(id) = &self.config.type_memory_id {
-            let entry = ops::object([("type", item_type), ("options", state.member("options")?)]);
-            remember(env.type_memory, id, &state.log_key, entry)?;
         }
 
         let rendered = RenderedItem {

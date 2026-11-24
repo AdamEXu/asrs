@@ -645,6 +645,234 @@
         "capture": [
           "sourceLists"
         ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([null])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 2
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": {\"bumpers\": \"\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 2
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": null}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": {\"bumpers\": \"\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 2
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": \"abc\"}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": {\"bumpers\": \"\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 2
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": 5}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": {\"bumpers\": \"\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 2
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": {\"units\": \"degrees\", \"bumpers\": \"\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": {\"bumpers\": \"\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "main": "restore-type-memory",
+        "data": null
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "main": "restore-type-memory",
+        "data": 5
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "main": "restore-type-memory",
+        "data": "abc"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": null
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": 5
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
       }
     ]
   }
