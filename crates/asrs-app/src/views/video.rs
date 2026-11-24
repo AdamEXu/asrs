@@ -202,14 +202,18 @@ impl Control {
     }
 }
 
-/// A CSS length in LayoutUnits, truncated as `LayoutUnit(float)` truncates.
-fn lu(v: f64) -> f64 {
-    math::trunc(v * 64.0) / 64.0
+/// A CSS length in LayoutUnits, which are 1/64 device px, truncated as `LayoutUnit(float)`
+/// truncates.
+fn lu(v: f64, scale: f64) -> f64 {
+    math::trunc(v * scale * 64.0) / 64.0 / scale
 }
 
 /// `percent` of `v` as `MinimumValueForLength` resolves it, in single precision.
-fn percent(v: f64, percent: f64) -> f64 {
-    lu(f64::from((v * percent / 100.0) as f32))
+fn percent(v: f64, percent: f64, scale: f64) -> f64 {
+    lu(
+        f64::from((v * scale * percent / 100.0) as f32) / scale,
+        scale,
+    )
 }
 
 /// Where the controls sit in `div.controls-content`, in client coordinates.
@@ -228,7 +232,8 @@ struct ControlsLayout {
 
 impl ControlsLayout {
     /// `space` is the width of the white space between two inline buttons.
-    fn new([x, y, w, h]: [f64; 4], transport: usize, space: f64) -> ControlsLayout {
+    fn new([x, y, w, h]: [f64; 4], transport: usize, space: f64, scale: f64) -> ControlsLayout {
+        let percent = |v, share| percent(v, share, scale);
         let source_width = percent(w, 30.0);
         let button_width = percent(source_width, 80.0 / 3.0);
         let button_top = y + percent(h, 15.0);
@@ -248,7 +253,7 @@ impl ControlsLayout {
             math::max2(half - 2.0 * TIMELINE_INSET, 0.0),
         ];
         let line = BUTTON * transport as f64 + space * (transport as f64 - 1.0);
-        let first = sync + lu(math::max2(sync_width - line, 0.0) / 2.0);
+        let first = sync + lu(math::max2(sync_width - line, 0.0) / 2.0, scale);
         ControlsLayout {
             source: [x, y, source_width + 1.0, h],
             sources,
@@ -273,10 +278,10 @@ impl ControlsLayout {
 
 /// The used width of `VIDEO_TIMELINE_PROGRESS` in a container `width` px wide. Without a
 /// `width` the empty box shrinks to nothing.
-fn progress_width(style: &JsString, width: f64) -> f64 {
+fn progress_width(style: &JsString, width: f64, scale: f64) -> f64 {
     let style = style.to_string_lossy();
     let share = style.strip_suffix('%').and_then(|v| v.parse::<f64>().ok());
-    share.map_or(0.0, |share| math::max2(percent(width, share), 0.0))
+    share.map_or(0.0, |share| math::max2(percent(width, share, scale), 0.0))
 }
 
 /// The stroke of a source button, as its transition and animation leave it.
@@ -790,12 +795,12 @@ impl<H: FrameHost> HubFrame<H> {
         )])
         .expect("body font");
         space.white_space = WhiteSpace::Pre;
-        let space = lu(text::measure(cx, &space, " ", scale).0);
+        let space = text::measure(cx, &space, " ", scale).0;
         let transport: Vec<Control> = Control::TRANSPORT
             .into_iter()
             .filter(|c| !c.hidden(buttons))
             .collect();
-        let layout = ControlsLayout::new(controls, transport.len(), space);
+        let layout = ControlsLayout::new(controls, transport.len(), space, f64::from(scale));
 
         let snap = |v: f64| math::floor(v * f64::from(scale) + 0.5) / f64::from(scale);
         let at = move |[x, y, w, h]: [f64; 4]| {
@@ -883,7 +888,7 @@ impl<H: FrameHost> HubFrame<H> {
             slider.set_clip(TIMELINE_RADIUS as f32, layout.timeline[3] as f32);
         });
         let [mx, my, mw, mh] = layout.marker;
-        let filled = [mx, my, progress_width(&progress, mw), mh];
+        let filled = [mx, my, progress_width(&progress, mw, f64::from(scale)), mh];
         let clip = layout.timeline;
         let marker = canvas(
             |_, _, _| {},
@@ -987,7 +992,7 @@ mod tests {
     /// Blink's boxes in the `video` scenario at 1100x650.
     #[test]
     fn controls_sit_where_blink_lays_them_out() {
-        let layout = ControlsLayout::new([300.0, 565.0, 800.0, 85.0], 5, 4.1875);
+        let layout = ControlsLayout::new([300.0, 565.0, 800.0, 85.0], 5, 4.1875, 1.0);
         assert_eq!(layout.source, [300.0, 565.0, 241.0, 85.0]);
         assert_eq!(
             layout.sources,
@@ -1003,9 +1008,27 @@ mod tests {
         );
     }
 
+    /// Blink's boxes in the `video` scenario on Windows, where a space is 4.3828125 px wide before
+    /// it is rounded up to a LayoutUnit.
+    #[test]
+    fn controls_sit_on_the_device_grid() {
+        let transport = |space, scale| {
+            ControlsLayout::new([300.0, 565.0, 800.0, 85.0], 5, space, scale).transport
+        };
+        let boxes = |left: [f64; 5]| left.map(|x| [x, 613.75, 30.0, 30.0]);
+        assert_eq!(
+            transport(4.390625, 1.0),
+            boxes([736.21875, 770.609375, 805.0, 839.390625, 873.78125])
+        );
+        assert_eq!(
+            transport(4.3828125, 2.0),
+            boxes([736.234375, 770.6171875, 805.0, 839.3828125, 873.765625])
+        );
+    }
+
     #[test]
     fn progress_is_a_share_of_the_track() {
-        let width = |s: &str| progress_width(&JsString::from(s), 515.0);
+        let width = |s: &str| progress_width(&JsString::from(s), 515.0, 1.0);
         assert_eq!(width("50%"), 257.5);
         assert_eq!(width(""), 0.0);
         assert_eq!(width("120%"), 618.0);
