@@ -7,6 +7,7 @@
 #[path = "support/hub_page.rs"]
 mod hub_page;
 
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -208,6 +209,38 @@ impl Page<'_> {
         self.frames(1);
     }
 
+    /// The window as it is drawn now.
+    fn shot(&mut self) -> Vec<[u8; 4]> {
+        let window = self.window.into();
+        let image = self.headless.context().capture_screenshot(window);
+        let pixels = image.expect("a screenshot").into_raw();
+        pixels.as_chunks::<4>().0.to_vec()
+    }
+
+    fn one_frame(&mut self) {
+        let cx = self.headless.context();
+        cx.advance_clock(std::time::Duration::from_millis(16));
+        cx.update_window(self.window.into(), |_, window, cx| {
+            window.simulate_next_frame(cx);
+        })
+        .expect("window");
+        cx.run_until_parked();
+    }
+
+    fn set_metadata(&mut self, time: f64, value: &str) {
+        self.model(|model| {
+            let key = JsString::from("/RealMetadata/Key");
+            let mut log = model.page().shared_log().borrow_mut();
+            log.put_string(&key, time, JsString::from(value));
+        });
+        self.model(|model| {
+            let (tabs, page) = model.tabs_mut();
+            let index = tabs.selected_index().expect("a selected tab");
+            let tab = tabs.tab_mut(index).expect("the tab");
+            tab.controller.refresh(page).expect("refresh");
+        });
+    }
+
     fn copied(&mut self) -> String {
         self.headless.context().update(|cx| {
             cx.write_to_clipboard(ClipboardItem::new_string(String::new()));
@@ -267,6 +300,34 @@ fn selected_text_survives_new_lines(headless: &mut HeadlessCapture, scale: f32) 
     page.close();
 }
 
+/// `selectAllChildren` of the body: no text node of the table is an end of it.
+fn selecting_all_survives_a_rebuilt_table(headless: &mut HeadlessCapture, scale: f32) {
+    let mut page = Page::open(headless, scale);
+    page.set_metadata(0.0, "first");
+    page.open_tab(TabType::Metadata, &JsValue::Null);
+    page.frames(3);
+    let plain = page.shot();
+    page.key("a");
+    page.frames(2);
+    let selected = page.shot();
+    let mut counts = HashMap::new();
+    for (before, after) in plain.iter().zip(&selected) {
+        if before != after {
+            *counts.entry(*after).or_insert(0) += 1;
+        }
+    }
+    let (color, area) = counts.into_iter().max_by_key(|e| e.1).expect("selected");
+    page.set_metadata(1.0, "other");
+    page.one_frame();
+    let left = page.shot().iter().filter(|p| **p == color).count();
+    assert!(
+        left > area / 2,
+        "{scale}x: {left} of {area} pixels selected"
+    );
+    assert_eq!(page.copied(), "other", "{scale}x");
+    page.close();
+}
+
 fn main() {
     if !cfg!(any(target_os = "macos", target_os = "linux")) {
         println!("hub console: skipped, no headless renderer on this platform");
@@ -280,6 +341,7 @@ fn main() {
         hiding_leaves_the_hovered_row(&mut headless, scale);
         dragging_a_field_in_fills_the_console(&mut headless, scale);
         selected_text_survives_new_lines(&mut headless, scale);
+        selecting_all_survives_a_rebuilt_table(&mut headless, scale);
     }
     println!("hub_console: ok");
 }

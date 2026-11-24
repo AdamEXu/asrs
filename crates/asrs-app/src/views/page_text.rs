@@ -245,9 +245,7 @@ impl PageSelection {
         cx: &App,
     ) -> Option<Selected> {
         if self.all {
-            if !self.state.is_all(doc) {
-                self.state.select_all(doc);
-            }
+            self.state.keep_all(doc);
             self.owner = Some(owner.clone());
         } else if self.owner.as_ref() != Some(owner) {
             return None;
@@ -302,8 +300,8 @@ impl<H: FrameHost> HubFrame<H> {
         let found = self.page_text(cx).map(|(owner, page)| {
             let shown = self.text.owner.as_ref() == Some(&owner);
             let target = if shown { &mut state } else { &mut other };
-            if self.text.all && !target.is_all(page.document()) {
-                target.select_all(page.document());
+            if self.text.all {
+                target.keep_all(page.document());
             }
             let result = f(self, target, page.as_ref());
             let all = self.text.all && target.is_all(page.document());

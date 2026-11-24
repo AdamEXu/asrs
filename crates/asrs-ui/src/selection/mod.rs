@@ -326,6 +326,14 @@ impl TextSelection {
         self.ends(doc) == document::end(doc).map(|end| [Position::default(), end])
     }
 
+    /// Keeps the whole document selected over what the page did to its text.
+    pub fn keep_all(&mut self, doc: &dyn Document) {
+        self.sync(doc);
+        if !self.is_all(doc) {
+            self.select_all(doc);
+        }
+    }
+
     /// `ExtendSelectionAsDirectional`.
     fn directional(
         &self,

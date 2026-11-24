@@ -126,6 +126,41 @@ fn hit(page: &Page, target: &Json) -> Hit {
     }
 }
 
+struct Rebuilt(Page, u64);
+
+impl Document for Rebuilt {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn text(&self, block: usize) -> Cow<'_, str> {
+        self.0.text(block)
+    }
+
+    fn place(&self, block: usize) -> Place {
+        self.0.place(block)
+    }
+
+    fn generation(&self) -> u64 {
+        self.1
+    }
+}
+
+#[test]
+fn all_stays_selected_over_new_text_of_the_same_length() {
+    let page = |text: &str| Page {
+        texts: vec!["a".to_owned(), text.to_owned()],
+        places: vec![Place::default(); 2],
+    };
+    for rebuilt in [Rebuilt(page("other"), 1), Rebuilt(page("other"), 0)] {
+        let mut state = TextSelection::new(Behavior::Mac);
+        state.select_all(&Rebuilt(page("first"), 0));
+        state.keep_all(&rebuilt);
+        state.sync(&rebuilt);
+        assert_eq!(state.text(&rebuilt).as_deref(), Some("aother"));
+    }
+}
+
 struct Replay {
     page: Page,
     behavior: Behavior,
