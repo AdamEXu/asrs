@@ -15,6 +15,7 @@ use asrs_tabs::ansi::AnsiStyle;
 use asrs_tabs::console::ConsoleNode;
 use asrs_tabs::console::controller::ConsoleGeometry;
 use asrs_tabs::console::view::ConsoleRow;
+use asrs_ui::selection::geometry;
 use asrs_ui::text::TextStyle;
 
 /// The header row: `height: 30px` and its 1 px bottom border.
@@ -75,6 +76,95 @@ impl CellNode {
 pub struct Cell {
     pub nodes: Vec<CellNode>,
     pub lines: Vec<Line>,
+}
+
+/// What a value cell renders, with `\n` for each `<br>`.
+pub fn value_text(row: &ConsoleRow) -> String {
+    let nodes = row.nodes();
+    nodes
+        .into_iter()
+        .map(|node| match node {
+            ConsoleNode::LineBreak => "\n".to_owned(),
+            ConsoleNode::Text { text, .. } => text.to_string_lossy(),
+        })
+        .collect()
+}
+
+impl Cell {
+    /// The bytes of the cell's [`value_text`] that are the link node `node` is in.
+    pub fn link_around(&self, node: usize) -> Option<(usize, usize)> {
+        let links = |node: &CellNode| matches!(node, CellNode::Text { link: true, .. });
+        let length = |node: &CellNode| match node {
+            CellNode::Text { text, .. } => text.len(),
+            CellNode::Break => 1,
+        };
+        if !links(self.nodes.get(node)?) {
+            return None;
+        }
+        let before = self.nodes[..node].iter().rposition(|n| !links(n));
+        let first = before.map_or(0, |n| n + 1);
+        let after = self.nodes[node..].iter().position(|n| !links(n));
+        let last = after.map_or(self.nodes.len(), |n| node + n);
+        let start: usize = self.nodes[..first].iter().map(length).sum();
+        let len: usize = self.nodes[first..last].iter().map(length).sum();
+        Some((start, start + len))
+    }
+
+    /// The cell's lines, for selecting. `text` is its [`value_text`] and `text_box` the top and
+    /// height of a line's text boxes in CSS px.
+    pub fn block(&self, text: &str, text_box: (f64, f64), scale: f64) -> geometry::Block {
+        let device = |css: f64| dom::lu_round((css * scale) as f32);
+        let mut starts = Vec::with_capacity(self.nodes.len());
+        let mut at = 0;
+        for node in &self.nodes {
+            starts.push(at);
+            at += match node {
+                CellNode::Text { text, .. } => text.len(),
+                CellNode::Break => 1,
+            };
+        }
+        let font = cell_font(false, false);
+        let mut next = 0;
+        let lines = self.lines.iter().enumerate().map(|(i, line)| {
+            let top = device(i as f64 * LINE_HEIGHT);
+            let pieces: Vec<_> = line
+                .pieces
+                .iter()
+                .map(|piece| {
+                    let start = starts[piece.item];
+                    let font = match &self.nodes[piece.item] {
+                        CellNode::Text { style, .. } => cell_font(style.bold, style.italic),
+                        CellNode::Break => font,
+                    };
+                    geometry::Piece {
+                        range: start + piece.range.start..start + piece.range.end,
+                        node: piece.item,
+                        x: piece.x,
+                        width: piece.width,
+                        font,
+                        tabs: piece.tabs,
+                    }
+                })
+                .collect();
+            let end = pieces.last().map_or(next, |p| p.range.end);
+            let newline = (text.as_bytes().get(end) == Some(&b'\n')).then_some(end);
+            next = newline.map_or(end, |n| n + 1);
+            geometry::Line {
+                top,
+                height: device(LINE_HEIGHT),
+                box_top: top + device(text_box.0),
+                box_height: device(text_box.1),
+                pieces,
+                newline,
+                start: 0,
+            }
+        });
+        geometry::Block {
+            lines: lines.collect(),
+            font,
+            truncates: false,
+        }
+    }
 }
 
 fn value_nodes(row: &ConsoleRow) -> Vec<CellNode> {
@@ -308,9 +398,19 @@ impl ConsoleLayout {
         self.0.borrow().scroll_top()
     }
 
+    pub fn scale(&self) -> f64 {
+        f64::from(self.0.borrow().scale)
+    }
+
     /// `scrollTop = top`.
     pub fn set_scroll_top(&self, top: f64) {
         self.0.borrow_mut().set_scroll_top(top);
+    }
+
+    /// The bottom of the table in the scrolled content.
+    pub fn table_height(&self) -> f64 {
+        let lines = self.0.borrow().tops.last().copied().unwrap_or(0);
+        HEADER_HEIGHT + lines as f64 * LINE_HEIGHT
     }
 
     /// A wheel event at `now` (ms).

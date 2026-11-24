@@ -12,6 +12,8 @@ use asrs_js::value::JsValue;
 use asrs_services::dialog::{self as services, MessageBox};
 use asrs_services::window_manager::{Platform, WindowId, WindowKind};
 use asrs_ui::gpui::{App, ClipboardItem, Window};
+use asrs_ui::platform::EditCommand;
+use asrs_ui::selection;
 
 use super::bridge::{self, MenuAction};
 use super::click::{self, ClickEnv, Effect, Failure, Reply, Then};
@@ -204,14 +206,29 @@ fn execute_role(role: &str, cx: &mut App) {
         "minimize" => on_window(cx, Window::minimize_window),
         "togglefullscreen" => on_window(cx, Window::toggle_fullscreen),
         "quit" => cx.quit(),
+        "copy" => edit(EditCommand::Copy, cx),
+        "selectall" => edit(EditCommand::SelectAll, cx),
         // A focused text field takes these keystrokes before the accelerator table sees them,
         // and with none focused Chromium's editing commands do nothing.
-        "undo" | "redo" | "cut" | "copy" | "paste" | "pasteandmatchstyle" | "delete"
-        | "selectall" => {}
+        "undo" | "redo" | "cut" | "paste" | "pasteandmatchstyle" | "delete" => {}
         "reload" | "forcereload" => show_unavailable("Reloading the window", cx),
         "toggledevtools" => show_unavailable("Developer tools", cx),
         "resetzoom" | "zoomin" | "zoomout" => show_unavailable("Zooming the window", cx),
         other => show_unavailable_role(other, cx),
+    }
+}
+
+/// An editing command of the Edit menu, in the focused window.
+pub fn edit(command: EditCommand, cx: &mut App) {
+    if let Some(handle) = Windows::focused(cx) {
+        let _ = handle.update(cx, |_, window, cx| run_edit(command, window, cx));
+    }
+}
+
+pub(crate) fn run_edit(command: EditCommand, window: &mut Window, cx: &mut App) {
+    match command {
+        EditCommand::Copy => window.dispatch_action(Box::new(selection::Copy), cx),
+        EditCommand::SelectAll => window.dispatch_action(Box::new(selection::SelectAll), cx),
     }
 }
 

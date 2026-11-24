@@ -587,6 +587,15 @@
     "src/logRun.ts",
     "src/shims.ts"
   ],
+  "genTextSelection": [
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/genTextSelection.ts",
+    "src/shims.ts"
+  ],
+  "genTextSelectionMain": [
+    "src/genTextSelectionMain.ts"
+  ],
   "genThree": [
     "src/cve1.ts",
     "src/environment.ts",

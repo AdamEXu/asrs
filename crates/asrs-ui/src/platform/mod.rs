@@ -409,3 +409,28 @@ fn fallback_wheel_delta(delta: &ScrollDelta) -> WheelDelta {
         },
     }
 }
+
+/// The system's light colours of selected text, `0xRRGGBB`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SystemSelection {
+    pub active: u32,
+    pub inactive: u32,
+    /// What selected text is drawn in, active and not, where selecting changes it.
+    pub text: Option<[u32; 2]>,
+}
+
+pub fn selection_colors() -> SystemSelection {
+    imp::selection_colors()
+}
+
+/// Has the windows take the Edit menu's Copy and Select All, which AppKit sends to the first
+/// responder. Elsewhere the menu's roles reach the app.
+pub fn install_edit_commands(cx: &mut App, on_command: impl Fn(EditCommand, &mut App) + 'static) {
+    imp::install_edit_commands(cx, on_command);
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EditCommand {
+    Copy,
+    SelectAll,
+}

@@ -349,6 +349,13 @@ impl StatisticsLayout {
         state.scroll_to([f64::INFINITY; 2]);
     }
 
+    pub fn scroll_by(&self, by: [f64; 2]) {
+        let [left, top] = self.scroll();
+        let mut state = self.0.borrow_mut();
+        state.wheel.stop();
+        state.scroll_to([left + by[0], top + by[1]]);
+    }
+
     pub fn scroll(&self) -> [f64; 2] {
         let mut state = self.0.borrow_mut();
         let max = state.place().max_scroll();

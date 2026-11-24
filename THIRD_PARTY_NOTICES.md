@@ -251,9 +251,11 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
   `text/layout.rs`, `text/line_break.rs`, `text/metrics.rs` text layout and `TextMetrics`,
   `text/shaping.rs`, `text/harfbuzz.rs`, `text/linux/` and `text/win/` word shaping, font fallback
   and text settings),
-  `crates/asrs-tabs/src/form/step.rs`, and behaviour reproduced in
-  `crates/asrs-ui` (SVG painting, filters, theme) and `crates/asrs-live/src/timers.rs`
-  (`DOMTimer` scheduling)
+  `crates/asrs-tabs/src/css_value.rs`, `crates/asrs-tabs/src/form/step.rs`,
+  `crates/asrs-ui/src/selection/` (text selection), and behaviour reproduced in
+  `crates/asrs-ui` (SVG painting, filters, theme), `crates/asrs-app/src/views/page_text.rs`
+  (autoscroll), `crates/asrs-canvas/src/text/caret.rs` (word boundaries) and
+  `crates/asrs-live/src/timers.rs` (`DOMTimer` scheduling)
 
 ## ICU, CLDR and Unicode data
 

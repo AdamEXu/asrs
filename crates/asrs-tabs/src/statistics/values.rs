@@ -71,6 +71,7 @@ pub enum StatisticsRow {
 pub struct StatisticsTable {
     change_counter: Option<f64>,
     rows: Vec<StatisticsRow>,
+    builds: u64,
 }
 
 impl StatisticsTable {
@@ -82,6 +83,11 @@ impl StatisticsTable {
         &self.rows
     }
 
+    /// How many times the rows' elements were built.
+    pub fn builds(&self) -> u64 {
+        self.builds
+    }
+
     /// The values part of `render(command)`; `dark` is the `prefers-color-scheme` the cell
     /// colours contrast with. Returns whether the command was new, which is when upstream goes
     /// on to update the histogram's data. A throw leaves the rows built before it.
@@ -91,6 +97,7 @@ impl StatisticsTable {
         }
         self.change_counter = Some(command.change_counter);
         self.rows.clear();
+        self.builds += 1;
         for line in &LINES {
             match *line {
                 Section(title) => self.rows.push(StatisticsRow::Section {

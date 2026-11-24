@@ -134,6 +134,11 @@ impl MetadataLayout {
         &self.placed
     }
 
+    /// What [`MetadataLayout::place`] last gave.
+    pub fn placed(&self) -> &Placed {
+        &self.placed
+    }
+
     /// The no-data alert, which shrinks to fit the half of the tab right of its centre.
     pub fn alert(&mut self, [width, height]: [f64; 2], scale: f32) -> PlacedAlert {
         let [width, height] = [width, height].map(|v| (v as f32 * scale * 64.0).round() as Lu);

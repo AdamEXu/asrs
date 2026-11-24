@@ -2,7 +2,7 @@ use std::path::Path;
 
 use gpui_kit::{App, Bounds, Pixels, ScrollEvent, Window};
 
-use super::{MenuPath, PopupMenu, WheelDelta};
+use super::{EditCommand, MenuPath, PopupMenu, SystemSelection, WheelDelta};
 
 pub(super) fn init() {}
 
@@ -35,6 +35,18 @@ pub(super) fn popup_menu(
     on_close: impl FnOnce(Option<MenuPath>, &mut App) + 'static,
 ) {
     cx.defer(move |cx| on_close(None, cx));
+}
+
+pub(super) fn install_edit_commands(_: &mut App, _: impl Fn(EditCommand, &mut App) + 'static) {}
+
+/// `RendererPreferences`' defaults, which Electron leaves as they are: its render hosts show
+/// #3367d1 for the active one, this blended with white over white.
+pub(super) fn selection_colors() -> SystemSelection {
+    SystemSelection {
+        active: 0x1967d2,
+        inactive: 0xc8c8c8,
+        text: Some([0xffffff, 0x323232]),
+    }
 }
 
 pub(super) fn select_popup(

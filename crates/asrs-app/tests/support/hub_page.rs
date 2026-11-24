@@ -24,8 +24,8 @@ const RANDOM_SEED: u64 = 1;
 type Window = WindowHandle<HubFrame<HubEntityHost>>;
 
 pub struct Page<'a> {
-    headless: &'a mut HeadlessCapture,
-    window: Window,
+    pub headless: &'a mut HeadlessCapture,
+    pub window: Window,
     hub: Entity<Hub>,
 }
 

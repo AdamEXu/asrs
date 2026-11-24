@@ -1,5 +1,5 @@
 import "./environment";
-import { app, BrowserWindow, dialog, Menu, net, screen, session, type MenuItem } from "electron";
+import { app, BrowserWindow, clipboard, dialog, Menu, net, screen, session, type MenuItem } from "electron";
 import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import { Socket } from "node:net";
@@ -40,6 +40,7 @@ const SAVE_SETTLE_MS = 1500;
 const STATE_SAVE_TIMEOUT_MS = 5000;
 const MENU_TIMEOUT_MS = 10_000;
 const PROMPT_SETTLE_MS = 300;
+const COPY_SETTLE_MS = 200;
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
 function fail(message: string): never {
@@ -554,6 +555,23 @@ function resolveClips(value: unknown): unknown {
   return Object.fromEntries(Object.entries(value).map(([key, v]) => [key, resolveClips(v)]));
 }
 
+// What the window's copy leaves on an emptied clipboard.
+async function copy(contents: Electron.WebContents, name: string) {
+  if (process.platform === "darwin" && process.env.ASRS_PRIVATE_PASTEBOARD === undefined) throw new Error("a copy needs xtask's private pasteboard");
+  clipboard.clear();
+  contents.copy();
+  await nextFrames();
+  await sleep(COPY_SETTLE_MS);
+  const folder = path.join(out, "files", "clipboard");
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(path.join(folder, `${name}.txt`), clipboard.readText());
+}
+
+async function emulateFocus(contents: Electron.WebContents, enabled: boolean) {
+  if (!contents.debugger.isAttached()) contents.debugger.attach("1.3");
+  await contents.debugger.sendCommand("Emulation.setFocusEmulationEnabled", { enabled });
+}
+
 let pressedButton: string | null = null;
 const MOUSE_TYPES = { move: ["mouseMove"], down: ["mouseDown"], up: ["mouseUp"], click: ["mouseDown", "mouseUp"] } as const;
 
@@ -613,6 +631,13 @@ async function perform(action: Action) {
     await switchPrompt(action.prompt, action.index ?? 0, action.width, action.height);
   } else if ("download" in action) {
     await until(`the download window to show ${JSON.stringify(action.download)}`, READY_TIMEOUT_MS, () => exec<boolean>(call(downloadShows, action.download), active()));
+  } else if ("role" in action) {
+    contents[action.role]();
+    await nextFrames();
+  } else if ("copy" in action) {
+    await copy(contents, action.copy);
+  } else if ("focus" in action) {
+    await emulateFocus(contents, action.focus);
   } else if ("capture" in action) {
     await capture(action.capture, action.probes ?? [], action.masks ?? []);
   }

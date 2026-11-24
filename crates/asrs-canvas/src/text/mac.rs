@@ -658,6 +658,23 @@ impl TextBackend for CoreText {
         Shaped { glyphs, width }
     }
 
+    fn space_width(&mut self, spec: &FontSpec, zoom: f32) -> f32 {
+        let shaped = self.shape(spec, " ", zoom);
+        let Some(space) = shaped.glyphs.first() else {
+            return 0.0;
+        };
+        let face = space.glyph.face;
+        let id = space.glyph.id as CGGlyph;
+        let font = self.faces[face as usize].font.clone();
+        let device = self.device_font(face, &font, spec.size * zoom);
+        let mut advance = CGSize::new(0.0, 0.0);
+        // SAFETY: one glyph in, one advance out.
+        unsafe {
+            device.get_advances_for_glyphs(kCTFontOrientationHorizontal, &id, &mut advance, 1);
+        }
+        advance.width as f32
+    }
+
     fn metrics(&mut self, spec: &FontSpec) -> FontMetrics {
         if spec.size <= 0.0 {
             return FontMetrics {
