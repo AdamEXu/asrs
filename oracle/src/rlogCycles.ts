@@ -41,7 +41,7 @@ const file = (): Cycles => {
   return b;
 };
 const DESCRIPTOR = "proto:FileDescriptorProto";
-const ANON = hex("22 12 0a 04 41 6e 6f 6e 12 0a 0a 01 78 18 01 20 01 28 05");
+const ANON = hex("22 11 0a 04 41 6e 6f 6e 12 09 0a 01 78 18 01 20 01 28 05");
 
 const cases: { name: string; isFile: boolean; frames: Uint8Array[] }[] = [];
 const add = (name: string, b: RlogBuilder) => cases.push({ name, isFile: true, frames: [b.bytes()] });
@@ -87,6 +87,13 @@ add("a value that returns once, to other records", file().backOnce().cycle(2));
   b.backOnce();
   const start = b.length;
   add("a cycle that adds a descriptor twice, after a return to other records", b.value(3, ANON).back(1, start));
+}
+// Enough records of no known type to put the port's 64th watched state on the descriptor.
+for (const skipped of [62, 63, 64]) {
+  const b = file().key(3, "/.schema/proto:anon", DESCRIPTOR) as Cycles;
+  b.backOnce().rawBytes(new Uint8Array(skipped).fill(9));
+  const start = b.length;
+  add(`a cycle that adds a descriptor twice, after ${skipped} skipped records`, b.value(3, ANON).back(1, start));
 }
 {
   const b = file().key(3, "/.schema/proto:anon", DESCRIPTOR) as Cycles;

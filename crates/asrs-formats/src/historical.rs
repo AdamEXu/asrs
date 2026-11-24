@@ -1014,11 +1014,17 @@ mod tests {
         // A FileDescriptorProto with no `name` holding one "Anon" message type: the
         // filename dedup does not apply, so adding it twice throws `duplicate name`.
         let anon: &[u8] = &[
-            0x22, 0x12, 0x0a, 0x04, b'A', b'n', b'o', b'n', 0x12, 0x0a, 0x0a, 0x01, b'x', 0x18,
+            0x22, 0x11, 0x0a, 0x04, b'A', b'n', b'o', b'n', 0x12, 0x09, 0x0a, 0x01, b'x', 0x18,
             0x01, 0x20, 0x01, 0x28, 0x05,
         ];
         let mut serialized = Log::new(true).to_serialized();
         serialized.proto_decoder = SerializedProtoDecoder(vec![anon.to_vec(), anon.to_vec()]);
+        let error = Log::from_serialized(serialized.clone(), cx.realm).err();
+        assert!(
+            matches!(&error, Some(LogError::Proto(e)) if e.js_message().to_string_lossy()
+                == "duplicate name 'Anon' in Root"),
+            "{error:?}"
+        );
         let uuid = source.uuid().to_owned();
         let initial = Response::Initial {
             log: Box::new(serialized),

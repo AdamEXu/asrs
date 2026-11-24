@@ -613,9 +613,12 @@ mod tests {
 
     #[test]
     fn an_export_whose_log_replay_throws_fails() {
-        let anon = *b"\x22\x12\x0a\x04Anon\x12\x0a\x0a\x01x\x18\x01\x20\x01\x28\x05";
+        let anon = b"\x22\x11\x0a\x04Anon\x12\x09\x0a\x01x\x18\x01\x20\x01\x28\x05".to_vec();
         let mut log = Log::new(true).to_serialized();
-        log.proto_decoder = SerializedProtoDecoder(vec![anon.to_vec(), anon.to_vec()]);
+        log.proto_decoder = SerializedProtoDecoder(vec![anon.clone()]);
+        let once = run_export(log.clone(), &JsValue::Null, &mut |_| {});
+        assert!(matches!(once, ExportMessage::Unmodeled(_)));
+        log.proto_decoder = SerializedProtoDecoder(vec![anon.clone(), anon]);
         let reply = run_export(log, &JsValue::Null, &mut |_| {});
         assert!(matches!(reply, ExportMessage::Reply(ExportReply::Failed)));
     }

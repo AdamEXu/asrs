@@ -483,7 +483,7 @@
     "log/proto-matrix": {"cases":776,"content":"4a7c6f536aa595f6","generator":"708bf7a1ef065337","spec":"parity/specs/log/proto-matrix.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/proto-renderer": {"cases":9,"content":"651a5840fe07decb","generator":"b61f3a9d271ff491","spec":"parity/specs/log/proto-renderer.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/proto-replay": {"cases":154,"content":"14b81a87074778c5","generator":"3265d002146b1849","spec":"parity/specs/log/proto-replay.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "log/rlog-cycles": {"cases":15,"content":"30ac68da8490d84b","generator":"37ee266bc588572c","spec":"parity/specs/log/rlog-cycles.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "log/rlog-cycles": {"cases":18,"content":"af517a50599abd4f","generator":"2cc85fb9bbe1f4a9","spec":"parity/specs/log/rlog-cycles.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/robot-state": {"cases":281,"content":"52f26ec0fa772217","generator":"e2cd8c4d7ac3ccad","spec":"parity/specs/log/robot-state.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/search": {"cases":2083,"content":"f4a6644302a7367e","generator":"41ace6222892f76a","spec":"parity/specs/log/search.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "log/struct": {"cases":5,"content":"5b842ffa1a277c13","generator":"75f019c64a0a10d3","spec":"parity/specs/log/struct.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
