@@ -8,6 +8,10 @@
 #[path = "support/child.rs"]
 mod child;
 
+#[path = "../../asrs-cli/src/js_json.rs"]
+#[allow(dead_code)]
+mod js_json;
+
 #[path = "support/settle.rs"]
 mod settle;
 
@@ -33,6 +37,8 @@ use asrs_model::preferences::{LiveMode, Preferences, SystemcoreStaticAddress, Th
 use asrs_model::selection::{Selection, SelectionMode};
 use asrs_model::source_list::configs;
 use asrs_model::tab_type::TabType;
+use asrs_parity::json::{self, Json};
+use asrs_parity::vectors;
 use asrs_services::dialog::OpenDialog;
 use asrs_services::download::DownloadEvent;
 use asrs_services::download::downloader::{ListItem, OpenLogBox, SaveLogDialog, WindowMessage};
@@ -53,6 +59,11 @@ const HOME: &str = "ASRS_MENU_DISPATCH_HOME";
 #[test]
 fn the_menu_in_the_app() {
     run_in_a_fresh_home("in_a_fresh_home");
+}
+
+#[test]
+fn layouts_of_other_shapes_restore_as_upstream() {
+    run_in_a_fresh_home("importing_other_shapes");
 }
 
 #[test]
@@ -255,6 +266,22 @@ impl AppUnderTest {
 
     fn click(&mut self, command: Command, replies: &[Reply]) -> Vec<(Option<WindowId>, Shown)> {
         self.click_checked(command, false, replies)
+    }
+
+    /// Imports `layout` from a file picked in "Import Layout..." and returns the one hub it opens.
+    fn import(&mut self, layout: &str) -> WindowId {
+        let file = self.home.join("imported.json");
+        std::fs::write(&file, layout).expect("a layout");
+        let before = self.hubs();
+        let shown = self.click(Command::ImportLayout, &[open(&[&file])]);
+        assert_eq!(shown.len(), 1, "{shown:?}");
+        let hubs = self.hubs();
+        let [hub] = hubs[..] else {
+            panic!("{hubs:?} after importing {layout}");
+        };
+        assert!(!before.contains(&hub), "{layout}");
+        self.focus(hub);
+        hub
     }
 
     fn press(
@@ -1300,4 +1327,122 @@ fn layouts_round_trip(app: &mut AppUnderTest, hub: WindowId) {
         (MessageBoxType::Error, "Failed to import layout")
     );
     assert_eq!(app.hubs().len(), 2);
+}
+
+/// A `restore-state` of a hub session spec with the label of the capture after it.
+fn restored_layouts(session: &str) -> Vec<(String, Json)> {
+    let spec = format!("parity/specs/hub/{session}.entry.json");
+    let text = std::fs::read_to_string(vectors::workspace_root().join(spec)).expect("a spec");
+    let spec = json::parse(&text).expect("JSON");
+    let steps = spec.get("fixture").and_then(|f| f.get("steps"));
+    let mut layouts = Vec::new();
+    let mut restored = None;
+    for step in steps.and_then(Json::as_array).expect("steps") {
+        if step.get("main").and_then(Json::as_str).is_some() {
+            restored = step.get("data").cloned();
+        } else if let Some(label) = step.get("label").and_then(Json::as_str)
+            && let Some(state) = restored.take()
+            && matches!(state, Json::Object(_))
+            && state.get("sidebar").is_some()
+        {
+            layouts.push((label.to_string_lossy(), state));
+        }
+    }
+    layouts
+}
+
+/// What upstream's hub held at the capture `label` and whether the restore before it threw
+/// out of the sidebar, which leaves the page as it was.
+fn recorded_state(session: &str, label: &str) -> (JsValue, bool) {
+    let records = vectors::load(&format!("hub/{session}")).unwrap_or_else(|e| panic!("{e}"));
+    let captured = |r: &vectors::Record| r.string("capture").is_some();
+    let at = records
+        .iter()
+        .position(|r| r.string("capture").as_deref() == Some(label));
+    let at = at.unwrap_or_else(|| panic!("{session}: no capture {label}"));
+    let before = records[..at].iter().rev().take_while(|r| !captured(r));
+    let threw = before
+        .filter_map(|r| r.string("error"))
+        .any(|error| error.contains("is not iterable") || error.contains("(reading 'width')"));
+    let state = records[at + 1].value("state").expect("state");
+    (js_json::to_js(&state).expect("a JS value"), threw)
+}
+
+/// The members of a saved hub state that do not depend on the assets or the renderers. A page's
+/// own tabs have random UUIDs.
+fn comparable(state: &JsValue, restored: bool) -> Vec<JsValue> {
+    let member = |value: &JsValue, key: &str| value.get(key).cloned().unwrap_or_default();
+    let tabs = member(state, "tabs");
+    let mut out = vec![member(state, "sidebar"), member(&tabs, "selected")];
+    for tab in tabs.get("tabs").and_then(JsValue::as_array).expect("tabs") {
+        out.extend(["type", "title"].map(|key| member(tab, key)));
+        out.extend(restored.then(|| member(tab, "controllerUUID")));
+        let controller = member(tab, "controller");
+        out.extend(
+            [
+                "sources",
+                "leftSources",
+                "discreteSources",
+                "leftUnitConversion",
+            ]
+            .map(|key| member(&controller, key)),
+        );
+    }
+    out
+}
+
+#[test]
+#[ignore = "run by layouts_of_other_shapes_restore_as_upstream with its own home directory"]
+fn importing_other_shapes() {
+    let Some(home) = std::env::var_os(HOME) else {
+        return;
+    };
+    let mut app = AppUnderTest::start(PathBuf::from(home));
+    let [hub] = app.hubs()[..] else {
+        panic!("{:?}", app.hubs());
+    };
+    the_beta_welcome_is_acknowledged(&mut app, hub);
+    app.focus(hub);
+    let defaults = app.hub(hub, HubModel::save_state);
+
+    let mut compared = 0;
+    for session in [
+        "lifecycle-restored-sidebars",
+        "lifecycle-restored-older-layouts",
+        "lifecycle-restored-sources",
+    ] {
+        for (label, state) in restored_layouts(session) {
+            let layout = format!(
+                r#"{{"version":"4.1.6","hubs":[{{"x":50,"y":60,"width":1000,"height":600,"state":{}}}],"satellites":[]}}"#,
+                state.to_compact()
+            );
+            let restored = app.import(&layout);
+            let (expected, sidebar_threw) = recorded_state(session, &label);
+            app.frames(restored, 2);
+            let actual = app.hub(restored, HubModel::save_state);
+            let what = format!("{session}: {label}");
+            let expected = if sidebar_threw { &defaults } else { &expected };
+            let [actual, expected] =
+                [&actual, expected].map(|state| comparable(state, !sidebar_threw));
+            assert_eq!(actual, expected, "{what}");
+            compared += 1;
+        }
+    }
+    assert!(compared > 70, "{compared} layouts compared");
+
+    for hubs in [
+        r#"[{}]"#,
+        r#"[{"state":null}]"#,
+        r#"[{"state":5}]"#,
+        r#"[5]"#,
+        r#"["hub"]"#,
+        r#"[[]]"#,
+        r#"[{"x":"1","y":null,"width":[],"height":{},"state":{"sidebar":{},"tabs":{"tabs":[]}}}]"#,
+        r#"[{"x":1,"y":1,"width":1000,"height":600,"state":{"sidebar":{"width":1e400},"tabs":{"selected":"length","tabs":[{"type":0},{"type":1},{"type":6}]}}}]"#,
+    ] {
+        let layout = format!(r#"{{"version":1,"hubs":{hubs},"satellites":[]}}"#);
+        let restored = app.import(&layout);
+        app.frames(restored, 2);
+        app.hub(restored, HubModel::save_state);
+    }
 }
