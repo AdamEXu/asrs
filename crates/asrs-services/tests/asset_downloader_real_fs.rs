@@ -197,3 +197,53 @@ fn archive_never_writes_through_a_symlink() {
             .is_symlink()
     );
 }
+
+struct Offline {
+    fetches: usize,
+}
+
+impl DownloadHost for Offline {
+    fn free_space(&mut self, _: &str) -> Result<f64, Rejected> {
+        Ok(1e12)
+    }
+
+    fn fetch(&mut self, _: FetchId, _: &FetchRequest) -> FetchOutcome {
+        self.fetches += 1;
+        if self.fetches == 1 {
+            FetchOutcome::NetworkError
+        } else {
+            FetchOutcome::Hang
+        }
+    }
+
+    fn request(&mut self, _: RequestId, request: &HttpRequest) -> HttpOutcome {
+        panic!("{request:?}");
+    }
+
+    fn random(&mut self) -> f64 {
+        0.5
+    }
+
+    fn assets_updated(&mut self) -> Result<(), Rejected> {
+        Ok(())
+    }
+}
+
+#[test]
+fn a_check_that_runs_late_has_its_whole_timeout() {
+    let folders = AssetFolders::new(PathStyle::Posix, "/fake/userData", "/bundled");
+    let mut downloader = AssetDownloader::new(&folders, Distribution::Frc6328);
+    let zone = NamedZone::get("UTC").expect("zone");
+    let mut host = Offline { fetches: 0 };
+    downloader.start(0.0, &RealFs, &mut host, &zone);
+    let due = |downloader: &AssetDownloader| -> Vec<f64> {
+        downloader.timers().iter().map(|t| t.due_ms).collect()
+    };
+    assert_eq!(due(&downloader), [30_000.0]);
+    downloader.run_due(29_999.0, &RealFs, &mut host, &zone);
+    assert_eq!((host.fetches, due(&downloader)), (1, vec![30_000.0]));
+    downloader.run_due(3_600_000.0, &RealFs, &mut host, &zone);
+    assert_eq!((host.fetches, due(&downloader)), (2, vec![3_605_000.0]));
+    downloader.run_due(3_605_000.0, &RealFs, &mut host, &zone);
+    assert_eq!((host.fetches, due(&downloader)), (2, vec![3_635_000.0]));
+}

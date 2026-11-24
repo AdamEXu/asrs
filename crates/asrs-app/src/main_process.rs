@@ -1,6 +1,6 @@
 //! `main.ts`'s process around its hub windows: `whenReady`, the launch argument and `open-file`
-//! events, the 5 s asset reload with `set-assets`, the 250 ms state save, the AdvantageKit path
-//! poll, `window-all-closed`, `activate` and the quit cleanup.
+//! events, the 5 s asset reload and the asset download loop with `set-assets`, the 250 ms state
+//! save, the AdvantageKit path poll, `window-all-closed`, `activate` and the quit cleanup.
 
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -15,7 +15,6 @@ use asrs_model::build_constants;
 use asrs_model::messages::{HubToMain, MainToHub, MainToSatellite, NamedMessage, SatelliteToMain};
 use asrs_model::preferences::{Preferences, Theme};
 use asrs_model::source_list_config::SourceListConfig;
-use asrs_services::asset_downloader;
 use asrs_services::beta::{self, BetaConfig, BetaStartup};
 use asrs_services::constants::{AKIT_PATH_INPUT_PERIOD_MS, layout_default_path};
 use asrs_services::dialog::MessageBox;
@@ -31,6 +30,7 @@ use asrs_ui::gpui::{AnyWindowHandle, App, Entity, Global, WeakEntity};
 use asrs_ui::platform;
 use asrs_ui::theme::{Appearance, ThemeSource};
 
+use crate::asset_download;
 use crate::download_flow;
 use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
@@ -907,6 +907,15 @@ impl MainProcess {
         }
     }
 
+    /// The download loop's `updateCallback`; false when `loadAssets()` throws.
+    pub(crate) fn assets_updated(cx: &mut App) -> bool {
+        let loaded = Self::load_assets(cx);
+        if loaded {
+            Self::send_assets(cx);
+        }
+        loaded
+    }
+
     /// Runs `f` with what the application menu's click handlers read.
     pub fn with_click_env<R>(cx: &App, f: impl FnOnce(&ClickEnv<'_>) -> R) -> Option<R> {
         let main = cx.try_global::<MainProcess>()?;
@@ -915,6 +924,7 @@ impl MainProcess {
                 .tracker
                 .current_application_state(&Screens::now(cx))
         };
+        let asset_status = asset_download::status(cx);
         Some(f(&ClickEnv {
             platform: Platform::current(),
             arch: process_arch(),
@@ -923,7 +933,7 @@ impl MainProcess {
             fs: &RealFs,
             paths: &main.state.paths,
             windows: Windows::manager(cx),
-            asset_status: asset_downloader::INITIAL_STATUS,
+            asset_status: &asset_status,
             layout_default_path: layout_default_path(SystemClock.now(), &NamedZone::system()),
             application_state: &application_state,
         }))
@@ -1339,10 +1349,12 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
     }
 
     MainProcess::check_for_update(cx, false);
+    if asset_download::ENABLED {
+        let folders = cx.global::<MainProcess>().state.paths.asset_folders();
+        asset_download::start(asset_download::Config::new(folders), cx);
+    }
     every(cx, ASSET_RELOAD_PERIOD, |cx| {
-        if MainProcess::load_assets(cx) {
-            MainProcess::send_assets(cx);
-        }
+        MainProcess::assets_updated(cx);
     });
     every(cx, STATE_SAVE_PERIOD, MainProcess::save_state);
     every(
@@ -1364,6 +1376,7 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
     .detach();
     cx.on_app_quit(|cx| {
         video::cleanup(cx);
+        asset_download::stop(cx);
         if let Some(main) = cx.try_global::<MainProcess>() {
             lifecycle::quit_cleanup(
                 &RealFs,

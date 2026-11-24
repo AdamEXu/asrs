@@ -2,6 +2,7 @@
 
 use asrs_model::app_identity::AppIdentity;
 
+pub mod asset_download;
 pub mod download_flow;
 mod export_flow;
 pub mod hub;

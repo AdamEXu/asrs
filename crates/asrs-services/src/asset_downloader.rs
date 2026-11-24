@@ -273,28 +273,58 @@ impl AssetDownloader {
         host: &mut dyn DownloadHost,
         zone: &impl LocalZone,
     ) {
+        while let Some(pos) = self.next_due(to_ms) {
+            self.clock = self.timers[pos].due;
+            self.fire(pos, fs, host, zone);
+        }
+        self.clock = to_ms;
+    }
+
+    /// Runs the timers due by now as a process that may be late for them does: at `now_ms`, and
+    /// not the ones they set.
+    pub fn run_due(
+        &mut self,
+        now_ms: f64,
+        fs: &dyn Fs,
+        host: &mut dyn DownloadHost,
+        zone: &impl LocalZone,
+    ) {
+        self.clock = now_ms;
+        let set_before = self.seq;
         while let Some(pos) = self
-            .timers
+            .next_due(now_ms)
+            .filter(|&pos| self.timers[pos].seq < set_before)
+        {
+            self.fire(pos, fs, host, zone);
+        }
+    }
+
+    fn next_due(&self, by_ms: f64) -> Option<usize> {
+        self.timers
             .iter()
             .enumerate()
-            .filter(|(_, t)| t.due <= to_ms)
+            .filter(|(_, t)| t.due <= by_ms)
             .min_by(|a, b| a.1.due.total_cmp(&b.1.due).then(a.1.seq.cmp(&b.1.seq)))
             .map(|(i, _)| i)
-        {
-            let timer = self.timers.remove(pos);
-            self.clock = timer.due;
-            match timer.kind {
-                TimerKind::Check => self.check(fs, host, zone),
-                TimerKind::Retry(di) => self.issue_request(di, fs, host),
-                TimerKind::AbortFetch => {
-                    if self.fetch_pending {
-                        self.fetch_pending = false;
-                        self.github_fail();
-                    }
+    }
+
+    fn fire(
+        &mut self,
+        pos: usize,
+        fs: &dyn Fs,
+        host: &mut dyn DownloadHost,
+        zone: &impl LocalZone,
+    ) {
+        match self.timers.remove(pos).kind {
+            TimerKind::Check => self.check(fs, host, zone),
+            TimerKind::Retry(di) => self.issue_request(di, fs, host),
+            TimerKind::AbortFetch => {
+                if self.fetch_pending {
+                    self.fetch_pending = false;
+                    self.github_fail();
                 }
             }
         }
-        self.clock = to_ms;
     }
 
     /// The outcome of a [`DownloadHost::fetch`] that answered [`FetchOutcome::Hang`].

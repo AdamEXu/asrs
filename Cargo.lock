@@ -363,10 +363,12 @@ dependencies = [
  "asrs-tabs",
  "asrs-ui",
  "async-channel",
+ "fs4",
  "image",
  "png 0.18.1",
  "rustls",
  "sha2 0.10.9",
+ "socket2",
  "ureq",
  "zune-core 0.5.3",
  "zune-jpeg 0.5.15",
@@ -2871,6 +2873,16 @@ dependencies = [
  "cc",
  "libc",
  "pkg-config",
+]
+
+[[package]]
+name = "fs4"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7e72ed92b67c146290f88e9c89d60ca163ea417a446f61ffd7b72df3e7f1dfd5"
+dependencies = [
+ "rustix",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
