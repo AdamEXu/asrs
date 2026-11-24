@@ -1,6 +1,7 @@
 //! The `http:` and `ws:` URLs the live sources build from an address, parsed as Chromium's URL
 //! library does. It differs from the WHATWG parser in the `url` crate: a space or `*` in a host is
-//! escaped, an ASCII `xn--` label is not checked, and paths escape `|` and `^`.
+//! escaped, an ASCII `xn--` label is not checked, brackets and colons may be escaped, and paths escape
+//! `|` and `^` and unescape `%2e`.
 
 use idna::uts46::{AsciiDenyList, DnsLength, Hyphens, Uts46};
 use url::{Host, Url};
@@ -15,6 +16,9 @@ const BLOCKED_PORTS: [u16; 81] = [
 ];
 
 const DEFAULT_PORT: u16 = 80;
+
+/// How many UTF-16 code units of a host Chromium gives to its IDNA processing.
+const MAX_IDN_HOST: usize = 1265;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct LiveUrl {
@@ -87,16 +91,13 @@ impl LiveUrl {
 }
 
 fn split_port(host_port: &str) -> (&str, &str) {
-    let after_address = match host_port.find(']') {
-        Some(end) if host_port.starts_with('[') => end,
-        _ => 0,
+    let address_end = match host_port.starts_with('[') {
+        true => host_port.rfind(']').unwrap_or(host_port.len()),
+        false => 0,
     };
-    match host_port[after_address..].find(':') {
-        Some(i) => {
-            let i = after_address + i;
-            (&host_port[..i], &host_port[i + 1..])
-        }
-        None => (host_port, ""),
+    match host_port.rfind(':') {
+        Some(i) if i >= address_end => (&host_port[..i], &host_port[i + 1..]),
+        _ => (host_port, ""),
     }
 }
 
@@ -131,17 +132,15 @@ fn percent_decode(text: &str) -> Vec<u8> {
 }
 
 fn canonical_host(host: &str) -> Option<String> {
-    if host.is_empty() {
-        return None;
-    }
-    if host.starts_with('[') {
-        return canonical_ipv6(&String::from_utf8(percent_decode(host)).ok()?);
-    }
     let mut name = canonical_bytes(&percent_decode(host))?;
     if !name.is_ascii() {
+        let text = String::from_utf8(name).ok()?;
+        if text.encode_utf16().count() > MAX_IDN_HOST {
+            return None;
+        }
         let ascii = Uts46::new()
             .to_ascii(
-                &name,
+                text.as_bytes(),
                 AsciiDenyList::EMPTY,
                 Hyphens::Allow,
                 DnsLength::Ignore,
@@ -151,7 +150,10 @@ fn canonical_host(host: &str) -> Option<String> {
     }
     let name = String::from_utf8(name)
         .ok()
-        .filter(|name| name.is_ascii())?;
+        .filter(|name| name.is_ascii() && !name.is_empty())?;
+    if name.contains([':', '[', ']']) {
+        return canonical_ipv6(&name);
+    }
     if !ends_in_a_number(&name) {
         return Some(name);
     }
@@ -167,8 +169,7 @@ fn canonical_bytes(host: &[u8]) -> Option<Vec<u8>> {
         match b {
             b' ' => out.extend_from_slice(b"%20"),
             b'*' => out.extend_from_slice(b"%2A"),
-            b'#' | b'%' | b'/' | b':' | b'<' | b'>' | b'?' | b'@' | b'[' | b'\\' | b']' | b'^'
-            | b'|' => return None,
+            b'#' | b'%' | b'/' | b'<' | b'>' | b'?' | b'@' | b'\\' | b'^' | b'|' => return None,
             _ if b.is_ascii_control() => return None,
             _ => out.push(b.to_ascii_lowercase()),
         }
@@ -209,7 +210,11 @@ fn canonical_ipv6(host: &str) -> Option<String> {
 
 fn request_target(tail: &str) -> Option<(String, Option<String>)> {
     let path_end = tail.find(['?', '#']).unwrap_or(tail.len());
-    let path = tail[..path_end].replace('|', "%7C").replace('^', "%5E");
+    let path = tail[..path_end]
+        .replace('|', "%7C")
+        .replace('^', "%5E")
+        .replace("%2e", ".")
+        .replace("%2E", ".");
     let url = Url::parse(&format!("http://host{path}{}", &tail[path_end..])).ok()?;
     let target = match url.query() {
         Some(query) => format!("{}?{query}", url.path()),

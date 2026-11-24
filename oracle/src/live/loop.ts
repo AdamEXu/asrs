@@ -7,7 +7,7 @@ interface Timer {
   due: number;
   repeat: number | null;
   level: number;
-  flexible: boolean;
+  precise: boolean;
   callback: Callback;
   args: unknown[];
 }
@@ -31,7 +31,7 @@ export interface ServerSide {
 
 const MIN_DELAY_MS = 4;
 const MAX_UNCLAMPED_LEVEL = 5;
-const FLEXIBLE_DELAY_MS = 32;
+const PRECISE_DELAY_MS = 32;
 const IDLE_DEFAULT_MS = 50;
 const FRAME_MS = 16;
 
@@ -57,9 +57,9 @@ const realSetImmediate: (cb: () => void) => unknown = g.setImmediate;
  * is above 5. `requestIdleCallback` fires at its `timeout` (50 ms without one),
  * `requestAnimationFrame` 16 ms later and `AbortSignal.timeout` at its delay, all three as
  * delayed tasks outside the nesting rules (level 0, never clamped) but in the timers' due-time
- * order. At equal due times precise timers, those with a delay under 32 ms, run before flexible
- * ones, every longer timer and the delayed tasks, and each group in creation order
- * (`live/net/timers`). The emulated main process shares these rules although Node has no nesting clamp;
+ * order. At equal due times precise timers, those with a delay from 1 to 31 ms, run before the
+ * others: longer timers, the delayed tasks, and timers without a delay, which join the queue behind
+ * what is already due. Each group runs in creation order (`live/net/timers`). The emulated main process shares these rules although Node has no nesting clamp;
  * main.ts never asks for a delay under 4 ms. Exceptions escaping a task are swallowed, as a
  * page reports and continues.
  */
@@ -138,7 +138,7 @@ export class LiveLoop {
       due: this.now + wait,
       repeat: repeat ? Math.max(MIN_DELAY_MS, wait) : null,
       level: nested ? this.runningLevel + 1 : 0,
-      flexible: !nested || wait >= FLEXIBLE_DELAY_MS,
+      precise: nested && wait > 0 && wait < PRECISE_DELAY_MS,
       callback,
       args
     });
@@ -169,7 +169,7 @@ export class LiveLoop {
 
   /** The order of timers due at the same time. */
   private runsBefore(a: Timer, b: Timer): boolean {
-    return a.flexible === b.flexible ? a.id < b.id : b.flexible;
+    return a.precise === b.precise ? a.id < b.id : a.precise;
   }
 
   private earliestTask(): Task | undefined {

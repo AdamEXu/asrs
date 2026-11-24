@@ -451,76 +451,6 @@
    ],
    [
     {
-     "name": "I",
-     "kind": "interval",
-     "delay": 50,
-     "repeats": 3
-    },
-    {
-     "name": "T",
-     "kind": "timeout",
-     "delay": 10,
-     "after": [
-      "I",
-      1
-     ]
-    },
-    {
-     "name": "A",
-     "kind": "abort",
-     "delay": 40,
-     "after": [
-      "T",
-      1
-     ]
-    },
-    {
-     "name": "Z",
-     "kind": "timeout",
-     "delay": 0,
-     "after": [
-      "I",
-      2
-     ]
-    }
-   ],
-   [
-    {
-     "name": "I",
-     "kind": "interval",
-     "delay": 50,
-     "repeats": 3
-    },
-    {
-     "name": "T",
-     "kind": "timeout",
-     "delay": 10,
-     "after": [
-      "I",
-      1
-     ]
-    },
-    {
-     "name": "B",
-     "kind": "timeout",
-     "delay": 40,
-     "after": [
-      "T",
-      1
-     ]
-    },
-    {
-     "name": "Z",
-     "kind": "timeout",
-     "delay": 0,
-     "after": [
-      "I",
-      2
-     ]
-    }
-   ],
-   [
-    {
      "name": "J",
      "kind": "interval",
      "delay": 100,
@@ -565,6 +495,404 @@
      "kind": "interval",
      "delay": 50,
      "repeats": 10
+    }
+   ],
+   [
+    {
+     "name": "a",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "b",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "Z",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "a",
+      1
+     ]
+    }
+   ],
+   [
+    {
+     "name": "a",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "b",
+     "kind": "abort",
+     "delay": 100
+    },
+    {
+     "name": "Z",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "a",
+      1
+     ]
+    }
+   ],
+   [
+    {
+     "name": "a",
+     "kind": "abort",
+     "delay": 100
+    },
+    {
+     "name": "b",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "Z",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "a",
+      1
+     ]
+    }
+   ],
+   [
+    {
+     "name": "I",
+     "kind": "interval",
+     "delay": 50,
+     "repeats": 2
+    },
+    {
+     "name": "J",
+     "kind": "interval",
+     "delay": 50,
+     "repeats": 2
+    },
+    {
+     "name": "Z",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "I",
+      1
+     ]
+    }
+   ],
+   [
+    {
+     "name": "I",
+     "kind": "interval",
+     "delay": 50,
+     "repeats": 2
+    },
+    {
+     "name": "J",
+     "kind": "interval",
+     "delay": 100,
+     "repeats": 1
+    },
+    {
+     "name": "Z",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "I",
+      2
+     ]
+    }
+   ],
+   [
+    {
+     "name": "I",
+     "kind": "interval",
+     "delay": 50,
+     "repeats": 2
+    },
+    {
+     "name": "b",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "Z",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "I",
+      2
+     ]
+    }
+   ],
+   [
+    {
+     "name": "a",
+     "kind": "timeout",
+     "delay": 20
+    },
+    {
+     "name": "b",
+     "kind": "timeout",
+     "delay": 20
+    },
+    {
+     "name": "Z",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "a",
+      1
+     ]
+    }
+   ],
+   [
+    {
+     "name": "a",
+     "kind": "timeout",
+     "delay": 20
+    },
+    {
+     "name": "b",
+     "kind": "abort",
+     "delay": 20
+    },
+    {
+     "name": "Z",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "a",
+      1
+     ]
+    }
+   ],
+   [
+    {
+     "name": "a",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "b",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "Z",
+     "kind": "abort",
+     "delay": 0,
+     "after": [
+      "a",
+      1
+     ]
+    }
+   ],
+   [
+    {
+     "name": "I",
+     "kind": "interval",
+     "delay": 10,
+     "repeats": 3
+    },
+    {
+     "name": "A",
+     "kind": "abort",
+     "delay": 30
+    },
+    {
+     "name": "P",
+     "kind": "timeout",
+     "delay": 20,
+     "after": [
+      "I",
+      1
+     ]
+    }
+   ],
+   [
+    {
+     "name": "a",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "b",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "Z",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "a",
+      1
+     ]
+    },
+    {
+     "name": "Y",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "Z",
+      1
+     ]
+    }
+   ],
+   [
+    {
+     "name": "I",
+     "kind": "interval",
+     "delay": 20,
+     "repeats": 5
+    },
+    {
+     "name": "J",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "Z",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "I",
+      5
+     ]
+    }
+   ],
+   [
+    {
+     "name": "I",
+     "kind": "interval",
+     "delay": 20,
+     "repeats": 5
+    },
+    {
+     "name": "J",
+     "kind": "abort",
+     "delay": 100
+    },
+    {
+     "name": "Z",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "I",
+      5
+     ]
+    }
+   ],
+   [
+    {
+     "name": "a",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "b",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "c",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "Z",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "b",
+      1
+     ]
+    }
+   ],
+   [
+    {
+     "name": "a",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "b",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "Z",
+     "kind": "abort",
+     "delay": 0,
+     "after": [
+      "a",
+      1
+     ]
+    },
+    {
+     "name": "Y",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "a",
+      1
+     ]
+    }
+   ],
+   [
+    {
+     "name": "a",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "b",
+     "kind": "timeout",
+     "delay": 100
+    },
+    {
+     "name": "Y",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "a",
+      1
+     ]
+    },
+    {
+     "name": "Z",
+     "kind": "abort",
+     "delay": 0,
+     "after": [
+      "a",
+      1
+     ]
+    }
+   ],
+   [
+    {
+     "name": "I",
+     "kind": "interval",
+     "delay": 50,
+     "repeats": 3
+    },
+    {
+     "name": "B",
+     "kind": "abort",
+     "delay": 100
+    },
+    {
+     "name": "Z",
+     "kind": "timeout",
+     "delay": 0,
+     "after": [
+      "I",
+      2
+     ]
     }
    ]
   ]

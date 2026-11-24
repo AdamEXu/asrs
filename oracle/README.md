@@ -678,8 +678,8 @@ is raised to 4 ms when the creating level is above 5, so a `setTimeout(0)` in a 
 `setInterval` callback waits 4 ms from the sixth repeat on (measured in Electron 39).
 `requestIdleCallback` fires at its `timeout`, `requestAnimationFrame` 16 ms later and
 `AbortSignal.timeout` at its delay, all as level-0 delayed tasks in the timers' due-time order. At
-an equal due time, timers with a delay under 32 ms run before longer ones and the delayed tasks
-(`live/net/timers`; how late Chromium's wake-ups make the latter is not modelled). IPC
+an equal due time, timers with a delay from 1 to 31 ms run before longer ones, the delayed tasks and
+timers without a delay (`live/net/timers`; how late Chromium's wake-ups make them is not modelled). IPC
 between the renderer and the emulated main process is a delivery with no delay.
 
 Client traffic reaches the server `latencyMs` after it is sent and server traffic reaches the
