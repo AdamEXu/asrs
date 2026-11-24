@@ -11,7 +11,8 @@ use asrs_js::string::JsError;
 use asrs_js::value::JsValue;
 use asrs_services::dialog::{self as services, MessageBox};
 use asrs_services::window_manager::{Platform, WindowId, WindowKind};
-use asrs_ui::gpui::{App, ClipboardItem, Window};
+use asrs_ui::gpui::{Action, App, ClipboardItem, Window};
+use asrs_ui::input;
 use asrs_ui::platform::EditCommand;
 use asrs_ui::selection;
 
@@ -22,6 +23,7 @@ use super::model::Command;
 use crate::download_flow;
 use crate::export_flow;
 use crate::main_process::{MainProcess, SatelliteConfig};
+use crate::quit;
 use crate::windows::{
     self, FileFilter, MessageBoxOptions, MessageBoxType, OpenDialogOptions, SaveDialogOptions,
     Windows,
@@ -205,12 +207,15 @@ fn execute_role(role: &str, cx: &mut App) {
     match role {
         "minimize" => on_window(cx, Window::minimize_window),
         "togglefullscreen" => on_window(cx, Window::toggle_fullscreen),
-        "quit" => cx.quit(),
+        "quit" => quit::quit(cx),
+        "undo" => edit(EditCommand::Undo, cx),
+        "redo" => edit(EditCommand::Redo, cx),
+        "cut" => edit(EditCommand::Cut, cx),
         "copy" => edit(EditCommand::Copy, cx),
+        "paste" => edit(EditCommand::Paste, cx),
+        "pasteandmatchstyle" => edit(EditCommand::PasteAndMatchStyle, cx),
+        "delete" => edit(EditCommand::Delete, cx),
         "selectall" => edit(EditCommand::SelectAll, cx),
-        // A focused text field takes these keystrokes before the accelerator table sees them,
-        // and with none focused Chromium's editing commands do nothing.
-        "undo" | "redo" | "cut" | "paste" | "pasteandmatchstyle" | "delete" => {}
         "reload" | "forcereload" => show_unavailable("Reloading the window", cx),
         "toggledevtools" => show_unavailable("Developer tools", cx),
         "resetzoom" | "zoomin" | "zoomout" => show_unavailable("Zooming the window", cx),
@@ -219,17 +224,23 @@ fn execute_role(role: &str, cx: &mut App) {
 }
 
 /// An editing command of the Edit menu, in the focused window.
-pub fn edit(command: EditCommand, cx: &mut App) {
+fn edit(command: EditCommand, cx: &mut App) {
     if let Some(handle) = Windows::focused(cx) {
         let _ = handle.update(cx, |_, window, cx| run_edit(command, window, cx));
     }
 }
 
-pub(crate) fn run_edit(command: EditCommand, window: &mut Window, cx: &mut App) {
-    match command {
-        EditCommand::Copy => window.dispatch_action(Box::new(selection::Copy), cx),
-        EditCommand::SelectAll => window.dispatch_action(Box::new(selection::SelectAll), cx),
-    }
+pub fn run_edit(command: EditCommand, window: &mut Window, cx: &mut App) {
+    let action: Box<dyn Action> = match command {
+        EditCommand::Undo => Box::new(input::Undo),
+        EditCommand::Redo => Box::new(input::Redo),
+        EditCommand::Cut => Box::new(input::Cut),
+        EditCommand::Copy => Box::new(selection::Copy),
+        EditCommand::Paste | EditCommand::PasteAndMatchStyle => Box::new(input::Paste),
+        EditCommand::Delete => Box::new(input::DeleteSelection),
+        EditCommand::SelectAll => Box::new(selection::SelectAll),
+    };
+    window.dispatch_action(action, cx);
 }
 
 fn show_unavailable_role(role: &str, cx: &mut App) {

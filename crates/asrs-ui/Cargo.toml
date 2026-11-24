@@ -130,6 +130,7 @@ features = [
     "NSCharacterSet",
     "NSDictionary",
     "NSGeometry",
+    "NSNotification",
     "NSObjCRuntime",
     "NSObject",
     "NSRunLoop",

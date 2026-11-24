@@ -30,18 +30,22 @@ pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
     (content.size.width, content.size.height)
 }
 
+pub(super) fn add_hidden_inset_toolbar(window: &NSWindow) {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let toolbar = NSToolbar::initWithIdentifier(
+        NSToolbar::alloc(mtm),
+        &NSString::from_str("titlebarStylingToolbar"),
+    );
+    #[allow(deprecated)]
+    toolbar.setShowsBaselineSeparator(false);
+    window.setToolbar(Some(&toolbar));
+}
+
 impl NativeWindow {
     pub fn hidden_inset_titlebar(&self) {
-        let Some(mtm) = MainThreadMarker::new() else {
-            return;
-        };
-        let toolbar = NSToolbar::initWithIdentifier(
-            NSToolbar::alloc(mtm),
-            &NSString::from_str("titlebarStylingToolbar"),
-        );
-        #[allow(deprecated)]
-        toolbar.setShowsBaselineSeparator(false);
-        self.0.setToolbar(Some(&toolbar));
+        add_hidden_inset_toolbar(&self.0);
     }
 
     pub fn content_size_for_frame(&self, width: f64, height: f64) -> (f64, f64) {

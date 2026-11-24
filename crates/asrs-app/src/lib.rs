@@ -11,6 +11,7 @@ pub mod licenses;
 pub mod live;
 pub mod main_process;
 pub mod menus;
+pub mod quit;
 pub mod satellite;
 pub mod scenario;
 pub mod self_test;

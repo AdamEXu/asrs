@@ -429,14 +429,49 @@ pub fn selection_colors() -> SystemSelection {
     imp::selection_colors()
 }
 
-/// Has the windows take the Edit menu's Copy and Select All, which AppKit sends to the first
-/// responder. Elsewhere the menu's roles reach the app.
-pub fn install_edit_commands(cx: &mut App, on_command: impl Fn(EditCommand, &mut App) + 'static) {
+/// Has the windows take the Edit menu's roles and Toggle Full Screen, which AppKit sends to the
+/// first responder. Elsewhere the menu's roles reach the app.
+pub fn install_edit_commands(
+    cx: &mut App,
+    on_command: impl Fn(EditCommand, &mut Window, &mut App) + 'static,
+) {
     imp::install_edit_commands(cx, on_command);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EditCommand {
+    Undo,
+    Redo,
+    Cut,
     Copy,
+    Paste,
+    PasteAndMatchStyle,
+    Delete,
     SelectAll,
+}
+
+/// Where the system asks the app to quit, it may unless `may_quit` says no, and then `ask` runs.
+/// `may_quit` must not use the app, which may be updating.
+pub fn on_quit_request(
+    cx: &mut App,
+    may_quit: impl Fn() -> bool + 'static,
+    ask: impl Fn(&mut App) + 'static,
+) {
+    imp::on_quit_request(cx, may_quit, ask);
+}
+
+pub struct FullScreenObserver(#[allow(dead_code)] imp::FullScreenObserver);
+
+impl FullScreenObserver {
+    pub fn stop(self) {}
+}
+
+/// `enter-full-screen` and `leave-full-screen` of a hub window, until the observer is dropped,
+/// where the system says when its transitions end.
+pub fn observe_full_screen(
+    window: &Window,
+    cx: &App,
+    on_change: impl Fn(bool, &mut App) + 'static,
+) -> Option<FullScreenObserver> {
+    imp::observe_full_screen(window, cx, on_change).map(FullScreenObserver)
 }
