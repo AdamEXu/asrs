@@ -2,11 +2,10 @@ fn main() {
     println!("cargo:rerun-if-env-changed=ASRS_PACKAGED");
     println!("cargo:rerun-if-env-changed=ASRS_BUILD_DATE");
     println!("cargo:rerun-if-changed=../../packaging/icons/asrs.ico");
-    if std::env::var_os("ASRS_PACKAGED").is_none() {
-        return;
-    }
     #[cfg(windows)]
-    windows();
+    if std::env::var_os("ASRS_PACKAGED").is_some() {
+        windows();
+    }
 }
 
 #[cfg(windows)]
