@@ -1,0 +1,361 @@
+{
+ "entry": "spinButtons",
+ "platforms": [
+  "macos-aarch64",
+  "linux-x86_64"
+ ],
+ "fixture": {
+  "steps": [
+   {
+    "name": "clicks",
+    "markup": "<input type=\"number\" style=\"width:200px\" value=\"5\">",
+    "ops": [
+     [
+      "move",
+      "text"
+     ],
+     [
+      "move",
+      "up"
+     ],
+     [
+      "press"
+     ],
+     [
+      "release"
+     ],
+     [
+      "move",
+      "down"
+     ],
+     [
+      "press"
+     ],
+     [
+      "release"
+     ],
+     [
+      "press"
+     ],
+     [
+      "release"
+     ],
+     [
+      "blur"
+     ]
+    ]
+   },
+   {
+    "name": "text-press",
+    "markup": "<input type=\"number\" style=\"width:200px\" value=\"5\">",
+    "ops": [
+     [
+      "move",
+      "text"
+     ],
+     [
+      "press"
+     ],
+     [
+      "release"
+     ],
+     [
+      "move",
+      "up"
+     ],
+     [
+      "press"
+     ],
+     [
+      "release"
+     ]
+    ]
+   },
+   {
+    "name": "empty",
+    "markup": "<input type=\"number\" style=\"width:200px\" >",
+    "ops": [
+     [
+      "move",
+      "up"
+     ],
+     [
+      "move",
+      "up"
+     ],
+     [
+      "press"
+     ],
+     [
+      "release"
+     ],
+     [
+      "move",
+      "down"
+     ],
+     [
+      "press"
+     ],
+     [
+      "release"
+     ],
+     [
+      "press"
+     ],
+     [
+      "release"
+     ]
+    ]
+   },
+   {
+    "name": "step",
+    "markup": "<input type=\"number\" style=\"width:200px\" value=\"0.65\" step=\"0.01\">",
+    "ops": [
+     [
+      "move",
+      "up"
+     ],
+     [
+      "move",
+      "up"
+     ],
+     [
+      "press"
+     ],
+     [
+      "release"
+     ],
+     [
+      "move",
+      "down"
+     ],
+     [
+      "press"
+     ],
+     [
+      "release"
+     ]
+    ]
+   },
+   {
+    "name": "hold-up",
+    "markup": "<input type=\"number\" style=\"width:200px\" value=\"0\">",
+    "ops": [
+     [
+      "move",
+      "up"
+     ],
+     [
+      "move",
+      "up"
+     ],
+     [
+      "press"
+     ],
+     [
+      "hold",
+      1400
+     ],
+     [
+      "release"
+     ]
+    ]
+   },
+   {
+    "name": "hold-down",
+    "markup": "<input type=\"number\" style=\"width:200px\" value=\"0\">",
+    "ops": [
+     [
+      "move",
+      "down"
+     ],
+     [
+      "move",
+      "down"
+     ],
+     [
+      "press"
+     ],
+     [
+      "hold",
+      1400
+     ],
+     [
+      "release"
+     ]
+    ]
+   },
+   {
+    "name": "drag-between",
+    "markup": "<input type=\"number\" style=\"width:200px\" value=\"0\">",
+    "ops": [
+     [
+      "move",
+      "up"
+     ],
+     [
+      "move",
+      "up"
+     ],
+     [
+      "press"
+     ],
+     [
+      "move",
+      "down"
+     ],
+     [
+      "hold",
+      1400
+     ],
+     [
+      "release"
+     ]
+    ]
+   },
+   {
+    "name": "drag-beside",
+    "markup": "<input type=\"number\" style=\"width:200px\" value=\"0\">",
+    "ops": [
+     [
+      "move",
+      "up"
+     ],
+     [
+      "move",
+      "up"
+     ],
+     [
+      "press"
+     ],
+     [
+      "move",
+      "beside-down"
+     ],
+     [
+      "hold",
+      1400
+     ],
+     [
+      "release"
+     ]
+    ]
+   },
+   {
+    "name": "drag-above",
+    "markup": "<input type=\"number\" style=\"width:200px\" value=\"0\">",
+    "ops": [
+     [
+      "move",
+      "down"
+     ],
+     [
+      "move",
+      "down"
+     ],
+     [
+      "press"
+     ],
+     [
+      "move",
+      "above"
+     ],
+     [
+      "hold",
+      1400
+     ],
+     [
+      "release"
+     ]
+    ]
+   },
+   {
+    "name": "hold-blur",
+    "markup": "<input type=\"number\" style=\"width:200px\" value=\"0\">",
+    "ops": [
+     [
+      "move",
+      "up"
+     ],
+     [
+      "move",
+      "up"
+     ],
+     [
+      "press"
+     ],
+     [
+      "blur"
+     ],
+     [
+      "hold",
+      700
+     ],
+     [
+      "release"
+     ]
+    ]
+   },
+   {
+    "name": "typed",
+    "markup": "<input type=\"number\" style=\"width:200px\" value=\"5\">",
+    "ops": [
+     [
+      "move",
+      "text"
+     ],
+     [
+      "press"
+     ],
+     [
+      "release"
+     ],
+     [
+      "type",
+      "7"
+     ],
+     [
+      "move",
+      "up"
+     ],
+     [
+      "press"
+     ],
+     [
+      "release"
+     ],
+     [
+      "key",
+      "ArrowDown"
+     ],
+     [
+      "blur"
+     ]
+    ]
+   },
+   {
+    "name": "unseen",
+    "markup": "<input type=\"number\" style=\"width:200px\" value=\"5\">",
+    "ops": [
+     [
+      "put",
+      "up"
+     ],
+     [
+      "press"
+     ],
+     [
+      "release"
+     ],
+     [
+      "type",
+      "7"
+     ],
+     [
+      "blur"
+     ]
+    ]
+   }
+  ]
+ }
+}

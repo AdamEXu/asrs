@@ -67,6 +67,8 @@ export interface UiScene {
   patches: { x: number; y: number; color: string }[];
   controls: UiControl[];
   pointer: { x: number; y: number; down: boolean; selector: string } | null;
+  /** `[x, y, width, height]` in CSS px of what is compared, where that is not the whole scene. */
+  region?: number[];
 }
 
 const FILTER_SOURCES = ["www/global.css", "www/hub.css", "www/renderers.css"];
@@ -273,6 +275,50 @@ function searchHoverScene(dark: boolean): UiScene {
   return scene;
 }
 
+// The buttons of Chromium's number inputs, 15 px wide inside the border and padding, where no
+// author rule hides them. A press focuses the input and steps its value, so only the button of a
+// pressed scene is compared.
+const SPIN_POINTS: { [state: string]: { x: number; y: number; down: boolean } } = {
+  text: { x: 60, y: 20, down: false },
+  up: { x: 200, y: 15, down: false },
+  down: { x: 200, y: 26, down: false },
+  "up-pressed": { x: 200, y: 15, down: true },
+  "down-pressed": { x: 200, y: 26, down: true }
+};
+
+function spinScenes(dark: boolean): UiScene[] {
+  const theme = dark ? "dark" : "light";
+  const prompts = Object.entries(SPIN_POINTS).map(([state, point]) => {
+    const scene = inputScene(`ui-spin-${state}-${theme}`, 230, 40, dark, ["www/prompts.css"], [control("number", "prompt", 10, 10, 200, 21, { value: "12.5" })]);
+    scene.pointer = { ...point, selector: "input" };
+    if (point.down) scene.region = [180, 0, 50, 40];
+    return scene;
+  });
+  const jumps = [
+    { state: "jump-up", y: 9 },
+    { state: "jump-down", y: 21 }
+  ].map(({ state, y }) => {
+    const scene = inputScene(`ui-spin-${state}-${theme}`, 230, 40, dark, ["www/hub.css", "www/renderers.css"], [
+      control("number", "table-jump", 0, 0, 175, 30, { placeholder: "0.000" })
+    ]);
+    scene.pointer = { x: 55, y, down: false, selector: "input" };
+    return scene;
+  });
+  // Neither shows the buttons.
+  const bare = [
+    { preset: "setting-block", y: 20 },
+    { preset: "field-value", y: 60 }
+  ].map(({ preset, y }) => {
+    const scene = inputScene(`ui-spin-${preset}-${theme}`, 300, 90, dark, ["www/hub.css"], [
+      control("number", "setting-block", 0, 0, 200, 40, { value: "5" }),
+      control("number", "field-value", 0, 45, 300, 30, { placeholder: "12.345", value: "-0.5" })
+    ]);
+    scene.pointer = { x: preset === "setting-block" ? 100 : 270, y, down: false, selector: "input" };
+    return scene;
+  });
+  return [...prompts, ...jumps, ...bare];
+}
+
 function option(label: string, extra: Partial<UiOption> = {}): UiOption {
   return { label, group: null, selected: false, disabled: false, ...extra };
 }
@@ -336,7 +382,8 @@ export function uiScenes(upstream: string): UiScene[] {
     searchHoverScene(dark),
     hubSelectScene(dark),
     promptSelectScene(dark),
-    selectHoverScene(dark)
+    selectHoverScene(dark),
+    ...spinScenes(dark)
   ]);
 }
 

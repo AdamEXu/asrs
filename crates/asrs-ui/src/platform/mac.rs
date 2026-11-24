@@ -2,6 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::ffi::CStr;
 use std::path::Path;
 use std::ptr::{self, NonNull};
+use std::time::Duration;
 
 use block2::RcBlock;
 use gpui_kit::{App, Bounds, Pixels, ScrollEvent, Window};
@@ -27,7 +28,7 @@ use objc2_core_graphics::{
 };
 use objc2_foundation::{
     NSArray, NSAttributedString, NSCharacterSet, NSDictionary, NSNumber, NSPoint, NSRect,
-    NSRunLoopCommonModes, NSSize, NSString, NSURL,
+    NSRunLoopCommonModes, NSSize, NSString, NSURL, NSUserDefaults,
 };
 use objc2_quartz_core::CAMetalLayer;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -40,11 +41,13 @@ use super::{
 
 mod actions;
 pub(super) mod dialog;
+mod tooltip;
 pub(super) mod window;
 
 pub(super) use actions::{
     FullScreenObserver, install_edit_commands, observe_full_screen, on_quit_request,
 };
+pub(super) use tooltip::set_tooltip;
 
 pub(super) fn add_recent_document(path: &Path) {
     if let Some(mtm) = MainThreadMarker::new()
@@ -84,6 +87,28 @@ fn ns_view(window: &Window) -> Option<Retained<NSView>> {
 
 fn ns_window(window: &Window) -> Option<Retained<NSWindow>> {
     ns_view(window)?.window()
+}
+
+/// Chromium's `NSScrollerButtonDelay` and `NSScrollerButtonPeriod`, or its defaults for them.
+pub(super) fn scroll_button_delays() -> (Duration, Duration) {
+    let defaults = NSUserDefaults::standardUserDefaults();
+    let seconds = |key: &str, default: f64| {
+        let key = NSString::from_str(key);
+        let value = defaults
+            .objectForKey(&key)
+            .map(|_| defaults.doubleForKey(&key));
+        Duration::try_from_secs_f64(value.unwrap_or(default))
+            .unwrap_or(Duration::from_secs_f64(default))
+    };
+    (
+        seconds("NSScrollerButtonDelay", 0.5),
+        seconds("NSScrollerButtonPeriod", 0.05),
+    )
+}
+
+/// A headless window, which has no native one, counts as key.
+pub(super) fn is_key_window(window: &Window) -> bool {
+    ns_window(window).is_none_or(|window| window.isKeyWindow())
 }
 
 pub(super) fn install_sidebar_vibrancy(window: &Window) -> bool {
@@ -1793,6 +1818,10 @@ pub(super) mod probe {
 
     pub fn screen_height() -> f64 {
         primary_screen_height()
+    }
+
+    pub fn tooltip_roundtrip(texts: &[&str]) -> Vec<(Option<String>, bool)> {
+        super::tooltip::roundtrip(texts)
     }
 
     pub fn is_tagged_srgb(window: &Window) -> Option<bool> {

@@ -1223,6 +1223,28 @@ keys the open popup takes. Its vector is generated and content-checked on Linux 
 `menus/electron-linux` (`src/genMenusHost.ts`) is `genMenus electron` on the platform it runs on,
 for Electron's role defaults there, and is likewise generated on Linux x86_64 only.
 
+
+## Spin button vectors
+
+`form/spin-buttons` (`src/spinButtons.ts`, with `src/spinButtonsMain.ts` as its Electron main
+process) is trusted mouse input, through the DevTools protocol, to the spin buttons of a number
+input in an offscreen page that emulates focus. A step is `{"name", "markup", "ops"}`; the ops and
+the records are described in `spinButtonsMain.ts`. The delays of a held button are rounded to what
+the timers are set to, and a step has no values from its hold on, so a run is reproducible. The
+delays differ by platform (macOS reads `NSScrollerButtonDelay` and `NSScrollerButtonPeriod`). The
+entry's generator hash also covers `spinButtonsMain` (`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
+
+## Tooltip recordings
+
+`cargo xtask app tooltips` runs scenarios of `parity/scenarios` with `appMain --tooltips` on macOS.
+`tools/tooltips.m` is loaded into Electron and replaces `-[ToolTipBaseView setToolTipAtMousePoint:]`,
+where Chromium hands AppKit the text, with one that writes it down; it also has every window say it
+is the key one, without which Chromium hands over nothing, since runs take no focus. At each
+capture the driver moves the pointer (`sendInputEvent`) to the middle and the corner of every
+titled element and out of the window, and reads the title `document.elementFromPoint` finds on a
+grid. `parity/tooltips/<scenario>.json` keeps the captures that differ from those before them;
+`crates/asrs-app/tests/tooltips.rs` replays them.
+
 ### Range pointer vectors
 
 `form/range-pointer` and `form/range-pointer-2x` (`src/genRangePointer.ts`, with

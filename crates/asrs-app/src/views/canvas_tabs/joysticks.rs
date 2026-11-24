@@ -23,6 +23,7 @@ use asrs_ui::input::style::{CONTROL_FONT, device_border};
 use asrs_ui::parity::probed;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY};
+use asrs_ui::tooltip::titled;
 
 use super::super::field_image::{self, FieldImage};
 use super::super::frame::{FrameHost, HubFrame};
@@ -339,7 +340,7 @@ impl<H: FrameHost> HubFrame<H> {
             {
                 table = table.child(probed(
                     "table.joystick-selector select",
-                    local(cell.select, controls).child(select),
+                    titled(control.title(), local(cell.select, controls).child(select)),
                 ));
             }
         }

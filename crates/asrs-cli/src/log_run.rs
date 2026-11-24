@@ -17,7 +17,8 @@ use crate::functions::{self, arg};
 use crate::js_json;
 use crate::log_field::{
     ToValue, any_set_value, array, boolean, index, js_string, loggable_type, loggable_type_opt,
-    number, numbers, serialized_value, set_value, string_value, type_string,
+    number, numbers, serialized_value, set_value, string_value, structured_type,
+    structured_type_value, type_string,
 };
 
 pub(crate) fn bytes(v: &Value) -> Result<Arc<[u8]>, String> {
@@ -88,7 +89,7 @@ pub(crate) fn serialized_field(v: &Value) -> Result<SerializedLogField, String> 
     Ok(SerializedLogField {
         timestamps: Arc::new(array(&member(v, "timestamps"), number)?),
         values: values(ty, &member(v, "values"))?,
-        structured_type: type_string(&member(v, "structuredType"))?,
+        structured_type: structured_type(&member(v, "structuredType"))?,
         wpilib_type: type_string(&member(v, "wpilibType"))?,
         metadata_string: js_string(&member(v, "metadataString"))?,
         striping_reference: boolean(&member(v, "stripingReference"))?,
@@ -282,7 +283,10 @@ fn query(log: &Log, key: &JsString) -> Value {
             log.get_type(key)
                 .map_or(Value::Null, |ty| Value::number(f64::from(ty as u8))),
         ),
-        ("structuredType", optional_js(log.get_structured_type(key))),
+        (
+            "structuredType",
+            structured_type_value(log.structured_type(key)),
+        ),
         ("wpilibType", optional_js(log.get_wpilib_type(key))),
         (
             "metadataString",
@@ -419,7 +423,7 @@ pub(crate) fn apply(
         "deleteField" => log.delete_field(&key()?),
         "clearBeforeTime" => log.clear_before_time(number(&arg(op, 1))?, boolean(&arg(op, 2))?),
         "updateRangeWithTimestamp" => log.update_range_with_timestamp(number(&arg(op, 1))?),
-        "setStructuredType" => log.set_structured_type(&key()?, type_string(&arg(op, 2))?),
+        "setStructuredType" => log.set_structured_type(&key()?, structured_type(&arg(op, 2))?),
         "setWpilibType" => log.set_wpilib_type(&key()?, js_string(&arg(op, 2))?),
         "setMetadataString" => log.set_metadata_string(&key()?, js_string(&arg(op, 2))?),
         "setGeneratedParent" => log.set_generated_parent(&key()?),

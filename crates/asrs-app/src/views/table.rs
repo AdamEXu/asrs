@@ -36,6 +36,7 @@ use asrs_ui::selection::geometry::{Block, Line, Piece};
 use asrs_ui::selection::{Caret, Document, Hit, Place, Position};
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY};
+use asrs_ui::tooltip::{titled, untitled};
 
 use super::cell_text::following;
 use super::frame::{FrameHost, HubFrame, wheel_of};
@@ -842,7 +843,8 @@ impl<H: FrameHost> HubFrame<H> {
                 .absolute()
                 .inset_0()
                 .child(header_cell(grid, cell, !last, border, &header_palette))
-                .child(key_box);
+                .child(titled(field.title.to_string_lossy(), grid.place(cell)))
+                .child(untitled(key_box));
             if !field.available {
                 let key = field.text.to_string_lossy();
                 let style = key_style("left");
@@ -864,6 +866,7 @@ impl<H: FrameHost> HubFrame<H> {
                 ];
                 let id = format!("table-close-{headers:x}-{index}");
                 let button = IconButton::new(SharedString::from(id), symbol("close.svg"))
+                    .title("")
                     .on_click(cx.listener(move |frame, _, _, cx| frame.table_close(index, cx)));
                 th = th.child(grid.button(button, at));
                 probes = probes.child(probed(
@@ -877,6 +880,7 @@ impl<H: FrameHost> HubFrame<H> {
         let [jx, jy, jw, jh] = JUMP_INPUT;
         let jump_at = [first[0] + jx, y + jy, jw, jh];
         let button = IconButton::new("table-jump", symbol("verticalalignbottom.svg"))
+            .title("Go to timestamp")
             .on_click(cx.listener(|frame, _, _, cx| frame.table_jump(cx)));
         let button_at = [first[0] + JUMP_BUTTON_LEFT, y + BUTTON_TOP];
         header = header
@@ -887,14 +891,15 @@ impl<H: FrameHost> HubFrame<H> {
                 border,
                 &header_palette,
             ))
-            .child(
+            .child(titled(
+                "Go to timestamp",
                 grid.place(jump_at)
                     .on_mouse_down_out({
                         let jump = jump.clone();
                         move |_, window, cx| jump.update(cx, |field, cx| field.blur(window, cx))
                     })
                     .child(jump),
-            )
+            ))
             .child(grid.button(button, button_at));
         probes = probes
             .child(probed("input.data-table-jump-input", grid.place(jump_at)))

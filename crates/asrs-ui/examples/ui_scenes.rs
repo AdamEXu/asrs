@@ -584,17 +584,23 @@ fn render(scene: &Arc<Scene>, scale: f32, reference: &Path, out: &Path) {
     let shot = capture.capture(window.into()).expect("first frame");
     let shot = if let Some((x, y, down)) = scene.pointer {
         let position = point(px(x), px(y));
+        let moved = PlatformInput::MouseMove(MouseMoveEvent {
+            position,
+            pressed_button: None,
+            modifiers: Modifiers::default(),
+        });
+        for _ in 0..2 {
+            capture
+                .context()
+                .update_window(window.into(), |_, window, cx| {
+                    window.dispatch_event(moved.clone(), cx);
+                })
+                .expect("dispatch move");
+            capture.capture(window.into()).expect("hover frame");
+        }
         capture
             .context()
             .update_window(window.into(), |_, window, cx| {
-                window.dispatch_event(
-                    PlatformInput::MouseMove(MouseMoveEvent {
-                        position,
-                        pressed_button: None,
-                        modifiers: Modifiers::default(),
-                    }),
-                    cx,
-                );
                 if down {
                     window.dispatch_event(
                         PlatformInput::MouseDown(MouseDownEvent {

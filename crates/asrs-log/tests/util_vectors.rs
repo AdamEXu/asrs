@@ -96,6 +96,11 @@ fn log_writers() {
 }
 
 #[test]
+fn photon_untyped_fields() {
+    check_fn_vectors("log/photon-untyped", dispatch);
+}
+
+#[test]
 fn log_key_utils() {
     check_fn_vectors("log/key-utils", dispatch);
 }
