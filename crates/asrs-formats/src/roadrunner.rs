@@ -1071,7 +1071,7 @@ mod tests {
         assert_eq!(
             field(&log, "P")
                 .structured_type
-                .as_ref()
+                .as_named()
                 .unwrap()
                 .to_string_lossy(),
             "Pose2d"

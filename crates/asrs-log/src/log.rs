@@ -17,7 +17,7 @@ pub mod struct_decoder;
 pub mod structured_clone;
 
 pub use log_core::{Log, MapValue, SerializedLog, TimestampDisplay};
-pub use log_field::{LogField, SerializedLogField};
+pub use log_field::{LogField, SerializedLogField, StructuredType};
 pub use log_field_tree::LogFieldTree;
 pub use log_key_utils::find_key;
 pub use log_util::{

@@ -15,7 +15,7 @@ use asrs_js::sort::array_sort;
 use asrs_js::string::JsString;
 use asrs_js::value::{JsObject, ToJs};
 use asrs_log::colors::ensure_theme_contrast;
-use asrs_log::log::Log;
+use asrs_log::log::{Log, StructuredType};
 
 use crate::source_list_config::{
     AutoAdvance, PreviewSetting, SourceListConfig, SourceListItemState,
@@ -378,7 +378,7 @@ pub struct SourceList {
     last_is_dark: Option<bool>,
     mouse_down: Option<(f64, f64)>,
     refresh_last_fields: Vec<JsString>,
-    refresh_last_struct_types: JsObject<Option<JsString>>,
+    refresh_last_struct_types: JsObject<StructuredType>,
     hand_icon_shown: bool,
     highlight: DragHighlight,
     type_prompt: Option<PendingTypePrompt>,
@@ -541,9 +541,9 @@ impl SourceList {
                 current.push(key.clone());
             }
         }
-        let mut struct_types: JsObject<Option<JsString>> = JsObject::new();
+        let mut struct_types: JsObject<StructuredType> = JsObject::new();
         for field in &current {
-            struct_types.insert(field.clone(), env.log.get_structured_type(field).cloned());
+            struct_types.insert(field.clone(), env.log.structured_type(field).clone());
         }
         let should_update = current
             .iter()
