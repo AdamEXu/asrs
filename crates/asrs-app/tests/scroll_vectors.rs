@@ -21,8 +21,8 @@ use asrs_ui::scroll::{self, Extent, Request, Scrollbars, Style};
 const FRAME: Duration = Duration::from_millis(10);
 /// How long the recorder waits for offsets to stay the same.
 const SETTLE: u32 = 27;
-/// A held press goes on by a frame's worth more or less.
-const HELD_TOLERANCE: f64 = 46.0;
+/// A held press goes on by a frame's worth more or less: 20 pages a second, at 60 Hz.
+const HELD_PAGES: f64 = 20.0 / 60.0;
 const LEVELS: i32 = 12;
 
 struct Scroller {
@@ -223,7 +223,10 @@ impl Page<'_> {
     fn settle(&mut self) {
         let mut last = self.update(|view, style| view.top(style));
         let mut same = 0;
+        let mut frames = 0;
         while same < SETTLE {
+            frames += 1;
+            assert!(frames < 1000, "still scrolling, at {last:?}");
             self.frames(1);
             let top = self.update(|view, style| view.top(style));
             same = if top == last { same + 1 } else { 0 };
@@ -337,10 +340,6 @@ impl Page<'_> {
             "wheel" => {
                 let position = point(px(at(1) as f32), px(at(2) as f32));
                 let delta = point(px(-at(3) as f32), px(-at(4) as f32));
-                self.input(PlatformInput::MouseMove(MouseMoveEvent {
-                    position,
-                    ..Default::default()
-                }));
                 self.input(PlatformInput::Scroll(ScrollEvent {
                     position,
                     delta: ScrollDelta::Pixels(delta),
@@ -509,7 +508,13 @@ fn replay(headless: &mut HeadlessCapture, id: &str) -> [usize; 3] {
                         "release" => held,
                         _ => false,
                     };
-                    let tolerance = if held { HELD_TOLERANCE } else { 1.0 };
+                    let page_px = page
+                        .update(|view, style| scroll::page_step(view.client(style)[1], view.scale));
+                    let tolerance = if held {
+                        1.0 + page_px * HELD_PAGES
+                    } else {
+                        1.0
+                    };
                     for axis in 0..2 {
                         let off = (got[axis] - want[axis]).abs();
                         assert!(off <= tolerance, "{at}: {got:?}, recorded {want:?}");

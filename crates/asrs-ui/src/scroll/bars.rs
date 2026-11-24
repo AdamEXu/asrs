@@ -199,7 +199,7 @@ impl Bar {
             return [self.thumb + inset * scale, length];
         }
         let start = self.thumb + (self.length - least) / 2.0;
-        [start.floor(), least]
+        [start.round(), least]
     }
 }
 
@@ -222,6 +222,8 @@ struct Held {
     since: f64,
     /// Where the scroll was when it began to go on, and then.
     going: Option<(f64, f64)>,
+    /// The last frame that went on.
+    frame: Option<f64>,
     reached: bool,
 }
 
@@ -363,6 +365,15 @@ impl Frame {
             && at[axis] < bar.track;
         let thumb = at[axis] >= bar.thumb && at[axis] < bar.thumb + bar.length;
         inside.then_some((at[axis], thumb))
+    }
+
+    /// [`Frame::over`] of each bar that nothing covers there.
+    fn hovered(&self, position: [f64; 2], window: &Window) -> [Option<(f64, bool)>; 2] {
+        [0, 1].map(|axis| {
+            let hitbox = self.hitboxes[axis].as_ref();
+            self.over(axis, position)
+                .filter(|_| hitbox.is_some_and(|h| h.is_hovered(window)))
+        })
     }
 
     fn box_size(&self) -> [f64; 2] {
@@ -627,10 +638,11 @@ fn held_step(state: &mut State, frame: &Frame, extent: &Extent, now: f64) -> Opt
         state.held = None;
         return None;
     };
-    if now - held.since < HELD_DELAY || held.reached {
+    if now - held.since < HELD_DELAY || held.reached || held.frame == Some(now) {
         return None;
     }
     let axis = held.axis;
+    held.frame = Some(now);
     let (from, began) = *held.going.get_or_insert((extent.offset[axis], now));
     let speed = held.step * HELD_STEPS / 1000.0;
     let max = bar.max / frame.scale;
@@ -711,6 +723,7 @@ fn listen(
                         button,
                         since,
                         going: None,
+                        frame: None,
                         reached: false,
                     });
                     drop(state);
@@ -746,14 +759,10 @@ fn listen(
             if inner.held.is_some() && event.pressed_button != Some(MouseButton::Left) {
                 inner.held = None;
             }
-            let over = [0, 1].map(|axis| {
-                let hovered = frame.hitboxes[axis]
-                    .as_ref()
-                    .is_some_and(|hitbox| hitbox.is_hovered(window));
-                frame
-                    .over(axis, client(event.position))
-                    .filter(|_| hovered && event.pressed_button.is_none())
-            });
+            if event.pressed_button.is_some() {
+                return;
+            }
+            let over = frame.hovered(client(event.position), window);
             let now = inner.now(cx);
             if inner.hover(Some(over), now) {
                 window.refresh();
@@ -761,7 +770,7 @@ fn listen(
         }
     });
     window.on_mouse_event({
-        let state = state.clone();
+        let (frame, state) = (frame.clone(), state.clone());
         move |event: &MouseUpEvent, phase, window, cx| {
             if phase != DispatchPhase::Capture || event.button != MouseButton::Left {
                 return;
@@ -772,6 +781,8 @@ fn listen(
             if let Some(axis) = axis {
                 let now = state.now(cx);
                 state.axes[axis].at = Some(now);
+                let over = frame.hovered(client(event.position), window);
+                state.hover(Some(over), now);
                 window.refresh();
             }
         }
