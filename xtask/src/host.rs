@@ -74,7 +74,7 @@ commands on the machine itself (cargo xtask host local ...):
 
 Results land in target/parity/host/ on the machine that ran them.";
 
-const WINDOWS_NODE: &str = r"C:\tools\node-v24.18.0-win-arm64";
+const WINDOWS_PATH: &str = r"C:\tools\node-v24.18.0-win-arm64;C:\tools\clang-20.1.8\bin";
 const LINUX_VM: &str = "asrs-linux";
 const COLOUR_SWITCHES: &[&str] = &["--force-color-profile=srgb", "--lang=en-US"];
 const S1_TIMEOUT: Duration = Duration::from_secs(120);
@@ -271,7 +271,7 @@ impl Host {
         let body = match self.os {
             Os::Linux => format!("cd {} && {command}", self.checkout()),
             Os::Windows => format!(
-                "$ErrorActionPreference = 'Continue'\n$env:Path = '{WINDOWS_NODE};' + $env:Path\nSet-Location {}\n& {{ {command} }} | Out-String -Stream\nexit $LASTEXITCODE",
+                "$ErrorActionPreference = 'Continue'\n$env:Path = '{WINDOWS_PATH};' + $env:Path\nSet-Location {}\n& {{ {command} }} | Out-String -Stream\nexit $LASTEXITCODE",
                 self.checkout()
             ),
         };
@@ -291,7 +291,7 @@ impl Host {
                 let task = gui_task();
                 let gui = gui_dir.replace('/', "\\");
                 let batch = format!(
-                    "@echo off\r\nset PATH={WINDOWS_NODE};%PATH%\r\ncd /d {}\r\n{command} > {gui}\\last.log 2>&1\r\necho %ERRORLEVEL% > {gui}\\exit.txt\r\n",
+                    "@echo off\r\nset PATH={WINDOWS_PATH};%PATH%\r\ncd /d {}\r\n{command} > {gui}\\last.log 2>&1\r\necho %ERRORLEVEL% > {gui}\\exit.txt\r\n",
                     self.checkout().replace('/', "\\")
                 );
                 format!(
@@ -1274,32 +1274,36 @@ fn display_profile() -> Json {
             })
         }
         "windows" => {
-            let dpi = command_text(
-                "powershell",
-                &[
-                    "-NoProfile",
-                    "-Command",
-                    "(Get-ItemProperty 'HKCU:/Control Panel/Desktop').LogPixels",
-                ],
-            )
-            .unwrap_or_default();
-            Json::object([
-                ("logPixels", Json::string(&dpi)),
-                (
-                    "iccProfiles",
-                    Json::string(
-                        &command_text(
-                            "powershell",
-                            &[
-                                "-NoProfile",
-                                "-Command",
-                                "(Get-ChildItem C:/Windows/System32/spool/drivers/color -Filter *.ic* | Select-Object -ExpandProperty Name) -join ','",
-                            ],
-                        )
-                        .unwrap_or_default(),
-                    ),
-                ),
-            ])
+            let powershell = |command: &str| {
+                command_text("powershell", &["-NoProfile", "-Command", command]).unwrap_or_default()
+            };
+            let desktop = |name: &str| {
+                powershell(&format!(
+                    "(Get-ItemProperty 'HKCU:/Control Panel/Desktop').{name}"
+                ))
+            };
+            let dwrite = "(Get-Item C:/Windows/System32/DWrite.dll).VersionInfo.ProductVersion";
+            let profiles = "(Get-ChildItem C:/Windows/System32/spool/drivers/color -Filter *.ic* | Select-Object -ExpandProperty Name) -join ','";
+            let tuner = "(Get-ChildItem HKCU:/Software/Microsoft/Avalon.Graphics -ErrorAction SilentlyContinue | Select-Object -ExpandProperty PSChildName) -join ','";
+            let mut fields = vec![
+                ("logPixels", desktop("LogPixels")),
+                ("iccProfiles", powershell(profiles)),
+                ("dwrite", powershell(dwrite)),
+                ("clearTypeTunerDisplays", powershell(tuner)),
+            ];
+            for name in [
+                "FontSmoothing",
+                "FontSmoothingType",
+                "FontSmoothingOrientation",
+                "FontSmoothingGamma",
+            ] {
+                fields.push((name, desktop(name)));
+            }
+            let fields: Vec<_> = fields
+                .iter()
+                .map(|(name, value)| (*name, Json::string(value)))
+                .collect();
+            Json::object(fields)
         }
         _ => Json::Null,
     }
@@ -1319,13 +1323,20 @@ fn font_hashes() -> Result<Vec<(String, Option<String>)>> {
             "SegUIVar.ttf",
             "seguiemj.ttf",
             "seguisym.ttf",
+            "seguibl.ttf",
             "arial.ttf",
             "arialbd.ttf",
+            "ariali.ttf",
             "cour.ttf",
             "courbd.ttf",
             "consola.ttf",
             "consolab.ttf",
             "times.ttf",
+            "cambria.ttc",
+            "msyh.ttc",
+            "msyhbd.ttc",
+            "msyhl.ttc",
+            "YuGothM.ttc",
         ]
         .iter()
         .map(|f| format!("C:/Windows/Fonts/{f}"))

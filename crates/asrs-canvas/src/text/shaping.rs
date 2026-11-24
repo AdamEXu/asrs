@@ -3,6 +3,9 @@
 use icu_properties::CodePointSetData;
 use icu_properties::props::EmojiPresentation;
 
+#[cfg(any(target_os = "linux", windows))]
+use super::FontSpec;
+
 /// The clusters of `text`, which starts at UTF-16 offset `from`, each with whether Blink's
 /// `FontFallbackPriority` makes it emoji presentation: an `Emoji_Presentation` base, or a
 /// sequence with VS16, a skin tone modifier, a keycap or a ZWJ; VS15 forces text.
@@ -64,4 +67,18 @@ pub(crate) fn hb_scale(units: i64, upem: u32, size: f32) -> i32 {
 /// Skia's `SkScalarRoundToScalar`.
 pub(crate) fn round(v: f32) -> f32 {
     (v + 0.5).floor()
+}
+
+/// `FontDescription::EffectiveFontSize`: Blink floors a font's zoomed size to 1/100 px.
+#[cfg(any(target_os = "linux", windows))]
+pub(crate) fn effective(spec: &FontSpec, zoom: f32) -> FontSpec {
+    let zoomed = spec.size * zoom;
+    let floored = (zoomed * 100.0).floor() / 100.0;
+    if floored == zoomed {
+        return *spec;
+    }
+    FontSpec {
+        size: floored / zoom,
+        ..*spec
+    }
 }

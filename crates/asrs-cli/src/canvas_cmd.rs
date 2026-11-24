@@ -39,7 +39,7 @@ fn js_text(v: Option<&JsValue>) -> Option<String> {
 }
 
 fn render_scenes(scenes: &Path, out: &Path, wanted: &[String]) -> Result<(), String> {
-    let mut glyphs = platform_backend().zip(MaskGammaLut::embedded());
+    let mut glyphs = platform_backend().zip(MaskGammaLut::system());
     if glyphs.is_none() {
         eprintln!(
             "no text backend or mask-gamma table on this platform: skipping scenes with text"
@@ -270,8 +270,7 @@ fn text_scene(path: &Path) -> Result<TextScene, String> {
 }
 
 fn fit_lut(reference: &Path, out: &Path) -> Result<(), String> {
-    let mut backend =
-        platform_backend().ok_or("no text backend for this platform yet (unit R12)")?;
+    let mut backend = platform_backend().ok_or("no text backend on this machine")?;
     let mut rows: [Option<[u8; 256]>; lut::ROWS] = [None; lut::ROWS];
     let mut residuals = Vec::new();
     for k in 0..lut::ROWS {
@@ -319,60 +318,112 @@ fn fit_lut(reference: &Path, out: &Path) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(all(test, target_os = "linux"))]
+#[cfg(all(test, any(target_os = "linux", windows)))]
 mod tests {
+    use std::io::Write;
+    use std::path::PathBuf;
+
     use asrs_canvas::text::FontSpec;
-    use asrs_canvas::text::linux::Fontations;
     use sha2::{Digest, Sha256};
 
     use super::*;
 
     const MAX_CHANNEL: u8 = 24;
 
+    const FONTS: [&str; 5] = [
+        "12px system-ui",
+        "200 12px system-ui",
+        "bold 12px system-ui",
+        "10px sans-serif",
+        "italic 10px sans-serif",
+    ];
+
+    #[cfg(target_os = "linux")]
+    fn font_files() -> Option<Vec<PathBuf>> {
+        let mut backend = asrs_canvas::text::linux::Fontations::new()?;
+        let file = |css: &&str| backend.font_file(&FontSpec::parse(css).unwrap());
+        FONTS.iter().map(file).map(|f| f.map(|f| f.0)).collect()
+    }
+
+    #[cfg(windows)]
+    fn font_files() -> Option<Vec<PathBuf>> {
+        let mut backend = asrs_canvas::text::win::DirectWrite::new()?;
+        let mut files = Vec::new();
+        for css in FONTS {
+            let spec = FontSpec::parse(css).unwrap();
+            files.push(backend.font_file(&spec)?.0);
+            files.extend(backend.fallback_file(&spec, '\u{1f4d6}', true));
+        }
+        Some(files)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn text() -> Option<(Box<dyn TextBackend>, MaskGammaLut)> {
+        platform_backend().zip(MaskGammaLut::system())
+    }
+
+    /// The machine's fonts with the render host's ClearType settings.
+    #[cfg(windows)]
+    fn text() -> Option<(Box<dyn TextBackend>, MaskGammaLut)> {
+        use asrs_canvas::text::cache::Cached;
+        use asrs_canvas::text::win::{DirectWrite, settings::TextSettings};
+        let backend = DirectWrite::with_settings(Some(TextSettings::DEFAULT))?;
+        let backend: Box<dyn TextBackend> = Box::new(Cached::new(backend));
+        Some(backend).zip(MaskGammaLut::embedded())
+    }
+
     /// A font of the scenes that is not the file the manifest records for the render host.
     fn unpinned_font(manifest: &Json) -> Option<String> {
         let fonts = manifest.get("host").and_then(|h| h.get("fonts")).unwrap();
         let Json::Object(fonts) = fonts else {
-            panic!("linux.json records no host fonts");
+            panic!("the manifest records no host fonts");
         };
-        let Some(mut backend) = Fontations::new() else {
+        let Some(files) = font_files() else {
             return Some("no fonts".to_owned());
         };
-        [
-            "12px system-ui",
-            "200 12px system-ui",
-            "bold 12px system-ui",
-            "10px sans-serif",
-            "italic 10px sans-serif",
-        ]
-        .iter()
-        .find_map(|css| {
-            let (path, _) = backend.font_file(&FontSpec::parse(css).unwrap()).unwrap();
-            let hash = format!("{:x}", Sha256::digest(fs::read(&path).unwrap()));
+        files.iter().find_map(|path| {
+            let hash = format!("{:x}", Sha256::digest(fs::read(path).unwrap()));
             let recorded = fonts
                 .iter()
                 .any(|(_, h)| h.as_str().is_some_and(|h| h.to_string_lossy() == hash));
-            (!recorded).then(|| format!("{css} resolves to {}", path.display()))
+            (!recorded).then(|| format!("{} is not a font of the render host", path.display()))
         })
     }
 
-    /// The committed text scenes against Chromium's CPU canvas on the Linux render host, at the
-    /// gate `cargo xtask canvas diff` holds text to, wherever its fonts are installed.
+    /// CI installs the Linux render host's fonts. Windows' cannot be installed, so a runner whose
+    /// files differ says so past libtest's output capture.
+    fn skip(problem: &str) {
+        if std::env::var_os("ASRS_CI").is_none() {
+            eprintln!("skipped: {problem} (FONTCONFIG_FILE)");
+            return;
+        }
+        assert!(cfg!(windows), "{problem}");
+        let line = format!("\n::warning title=Windows text scenes not run::{problem}\n");
+        let _ = std::io::stdout().write_all(line.as_bytes());
+    }
+
+    /// The committed text scenes against Chromium's CPU canvas on the platform's render
+    /// host, at the gate `cargo xtask canvas diff` holds text to, wherever its fonts are
+    /// installed.
     #[test]
-    fn text_scenes_match_the_linux_render_host() {
+    fn text_scenes_match_the_render_host() {
+        let os = std::env::consts::OS;
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/vectors/canvas");
-        let manifest = json::parse(&fs::read_to_string(root.join("linux.json")).unwrap()).unwrap();
+        let manifest =
+            json::parse(&fs::read_to_string(root.join(format!("{os}.json"))).unwrap()).unwrap();
         let scenes = manifest.get("scenes").and_then(Json::as_array).unwrap();
         assert!(scenes.len() >= 12);
         if let Some(problem) = unpinned_font(&manifest) {
-            assert!(std::env::var_os("ASRS_CI").is_none(), "{problem}");
-            eprintln!("skipped: {problem}, not a font of the render host (FONTCONFIG_FILE)");
+            skip(&problem);
             return;
         }
-        let mut glyphs = platform_backend().zip(MaskGammaLut::embedded());
+        let mut glyphs = text();
         for entry in scenes {
             let name = string(entry.get("scene").unwrap()).unwrap();
-            let file = |ext: &str| root.join(format!("scenes-linux/{name}.{ext}"));
+            if name.starts_with("dom-") {
+                continue;
+            }
+            let file = |ext: &str| root.join(format!("scenes-{os}/{name}.{ext}"));
             let scene =
                 asrs_js::json::parse_str(&fs::read_to_string(file("json")).unwrap()).unwrap();
             let number = |k: &str| js_number(scene.get(k), k).unwrap();

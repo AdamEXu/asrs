@@ -3,6 +3,8 @@ pub mod coverage;
 pub mod dom;
 pub mod flow;
 pub mod font;
+#[cfg(any(target_os = "linux", windows))]
+mod harfbuzz;
 pub mod inline;
 pub mod layout;
 pub mod line_break;
@@ -11,9 +13,15 @@ pub mod linux;
 pub mod lut;
 #[cfg(target_os = "macos")]
 mod mac;
+#[cfg(any(target_os = "linux", windows))]
+mod matrix;
 pub mod metrics;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", windows))]
+mod path_mask;
+#[cfg(any(target_os = "linux", target_os = "macos", windows))]
 mod shaping;
+#[cfg(windows)]
+pub mod win;
 
 use std::sync::Arc;
 
@@ -202,7 +210,10 @@ pub fn platform_backend() -> Option<Box<dyn TextBackend>> {
     #[cfg(target_os = "linux")]
     return linux::Fontations::new()
         .map(|b| Box::new(cache::Cached::new(b)) as Box<dyn TextBackend>);
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(windows)]
+    return win::DirectWrite::new()
+        .map(|b| Box::new(cache::Cached::new(b)) as Box<dyn TextBackend>);
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     return None;
 }
 

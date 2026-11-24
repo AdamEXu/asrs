@@ -1,3 +1,5 @@
+use asrs_js::math::pow;
+
 pub const ROWS: usize = 8;
 pub const BYTES: usize = ROWS * 256;
 
@@ -36,12 +38,42 @@ impl MaskGammaLut {
         self.0.iter().flatten().copied().collect()
     }
 
+    /// `SK_GAMMA_CONTRAST` of Chromium's Windows Skia.
+    pub const WINDOWS_CONTRAST: f32 = 1.0;
+    /// `SK_GAMMA_SRGB`.
+    pub const WINDOWS_GAMMA: f32 = 0.0;
+
+    /// Skia's `SkMaskGamma` tables; a device gamma of 0 is sRGB.
+    pub fn skia(contrast: f32, gamma: f32) -> Self {
+        let contrast = f64::from((contrast * 255.0 + 0.5) as u8) / 255.0;
+        let gamma = f64::from((gamma * 64.0) as u8) / 64.0;
+        let mut rows = [[0u8; 256]; ROWS];
+        for (bucket, row) in rows.iter_mut().enumerate() {
+            *row = correcting_row(bucket, contrast, gamma);
+        }
+        MaskGammaLut::from_rows(rows)
+    }
+
     pub fn row(&self, bucket: usize) -> &[u8; 256] {
         &self.0[bucket]
     }
 
     pub fn apply(&self, rgb: [u8; 3], coverage: u8) -> u8 {
         self.0[luminance_bucket(rgb)][coverage as usize]
+    }
+
+    /// The table for the user's text settings, where the platform has any that Chromium follows.
+    pub fn system() -> Option<Self> {
+        #[cfg(windows)]
+        {
+            use crate::text::win::settings::TextSettings;
+            let settings = TextSettings::current();
+            let tuned = (settings.contrast, settings.gamma);
+            if tuned != (Self::WINDOWS_CONTRAST, Self::WINDOWS_GAMMA) {
+                return Some(Self::skia(settings.contrast, settings.gamma));
+            }
+        }
+        Self::embedded()
     }
 
     /// The table committed for the platform this was built for, if it has one.
@@ -54,9 +86,49 @@ impl MaskGammaLut {
         return MaskGammaLut::from_bytes(include_bytes!(
             "../../../../parity/vectors/canvas/lut-linux.bin"
         ));
-        #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+        #[cfg(windows)]
+        return MaskGammaLut::from_bytes(include_bytes!(
+            "../../../../parity/vectors/canvas/lut-windows.bin"
+        ));
+        #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
         return None;
     }
+}
+
+fn to_luma(gamma: f64, v: f64) -> f64 {
+    if gamma != 0.0 {
+        pow(v, gamma)
+    } else if v <= 0.04045 {
+        v / 12.92
+    } else {
+        pow((v + 0.055) / 1.055, 2.4)
+    }
+}
+
+fn from_luma(gamma: f64, v: f64) -> f64 {
+    if gamma != 0.0 {
+        pow(v, 1.0 / gamma)
+    } else if v <= 0.0031308 {
+        v * 12.92
+    } else {
+        1.055 * pow(v, 1.0 / 2.4) - 0.055
+    }
+}
+
+/// `SkTMaskGamma_build_correcting_lut`.
+fn correcting_row(bucket: usize, contrast: f64, gamma: f64) -> [u8; 256] {
+    let base = bucket << 5;
+    let src = ((base | base >> 3 | base >> 6) & 255) as f64 / 255.0;
+    let dst = 1.0 - src;
+    let (lin_src, lin_dst) = (to_luma(gamma, src), to_luma(gamma, dst));
+    let mut row = [0u8; 256];
+    for (i, v) in row.iter_mut().enumerate() {
+        let raw = i as f64 / 255.0;
+        let a = raw + (1.0 - raw) * (contrast * lin_dst) * raw;
+        let out = from_luma(gamma, lin_src * a + (1.0 - a) * lin_dst);
+        *v = (255.0 * (out - dst) / (src - dst) + 0.5).floor() as u8;
+    }
+    row
 }
 
 pub fn luminance_bucket(rgb: [u8; 3]) -> usize {
