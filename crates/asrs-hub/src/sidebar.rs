@@ -542,7 +542,7 @@ fn expanded_set(value: &JsValue) -> Result<IndexMap<ExpandedKey, JsValue>, JsErr
         JsValue::String(s) => char::decode_utf16(s.units().iter().copied())
             .map(|c| {
                 JsValue::String(match c {
-                    Ok(c) => JsString::from(c.to_string()),
+                    Ok(c) => JsString::from(String::from(c)),
                     Err(lone) => JsString::from_units(vec![lone.unpaired_surrogate()]),
                 })
             })

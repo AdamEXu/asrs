@@ -1338,14 +1338,13 @@ fn restored_layouts(session: &str) -> Vec<(String, Json)> {
     let mut layouts = Vec::new();
     let mut restored = None;
     for step in steps.and_then(Json::as_array).expect("steps") {
-        if step.get("main").and_then(Json::as_str).is_some() {
+        if step.get("main").is_some() {
             restored = step.get("data").cloned();
-        } else if let Some(label) = step.get("label").and_then(Json::as_str)
-            && let Some(state) = restored.take()
-            && matches!(state, Json::Object(_))
-            && state.get("sidebar").is_some()
-        {
-            layouts.push((label.to_string_lossy(), state));
+        } else if let Some(label) = step.get("label").and_then(Json::as_str) {
+            let layout = restored.take().filter(|data| data.get("sidebar").is_some());
+            layouts.extend(layout.map(|state| (label.to_string_lossy(), state)));
+        } else {
+            assert!(step.get("advance").is_some(), "{}", step.to_compact());
         }
     }
     layouts
@@ -1370,14 +1369,14 @@ fn recorded_state(session: &str, label: &str) -> (JsValue, bool) {
 
 /// The members of a saved hub state that do not depend on the assets or the renderers. A page's
 /// own tabs have random UUIDs.
-fn comparable(state: &JsValue, restored: bool) -> Vec<JsValue> {
-    let member = |value: &JsValue, key: &str| value.get(key).cloned().unwrap_or_default();
-    let tabs = member(state, "tabs");
+fn comparable(state: &JsValue, restored: bool) -> Vec<Option<JsValue>> {
+    let member = |value: &JsValue, key: &str| value.get(key).cloned();
+    let tabs = member(state, "tabs").expect("tabs");
     let mut out = vec![member(state, "sidebar"), member(&tabs, "selected")];
     for tab in tabs.get("tabs").and_then(JsValue::as_array).expect("tabs") {
         out.extend(["type", "title"].map(|key| member(tab, key)));
         out.extend(restored.then(|| member(tab, "controllerUUID")));
-        let controller = member(tab, "controller");
+        let controller = member(tab, "controller").expect("a controller");
         out.extend(
             [
                 "sources",
