@@ -607,7 +607,7 @@ impl<H: FrameHost> HubFrame<H> {
                 local(container)
                     .id("field-2d-scroll")
                     .capture_any_mouse_down(
-                        cx.listener(|frame, _, _, _| frame.press_area(&Area::Field2d)),
+                        cx.listener(move |frame, _, _, _| frame.press_area(&Area::Field2d(key))),
                     )
                     .on_any_mouse_down(cx.listener(|frame, event: &MouseDownEvent, _, cx| {
                         frame.field_2d_mouse_down(event, cx)
@@ -954,18 +954,15 @@ impl<H: FrameHost> HubFrame<H> {
         cx.notify();
     }
 
-    pub(super) fn field_2d_smooth(&mut self, by: [f64; 2], cx: &mut Context<'_, Self>) {
+    pub(super) fn field_2d_smooth(&mut self, key: usize, by: [f64; 2], cx: &mut Context<'_, Self>) {
         let now = self.host().frame_time(cx);
-        let Some(shown) = self.field_2d.shown else {
-            return;
-        };
-        if let Some(tab) = self.field_2d.tabs.get_mut(&shown.key) {
+        if let Some(tab) = self.field_2d.tabs.get_mut(&key) {
             tab.sensor.scroll_by(by, now);
         }
     }
 
-    pub(super) fn field_2d_range(&self) -> Option<[[f64; 2]; 2]> {
-        let shown = self.field_2d.shown?;
+    pub(super) fn field_2d_range(&self, key: usize) -> Option<[[f64; 2]; 2]> {
+        let shown = self.field_2d.shown.filter(|s| s.key == key)?;
         Some(overlay_range(shown.overlay_client_size()))
     }
 

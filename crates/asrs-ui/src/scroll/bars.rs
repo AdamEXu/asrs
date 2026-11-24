@@ -7,8 +7,8 @@ use std::time::Instant;
 
 use gpui_kit::{
     App, Bounds, Corners, DispatchPhase, Global, Hitbox, HitboxBehavior, IntoElement, MouseButton,
-    MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Styled, Window,
-    canvas, fill, point, px, rgba, size,
+    MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, ScrollEvent,
+    Styled, Window, canvas, fill, point, px, rgba, size,
 };
 
 use super::keys::{LINE, page_step};
@@ -96,8 +96,13 @@ pub fn set_style(style: Style, jump: bool, cx: &mut App) {
     cx.refresh_windows();
 }
 
-/// Takes the system's style.
+/// Takes the system's style, and follows it.
 pub fn use_system_style(cx: &mut App) {
+    take_system_style(cx);
+    crate::platform::observe_scrollbar_preferences(cx, take_system_style);
+}
+
+fn take_system_style(cx: &mut App) {
     let (classic, jump) = crate::platform::scrollbar_preferences();
     set_style(Style::of(classic), jump, cx);
 }
@@ -139,6 +144,7 @@ pub struct Bar {
     /// Its buttons' length.
     pub button: f64,
     pub thumb: f64,
+    /// The thumb's length, which is 0 where it has no room.
     pub length: f64,
     pub max: f64,
 }
@@ -166,15 +172,20 @@ pub fn geometry(style: Style, extent: &Extent, rect: [f64; 2], scale: f64) -> [O
             0.0
         };
         let track = rect[a] - corner;
-        let button = style.button() * scale;
+        if track <= 0.0 {
+            return None;
+        }
+        let button = (style.button() * scale).min((track / 2.0).floor());
         let inner = track - 2.0 * button;
         let length = (inner * client / content[a])
             .round()
             .max(style.min_thumb() * scale);
+        let length = match style {
+            // The themes do not scale the room a thumb needs.
+            Style::Overlay | Style::Classic if inner <= style.min_thumb() => 0.0,
+            _ => length.min(inner),
+        };
         let max = content[a] - client;
-        if length > inner {
-            return None;
-        }
         let offset = (extent.offset[a] * scale).clamp(0.0, max);
         Some(Bar {
             track,
@@ -186,7 +197,26 @@ pub fn geometry(style: Style, extent: &Extent, rect: [f64; 2], scale: f64) -> [O
     })
 }
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Part {
+    Back,
+    Before,
+    Thumb,
+    After,
+    Forward,
+}
+
 impl Bar {
+    fn part(&self, at: f64) -> Part {
+        match at {
+            at if at < self.button => Part::Back,
+            at if at >= self.track - self.button => Part::Forward,
+            at if at < self.thumb => Part::Before,
+            at if at < self.thumb + self.length => Part::Thumb,
+            _ => Part::After,
+        }
+    }
+
     fn ratio(&self) -> f64 {
         let travel = self.track - 2.0 * self.button - self.length;
         if travel > 0.0 { self.max / travel } else { 0.0 }
@@ -196,7 +226,7 @@ impl Bar {
     pub fn drawn(&self, style: Style, scale: f64) -> [f64; 2] {
         let (inset, least) = style.thumb_inset();
         let length = self.length - 2.0 * inset * scale;
-        let least = least * scale;
+        let least = (least * scale).min(self.length);
         if length >= least {
             return [self.thumb + inset * scale, length];
         }
@@ -210,23 +240,50 @@ struct Drag {
     axis: usize,
     pointer: f64,
     offset: f64,
+    /// The largest offset as of the last move.
+    max: f64,
 }
 
 #[derive(Clone, Copy, Debug)]
 struct Held {
     axis: usize,
-    /// Along the bar, in device px.
-    pointer: f64,
-    direction: f64,
+    part: Part,
+    /// Along the bar, in device px, while the pointer is on the part.
+    pointer: Option<f64>,
     /// What a press scrolls by, in CSS px.
     step: f64,
-    button: bool,
-    since: f64,
-    /// Where the scroll was when it began to go on, and then.
+    /// When it goes on.
+    due: f64,
+    /// Where the scroll was when it last began to go on, and then.
     going: Option<(f64, f64)>,
     /// The last frame that went on.
     frame: Option<f64>,
     reached: bool,
+}
+
+impl Held {
+    fn direction(&self) -> f64 {
+        match self.part {
+            Part::Back | Part::Before => -1.0,
+            _ => 1.0,
+        }
+    }
+
+    fn on_button(&self) -> bool {
+        matches!(self.part, Part::Back | Part::Forward)
+    }
+
+    /// It waits while the pointer is elsewhere, and goes on as the pointer comes back.
+    fn pointed(&mut self, bar: &Bar, at: Option<f64>, now: f64) {
+        let on = at.filter(|at| bar.part(*at) == self.part);
+        if on.is_none() {
+            self.going = None;
+        } else if self.pointer.is_none() {
+            self.due = now;
+        }
+        self.pointer = on;
+        self.reached = false;
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -520,12 +577,15 @@ impl Frame {
             (Style::Overlay, true, _) => 0xffffff80,
         };
         if self.style == Style::Fluent {
-            for (end, direction) in [(0, -1.0), (1, 1.0)] {
+            for (end, button) in [(0, Part::Back), (1, Part::Forward)] {
                 let pressed = state
                     .held
-                    .is_some_and(|h| h.axis == axis && h.button && h.direction == direction);
+                    .is_some_and(|h| h.axis == axis && h.part == button);
                 self.paint_arrow(axis, bar, end, pressed, window);
             }
+        }
+        if bar.length == 0.0 {
+            return;
         }
         let [start, length] = bar.drawn(self.style, scale);
         let bounds = self.place(
@@ -639,18 +699,18 @@ fn held_step(state: &mut State, frame: &Frame, extent: &Extent, now: f64) -> Opt
         state.held = None;
         return None;
     };
-    if now - held.since < HELD_DELAY || held.reached || held.frame == Some(now) {
+    if now < held.due || held.reached || held.frame == Some(now) {
         return None;
     }
+    let pointer = held.pointer?;
     let axis = held.axis;
     held.frame = Some(now);
     let (from, began) = *held.going.get_or_insert((extent.offset[axis], now));
     let speed = held.step * HELD_STEPS / 1000.0;
     let max = bar.max / frame.scale;
-    let to = (from + held.direction * speed * (now - began)).clamp(0.0, max);
-    held.reached = !held.button
-        && held.pointer >= bar.thumb - 1.0
-        && held.pointer < bar.thumb + bar.length + 1.0;
+    let to = (from + held.direction() * speed * (now - began)).clamp(0.0, max);
+    held.reached =
+        !held.on_button() && pointer >= bar.thumb - 1.0 && pointer < bar.thumb + bar.length + 1.0;
     state.held = Some(held);
     let mut offset = extent.offset;
     offset[axis] = to;
@@ -690,11 +750,15 @@ fn listen(
                 let mut to = extent.offset;
                 let mut state = state.borrow_mut();
                 let pointer = client(event.position)[axis];
+                if bar.length == 0.0 && frame.style == Style::Overlay {
+                    return;
+                }
                 if thumb {
                     state.drag = Some(Drag {
                         axis,
                         pointer,
                         offset,
+                        max: bar.max,
                     });
                 } else if jump && bar.button == 0.0 {
                     let half = (bar.length / 2.0).floor();
@@ -704,32 +768,28 @@ fn listen(
                         axis,
                         pointer,
                         offset: to[axis],
+                        max: bar.max,
                     });
                     drop(state);
                     request(Request::To(to), window, cx);
                 } else {
-                    let button = at < bar.button || at >= bar.track - bar.button;
-                    let direction = if at < bar.thumb { -1.0 } else { 1.0 };
-                    let step = if button {
-                        LINE
-                    } else {
-                        page_step(scrolls(&bar, axis, frame.scale), frame.scale)
-                    };
-                    let since = state.now(cx);
-                    state.held = Some(Held {
+                    let mut held = Held {
                         axis,
-                        pointer: at,
-                        direction,
-                        step,
-                        button,
-                        since,
+                        part: bar.part(at),
+                        pointer: Some(at),
+                        step: LINE,
+                        due: state.now(cx) + HELD_DELAY,
                         going: None,
                         frame: None,
                         reached: false,
-                    });
+                    };
+                    if !held.on_button() {
+                        held.step = page_step(scrolls(&bar, axis, frame.scale), frame.scale);
+                    }
+                    state.held = Some(held);
                     drop(state);
                     let mut by = [0.0; 2];
-                    by[axis] = direction * step;
+                    by[axis] = held.direction() * held.step;
                     request(Request::By(by), window, cx);
                 }
                 window.refresh();
@@ -743,11 +803,20 @@ fn listen(
                 return;
             }
             let mut inner = state.borrow_mut();
-            if let Some(drag) = inner.drag {
+            if let Some(mut drag) = inner.drag {
                 if event.pressed_button != Some(MouseButton::Left) {
                     inner.drag = None;
                 } else if let Some(bar) = frame.bars[drag.axis] {
-                    let moved = client(event.position)[drag.axis] - drag.pointer;
+                    let pointer = client(event.position)[drag.axis];
+                    if drag.max != bar.max {
+                        drag.max = bar.max;
+                        drag.pointer = pointer;
+                        drag.offset = extent.offset[drag.axis];
+                        inner.drag = Some(drag);
+                        cx.stop_propagation();
+                        return;
+                    }
+                    let moved = pointer - drag.pointer;
                     let mut to = extent.offset;
                     let max = bar.max / frame.scale;
                     to[drag.axis] = (drag.offset + moved * bar.ratio()).clamp(0.0, max);
@@ -757,8 +826,16 @@ fn listen(
                     return;
                 }
             }
-            if inner.held.is_some() && event.pressed_button != Some(MouseButton::Left) {
-                inner.held = None;
+            if let Some(mut held) = inner.held {
+                inner.held = match (event.pressed_button, &frame.bars[held.axis]) {
+                    (Some(MouseButton::Left), Some(bar)) => {
+                        let over = frame.over(held.axis, client(event.position));
+                        let now = inner.now(cx);
+                        held.pointed(bar, over.map(|(at, _)| at), now);
+                        Some(held)
+                    }
+                    _ => None,
+                };
             }
             if event.pressed_button.is_some() {
                 return;
@@ -785,6 +862,14 @@ fn listen(
                 let over = frame.hovered(client(event.position), window);
                 state.hover(Some(over), now);
                 window.refresh();
+            }
+        }
+    });
+    window.on_mouse_event({
+        let (frame, state) = (frame.clone(), state.clone());
+        move |event: &ScrollEvent, phase, _, _| {
+            if phase == DispatchPhase::Capture && frame.bounds.contains(&event.position) {
+                state.borrow_mut().drag = None;
             }
         }
     });

@@ -18,6 +18,13 @@ use asrs_ui::gpui::{
 };
 use asrs_ui::scroll::{self, Extent, Request, Scrollbars, Style};
 
+/// The host whose recording stands for this one: Blink's offsets and Skia's GPU rasterization, which
+/// the recorder runs on SwiftShader on Linux, are the same on both of a system's architectures.
+const HOST: &str = if cfg!(target_os = "macos") {
+    "macos-aarch64"
+} else {
+    "linux-x86_64"
+};
 const FRAME: Duration = Duration::from_millis(10);
 /// How long the recorder waits for offsets to stay the same.
 const SETTLE: u32 = 27;
@@ -307,10 +314,23 @@ impl Page<'_> {
         });
     }
 
-    /// `a.scrollTop = 5;a.scrollLeft = 50`.
+    /// `a.scrollTop=5;a.scrollLeft=50`, or `a.firstElementChild.style.height='50px'`.
     fn script(&mut self, script: &str) {
         for part in script.split(';') {
             let (name, value) = part.split_once('=').expect("an assignment");
+            if name == "a.firstElementChild.style.height" {
+                let height = value.trim_matches('\'').trim_end_matches("px");
+                let height = height.parse().expect("a length");
+                self.update(|view, style| {
+                    view.content[1] = height;
+                    view.offset[1] = view.offset[1].min(view.max(style)[1]);
+                });
+                continue;
+            }
+            assert!(
+                ["a.scrollTop", "a.scrollLeft"].contains(&name),
+                "script {name}"
+            );
             self.update(|view, style| {
                 let (max, client) = (view.max(style), view.client(style));
                 let value = match value {
@@ -414,8 +434,7 @@ fn replay(headless: &mut HeadlessCapture, id: &str) -> [usize; 3] {
     let fixture = spec.get("fixture").expect("a fixture");
     let jump = matches!(fixture.get("jump"), Some(Json::Bool(true)));
     let list = |key: &str| items(fixture.get(key).expect("a list")).to_vec();
-    let host = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
-    let records = vectors::load(&format!("{id}/{host}")).expect("vectors");
+    let records = vectors::load(&format!("{id}/{HOST}")).expect("vectors");
     let mut records = records.iter();
     let mut counts = [0; 3];
     let styles: Vec<String> = if cfg!(target_os = "macos") {
@@ -545,7 +564,13 @@ fn main() {
     }
     let mut headless = HeadlessCapture::new(Arc::new(())).expect("headless");
     let mac = cfg!(target_os = "macos");
-    for id in ["scroll/keys", "scroll/bars", "scroll/jump", "scroll/fade"] {
+    for id in [
+        "scroll/keys",
+        "scroll/bars",
+        "scroll/drag",
+        "scroll/jump",
+        "scroll/fade",
+    ] {
         if !mac && matches!(id, "scroll/jump" | "scroll/fade") {
             continue;
         }

@@ -310,12 +310,13 @@ impl<H: FrameHost> HubFrame<H> {
 
     fn line_graph_overlay(&self, shown: &Shown, cx: &mut Context<'_, Self>) -> AnyElement {
         let [x, y, w, h] = shown.overlay;
+        let key = shown.key;
         probed(
             "div.line-graph-scroll",
             div()
                 .id("line-graph-scroll")
                 .capture_any_mouse_down(
-                    cx.listener(|frame, _, _, _| frame.press_area(&Area::LineGraph)),
+                    cx.listener(move |frame, _, _, _| frame.press_area(&Area::LineGraph(key))),
                 )
                 .absolute()
                 .left(px((x - shown.root[0]) as f32))
@@ -516,18 +517,20 @@ impl<H: FrameHost> HubFrame<H> {
         cx.notify();
     }
 
-    pub(super) fn line_graph_smooth(&mut self, by: [f64; 2], cx: &mut Context<'_, Self>) {
+    pub(super) fn line_graph_smooth(
+        &mut self,
+        key: usize,
+        by: [f64; 2],
+        cx: &mut Context<'_, Self>,
+    ) {
         let now = self.host().frame_time(cx);
-        let Some(shown) = self.line_graph().shown else {
-            return;
-        };
-        if let Some(tab) = self.line_graph_mut().tabs.get_mut(&shown.key) {
+        if let Some(tab) = self.line_graph_mut().tabs.get_mut(&key) {
             tab.sensor.scroll_by(by, now);
         }
     }
 
-    pub(super) fn line_graph_range(&self) -> Option<[[f64; 2]; 2]> {
-        let shown = self.line_graph().shown?;
+    pub(super) fn line_graph_range(&self, key: usize) -> Option<[[f64; 2]; 2]> {
+        let shown = self.line_graph().shown.filter(|s| s.key == key)?;
         Some(overlay_range(shown.overlay_client_size()))
     }
 

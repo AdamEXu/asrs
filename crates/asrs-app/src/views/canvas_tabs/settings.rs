@@ -216,7 +216,7 @@ struct PanelLayout {
 }
 
 impl PanelLayout {
-    /// With a scrollbar that takes `bar` px of it where it overflows.
+    /// `bar` is what a scrollbar takes of the panel where it overflows.
     fn new([x, y, w, h]: [f64; 4], bar: f64) -> PanelLayout {
         let width = math::min2(lu(w * 0.4), MAX_WIDTH);
         let panel = [x + w - width - 1.0, y, width + 1.0, h];

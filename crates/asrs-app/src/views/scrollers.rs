@@ -25,8 +25,8 @@ pub enum Area {
     SideBar,
     Timeline,
     TabBar,
-    LineGraph,
-    Field2d,
+    LineGraph(usize),
+    Field2d(usize),
 }
 
 #[derive(Default)]
@@ -196,7 +196,11 @@ impl<H: FrameHost> HubFrame<H> {
             Area::StatisticsSettings(key) => self.statistics_settings_scroll_to(*key, to[1], cx),
             Area::CanvasSettings(key) => self.canvas_settings_scroll_to(*key, to[1], scale),
             Area::List(uuid) => self.source_list_scroll_to(uuid, to[1], scale),
-            Area::SideBar | Area::Timeline | Area::TabBar | Area::LineGraph | Area::Field2d => {}
+            Area::SideBar
+            | Area::Timeline
+            | Area::TabBar
+            | Area::LineGraph(_)
+            | Area::Field2d(_) => {}
         }
         cx.notify();
     }
@@ -212,8 +216,8 @@ impl<H: FrameHost> HubFrame<H> {
             Area::SideBar => self.host_mut().side_bar_smooth(by[1], cx),
             Area::Timeline => self.timeline_smooth(by, cx),
             Area::TabBar => self.tab_bar_smooth(by, cx),
-            Area::LineGraph => self.line_graph_smooth(by, cx),
-            Area::Field2d => self.field_2d_smooth(by, cx),
+            Area::LineGraph(key) => self.line_graph_smooth(*key, by, cx),
+            Area::Field2d(key) => self.field_2d_smooth(*key, by, cx),
         }
         cx.notify();
     }
@@ -225,13 +229,16 @@ impl<H: FrameHost> HubFrame<H> {
             Area::Console(key) => self.console_range(*key),
             Area::Statistics(key) => self.statistics_range(*key),
             Area::StatisticsSettings(key) => self.statistics_settings_range(*key),
-            Area::CanvasSettings(key) => self.canvas_settings_range(*key),
+            Area::CanvasSettings(key) if self.scrollers.bars.contains_key(area) => {
+                self.canvas_settings_range(*key)
+            }
+            Area::CanvasSettings(_) => None,
             Area::List(uuid) => self.source_list_range(uuid),
             Area::SideBar => self.host().side_bar_range(cx),
             Area::Timeline => self.timeline_range(),
             Area::TabBar => self.tab_bar_range(),
-            Area::LineGraph => self.line_graph_range(),
-            Area::Field2d => self.field_2d_range(),
+            Area::LineGraph(key) => self.line_graph_range(*key),
+            Area::Field2d(key) => self.field_2d_range(*key),
         }
     }
 

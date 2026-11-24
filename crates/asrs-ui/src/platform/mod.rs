@@ -500,6 +500,14 @@ pub fn scrollbar_preferences() -> (bool, bool) {
     imp::scrollbar_preferences()
 }
 
+/// Calls `on_change` when [`scrollbar_preferences`] change while the app runs, where they can.
+pub fn observe_scrollbar_preferences(cx: &App, on_change: impl Fn(&mut App) + 'static) {
+    #[cfg(target_os = "macos")]
+    mac::scrollbars::observe(cx, on_change);
+    #[cfg(not(target_os = "macos"))]
+    let _ = (cx, on_change);
+}
+
 /// The system's light colours of selected text, `0xRRGGBB`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SystemSelection {

@@ -107,12 +107,12 @@ pub(super) fn observe_full_screen(
     None
 }
 
-/// `RendererPreferences`' defaults, which Electron leaves as they are: its render hosts show
-/// #3367d1 for the active one, this blended with white over white.
 pub(super) fn scrollbar_preferences() -> (bool, bool) {
     (true, false)
 }
 
+/// `RendererPreferences`' defaults, which Electron leaves as they are: its render hosts show
+/// #3367d1 for the active one, this blended with white over white.
 pub(super) fn selection_colors() -> SystemSelection {
     SystemSelection {
         active: 0x1967d2,

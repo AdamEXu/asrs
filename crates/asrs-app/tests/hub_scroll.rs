@@ -27,6 +27,13 @@ use asrs_ui::parity::Recorder;
 use asrs_ui::scroll::{Style, set_style};
 use hub_page::Page;
 
+/// The host whose recording stands for this one: Blink's offsets are the same on both of a system's
+/// architectures.
+const HOST: &str = if cfg!(target_os = "macos") {
+    "macos-aarch64"
+} else {
+    "linux-x86_64"
+};
 const SETTLE_FRAMES: usize = 40;
 const ROWS: usize = 400;
 /// The `scrollTop` the recorded keys scroll from.
@@ -38,8 +45,7 @@ fn items(value: Option<&Json>) -> &[Json] {
 
 /// How far `key` goes in a scroller `height` px high.
 fn recorded(key: &str, height: f64, scale: f32) -> f64 {
-    let host = format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH);
-    let records = vectors::load(&format!("scroll/keys/{host}")).expect("vectors");
+    let records = vectors::load(&format!("scroll/keys/{HOST}")).expect("vectors");
     let step = format!("page{height}");
     let text = |value: &Json| value.as_str().map(|s| s.to_string_lossy());
     let found = records.iter().find(|record| {

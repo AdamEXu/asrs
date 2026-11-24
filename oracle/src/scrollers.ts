@@ -30,7 +30,9 @@ for (const style of styles) {
       const env = { ...process.env };
       delete env.ELECTRON_RUN_AS_NODE;
       env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
-      const platform = process.platform === "linux" ? ["--ozone-platform=headless"] : [];
+      // Rasterized as with a GPU, whatever the host's are and whether it has a display.
+      const gpu = ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"];
+      const platform = process.platform === "linux" ? ["--ozone-platform=headless", ...gpu] : [];
       // The argument domain of NSUserDefaults, which this process alone sees.
       const defaults = process.platform === "darwin" ? ["-AppleShowScrollBars", style === "classic" ? "Always" : "WhenScrolling", "-AppleScrollerPagingBehavior", fixture.jump ? "YES" : "NO"] : [];
       run = spawnSync(

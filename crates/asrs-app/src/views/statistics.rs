@@ -98,8 +98,8 @@ struct SettingsLayout {
 }
 
 impl SettingsLayout {
-    /// `line` is the height of a number input's line of text.
-    /// With a scrollbar that takes `bar` px of it where it overflows.
+    /// `line` is the height of a number input's line of text, and `bar` what a scrollbar takes of
+    /// the panel where it overflows.
     fn new([x, y, w, h]: [f64; 4], line: f64, bar: f64) -> SettingsLayout {
         let width = math::min2(lu(w * 0.4), SETTINGS_MAX_WIDTH);
         let panel = [x + w - width - 1.0, y, width + 1.0, h];

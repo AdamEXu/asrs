@@ -326,7 +326,6 @@ impl State {
 }
 
 impl StatisticsLayout {
-    /// Sizes the renderer element.
     pub fn set_scrollbar(&self, bar: f64) {
         let mut state = self.0.borrow_mut();
         if std::mem::replace(&mut state.bar, bar) != bar {
@@ -334,6 +333,7 @@ impl StatisticsLayout {
         }
     }
 
+    /// Sizes the renderer element.
     pub fn resize(&self, size: [f64; 2], scale: f32) {
         let mut state = self.0.borrow_mut();
         if (state.size, state.scale) != (size, scale) {
