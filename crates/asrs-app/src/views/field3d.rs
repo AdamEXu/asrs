@@ -1347,7 +1347,7 @@ impl<H: FrameHost> HubFrame<H> {
         } else {
             (0xeeeeee, 0xaaaaaa)
         };
-        let focus = FocusRing::of("xr-button-focus", None, window, cx);
+        let focus = FocusRing::of(("xr-button-focus", key), None, window, cx);
         let radius = px(10.0);
         let click = move |frame: &mut HubFrame<H>, cx: &mut Context<'_, HubFrame<H>>| {
             frame.host_mut().input(cx, |hub| {

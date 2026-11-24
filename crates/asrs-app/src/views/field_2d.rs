@@ -746,7 +746,7 @@ impl<H: FrameHost> HubFrame<H> {
         if let (Some([lx, ly]), Some(width)) = (layout.source, source_width) {
             let (_, h) = text::measure(cx, &source_style(), "Source", scale);
             let entity = entity.clone();
-            let focus = FocusRing::of("field-source-focus", None, window, cx);
+            let focus = FocusRing::of(("field-source-focus", key), None, window, cx);
             let (ascent, descent) = text::font_metrics(cx, &source_style(), scale);
             let content = f64::from((ascent + descent) / scale);
             // On the select's baseline.
