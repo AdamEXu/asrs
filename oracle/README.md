@@ -1319,7 +1319,8 @@ script runs (the driver exits naming the expected set when one is missing):
 
 What the driver pins besides switches: windows are shown inactive (`show` becomes
 `showInactive`, except for modal prompts, whose `show` begins a sheet) at the primary display's work-area origin plus 16 px with the scenario's content
-size, ignore the real pointer, and never open DevTools; `fetch` and `net.fetch` in the main
+size, ignore the real pointer, never open DevTools, and on macOS cannot take the focus (a run
+in which one does fails); `fetch` and `net.fetch` in the main
 process and non-loopback HTTP and WebSocket requests from pages are refused (the refused URLs
 are in `run.json`); every `dialog` call is answered from the scenario's `dialog` actions, and an
 unscripted one fails the run; `prefs.json` is the scenario's `prefs` plus its theme, and
@@ -1377,7 +1378,7 @@ for focused text inputs, webviews and the scenario's mask selectors, the canvas 
 list, and a `timing` object that differs between runs), `<name>.canvas-<i>.png` (`getImageData`
 on each visible 2D canvas) and `<name>.gl-<i>.png`. Each GL entry names its render mode (`mode`:
 `standard`, `low-power` or `cinematic`, read from the context's `powerPreference`, which
-`Field3dRendererImpl` sets from the mode alone), and gate 4 picks its rule from it. On the `app`
+`Field3dRendererImpl` sets from the mode alone), and gate 4 requires the same one of the port. On the `app`
 page the capture also waits for the next `save-state` and writes its data as
 `<name>.hub-state.json` (`JSON.stringify`, compared byte for byte) and records
 `selection.getTimelineRange()` as `timelineRange` (compared within 1e-9 of the span: Chromium

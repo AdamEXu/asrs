@@ -11,6 +11,9 @@ use crate::three::{ArrayData, BufferAttribute, Group};
 pub const COLOR_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Bgra8Unorm;
 const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 const ID_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R32Uint;
+/// Ids of the multisampled aux pass, packed into the bytes of a colour: `R32Uint` cannot be
+/// multisampled.
+const SAMPLE_ID_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const SHADOW_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const DRAW_STRIDE: u64 = 256;
 const MAX_HEMI: usize = 4;
@@ -141,6 +144,7 @@ struct PipeKey {
 enum Pass {
     Color,
     Aux,
+    AuxSamples,
     Shadow,
 }
 
@@ -174,12 +178,15 @@ pub struct Timings {
 
 /// Per-pixel object ids and depth from a single-sample pass over the same draws, for the edge
 /// mask of the 3D pixel gate. A pixel holds `(object id + 1) * 2 + front facing`; 0 is background.
+/// `mixed` marks the pixels whose samples hold more than one id when the same draws are rendered
+/// with the frame's sample count.
 pub struct AuxBuffers {
     pub width: u32,
     pub height: u32,
     pub opaque_ids: Vec<u32>,
     pub transparent_ids: Vec<u32>,
     pub depth: Vec<f32>,
+    pub mixed: Vec<bool>,
 }
 
 struct Targets {
@@ -506,14 +513,19 @@ impl Renderer {
                         wgpu::ColorWrites::empty()
                     }
                 };
+                let format = if key.samples > 1 {
+                    SAMPLE_ID_FORMAT
+                } else {
+                    ID_FORMAT
+                };
                 vec![
                     Some(wgpu::ColorTargetState {
-                        format: ID_FORMAT,
+                        format,
                         blend: None,
                         write_mask: mask(!key.blend),
                     }),
                     Some(wgpu::ColorTargetState {
-                        format: ID_FORMAT,
+                        format,
                         blend: None,
                         write_mask: mask(key.blend),
                     }),
@@ -529,16 +541,21 @@ impl Renderer {
                     write_mask: wgpu::ColorWrites::ALL,
                 })]
             };
-            let (vertex_entry, fragment_entry) = match (key.program, key.aux) {
-                (Program::Phong, aux) => (
+            let fragment = |color, aux, aux_samples| match (key.aux, key.samples) {
+                (false, _) => color,
+                (true, 1) => aux,
+                (true, _) => aux_samples,
+            };
+            let (vertex_entry, fragment_entry) = match key.program {
+                Program::Phong => (
                     if key.instanced {
                         "vs_instanced"
                     } else {
                         "vs_mesh"
                     },
-                    if aux { "fs_aux" } else { "fs" },
+                    fragment("fs", "fs_aux", "fs_aux_samples"),
                 ),
-                (Program::Depth, _) => (
+                Program::Depth => (
                     if key.instanced {
                         "vs_depth_instanced"
                     } else {
@@ -546,17 +563,14 @@ impl Renderer {
                     },
                     "fs_depth",
                 ),
-                (Program::FatLine, aux) => (
+                Program::FatLine => (
                     "vs_fat_line",
-                    if aux {
-                        "fs_fat_line_aux"
-                    } else {
-                        "fs_fat_line"
-                    },
+                    fragment("fs_fat_line", "fs_fat_line_aux", "fs_fat_line_aux_samples"),
                 ),
-                (Program::Lines | Program::LineStrip, aux) => {
-                    ("vs_basic", if aux { "fs_basic_aux" } else { "fs_basic" })
-                }
+                Program::Lines | Program::LineStrip => (
+                    "vs_basic",
+                    fragment("fs_basic", "fs_basic_aux", "fs_basic_aux_samples"),
+                ),
             };
             let topology = match key.program {
                 Program::Lines => wgpu::PrimitiveTopology::LineList,
@@ -981,8 +995,11 @@ impl Renderer {
             depth_write: shadow || kind.depth_write(),
             instanced,
             float_color,
-            aux: pass == Pass::Aux,
-            samples: if pass == Pass::Color { samples } else { 1 },
+            aux: matches!(pass, Pass::Aux | Pass::AuxSamples),
+            samples: match pass {
+                Pass::Color | Pass::AuxSamples => samples,
+                Pass::Aux | Pass::Shadow => 1,
+            },
             strip_index_format,
         }
     }
@@ -996,6 +1013,7 @@ impl Renderer {
         samples: u32,
         instance_offsets: &[Option<u64>],
         pass_kind: Pass,
+        viewport: Option<[u32; 2]>,
         frame_group: Option<&wgpu::BindGroup>,
         pass_desc: &wgpu::RenderPassDescriptor<'_>,
         encoder: &mut wgpu::CommandEncoder,
@@ -1008,6 +1026,9 @@ impl Renderer {
             self.pipeline(key);
         }
         let mut pass = encoder.begin_render_pass(pass_desc);
+        if let Some([width, height]) = viewport {
+            pass.set_viewport(0.0, 0.0, width as f32, height as f32, 0.0, 1.0);
+        }
         pass.set_bind_group(0, frame_group.unwrap_or(&self.frame_group), &[]);
         for (n, draw) in draws.iter().enumerate() {
             let index = first + n;
@@ -1119,6 +1140,7 @@ impl Renderer {
                 1,
                 instance_offsets,
                 Pass::Shadow,
+                None,
                 Some(&maps.frame_groups[layer]),
                 &desc,
                 encoder,
@@ -1190,6 +1212,7 @@ impl Renderer {
                 samples,
                 &instance_offsets,
                 Pass::Color,
+                Some(gl_viewport(frame)),
                 None,
                 &desc,
                 &mut encoder,
@@ -1293,10 +1316,15 @@ impl Renderer {
         Some((width, height, out))
     }
 
-    /// The single-sample id and depth pass behind the edge mask. Opaque draws write the first
-    /// id target and depth; transparent draws only the second id target, depth tested.
+    /// The id and depth passes behind the edge mask, single-sample and, for a multisampled frame,
+    /// with the frame's samples. Opaque draws write the first id target and depth; transparent
+    /// draws only the second id target, depth tested.
     pub fn render_aux(&mut self, frame: &Frame) -> AuxBuffers {
-        let FrameOptionsSize { width, height, .. } = frame_size(frame);
+        let FrameOptionsSize {
+            width,
+            height,
+            samples,
+        } = frame_size(frame);
         self.ensure_shadow_maps(frame);
         self.sync_resources(frame);
         let instance_offsets = self.write_uniforms(frame);
@@ -1304,50 +1332,40 @@ impl Renderer {
         let opaque = self.texture(width, height, ID_FORMAT, 1, usage);
         let transparent = self.texture(width, height, ID_FORMAT, 1, usage);
         let depth = self.texture(width, height, DEPTH_FORMAT, 1, usage);
-        let views = [&opaque, &transparent].map(|t| t.create_view(&Default::default()));
-        let depth_view = depth.create_view(&Default::default());
+        let mixed = self.texture(width, height, ID_FORMAT, 1, usage);
         let mut encoder = self.device.create_command_encoder(&Default::default());
-        {
-            let attachment = |view| {
-                Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-                        store: wgpu::StoreOp::Store,
-                    },
-                })
-            };
-            let color_attachments = [attachment(&views[0]), attachment(&views[1])];
-            let desc = wgpu::RenderPassDescriptor {
-                label: None,
-                color_attachments: &color_attachments,
-                depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
-                    view: &depth_view,
-                    depth_ops: Some(wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(1.0),
-                        store: wgpu::StoreOp::Store,
-                    }),
-                    stencil_ops: None,
-                }),
-                timestamp_writes: None,
-                occlusion_query_set: None,
-                multiview_mask: None,
-            };
-            self.encode_draws(
-                &frame.draws,
-                0,
-                1,
+        self.encode_aux(
+            frame,
+            &instance_offsets,
+            Pass::Aux,
+            1,
+            [&opaque, &transparent, &depth],
+            &mut encoder,
+        );
+        if samples > 1 {
+            let usage =
+                wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
+            let ids =
+                [(); 2].map(|()| self.texture(width, height, SAMPLE_ID_FORMAT, samples, usage));
+            let sample_depth = self.texture(
+                width,
+                height,
+                DEPTH_FORMAT,
+                samples,
+                wgpu::TextureUsages::RENDER_ATTACHMENT,
+            );
+            self.encode_aux(
+                frame,
                 &instance_offsets,
-                Pass::Aux,
-                None,
-                &desc,
+                Pass::AuxSamples,
+                samples,
+                [&ids[0], &ids[1], &sample_depth],
                 &mut encoder,
             );
+            super::mixed::encode(&self.device, &mut encoder, &ids, &mixed);
         }
         let padded = padded_row(width);
-        let buffers: Vec<wgpu::Buffer> = (0..3)
+        let buffers: Vec<wgpu::Buffer> = (0..4)
             .map(|_| {
                 self.device.create_buffer(&wgpu::BufferDescriptor {
                     label: None,
@@ -1361,6 +1379,7 @@ impl Renderer {
             (&opaque, wgpu::TextureAspect::All, &buffers[0]),
             (&transparent, wgpu::TextureAspect::All, &buffers[1]),
             (&depth, wgpu::TextureAspect::DepthOnly, &buffers[2]),
+            (&mixed, wgpu::TextureAspect::All, &buffers[3]),
         ] {
             encoder.copy_texture_to_buffer(
                 wgpu::TexelCopyTextureInfo {
@@ -1416,13 +1435,65 @@ impl Renderer {
             .iter()
             .map(|c| f32::from_ne_bytes(*c))
             .collect();
+        let mixed = u32s(read(&buffers[3])).iter().map(|&v| v != 0).collect();
         AuxBuffers {
             width,
             height,
             opaque_ids,
             transparent_ids,
             depth,
+            mixed,
         }
+    }
+
+    fn encode_aux(
+        &mut self,
+        frame: &Frame,
+        instance_offsets: &[Option<u64>],
+        pass: Pass,
+        samples: u32,
+        [opaque, transparent, depth]: [&wgpu::Texture; 3],
+        encoder: &mut wgpu::CommandEncoder,
+    ) {
+        let views = [opaque, transparent].map(|t| t.create_view(&Default::default()));
+        let depth_view = depth.create_view(&Default::default());
+        let color_attachments = views.each_ref().map(|view| {
+            Some(wgpu::RenderPassColorAttachment {
+                view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })
+        });
+        let desc = wgpu::RenderPassDescriptor {
+            label: None,
+            color_attachments: &color_attachments,
+            depth_stencil_attachment: Some(wgpu::RenderPassDepthStencilAttachment {
+                view: &depth_view,
+                depth_ops: Some(wgpu::Operations {
+                    load: wgpu::LoadOp::Clear(1.0),
+                    store: wgpu::StoreOp::Store,
+                }),
+                stencil_ops: None,
+            }),
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        };
+        self.encode_draws(
+            &frame.draws,
+            0,
+            samples,
+            instance_offsets,
+            pass,
+            Some(gl_viewport(frame)),
+            None,
+            &desc,
+            encoder,
+        );
     }
 }
 
@@ -1438,6 +1509,10 @@ fn frame_size(frame: &Frame) -> FrameOptionsSize {
         height: frame.options.height.max(1),
         samples: if frame.options.samples > 1 { 4 } else { 1 },
     }
+}
+
+fn gl_viewport(frame: &Frame) -> [u32; 2] {
+    frame.options.gl_viewport.map(|v| v.max(1))
 }
 
 fn extent(width: u32, height: u32) -> wgpu::Extent3d {

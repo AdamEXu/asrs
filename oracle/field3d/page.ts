@@ -80,6 +80,7 @@ type NodeSpec = {
 type SceneSpec = {
   size: [number, number];
   antialias: boolean;
+  pixelRatio?: number;
   shadows?: boolean;
   fov: number;
   camera: { position: Vec3; target: Vec3 };
@@ -323,7 +324,7 @@ function toBase64(bytes: Uint8Array): string {
   camera.aspect = width / height;
   camera.updateProjectionMatrix();
   scene.background = dark ? new THREE.Color("#222222") : new THREE.Color("#ffffff");
-  renderer.setPixelRatio(scale);
+  renderer.setPixelRatio(scale * (spec.pixelRatio ?? 1));
   renderer.render(scene, camera);
 
   const gl = renderer.getContext() as WebGL2RenderingContext;

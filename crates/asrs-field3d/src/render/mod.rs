@@ -9,6 +9,7 @@
 mod edges;
 mod frame;
 mod gpu;
+mod mixed;
 mod scene;
 mod thread;
 

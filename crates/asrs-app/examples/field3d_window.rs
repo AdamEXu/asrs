@@ -142,6 +142,7 @@ impl Field3dWindow {
             height,
             samples: 4,
             viewport: [f64::from(width), f64::from(height)],
+            gl_viewport: [width, height],
             shadow_map: false,
         };
         self.thread
