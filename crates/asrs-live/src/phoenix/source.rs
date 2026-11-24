@@ -161,6 +161,15 @@ impl PhoenixSource {
         self.base.stop(cx.timers);
     }
 
+    /// Whether handling timer `id` reads [`PhoenixWindow`]'s active fields.
+    pub fn reads_fields(&self, id: TimerId) -> bool {
+        self.plot_timers.contains(&id)
+    }
+
+    pub fn base(&self) -> &LiveDataSourceBase {
+        &self.base
+    }
+
     /// Dispatches a fired timer: the getDevices and plot intervals, the per-device plot
     /// timeouts, each request's abort timer, then the base's discard interval.
     pub fn handle_timer(

@@ -5,6 +5,12 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { realClearTimeout, realSetImmediate, realSetTimeout } from "./historical/timers";
+import { Net, Trace } from "./live/net";
+import { NT4Server } from "./live/nt4Server";
+import { PageLoop } from "./live/pageLoop";
+import { RLOGMain } from "./live/rlogMain";
+import { MockServer, Outbox, ServerContext, ServerHost } from "./live/server";
+import { FTCServer, PhoenixServer, RLOGServer } from "./live/simpleServers";
 
 // hubSession [<spec or fixture file>]
 //   Runs a `dom` fixture on the same page bundle (domPage.js: src/dom/env.ts, then the real
@@ -124,7 +130,10 @@ async function settle(): Promise<void> {
     await turn();
     await terminatedWorkersExited();
     const slot = slots.find((s) => !s.hung && (s.inbox.length > 0 || s.worker.busy));
-    if (slot === undefined) return;
+    if (slot === undefined) {
+      live?.taskEnded();
+      return;
+    }
     if (slot.inbox.length === 0) {
       if (!(await waitFor(slot))) {
         slot.hung = true;
@@ -208,6 +217,8 @@ function historicalStart(uuid: string, logPath: string): unknown {
   return { uuid, files: [readLog(logPath)], error: null };
 }
 
+let mainTimeout: (run: () => void, ms: number) => void;
+
 /** Main answers the page's requests as later tasks; the page's port records them first. */
 function pageWrite(line: string) {
   lines.push(line);
@@ -215,10 +226,49 @@ function pageWrite(line: string) {
   if (record.main === "historical-start") {
     const data = fromTree(record.data) as { uuid: string; path: string };
     const reply = adopt(historicalStart(data.uuid, data.path));
-    page.setTimeout(() => page.messagePort.onmessage({ data: { name: "historical-data", data: reply } }), 0);
+    mainTimeout(() => page.messagePort.onmessage({ data: { name: "historical-data", data: reply } }), 0);
   } else if (record.main === "historical-start-raw") {
     throw new Error("historical-start-raw is not modelled");
+  } else if (record.main === "live-rlog-start" || record.main === "live-rlog-stop") {
+    if (live === null || rlogMain === null) throw new Error("an RLOG source needs the fixture's \"live\"");
+    const data = record.data === undefined ? undefined : fromTree(record.data);
+    const main = rlogMain;
+    live.deliver(0, () => main.handle(record.main, data));
   }
+}
+
+const SERVERS: { [protocol: string]: new (out: Outbox, ctx: ServerContext, config: any) => MockServer } = {
+  nt4: NT4Server,
+  rlog: RLOGServer,
+  phoenix: PhoenixServer,
+  ftc: FTCServer
+};
+let live: PageLoop | null = null;
+let rlogMain: RLOGMain | null = null;
+
+/**
+ * The fixture's `live` is a live session (`liveSession.ts`) with no client steps: its server
+ * answers the page's WebSockets and requests and main's RLOG socket, on the page's clock.
+ */
+function installLive(session: any): void {
+  const loop = new PageLoop(page, (error) => log(`live task: ${(error as Error)?.stack ?? String(error)}`));
+  const outbox: { current: Outbox | null } = { current: null };
+  const relay = new Proxy({} as Outbox, { get: (_t, name) => (outbox.current as any)[name].bind(outbox.current) });
+  const server = new SERVERS[session.protocol](relay, { epochMs: loop.epochMs, now: () => loop.now }, session.server ?? {});
+  const steps = (session.steps ?? []).map((step: any) => ({ t: step.t, op: step.server }));
+  const latencyMs: number = session.latencyMs ?? 1;
+  const host = new ServerHost(server, steps, latencyMs, () => loop.now);
+  const trace = new Trace(loop, lines);
+  const net = new Net(loop, host, trace, latencyMs, adopt as <T>(value: T) => T);
+  outbox.current = net;
+  loop.server = host;
+  loop.install();
+  net.install(page);
+  rlogMain = new RLOGMain({ createConnection: (options) => net.createConnection(options) }, (_window, name, data) => {
+    loop.deliver(0, () => page.messagePort.onmessage({ data: { name, data: adopt(data) } }));
+    return true;
+  });
+  live = loop;
 }
 
 page.Worker = PageWorker;
@@ -230,11 +280,13 @@ page.__oracleOuter = { TextEncoder, TextDecoder };
 process.on("unhandledRejection", (reason) => {
   const error = reason as Error;
   log(`unhandled rejection: ${error?.stack ?? String(reason)}`);
-  write({ exception: "unhandledRejection", error: toTree(`${error?.name}: ${error?.message}`) });
+  if (live === null) write({ exception: "unhandledRejection", error: toTree(`${error?.name}: ${error?.message}`) });
 });
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 page.eval(fs.readFileSync(path.join(here, "domPage.js"), "utf8"));
+mainTimeout = page.setTimeout.bind(page);
+if (fixture.live !== undefined) installLive(fixture.live);
 await page.__oracleRun();
 for (const slot of slots) OracleWorker.prototype.terminate.call(slot.worker);
 setWorkerRouter(null);

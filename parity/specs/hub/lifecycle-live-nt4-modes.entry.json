@@ -1,0 +1,480 @@
+{
+ "entry": "hubSession",
+ "fixture": {
+  "seed": 102,
+  "live": {
+   "protocol": "nt4",
+   "seed": 1,
+   "epochMs": 1767225600000,
+   "latencyMs": 1,
+   "endMs": 600000,
+   "client": {
+    "source": "nt4",
+    "address": "10.63.28.2",
+    "mode": "default"
+   },
+   "server": {
+    "version": "4.0",
+    "ports": [
+     5810,
+     6810,
+     6767
+    ],
+    "topics": [
+     {
+      "name": "/SmartDashboard/speed",
+      "type": "double",
+      "value": 1.5
+     },
+     {
+      "name": "/SmartDashboard/kP",
+      "type": "double",
+      "value": 0.25
+     },
+     {
+      "name": "/SmartDashboard/count",
+      "type": "int",
+      "value": 3
+     },
+     {
+      "name": "/SmartDashboard/enable",
+      "type": "boolean",
+      "value": false
+     },
+     {
+      "name": "/SmartDashboard/name",
+      "type": "string",
+      "value": "robot"
+     },
+     {
+      "name": "/SmartDashboard/locked",
+      "type": "double",
+      "properties": {
+       "mutable": false
+      },
+      "value": 2
+     },
+     {
+      "name": "/Other/hidden",
+      "type": "double",
+      "value": 9
+     },
+     {
+      "name": "/AdvantageKit/Timestamp",
+      "type": "int",
+      "value": 0
+     },
+     {
+      "name": "/AdvantageKit/Drive/x",
+      "type": "double",
+      "value": 1
+     },
+     {
+      "name": "/Tuning/kP",
+      "type": "double",
+      "value": 0.1
+     }
+    ]
+   },
+   "steps": [
+    {
+     "t": 1500,
+     "server": [
+      "set",
+      "/AdvantageKit/Drive/x",
+      5
+     ]
+    },
+    {
+     "t": 4000,
+     "server": [
+      "set",
+      "/SmartDashboard/speed",
+      7
+     ]
+    },
+    {
+     "t": 7000,
+     "server": [
+      "set",
+      "/SmartDashboard/speed",
+      8
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "(() => { const t = document.getElementsByTagName('title')[0]; window.__titles = []; let last = t.textContent; new MutationObserver(() => { if (t.textContent !== last) { last = t.textContent; window.__titles.push(last); } }).observe(t, { childList: true, characterData: true, subtree: true }); return last; })()"
+     }
+    ],
+    "label": "watch"
+   },
+   {
+    "main": "set-preferences",
+    "data": {
+     "theme": "system",
+     "robotAddress": "10.63.28.2",
+     "remotePath": "/U/logs",
+     "liveMode": "nt4-akit",
+     "liveSubscribeMode": "logging",
+     "liveDiscard": 1200,
+     "publishFilter": "",
+     "rlogPort": 5800,
+     "coordinateSystem": "automatic",
+     "field3dModeAc": "standard",
+     "field3dModeBattery": "",
+     "field3dAntialiasing": true,
+     "tbaApiKey": "",
+     "userAssetsFolder": null,
+     "skipHootNonProWarning": false,
+     "skipFRCCoordinateSystemWarning": false,
+     "skipFTCCoordinateSystemWarning": false,
+     "ctreLicenseAccepted": false,
+     "systemcoreStaticAddress": "",
+     "hasScrolledLineGraph": false,
+     "hasScrolledTimeline": false,
+     "prefersFTC": false,
+     "timestamps": "start-zero"
+    }
+   },
+   {
+    "main": "start-live",
+    "data": "robot"
+   },
+   {
+    "advance": 1400
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "akit"
+   },
+   {
+    "eval": "window.tuner.publish(\"/Tuning/kP\", 3.25)"
+   },
+   {
+    "eval": "window.tuner.publish(\"/Drive/x\", 2)"
+   },
+   {
+    "advance": 600
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "akit tuned"
+   },
+   {
+    "main": "set-preferences",
+    "data": {
+     "theme": "system",
+     "robotAddress": "10.63.28.2",
+     "remotePath": "/U/logs",
+     "liveMode": "nt4-akit",
+     "liveSubscribeMode": "low-bandwidth",
+     "liveDiscard": 1200,
+     "publishFilter": "",
+     "rlogPort": 5800,
+     "coordinateSystem": "automatic",
+     "field3dModeAc": "standard",
+     "field3dModeBattery": "",
+     "field3dAntialiasing": true,
+     "tbaApiKey": "",
+     "userAssetsFolder": null,
+     "skipHootNonProWarning": false,
+     "skipFRCCoordinateSystemWarning": false,
+     "skipFTCCoordinateSystemWarning": false,
+     "ctreLicenseAccepted": false,
+     "systemcoreStaticAddress": "",
+     "hasScrolledLineGraph": false,
+     "hasScrolledTimeline": false,
+     "prefersFTC": false,
+     "timestamps": "start-zero"
+    }
+   },
+   {
+    "advance": 500
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "low bandwidth"
+   },
+   {
+    "main": "set-preferences",
+    "data": {
+     "theme": "system",
+     "robotAddress": "10.63.28.2",
+     "remotePath": "/U/logs",
+     "liveMode": "nt4-systemcore",
+     "liveSubscribeMode": "logging",
+     "liveDiscard": 1200,
+     "publishFilter": "",
+     "rlogPort": 5800,
+     "coordinateSystem": "automatic",
+     "field3dModeAc": "standard",
+     "field3dModeBattery": "",
+     "field3dAntialiasing": true,
+     "tbaApiKey": "",
+     "userAssetsFolder": null,
+     "skipHootNonProWarning": false,
+     "skipFRCCoordinateSystemWarning": false,
+     "skipFTCCoordinateSystemWarning": false,
+     "ctreLicenseAccepted": false,
+     "systemcoreStaticAddress": "",
+     "hasScrolledLineGraph": false,
+     "hasScrolledTimeline": false,
+     "prefersFTC": false,
+     "timestamps": "start-zero"
+    }
+   },
+   {
+    "advance": 300
+   },
+   {
+    "main": "start-live",
+    "data": "robot"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "switching"
+   },
+   {
+    "advance": 1800
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "systemcore"
+   },
+   {
+    "main": "start-live",
+    "data": "ds"
+   },
+   {
+    "advance": 1500
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "ds"
+   },
+   {
+    "main": "set-preferences",
+    "data": {
+     "theme": "system",
+     "robotAddress": "10.63.28.2",
+     "remotePath": "/U/logs",
+     "liveMode": "nt4-systemcore",
+     "liveSubscribeMode": "logging",
+     "liveDiscard": 1,
+     "publishFilter": "",
+     "rlogPort": 5800,
+     "coordinateSystem": "automatic",
+     "field3dModeAc": "standard",
+     "field3dModeBattery": "",
+     "field3dAntialiasing": true,
+     "tbaApiKey": "",
+     "userAssetsFolder": null,
+     "skipHootNonProWarning": false,
+     "skipFRCCoordinateSystemWarning": false,
+     "skipFTCCoordinateSystemWarning": false,
+     "ctreLicenseAccepted": false,
+     "systemcoreStaticAddress": "",
+     "hasScrolledLineGraph": false,
+     "hasScrolledTimeline": false,
+     "prefersFTC": false,
+     "timestamps": "start-zero"
+    }
+   },
+   {
+    "advance": 1500
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "discarded"
+   },
+   {
+    "main": "set-preferences",
+    "data": {
+     "theme": "system",
+     "robotAddress": "10.63.28.2",
+     "remotePath": "/U/logs",
+     "liveMode": "nt4",
+     "liveSubscribeMode": "logging",
+     "liveDiscard": 1200,
+     "publishFilter": "",
+     "rlogPort": 5800,
+     "coordinateSystem": "automatic",
+     "field3dModeAc": "standard",
+     "field3dModeBattery": "",
+     "field3dAntialiasing": true,
+     "tbaApiKey": "",
+     "userAssetsFolder": null,
+     "skipHootNonProWarning": false,
+     "skipFRCCoordinateSystemWarning": false,
+     "skipFTCCoordinateSystemWarning": false,
+     "ctreLicenseAccepted": false,
+     "systemcoreStaticAddress": "usb",
+     "hasScrolledLineGraph": false,
+     "hasScrolledTimeline": false,
+     "prefersFTC": false,
+     "timestamps": "start-zero"
+    }
+   },
+   {
+    "main": "start-live",
+    "data": "robot"
+   },
+   {
+    "advance": 1200
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "usb"
+   }
+  ]
+ }
+}
