@@ -10,7 +10,7 @@ use asrs_services::licenses;
 use asrs_tabs::info::License;
 use asrs_ui::gpui::{App, Global};
 
-use crate::main_process::PACKAGED;
+use crate::main_process::{PACKAGED, resources_dir};
 
 /// The list to show in place of the build's own.
 pub struct LicensesFile(pub PathBuf);
@@ -26,6 +26,11 @@ pub fn load(cx: &App) -> Result<Vec<License>, String> {
     };
     let license = |(module, text): &Entry| License::new(module, text);
     Ok(entries.iter().map(license).collect())
+}
+
+/// How many entries the list of this build has.
+pub(crate) fn packaged_count() -> Result<usize, String> {
+    build_list().map(|entries| entries.len())
 }
 
 fn read(path: &Path) -> Result<JsString, String> {
@@ -45,8 +50,7 @@ fn build_list() -> Result<Vec<Entry>, String> {
         return read_list(&workspace.join("target/oracle/upstream/src/licenses.json"));
     }
     let mut entries = if PACKAGED {
-        let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-        read_list(&exe.with_file_name("licenses.json"))?
+        read_list(&resources_dir().join("licenses.json"))?
     } else {
         match read_list(&workspace.join("target/licenses/licenses.json")) {
             Ok(entries) => entries,

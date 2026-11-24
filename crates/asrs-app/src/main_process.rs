@@ -110,12 +110,33 @@ pub fn process_arch() -> &'static str {
     }
 }
 
-/// `path.join(__dirname, "..", "bundledAssets")`: beside the executable in a packaged build,
-/// the workspace's copy of upstream's folder otherwise.
+/// Where a packaged build keeps the files it ships: `Contents/Resources` of the app bundle on
+/// macOS (code signing allows nothing but code beside the executable), the executable's folder
+/// elsewhere.
+pub fn resources_dir() -> PathBuf {
+    let exe = std::env::current_exe().unwrap_or_default();
+    let dir = exe.parent().unwrap_or(Path::new("."));
+    if cfg!(target_os = "macos") {
+        dir.with_file_name("Resources")
+    } else {
+        dir.to_owned()
+    }
+}
+
+/// The folder upstream's pages load `../www` from: where `www/textures` is shipped in a packaged
+/// build, the upstream checkout otherwise.
+pub fn app_root() -> PathBuf {
+    if PACKAGED {
+        return resources_dir();
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../reference/AdvantageScope")
+}
+
+/// `path.join(__dirname, "..", "bundledAssets")`: shipped in a packaged build, the workspace's
+/// copy of upstream's folder otherwise.
 pub fn bundled_assets_dir() -> PathBuf {
     if PACKAGED {
-        let exe = std::env::current_exe().unwrap_or_default();
-        return exe.parent().unwrap_or(Path::new(".")).join("bundledAssets");
+        return resources_dir().join("bundledAssets");
     }
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let candidates = [
@@ -132,12 +153,11 @@ pub fn bundled_assets_dir() -> PathBuf {
     )
 }
 
-/// `docs/build`, which the hub page loads as `../docs/build`: beside the executable in a packaged
-/// build, what `cargo xtask docs` wrote otherwise.
+/// `docs/build`, which the hub page loads as `../docs/build`: shipped in a packaged build, what
+/// `cargo xtask docs` wrote otherwise.
 pub fn documentation_dir() -> PathBuf {
     if PACKAGED {
-        let exe = std::env::current_exe().unwrap_or_default();
-        return exe.parent().unwrap_or(Path::new(".")).join("docs/build");
+        return resources_dir().join("docs/build");
     }
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/docs/build")
 }

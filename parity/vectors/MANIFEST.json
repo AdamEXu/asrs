@@ -390,6 +390,7 @@
     "js/math-rem/windows-aarch64": {"cases":980,"content":"e02ff52693333343","generator":"ee5f09dd49dd3879","spec":"parity/specs/js/math-rem.fn.json","zone":"UTC","generatedOn":"windows-aarch64"},
     "js/sort": {"cases":10000,"content":"37813dd4a2a30954","generator":"ce54082ff994324e","spec":"parity/specs/js/sort.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "js/time": {"cases":29,"content":"ef1e569718d27e3a","generator":"eed98ceb3cfaecf0","spec":"parity/specs/js/time.jsonl","zone":"UTC","generatedOn":"macos-aarch64"},
+    "js/time-zone-rules": {"cases":598,"content":"5c599bfa17a6656e","generator":"b33f84593f3037dd","spec":"parity/specs/js/time-zone-rules.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "js/time-zones/America/Los_Angeles": {"cases":146,"content":"2580ce5d5f3e42a2","generator":"651cde6f08b75220","spec":"parity/specs/js/time-zones.fn.json","zone":"America/Los_Angeles","generatedOn":"macos-aarch64"},
     "js/time-zones/Asia/Kolkata": {"cases":146,"content":"e0f4993d7a66247e","generator":"9b272bbb201dbd21","spec":"parity/specs/js/time-zones.fn.json","zone":"Asia/Kolkata","generatedOn":"macos-aarch64"},
     "js/time-zones/Pacific/Auckland": {"cases":146,"content":"f114b45007c2414e","generator":"c974c1fc0410b974","spec":"parity/specs/js/time-zones.fn.json","zone":"Pacific/Auckland","generatedOn":"macos-aarch64"},
