@@ -11,7 +11,7 @@ use asrs_js::string::JsError;
 use asrs_js::value::JsValue;
 use asrs_services::dialog::{self as services, MessageBox};
 use asrs_services::window_manager::{Platform, WindowId, WindowKind};
-use asrs_ui::gpui::{Action, App, ClipboardItem, Window};
+use asrs_ui::gpui::{Action, App, ClipboardItem, Global, Window};
 use asrs_ui::input;
 use asrs_ui::platform::EditCommand;
 use asrs_ui::selection;
@@ -303,6 +303,36 @@ pub(crate) fn show_message_box(
             on_done(result.response, cx);
         });
     });
+}
+
+struct Uncaught(async_channel::Sender<String>);
+
+impl Global for Uncaught {}
+
+/// Electron's `uncaughtException` handler in the main process. `error` is `name: message`: the
+/// stack under it has no counterpart here. `showErrorBox` blocks, so the next error waits for this
+/// one's box to close.
+pub(crate) fn show_uncaught(error: String, cx: &mut App) {
+    if !cx.has_global::<Uncaught>() {
+        let (sender, errors) = async_channel::unbounded::<String>();
+        cx.set_global(Uncaught(sender));
+        cx.spawn(async move |cx| {
+            while let Ok(error) = errors.recv().await {
+                let (open, closed) = async_channel::bounded::<()>(1);
+                let options = MessageBoxOptions {
+                    kind: MessageBoxType::Error,
+                    title: "Error".to_owned(),
+                    message: "A JavaScript error occurred in the main process".to_owned(),
+                    detail: format!("Uncaught Exception:\n{error}"),
+                    ..MessageBoxOptions::default()
+                };
+                cx.update(|cx| show_message_box(None, options, cx, move |_, _| drop(open)));
+                let _ = closed.recv().await;
+            }
+        })
+        .detach();
+    }
+    let _ = cx.global::<Uncaught>().0.try_send(error);
 }
 
 pub(crate) fn with_window(

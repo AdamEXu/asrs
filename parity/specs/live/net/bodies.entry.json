@@ -1,0 +1,44 @@
+{
+ "entry": "genLiveNet",
+ "inputs": [
+  "../../../../oracle/src/genLiveNetMain.ts"
+ ],
+ "fixture": {
+  "bodies": [
+   "7b2261223a22c3a9227d",
+   "efbbbf7b2261223a22c3a9227d",
+   "efbbbfefbbbf7b2261223a22c3a9227d",
+   "efbbbfefbbbfefbbbf7b2261223a22c3a9227d",
+   "",
+   "efbbbf",
+   "efbbbfefbbbf",
+   "efbb",
+   "efbb7b2261223a22c3a9227d",
+   "7b2261223a22c3a9227defbbbf",
+   "20efbbbf7b2261223a22c3a9227d",
+   "fffe7b007d00",
+   "feff007b007d",
+   "7b2261223a22ff227d",
+   "7b2261223a22c3227d",
+   "7b2261223a22e282227d",
+   "7b2261223a22f09f92227d",
+   "7b2261223a22f09f92a9227d",
+   "7b2261223a22eda080227d",
+   "7b2261223a22c0af227d",
+   "7b2261223a22e08080227d",
+   "7b2261223a22f4908080227d",
+   "7b2261223a22f888808080227d",
+   "7b2261223a228080227d",
+   "7b2261223a22f0808041227d",
+   "7b2261223a22f180c3a9227d",
+   "7b2261223a22e180e2f09192f1bf41227d",
+   "7b2261223a22780079227d",
+   "f0",
+   "e282",
+   "7b2261223a22efbbbf227d",
+   "7b2261223a22efbfbeefbfbf227d",
+   "7b7dff",
+   "ff7b7d"
+  ]
+ }
+}

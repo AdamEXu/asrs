@@ -251,7 +251,7 @@ impl Driver for ClientDriver {
                     "dump",
                     Some(&Value::Array(vec![
                         Value::number(0.0),
-                        support::dump(&self.log),
+                        support::log_dump::dump(&self.log),
                     ])),
                 );
                 Ok(())
@@ -281,7 +281,7 @@ impl Driver for ClientDriver {
             "dump",
             Some(&Value::Array(vec![
                 Value::number(0.0),
-                support::dump(&self.log),
+                support::log_dump::dump(&self.log),
             ])),
         );
     }

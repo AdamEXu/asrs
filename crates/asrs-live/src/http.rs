@@ -7,9 +7,9 @@ use std::collections::BTreeMap;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
-use tokio_tungstenite::tungstenite::http::Uri;
 
 use crate::channel::EventSender;
+use crate::live_url::LiveUrl;
 use crate::net_options::NetOptions;
 
 const MAX_HEAD: usize = 65536;
@@ -55,7 +55,8 @@ pub trait FetchTransport {
 pub(crate) struct FetchTasks {
     options: NetOptions,
     read_body: bool,
-    tasks: BTreeMap<u32, JoinHandle<()>>,
+    /// `None` for a request that settled without a connection.
+    tasks: BTreeMap<u32, Option<JoinHandle<()>>>,
 }
 
 impl FetchTasks {
@@ -75,7 +76,11 @@ impl FetchTasks {
         wrap: fn(FetchEvent) -> E,
     ) {
         let events = events.clone();
-        let url = url.to_owned();
+        let Some(url) = request_url(url) else {
+            self.tasks.insert(id.0, None);
+            let _ = events.send(wrap(FetchEvent::Failed(id)));
+            return;
+        };
         let read_body = self.read_body;
         let options = self.options.clone();
         let task = self.options.handle.spawn(async move {
@@ -85,7 +90,7 @@ impl FetchTasks {
             };
             let _ = events.send(wrap(event));
         });
-        self.tasks.insert(id.0, task);
+        self.tasks.insert(id.0, Some(task));
     }
 
     /// Whether a settled request is still awaited; it is forgotten either way.
@@ -94,7 +99,7 @@ impl FetchTasks {
     }
 
     pub(crate) fn abort(&mut self, id: RequestId) {
-        if let Some(task) = self.tasks.remove(&id.0) {
+        if let Some(Some(task)) = self.tasks.remove(&id.0) {
             task.abort();
         }
     }
@@ -102,38 +107,10 @@ impl FetchTasks {
 
 impl Drop for FetchTasks {
     fn drop(&mut self) {
-        for task in self.tasks.values() {
+        for task in self.tasks.values().flatten() {
             task.abort();
         }
     }
-}
-
-/// What the URL parser does to a URL before the request goes out: bytes a URI cannot carry
-/// are percent-encoded.
-pub(crate) fn percent_encode(url: &str) -> String {
-    let mut out = String::with_capacity(url.len());
-    for b in url.bytes() {
-        if b.is_ascii_graphic()
-            && !matches!(
-                b,
-                b'"' | b'<' | b'>' | b'`' | b'{' | b'}' | b'|' | b'\\' | b'^'
-            )
-        {
-            out.push(char::from(b));
-        } else {
-            out.push_str(&format!("%{b:02X}"));
-        }
-    }
-    out
-}
-
-pub(crate) fn host_port(uri: &Uri, default_port: u16) -> Option<(String, u16)> {
-    let host = uri.host()?;
-    let host = host
-        .strip_prefix('[')
-        .and_then(|h| h.strip_suffix(']'))
-        .unwrap_or(host);
-    Some((host.to_owned(), uri.port_u16().unwrap_or(default_port)))
 }
 
 enum Framing {
@@ -211,21 +188,24 @@ impl Reader {
     }
 }
 
+/// The URL of a request that reaches the network.
+fn request_url(url: &str) -> Option<LiveUrl> {
+    LiveUrl::parse(url).filter(|url| {
+        url.scheme == "http"
+            && !url.has_credentials
+            && !url.dangling_markup
+            && !url.port_is_blocked()
+    })
+}
+
 /// `fetch(url)` reduced to the response, read through the body when `read_body` is set;
 /// `None` is a network error.
-async fn get(url: &str, read_body: bool, options: &NetOptions) -> Option<Response> {
-    let uri = Uri::try_from(percent_encode(url)).ok()?;
-    if uri.scheme_str() != Some("http") {
-        return None;
-    }
-    let (host, port) = host_port(&uri, 80)?;
-    let authority = uri.authority()?.as_str().to_owned();
-    let path = uri.path_and_query().map_or("/", |p| p.as_str());
-    let path = if path.is_empty() { "/" } else { path };
-    let (to_host, to_port) = options.dial(&host, port);
+async fn get(url: &LiveUrl, read_body: bool, options: &NetOptions) -> Option<Response> {
+    let (to_host, to_port) = options.dial(&url.host, url.port);
     let mut stream = TcpStream::connect((to_host.as_str(), to_port)).await.ok()?;
     let request = format!(
-        "GET {path} HTTP/1.1\r\nHost: {authority}\r\nAccept: */*\r\nConnection: close\r\n\r\n"
+        "GET {} HTTP/1.1\r\nHost: {}\r\nAccept: */*\r\nConnection: close\r\n\r\n",
+        url.target, url.authority
     );
     stream.write_all(request.as_bytes()).await.ok()?;
     let mut reader = Reader {
@@ -239,13 +219,9 @@ async fn get(url: &str, read_body: bool, options: &NetOptions) -> Option<Respons
             break (status, head);
         }
     };
-    let authority = if port == 80 {
-        authority.trim_end_matches(":80").to_owned()
-    } else {
-        authority
-    };
     let body = if read_body {
         let body = reader.body(framing(&head)).await?;
+        // Blink strips one BOM. Node's fetch, which main uses, strips two.
         let body = body.strip_prefix(b"\xEF\xBB\xBF").unwrap_or(&body);
         String::from_utf8_lossy(body).into_owned()
     } else {
@@ -253,7 +229,7 @@ async fn get(url: &str, read_body: bool, options: &NetOptions) -> Option<Respons
     };
     Some(Response {
         status,
-        url: format!("http://{authority}{path}"),
+        url: url.href(),
         body,
     })
 }
@@ -331,14 +307,18 @@ mod tests {
     async fn bodies_follow_content_length_and_chunked_framing() {
         let url =
             serve_once(b"HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\n\xEF\xBB\xBF{\"a\":1}").await;
-        let response = get(&url, true, &options()).await.unwrap();
+        let response = get(&request_url(&url).unwrap(), true, &options())
+            .await
+            .unwrap();
         assert_eq!((response.status, response.body.as_str()), (200, "{\"a\""));
 
         let url = serve_once(
             b"HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3;x=1\r\n{\"a\r\n4\r\n\":1}\r\n0\r\n\r\n",
         )
         .await;
-        let response = get(&url, true, &options()).await.unwrap();
+        let response = get(&request_url(&url).unwrap(), true, &options())
+            .await
+            .unwrap();
         assert_eq!(
             (response.status, response.body.as_str()),
             (200, "{\"a\":1}")
@@ -346,7 +326,9 @@ mod tests {
         assert_eq!(response.url, url);
 
         let url = serve_once(b"HTTP/1.1 404 Not Found\r\nContent-Length: 5\r\n\r\nnope!").await;
-        let response = get(&url, false, &options()).await.unwrap();
+        let response = get(&request_url(&url).unwrap(), false, &options())
+            .await
+            .unwrap();
         assert_eq!((response.status, response.body.as_str()), (404, ""));
     }
 }
