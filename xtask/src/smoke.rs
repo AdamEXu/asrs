@@ -101,7 +101,9 @@ pub fn run(args: &[String]) -> Result {
         frame,
     };
     step("files", smoke.files())?;
-    step("signature", smoke.signature())?;
+    if smoke.bundle.os == Os::Macos {
+        step("signature", smoke.signature())?;
+    }
     step("self-test", smoke.self_test())?;
     step("start", smoke.start())?;
     step("library", smoke.library())?;
@@ -291,9 +293,6 @@ impl Smoke {
     }
 
     fn signature(&self) -> Result {
-        if self.bundle.os != Os::Macos {
-            return Ok(());
-        }
         run_tool(
             Command::new("plutil")
                 .args(["-lint", "-s"])
