@@ -1,3 +1,5 @@
+// Ported from Skia, Chromium m142 (BSD-3-Clause, Copyright 2012 Google Inc.). See THIRD_PARTY_NOTICES.md.
+
 use asrs_js::math::pow;
 
 pub const ROWS: usize = 8;

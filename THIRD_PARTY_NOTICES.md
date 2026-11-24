@@ -234,8 +234,9 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
   `stroke.rs`; `dash.rs`; `clip.rs`; `raster_clip.rs`; `geometry.rs`; `hairline.rs`;
   `skpath.rs`; `pixels.rs`; Graphite's MSAA tessellation in `msaa.rs`; mip levels in `mip.rs`; gradients, paths and
   the raster pipeline in `gradient.rs`, `path.rs`, `raster.rs`; text layout matrices in
-  `text/layout.rs`; the Fontations scaler, fontconfig matching and bitmap glyphs in
-  `text/linux/`; skcms, `SkColorSpace` and the colour-conversion pipeline stages in
+  `text/layout.rs` and `text/matrix.rs`; mask filling in `text/path_mask.rs` and mask gamma in
+  `text/lut.rs`; the Fontations scaler, fontconfig matching and bitmap glyphs in `text/linux/`;
+  the DirectWrite scaler, font matching and COLR glyphs in `text/win/`; skcms, `SkColorSpace` and the colour-conversion pipeline stages in
   `color_profile.rs`)
 
 ## Chromium and Blink
@@ -248,7 +249,8 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
 - Used in: `crates/asrs-canvas/src/` (`color.rs` CSS colour parsing, `path.rs` and `raster.rs`
   `CanvasPath`, `gradient.rs` stop handling, `text/dom.rs`, `text/flow.rs`, `text/inline.rs`,
   `text/layout.rs`, `text/line_break.rs`, `text/metrics.rs` text layout and `TextMetrics`,
-  `text/shaping.rs` and `text/linux/` word shaping and font fallback),
+  `text/shaping.rs`, `text/harfbuzz.rs`, `text/linux/` and `text/win/` word shaping, font fallback
+  and text settings),
   `crates/asrs-tabs/src/form/step.rs`, and behaviour reproduced in
   `crates/asrs-ui` (SVG painting, filters, theme) and `crates/asrs-live/src/timers.rs`
   (`DOMTimer` scheduling)
