@@ -248,6 +248,14 @@ fn axis_values(face: &IDWriteFontFace) -> Vec<DWRITE_FONT_AXIS_VALUE> {
     }
 }
 
+/// What sets a variable font's instances in one file apart.
+pub fn axes(face: &IDWriteFontFace) -> Vec<(u32, u32)> {
+    axis_values(face)
+        .iter()
+        .map(|v| (v.axisTag.0, v.value.to_bits()))
+        .collect()
+}
+
 fn variations(face: &IDWriteFontFace) -> Vec<rustybuzz::Variation> {
     axis_values(face)
         .iter()
@@ -419,8 +427,8 @@ fn has_bitmap_data(font: &IDWriteFont) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::super::DirectWrite;
     use super::super::settings::TextSettings;
+    use super::super::{DirectWrite, FontSpec};
     use super::*;
 
     #[test]
@@ -441,23 +449,88 @@ mod tests {
         loader.cast::<IDWriteLocalFontFileLoader>().is_ok()
     }
 
+    fn backend() -> DirectWrite {
+        DirectWrite::with_settings(Some(TextSettings::DEFAULT)).unwrap()
+    }
+
+    fn local_face(backend: &DirectWrite, family: &str) -> Option<IDWriteFontFace> {
+        let (mut index, mut exists) = (0, false.into());
+        // SAFETY: plain COM calls on a live collection.
+        unsafe {
+            let collection = &backend.collection;
+            let name = windows::core::HSTRING::from(family);
+            collection
+                .FindFamilyName(&name, &mut index, &mut exists)
+                .unwrap();
+            let family = exists
+                .as_bool()
+                .then(|| collection.GetFontFamily(index).unwrap())?;
+            let font = match_style(&family, 700.0, false).unwrap();
+            Some(font.CreateFontFace().unwrap())
+        }
+    }
+
     #[test]
     fn faces_bypass_the_font_cache_service() {
-        let mut backend = DirectWrite::with_settings(Some(TextSettings::DEFAULT)).unwrap();
-        for family in ["Arial", "Segoe UI", "Segoe UI Emoji", "Bahnschrift"] {
-            let Some(typeface) = backend.match_family(family, 700.0, false) else {
-                continue;
-            };
-            let face = &backend.typefaces[typeface].face;
-            assert!(!is_local(face), "{family}");
-            if family == "Bahnschrift" {
-                let weight = u32::from_le_bytes(*b"wght");
-                let axes = axis_values(face);
-                let weight = axes.iter().find(|v| v.axisTag.0 == weight);
-                assert_eq!(weight.unwrap().value, 700.0);
+        let mut checked = 0;
+        // The second backend comes after the first one's factory is released.
+        for _ in 0..2 {
+            let mut backend = backend();
+            for family in [
+                "Arial",
+                "Segoe UI",
+                "Segoe UI Emoji",
+                "Cambria Math",
+                "Microsoft YaHei",
+                "Bahnschrift",
+            ] {
+                let Some(local) = local_face(&backend, family) else {
+                    continue;
+                };
+                let typeface = backend.match_family(family, 700.0, false).unwrap();
+                let face = &backend.typefaces[typeface].face;
+                assert!(is_local(&local) && !is_local(face), "{family}");
+                // SAFETY: plain COM calls on live faces.
+                let identity = |f: &IDWriteFontFace| unsafe {
+                    (
+                        f.GetIndex(),
+                        f.GetGlyphCount(),
+                        f.GetSimulations(),
+                        f.GetType(),
+                        axes(f),
+                    )
+                };
+                assert_eq!(identity(&local), identity(face), "{family}");
+                checked += 1;
             }
+            let spec = FontSpec::parse("bold 12px system-ui").unwrap();
+            for c in ['日', 'か', '\u{2699}', '\u{1f916}', 'ไ', '\u{16a0}'] {
+                backend.fallback_file(&spec, c, false);
+            }
+            assert!(backend.typefaces.iter().all(|t| !is_local(&t.face)));
         }
-        assert!(!backend.typefaces.is_empty());
+        assert!(checked > 0);
+    }
+
+    #[test]
+    fn instances_of_a_variable_font_stay_apart() {
+        let mut backend = backend();
+        let Some(regular) = backend.match_family("Bahnschrift", 400.0, false) else {
+            return;
+        };
+        let bold = backend.match_family("Bahnschrift", 700.0, false).unwrap();
+        let weight = u32::from_le_bytes(*b"wght");
+        for (typeface, want) in [(regular, 400.0), (bold, 700.0)] {
+            let typeface = &backend.typefaces[typeface];
+            let axes = axis_values(&typeface.face);
+            let axis = axes.iter().find(|v| v.axisTag.0 == weight).unwrap();
+            assert_eq!(axis.value, want);
+            assert_eq!(typeface.bold, want >= 600.0);
+        }
+        assert_eq!(
+            backend.match_family("Bahnschrift", 700.0, false),
+            Some(bold)
+        );
     }
 
     #[test]

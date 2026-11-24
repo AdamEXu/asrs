@@ -5,6 +5,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::Path;
 
+use asrs_canvas::text::caret;
 use asrs_canvas::text::lut::{self, MaskGammaLut};
 use asrs_canvas::text::win::DirectWrite;
 use asrs_canvas::text::win::settings::{Edging, TextSettings};
@@ -243,6 +244,7 @@ fn check_probes(backend: &mut DirectWrite, probes: &[Probe]) {
     for p in probes {
         let font = FontSpec::parse(&p.font).unwrap();
         let m = measure_text(backend, &font, "left", "alphabetic", &p.text);
+        assert_eq!(p.metrics.len(), 5, "{} {}", p.font, p.text);
         for (name, want) in FIELDS.iter().zip(&p.metrics) {
             let got = field(&m, name);
             if got != *want {
@@ -350,6 +352,56 @@ fn text_settings_pick_the_masks() {
         ..TextSettings::DEFAULT
     });
     assert!(none.is_none() && smooth != gray);
+}
+
+/// Segoe UI Symbol has no bold face, so its bold is drawn from outlines.
+#[test]
+fn synthetic_bold_follows_the_text_settings() {
+    let font = FontSpec::parse(&format!("bold 24px {SYSTEM}")).unwrap();
+    let mask = |edging| {
+        let settings = TextSettings {
+            edging,
+            ..TextSettings::DEFAULT
+        };
+        let mut backend = DirectWrite::with_settings(Some(settings)).unwrap();
+        let shaped = backend.shape(&font, "\u{2699}", 1.0);
+        backend
+            .raw_mask(shaped.glyphs[0].glyph, 1.0, 1.0, 0)
+            .unwrap()
+    };
+    let partial = |v: &u8| !matches!(v, 0 | 255);
+    let aliased = mask(Edging::Alias);
+    assert!(!aliased.data.iter().any(partial));
+    assert!(aliased.data.contains(&255));
+    assert!(mask(Edging::AntiAlias).data.iter().any(partial));
+}
+
+/// The caret positions text selection uses end at the run's width, and its space is the one
+/// `measureText` reports, whatever the machine's fonts.
+#[test]
+fn carets_follow_shaped_text() {
+    let mut backend = DirectWrite::with_settings(Some(TextSettings::DEFAULT)).unwrap();
+    for css in [
+        "12px system-ui",
+        "bold 13px monospace",
+        "39.109px sans-serif",
+    ] {
+        let font = FontSpec::parse(css).unwrap();
+        let space = measure_text(&mut backend, &font, "left", "alphabetic", " ").width;
+        assert_eq!(
+            f64::from(caret::space_width(&mut backend, &font, 1.0)),
+            space
+        );
+        for text in ["/Drive/Left 1.5", "naïve e\u{301}x", "a 日本か \u{1f916} b"] {
+            for scale in [1.0f32, 1.5, 2.0] {
+                let carets = caret::carets(&mut backend, &font, text, scale);
+                let width = backend.shape(&font, text, scale).width * scale;
+                assert_eq!(carets.first(), Some(&(0, 0.0)));
+                assert_eq!(carets.last(), Some(&(text.len(), width)), "{css} {text}");
+                assert!(carets.windows(2).all(|w| w[0].1 < w[1].1), "{css} {text}");
+            }
+        }
+    }
 }
 
 fn lerp32(src: u8, dst: u8, mask: u32) -> u8 {
@@ -525,5 +577,6 @@ fn lcd_masks_reproduce_dom_text() {
         eprintln!("{name}: {differing} of {boxed} ({percent:.4} %), max channel {max}");
         let gate = if scale == 1 { 0.2 } else { 0.003 };
         assert!(percent <= gate, "{name}: {percent:.4} %");
+        assert!(max <= 2, "{name}: max channel {max}");
     }
 }

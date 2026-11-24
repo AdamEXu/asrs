@@ -19,7 +19,9 @@ driven over SSH; neither has GPU acceleration, so Chromium and native code rende
   windows   Windows 11 Pro ARM64 in UTM (`Win11-ARM`), files in /Volumes/T9/vms/win11-arm
             (override with ASRS_WINDOWS_VM). SSH dev@127.0.0.1:2222 with keys/id_ed25519.
             Checkout C:\work\asrs, oracle pack C:\work\asrs-pack.tar.zst. GUI programs run in
-            the logged-in desktop session through a scheduled task.
+            the logged-in desktop session through a scheduled task. Its fonts have changed with
+            an update, so parity/vectors/canvas/windows.json and the vectors it lists come from
+            an x86_64 VM, inside which the `local` and `canvas` commands run (#59).
   linux     Ubuntu 24.04 ARM64 tart VM `asrs-linux` under TART_HOME=/Volumes/T9/tart, Xorg on
             virtio-gpu with an autologin xfce session on :0. SSH admin@$(tart ip asrs-linux) with
             /Volumes/T9/asrs/hosts/asrs-linux/id_ed25519 (override with ASRS_LINUX_KEYS).

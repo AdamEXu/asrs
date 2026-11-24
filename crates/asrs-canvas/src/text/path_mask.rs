@@ -49,6 +49,25 @@ pub fn gray(path: &SkPath) -> Option<Mask> {
     })
 }
 
+/// `SkScalerContext::GenerateImageFromPath` for a BW mask.
+#[cfg(windows)]
+pub fn aliased(path: &SkPath) -> Option<Mask> {
+    use tiny_skia::{FillRule, Transform};
+    let [left, top, width, height] = bounds(path)?;
+    let (width, height) = (width as u32, height as u32);
+    let shift = Transform::from_translate(-left as f32, -top as f32);
+    let mut mask = tiny_skia::Mask::new(width, height)?;
+    mask.fill_path(&path.to_tiny()?, FillRule::Winding, false, shift);
+    Some(Mask {
+        left,
+        top,
+        width,
+        height,
+        data: mask.data().to_vec(),
+        color: false,
+    })
+}
+
 const LCD_FILTER: [[u32; 12]; 3] = [
     [
         0x03, 0x0b, 0x1c, 0x33, 0x40, 0x39, 0x24, 0x10, 0x05, 0x01, 0x00, 0x00,

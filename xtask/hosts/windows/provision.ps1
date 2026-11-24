@@ -34,8 +34,8 @@ if (-not (Test-Path "C:\tools\$clang\bin\clang.exe")) {
     Remove-Item $archive
 }
 
-# Chromium takes ClearType from these, and its gamma and contrast from the tuner's key below if
-# there is one.
+# Chromium takes ClearType and its orientation from these, and the orientation from the tuner's
+# key below if there is one.
 $desktop = 'HKCU:\Control Panel\Desktop'
 Set-ItemProperty $desktop FontSmoothing '2'
 Set-ItemProperty $desktop FontSmoothingType 2 -Type DWord

@@ -83,6 +83,9 @@ struct Bitmap {
     data: Vec<u8>,
 }
 
+/// A font file, the index of a face in it and the face's variation axes.
+type FileFace = (PathBuf, u32, Vec<(u32, u32)>);
+
 /// DirectWrite, configured as Chromium's Skia and Blink configure it.
 pub struct DirectWrite {
     factory: IDWriteFactory2,
@@ -91,7 +94,7 @@ pub struct DirectWrite {
     settings: TextSettings,
     system_family: String,
     typefaces: Vec<Typeface>,
-    files: HashMap<(PathBuf, u32), usize>,
+    files: HashMap<FileFace, usize>,
     matched: HashMap<(String, u32, bool), Option<usize>>,
     faces: Vec<Face>,
     primary: HashMap<FontKey, u32>,
@@ -159,7 +162,7 @@ impl DirectWrite {
             .path
             .clone()
             .filter(|_| !simulated)
-            .map(|path| (path, index));
+            .map(|path| (path, index, typeface::axes(&typeface.face)));
         if let Some(&known) = key.as_ref().and_then(|key| self.files.get(key)) {
             return Some(known);
         }
@@ -516,7 +519,11 @@ impl DirectWrite {
             path = embolden::embolden(&local, width).transformed(&post);
         }
         if self.settings.edging != Edging::SubpixelAntiAlias {
-            let mask = path_mask::gray(&path)?;
+            let mask = if self.settings.edging == Edging::Alias {
+                path_mask::aliased(&path)?
+            } else {
+                path_mask::gray(&path)?
+            };
             return Some(Bitmap {
                 bounds: rect(mask.left, mask.top, mask.width, mask.height),
                 channels: 1,
