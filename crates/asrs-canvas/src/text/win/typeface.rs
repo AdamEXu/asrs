@@ -318,11 +318,12 @@ struct FontFile {
     memory: Option<IDWriteFontFile>,
 }
 
+type FontFiles = HashMap<Vec<u8>, (FontFile, IDWriteFontFileStream)>;
+
 /// A font file's bytes: DirectWrite's own mapping, held once per process because faces borrow it
 /// forever.
 fn font_data(factory: &IDWriteFactory2, face: &IDWriteFontFace) -> Option<FontFile> {
-    static FILES: Mutex<Option<HashMap<Vec<u8>, (FontFile, IDWriteFontFileStream)>>> =
-        Mutex::new(None);
+    static FILES: Mutex<Option<FontFiles>> = Mutex::new(None);
     // SAFETY: the reference key, the path and the mapped fragment are read for the lengths
     // DirectWrite reports. The fragment is never released and its stream is kept, so the mapping
     // outlives every borrow.

@@ -120,14 +120,19 @@ fn correcting_row(bucket: usize, contrast: f64, gamma: f64) -> [u8; 256] {
     row
 }
 
-/// The 3-bit luminance Skia picks a row by: `SkComputeLuminance` of the colour as
-/// `SkScalerContextRec` keeps it, 3 bits a channel.
+/// The 3-bit luminance Skia picks a row by. Windows takes `SkComputeLuminance` of the colour as
+/// `SkScalerContextRec` keeps it, 3 bits a channel. That is wrong on macOS, whose rule is open in
+/// <https://github.com/AdamEXu/asrs/issues/362>.
 pub fn luminance_bucket(rgb: [u8; 3]) -> usize {
-    let [r, g, b] = rgb.map(|v| {
-        let bits = u32::from(v) & 0xe0;
-        bits | bits >> 3 | bits >> 6
-    });
-    ((r * 54 + g * 183 + b * 19) >> 8) as usize >> 5
+    if cfg!(windows) {
+        let [r, g, b] = rgb.map(|v| {
+            let bits = u32::from(v) & 0xe0;
+            bits | bits >> 3 | bits >> 6
+        });
+        return ((r * 54 + g * 183 + b * 19) >> 8) as usize >> 5;
+    }
+    let lum = 0.2126 * f64::from(rgb[0]) + 0.7152 * f64::from(rgb[1]) + 0.0722 * f64::from(rgb[2]);
+    (lum.round().clamp(0.0, 255.0) as usize) >> 5
 }
 
 /// One table row from `(raw coverage, Chromium coverage)` pairs: the median Chromium value of
@@ -173,7 +178,8 @@ mod tests {
         assert_eq!(luminance_bucket([0x22, 0x22, 0x22]), 1);
         assert_eq!(luminance_bucket([0xee, 0xee, 0xee]), 7);
         assert_eq!(luminance_bucket([0x7f, 0x7f, 0x7f]), 3);
-        assert_eq!(luminance_bucket([0xff, 0x9f, 0x1f]), 4);
+        let pink = if cfg!(windows) { 6 } else { 5 };
+        assert_eq!(luminance_bucket([0xff, 0xa6, 0xb8]), pink);
     }
 
     #[test]
