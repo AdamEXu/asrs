@@ -61,6 +61,8 @@ impl NativeWindow {
 
     pub fn set_content_origin(&self, _x: f64, _y: f64) {}
 
+    pub fn center(&self, _parent: Option<&NativeWindow>) {}
+
     pub fn set_content_size_limits(&self, min: Option<(f64, f64)>, max: Option<(f64, f64)>) {
         if let Some((width, height)) = min {
             self.0.setContentMinSize(NSSize::new(width, height));

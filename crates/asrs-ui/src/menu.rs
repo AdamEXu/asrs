@@ -1085,7 +1085,7 @@ fn current_os() -> OperatingSystem {
 
 /// The keystroke GPUI reports on Linux for `keystroke` typed on a US layout: a shifted symbol is
 /// that symbol without the shift.
-fn typed_on_linux(mut keystroke: Keystroke) -> Keystroke {
+fn shifted_symbol(mut keystroke: Keystroke) -> Keystroke {
     const PLAIN: &str = "`1234567890-=[]\\;',./";
     const SHIFTED: &str = "~!@#$%^&*()_+{}|:\"<>?";
     if keystroke.modifiers.shift
@@ -1113,10 +1113,10 @@ pub fn install_accelerators(
         .into_iter()
         .filter_map(|(keystroke, path)| {
             let keystroke = Keystroke::parse_with_os(&keystroke, current_os()).ok()?;
-            let keystroke = if cfg!(target_os = "linux") {
-                typed_on_linux(keystroke)
-            } else {
+            let keystroke = if cfg!(target_os = "macos") {
                 keystroke
+            } else {
+                shifted_symbol(keystroke)
             };
             Some((keystroke, path))
         })
@@ -1141,7 +1141,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn shifted_symbols_lose_the_shift_on_linux() {
+    fn shifted_symbols_lose_the_shift() {
         for (accelerator, typed) in [
             ("ctrl-shift-=", "ctrl-+"),
             ("ctrl-shift-/", "ctrl-?"),
@@ -1150,7 +1150,7 @@ mod tests {
             ("ctrl-=", "ctrl-="),
         ] {
             let parse = |k| Keystroke::parse_with_os(k, OperatingSystem::Linux).expect("keystroke");
-            assert_eq!(typed_on_linux(parse(accelerator)), parse(typed));
+            assert_eq!(shifted_symbol(parse(accelerator)), parse(typed));
         }
     }
 

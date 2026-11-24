@@ -79,18 +79,17 @@ fn origin(options: &WindowOptions, cx: &App) -> Option<(f64, f64)> {
 /// primary screen, rounded on macOS (`NativeWindowMac` uses the full frame and never calls
 /// `[NSWindow center]`) and in whole numbers on Linux.
 fn default_origin(options: &WindowOptions, cx: &App) -> Option<(f64, f64)> {
-    let display = cx.primary_display()?;
-    let (whole, area): (fn(f64) -> f64, _) = if cfg!(target_os = "macos") {
-        (f64::round, display.bounds())
+    let whole = if cfg!(target_os = "macos") {
+        f64::round
     } else if cfg!(target_os = "linux") {
-        (f64::floor, display.bounds())
+        f64::floor
     } else {
-        (f64::floor, display.visible_bounds())
+        return None;
     };
-    let f = |p: asrs_ui::gpui::Pixels| f64::from(f32::from(p));
+    let screen = cx.primary_display()?.bounds().size;
     Some((
-        f(area.origin.x) + whole((f(area.size.width) - options.width) / 2.0),
-        f(area.origin.y) + whole((f(area.size.height) - options.height) / 2.0),
+        whole((f64::from(f32::from(screen.width)) - options.width) / 2.0),
+        whole((f64::from(f32::from(screen.height)) - options.height) / 2.0),
     ))
 }
 
@@ -194,8 +193,9 @@ fn finish(
     native.set_content_size(width, height);
     let (min, max) = content_limits(native, options);
     native.set_content_size_limits(min, max);
-    if let Some((x, y)) = origin {
-        native.set_content_origin(x, y);
+    match origin {
+        Some((x, y)) => native.set_content_origin(x, y),
+        None => native.center(parent),
     }
     if options.fullscreenable == Some(false) {
         native.set_fullscreenable(false);

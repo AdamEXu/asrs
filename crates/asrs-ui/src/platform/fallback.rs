@@ -124,6 +124,10 @@ pub(super) mod window {
             match *self {}
         }
 
+        pub fn center(&self, _parent: Option<&NativeWindow>) {
+            match *self {}
+        }
+
         pub fn set_content_size_limits(&self, _min: Option<(f64, f64)>, _max: Option<(f64, f64)>) {
             match *self {}
         }

@@ -277,6 +277,12 @@ impl NativeWindow {
         self.0.set_content_origin(x, y);
     }
 
+    /// Where Electron puts a window opened without `x` and `y` on Windows: over its parent, or in
+    /// the middle of the work area. Elsewhere the window already opened in its place.
+    pub fn center(&self, parent: Option<&NativeWindow>) {
+        self.0.center(parent.map(|parent| &parent.0));
+    }
+
     /// Minimum and maximum content sizes, enforced during live resize.
     pub fn set_content_size_limits(&self, min: Option<(f64, f64)>, max: Option<(f64, f64)>) {
         self.0.set_content_size_limits(min, max);

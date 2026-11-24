@@ -43,6 +43,8 @@ impl NativeWindow {
         self.0.place(x, y).ok();
     }
 
+    pub fn center(&self, _parent: Option<&NativeWindow>) {}
+
     pub fn set_content_size_limits(&self, min: Option<(f64, f64)>, max: Option<(f64, f64)>) {
         self.0.set_size_limits(min, max).ok();
     }

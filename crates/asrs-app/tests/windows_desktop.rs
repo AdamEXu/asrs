@@ -286,6 +286,9 @@ app.whenReady().then(() => {
         WindowKind::Licenses,
     ];
 
+    /// Where Electron's parent window is, which is as large as ours.
+    const PARENT: (f64, f64) = (60.0, 420.0);
+
     const SATELLITE: Rect = Rect {
         x: 160.0,
         y: 160.0,
@@ -369,7 +372,13 @@ app.whenReady().then(() => {
                 ours == (theirs[1], theirs[2]),
                 format!("ours {ours:?}, Electron {:?}", &theirs[1..3]),
             );
-            let bounds = [bounds.0, bounds.1, bounds.2, bounds.3];
+            let mut bounds = [bounds.0, bounds.1, bounds.2, bounds.3];
+            if options.modal {
+                let parent = cx.update(|cx| Windows::manager(cx).bounds(parent));
+                let parent = parent.expect("the parent's bounds");
+                bounds[0] += PARENT.0 - parent.x;
+                bounds[1] += PARENT.1 - parent.y;
+            }
             report.check(
                 &format!("{name} bounds"),
                 bounds == theirs[3..7],
@@ -500,7 +509,7 @@ app.whenReady().then(() => {
             [0, 40],
         ];
         let rect = Rect {
-            x: 1300.0,
+            x: 2200.0,
             y: 200.0,
             width: 400.0,
             height: 300.0,
@@ -510,7 +519,7 @@ app.whenReady().then(() => {
         let (id, view) = opened.expect("open window");
         let handle = handle_of(cx, id);
         let log = cx.update(|cx| view.read(cx).wheel.clone());
-        let request = r#"{"op":"open","options":{"x":1300,"y":700,"width":400,"height":300}}"#;
+        let request = r#"{"op":"open","options":{"x":2200,"y":700,"width":400,"height":300}}"#;
         let opened = electron.numbers(cx, request, "open ").await;
         let theirs = (opened[3] + 200.0, opened[4] + 150.0);
         electron
@@ -737,6 +746,18 @@ app.whenReady().then(() => {
         }
     }
 
+    /// Leaves a pair of strips in the temp folder as PPM, for whoever looks at a difference.
+    fn dump(name: &str, mine: &Rgb, other: &Rgb) {
+        let dir = std::env::temp_dir().join("asrs-captions");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        for (side, image) in [("ours", mine), ("electron", other)] {
+            let mut ppm = format!("P6 {} {} 255\n", image.width, image.height).into_bytes();
+            ppm.extend(image.data.iter().flatten());
+            let name = name.replace([' ', ','], "-");
+            std::fs::write(dir.join(format!("{name}-{side}.ppm")), ppm).expect("ppm");
+        }
+    }
+
     const STRIP: (i32, i32) = (140, 38);
 
     /// The screen's pixels over the caption buttons of a window's content, less the row and
@@ -831,6 +852,9 @@ app.whenReady().then(() => {
                 Ok(compared) => {
                     let differing = compared.mask.iter().filter(|d| **d).count();
                     let blob = pixel::max_blob(&compared.mask, width, height);
+                    if blob > 0 {
+                        dump(name, mine, other);
+                    }
                     let rate = 100.0 * differing as f64 / compared.mask.len() as f64;
                     let detail = format!("{differing} px differ ({rate:.3} %), blob {blob}");
                     (rate <= 0.2 && blob <= 64, detail)

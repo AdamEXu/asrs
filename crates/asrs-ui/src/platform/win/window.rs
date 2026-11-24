@@ -2,7 +2,9 @@
 
 use gpui_kit::{Bounds, Pixels, Window};
 use windows::Win32::Foundation::{HWND, POINT, RECT};
-use windows::Win32::Graphics::Gdi::ClientToScreen;
+use windows::Win32::Graphics::Gdi::{
+    ClientToScreen, GetMonitorInfoW, MONITOR_DEFAULTTONEAREST, MONITORINFO, MonitorFromWindow,
+};
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::{
     GetClientRect, GetWindowRect, IsIconic, IsWindowVisible, SWP_NOACTIVATE, SWP_NOMOVE,
@@ -99,6 +101,19 @@ pub fn frame(hwnd: HWND) -> Option<Frame> {
     })
 }
 
+fn work_area(hwnd: HWND) -> Option<RECT> {
+    let mut info = MONITORINFO {
+        cbSize: size_of::<MONITORINFO>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: `info` outlives the call.
+    unsafe {
+        let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        GetMonitorInfoW(monitor, &mut info).ok().ok()?;
+    }
+    Some(info.rcWork)
+}
+
 /// Electron's frameless windows have no title bar, and their bounds are the content's.
 pub fn frameless(hwnd: HWND) -> bool {
     matches!((window_rect(hwnd), client_rect(hwnd)), (Some(w), Some(c)) if w.top == c.top)
@@ -161,15 +176,33 @@ impl NativeWindow {
     }
 
     pub fn set_content_origin(&self, x: f64, y: f64) {
-        let (Some(window), Some(bounds)) = (window_rect(self.0), self.bounds()) else {
+        let device = |v: f64| (v * self.scale()).round() as i32;
+        if let Some(bounds) = self.bounds() {
+            self.move_bounds(bounds, device(x), device(y));
+        }
+    }
+
+    fn move_bounds(&self, bounds: RECT, x: i32, y: i32) {
+        let Some(window) = window_rect(self.0) else {
             return;
         };
-        let device = |v: f64| (v * self.scale()).round() as i32;
         let flags = SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE;
-        let x = device(x) - (bounds.left - window.left);
-        let y = device(y) - (bounds.top - window.top);
+        let x = x - (bounds.left - window.left);
+        let y = y - (bounds.top - window.top);
         // SAFETY: a closed window makes the call fail.
         unsafe { SetWindowPos(self.0, None, x, y, 0, 0, flags) }.ok();
+    }
+
+    /// `CenterAndSizeWindow`, over the parent's bounds or on the work area.
+    pub fn center(&self, parent: Option<&NativeWindow>) {
+        let over = parent.and_then(NativeWindow::bounds);
+        let (Some(bounds), Some(over)) = (self.bounds(), over.or_else(|| work_area(self.0))) else {
+            return;
+        };
+        let start = |low: i32, high: i32, size: i32| low + ((high - low - size) / 2).max(0);
+        let x = start(over.left, over.right, bounds.right - bounds.left);
+        let y = start(over.top, over.bottom, bounds.bottom - bounds.top);
+        self.move_bounds(bounds, x, y);
     }
 
     pub fn set_content_size_limits(&self, min: Option<(f64, f64)>, max: Option<(f64, f64)>) {
