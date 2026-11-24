@@ -11,6 +11,8 @@ pub mod geometry;
 pub mod gradient;
 pub mod hairline;
 pub mod heatmap;
+pub mod image;
+pub mod matrix;
 pub mod mip;
 pub mod msaa;
 pub mod path;

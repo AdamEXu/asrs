@@ -1223,6 +1223,28 @@ keys the open popup takes. Its vector is generated and content-checked on Linux 
 `menus/electron-linux` (`src/genMenusHost.ts`) is `genMenus electron` on the platform it runs on,
 for Electron's role defaults there, and is likewise generated on Linux x86_64 only.
 
+
+## Spin button vectors
+
+`form/spin-buttons` (`src/spinButtons.ts`, with `src/spinButtonsMain.ts` as its Electron main
+process) is trusted mouse input, through the DevTools protocol, to the spin buttons of a number
+input in an offscreen page that emulates focus. A step is `{"name", "markup", "ops"}`; the ops and
+the records are described in `spinButtonsMain.ts`. The delays of a held button are rounded to what
+the timers are set to, and a step has no values from its hold on, so a run is reproducible. The
+delays differ by platform (macOS reads `NSScrollerButtonDelay` and `NSScrollerButtonPeriod`). The
+entry's generator hash also covers `spinButtonsMain` (`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
+
+## Tooltip recordings
+
+`cargo xtask app tooltips` runs scenarios of `parity/scenarios` with `appMain --tooltips` on macOS.
+`tools/tooltips.m` is loaded into Electron and replaces `-[ToolTipBaseView setToolTipAtMousePoint:]`,
+where Chromium hands AppKit the text, with one that writes it down; it also has every window say it
+is the key one, without which Chromium hands over nothing, since runs take no focus. At each
+capture the driver moves the pointer (`sendInputEvent`) to the middle and the corner of every
+titled element and out of the window, and reads the title `document.elementFromPoint` finds on a
+grid. `parity/tooltips/<scenario>.json` keeps the captures that differ from those before them;
+`crates/asrs-app/tests/tooltips.rs` replays them.
+
 ### Range pointer vectors
 
 `form/range-pointer` and `form/range-pointer-2x` (`src/genRangePointer.ts`, with
@@ -1233,6 +1255,24 @@ properties are assigned, and each op runs: `["press" | "move" | "release", x]` i
 slider's left edge and `["key", name]` through the DevTools protocol, `["set", property, value]`,
 `["focus"]` and `["blur"]` as script. After the markup and after each op it writes `{"step", "op",
 "value", "focused", "events"}`. The specs list the main process under `inputs`.
+
+### Focus ring vectors
+
+`focus/rings` (`src/focusRings.ts`, with `src/focusRingsMain.ts` as its Electron main process)
+records which element of a page with upstream's `global.css` has the focus, matches `:focus` and
+`:focus-visible` and has the rule's outline, after each op of the fixture's `sequences` and of
+seeded random ones: keys with and without modifiers, presses of each mouse button, pointer moves,
+`focus()` and `blur()`, in an active and an inactive window (`["active", bool]`, through
+`Emulation.setFocusEmulationEnabled`). Input is `sendInputEvent`'s: the DevTools protocol's
+focuses the page. The window is never shown, and on Linux the run uses the headless Ozone platform,
+so no display is needed. Presses on the select and keys that open its popup are left out.
+
+`focus/fields` is the same entry with `hub.css` and the fixture's `styles`, computed values to
+record: the backgrounds of focused fields, which window captures mask.
+
+`crates/asrs-ui/tests/focus_rings.rs` and `focus_fields.rs` replay them. Each is generated on macOS
+and on Linux x86_64; on the latter with `cargo xtask oracle gen` in a checkout there. Windows
+has no records (#379): the port applies the rule that the two recorded platforms share.
 
 ### Text selection vectors
 
@@ -1389,7 +1429,7 @@ alert, an alert or progress text that starts so, or that much of its progress ba
 `{"copy": name}` (the Edit menu's Copy, as `webContents.copy()`, and what that leaves on an emptied
 clipboard, written to `files/clipboard/<name>.txt`),
 `{"focus": boolean}` (whether the window's page counts as active and focused, through
-`Emulation.setFocusEmulationEnabled`; false until then),
+`Emulation.setFocusEmulationEnabled`; false until then; windows opened later need their own),
 `{"wait": ms}`, `{"idle": true}` and
 `{"capture": name, "probes": [selectors], "masks": [selectors]}`.
 

@@ -1,0 +1,487 @@
+{
+  "about": "Focus rings (#355) in active prompt windows: buttons, selects and the Help link reached with Tab, pressed, and after keys with and without Cmd or Ctrl, and the same windows inactive",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Speeds",
+              "controller": {
+                "leftSources": [],
+                "rightSources": [],
+                "discreteSources": [],
+                "leftLockedRange": [
+                  -2.5,
+                  7.123456789
+                ],
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": {
+                    "type": "length",
+                    "from": "meters",
+                    "to": "feet",
+                    "factor": 2
+                  }
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 64
+    },
+    {
+      "mouse": "click",
+      "x": 400,
+      "y": 64,
+      "button": "right"
+    },
+    {
+      "menu": [
+        "Rename..."
+      ]
+    },
+    {
+      "prompt": "renameTab"
+    },
+    {
+      "focus": true
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "exit",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "confirm",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "focus": false
+    },
+    {
+      "capture": "inactive",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "focus": true
+    },
+    {
+      "capture": "active-again",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 242,
+      "y": 58
+    },
+    {
+      "mouse": "down",
+      "x": 242,
+      "y": 58
+    },
+    {
+      "mouse": "move",
+      "x": 120,
+      "y": 62
+    },
+    {
+      "mouse": "up",
+      "x": 120,
+      "y": 62
+    },
+    {
+      "capture": "pressed",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "capture": "command",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "capture": "key",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 242,
+      "y": 58
+    },
+    {
+      "mouse": "down",
+      "x": 242,
+      "y": 58
+    },
+    {
+      "mouse": "move",
+      "x": 120,
+      "y": 62
+    },
+    {
+      "mouse": "up",
+      "x": 120,
+      "y": 62
+    },
+    {
+      "capture": "pressed-again",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 277,
+      "y": 58
+    },
+    {
+      "mouse": "down",
+      "x": 277,
+      "y": 58
+    },
+    {
+      "mouse": "move",
+      "x": 120,
+      "y": 62
+    },
+    {
+      "mouse": "up",
+      "x": 120,
+      "y": 62
+    },
+    {
+      "capture": "other-pressed",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "around",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "prompt": null
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "start-export"
+    },
+    {
+      "prompt": "export"
+    },
+    {
+      "focus": true
+    },
+    {
+      "capture": "export",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "export-format",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "m"
+    },
+    {
+      "capture": "export-chosen",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "export-fields",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "export-help",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "focus": false
+    },
+    {
+      "capture": "export-inactive",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "focus": true
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "export-exit",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 277,
+      "y": 166
+    },
+    {
+      "mouse": "down",
+      "x": 277,
+      "y": 166
+    },
+    {
+      "mouse": "move",
+      "x": 120,
+      "y": 168
+    },
+    {
+      "mouse": "up",
+      "x": 120,
+      "y": 168
+    },
+    {
+      "capture": "export-pressed",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "capture": "export-command",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "key": "Tab",
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "key": "Tab",
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "capture": "export-back",
+      "probes": [
+        "td.input > input",
+        "td.input > select",
+        "#exit",
+        "#confirm",
+        "div.help-div"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 242,
+      "y": 166
+    },
+    {
+      "mouse": "click",
+      "x": 242,
+      "y": 166
+    },
+    {
+      "prompt": null
+    },
+    {
+      "idle": true
+    }
+  ]
+}

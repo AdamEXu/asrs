@@ -171,6 +171,15 @@
     "src/registry.ts",
     "src/shims.ts"
   ],
+  "focusRings": [
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/focusRings.ts",
+    "src/shims.ts"
+  ],
+  "focusRingsMain": [
+    "src/focusRingsMain.ts"
+  ],
   "genAssetDownload": [
     "src/environment.ts",
     "src/genAssetDownload.ts"

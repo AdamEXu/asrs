@@ -1,68 +1,13 @@
 use gpui_kit::{
-    AnyElement, App, ClickEvent, Div, ElementId, FocusHandle, InteractiveElement, IntoElement,
+    AnyElement, App, ClickEvent, ElementId, FocusHandle, InteractiveElement, IntoElement,
     ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, div, px,
     rgb,
 };
 
+use crate::focus::{FocusRing, TransformedOutline};
 use crate::icon::{Icon, IconFit, IconSource};
-use crate::theme::{Appearance, BUTTON_RADIUS, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, IconTint};
+use crate::theme::{Appearance, BUTTON_RADIUS, FOCUS_RING_RADIUS, IconTint};
 use crate::tooltip::titled;
-
-/// Chromium keeps `:focus-visible` until focus moves, so whether focus arrived from the
-/// keyboard is latched rather than read from the latest input.
-struct FocusState {
-    handle: FocusHandle,
-    from_keyboard: bool,
-}
-
-/// A button's focus and whether it takes `global.css`'s `:focus-visible` style: focused from the
-/// keyboard, in an active window.
-pub struct FocusRing {
-    pub handle: FocusHandle,
-    pub visible: bool,
-}
-
-impl FocusRing {
-    /// The state of the button `id`, which is a tab stop, focused through `given` or a handle of
-    /// its own.
-    pub fn of(
-        id: impl Into<ElementId>,
-        given: Option<FocusHandle>,
-        window: &mut Window,
-        cx: &mut App,
-    ) -> FocusRing {
-        let state = window.use_keyed_state(id, cx, |_, cx| FocusState {
-            handle: given.unwrap_or_else(|| cx.focus_handle()).tab_stop(true),
-            from_keyboard: false,
-        });
-        let focused = state.read(cx).handle.is_focused(window);
-        let keyboard = window.last_input_was_keyboard();
-        let from_keyboard = state.update(cx, |s, _| {
-            s.from_keyboard = focused && (s.from_keyboard || keyboard);
-            s.from_keyboard
-        });
-        FocusRing {
-            handle: state.read(cx).handle.clone(),
-            visible: from_keyboard && window.is_window_active(),
-        }
-    }
-
-    /// The 2 px outline outside the button's box.
-    pub fn outline(&self, appearance: Appearance) -> Option<Div> {
-        let outset = px(-FOCUS_RING_WIDTH);
-        self.visible.then(|| {
-            div()
-                .absolute()
-                .top(outset)
-                .left(outset)
-                .right(outset)
-                .bottom(outset)
-                .border(px(FOCUS_RING_WIDTH))
-                .border_color(rgb(appearance.theme().focus_ring))
-                .rounded(px(FOCUS_RING_RADIUS + FOCUS_RING_WIDTH))
-        })
-    }
-}
 
 type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 
@@ -73,9 +18,8 @@ type ClickHandler = Box<dyn Fn(&ClickEvent, &mut Window, &mut App) + 'static>;
 /// `blurred` mirrors upstream's `button.blurred` class, which the hub toggles on every existing
 /// button from the main process's `set-focused` message, not live window focus.
 ///
-/// An enabled button is a tab stop. Focused from the keyboard it takes `global.css`'s
-/// `:focus-visible` style: a 2 px `#446ce3` outline outside the box, which follows the 3 px
-/// border radius that rule also sets. No element matches `:focus` while the window is inactive.
+/// An enabled button is a tab stop and takes `global.css`'s `:focus-visible` style: a 2 px
+/// `#446ce3` outline outside the box, which follows the 3 px border radius that rule also sets.
 #[derive(IntoElement)]
 pub struct IconButton {
     id: ElementId,
@@ -241,9 +185,20 @@ impl RenderOnce for IconButton {
             button = button.bg(rgb(rest));
         }
         if let Some(focus) = &focus {
-            button = button
-                .track_focus(&focus.handle)
-                .children(focus.outline(appearance));
+            button = button.track_focus(&focus.handle);
+            if self.translate != [0.0, 0.0] && focus.visible {
+                let size = [f64::from(self.width), f64::from(self.height)];
+                let outline = TransformedOutline {
+                    size: self.box_size.unwrap_or(size),
+                    offset: 0.0,
+                    subpixel: self.subpixel,
+                    translate: self.translate,
+                    appearance,
+                };
+                button = button.child(outline.element());
+            } else {
+                button = button.children(focus.outline(appearance));
+            }
         }
         if !self.disabled {
             button = button

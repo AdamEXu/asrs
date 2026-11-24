@@ -10,7 +10,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use asrs_canvas::pixels::transform_bilinear;
-use asrs_canvas::{Canvas2d, Pixmap, Raster, RasterState};
+use asrs_canvas::{Canvas2d, Pixmap, Raster, RasterState, ShadeCache};
 use asrs_hub::hub::{HubModel, HubPage};
 use asrs_hub::tabs::TabRef;
 use asrs_js::math;
@@ -23,18 +23,19 @@ use asrs_tabs::field_2d::{
 use asrs_tabs::form::{self, OptGroup, SelectOption};
 use asrs_ui::canvas_view::FramePresenter;
 use asrs_ui::canvas_view::geometry::{client_size, mouse_client};
+use asrs_ui::focus::{self, FocusRing, LINK_OUTLINE_OFFSET};
 use asrs_ui::gpui::{
-    AnyElement, AppContext, Context, Entity, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, StatefulInteractiveElement, Styled,
-    Subscription, Window, canvas, div, px, rgb,
+    AnyElement, App, AppContext, ClickEvent, Context, Entity, InteractiveElement, IntoElement,
+    KeyboardButton, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent,
+    StatefulInteractiveElement, Styled, Subscription, Window, canvas, div, px, rgb,
 };
 use asrs_ui::icon::IconSource;
 use asrs_ui::input::style::CONTROL_FONT;
-use asrs_ui::input::{Segment, SegmentedControl, Select, SelectEvent};
+use asrs_ui::input::{Segment, SegmentedControl, Select, SelectEvent, select_geometry};
 use asrs_ui::parity::probed;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
-use asrs_ui::theme::{Appearance, FONT_FAMILY};
+use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, FONT_FAMILY};
 use asrs_ui::tooltip::titled;
 
 use super::field_image::{self, FieldImage};
@@ -234,6 +235,7 @@ struct SelectView {
 struct TabView {
     sensor: ScrollSensor,
     raster: RasterState,
+    shades: ShadeCache,
     bitmap: Option<Arc<Pixmap>>,
     style: Option<CanvasStyle>,
     presenter: FramePresenter,
@@ -377,12 +379,16 @@ fn rasterize(
     frame: &Canvas2d,
     images: &[(String, Arc<Pixmap>)],
     state: &mut RasterState,
+    shades: &mut ShadeCache,
 ) -> Option<Pixmap> {
     let Some(mut raster) = Raster::new(frame.width, frame.height) else {
         *state = RasterState::default();
+        *shades = ShadeCache::default();
         return None;
     };
-    raster = raster.with_state(*state);
+    raster = raster
+        .with_state(*state)
+        .with_shades(std::mem::take(shades));
     for (id, pixmap) in images {
         if id == HEATMAP_IMAGE {
             raster.add_image(id, pixmap.clone());
@@ -392,6 +398,7 @@ fn rasterize(
     }
     raster.run(&frame.calls);
     *state = raster.state();
+    *shades = raster.take_shades();
     Some(raster.into_pixmap())
 }
 
@@ -522,7 +529,8 @@ impl<H: FrameHost> HubFrame<H> {
             if let Some(heatmap) = painted.heatmap {
                 images.push((HEATMAP_IMAGE.to_owned(), Arc::new(heatmap)));
             }
-            tab.bitmap = rasterize(&painted.frame, &images, &mut tab.raster).map(Arc::new);
+            let (raster, shades) = (&mut tab.raster, &mut tab.shades);
+            tab.bitmap = rasterize(&painted.frame, &images, raster, shades).map(Arc::new);
             tab.style = painted.style;
             tab.presented = None;
         }
@@ -748,17 +756,23 @@ impl<H: FrameHost> HubFrame<H> {
         if let (Some([lx, ly]), Some(width)) = (layout.source, source_width) {
             let (_, h) = text::measure(cx, &source_style(), "Source", scale);
             let entity = entity.clone();
-            let r = [
-                lx + SOURCE_PADDING,
-                ly + (SELECT_HEIGHT - h) / 2.0,
-                width,
-                h,
-            ];
+            let focus = FocusRing::of(("field-source-focus", key), None, window, cx);
+            let (ascent, descent) = text::font_metrics(cx, &source_style(), scale);
+            let content = f64::from((ascent + descent) / scale);
+            // On the select's baseline.
+            let top = ly + f64::from(select_baseline(scale, cx) - ascent / scale);
+            let r = [lx + SOURCE_PADDING, top - (h - content) / 2.0, width, h];
             panel = panel.child(titled(
                 "Open field image source URL",
                 local(r)
                     .id("field-source")
-                    .on_click(move |_, _, cx| {
+                    .track_focus(&focus.handle)
+                    .on_click(move |event, _, cx| {
+                        // Space clicks a button and scrolls from a link.
+                        if matches!(event, ClickEvent::Keyboard(e) if e.button == KeyboardButton::Space)
+                        {
+                            return;
+                        }
                         let _ = entity.update(cx, |frame, cx| {
                             frame.field_2d_settings(key, SettingsInput::Source, cx)
                         });
@@ -773,6 +787,18 @@ impl<H: FrameHost> HubFrame<H> {
                             ),
                     ),
             ));
+            if focus.visible {
+                let around = SOURCE_PADDING + LINK_OUTLINE_OFFSET;
+                let outlined = [
+                    r[0] - around,
+                    top - around,
+                    width + 2.0 * around,
+                    content + 2.0 * around,
+                ];
+                let radius = px(FOCUS_RING_RADIUS + LINK_OUTLINE_OFFSET as f32 + FOCUS_RING_WIDTH);
+                panel =
+                    panel.child(local(outlined).child(focus::outline(appearance).rounded(radius)));
+            }
         }
         let orientation = ORIENTATION_ICONS
             .iter()
@@ -936,6 +962,15 @@ impl<H: FrameHost> HubFrame<H> {
         }
         cx.notify();
     }
+}
+
+/// The field select's baseline below its top, in CSS px.
+fn select_baseline(scale: f32, cx: &mut App) -> f32 {
+    let (ascent, descent) = text::font_metrics(cx, &TextStyle::new(CONTROL_FONT), scale);
+    let height = SELECT_HEIGHT as f32 * scale;
+    let snapped = (0, height.round() as i32);
+    let [_, top, _, _] = select_geometry(0.0, height, snapped, ascent + descent, scale).text;
+    (top + ascent) / scale
 }
 
 #[cfg(test)]

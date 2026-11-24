@@ -9,8 +9,8 @@ use gpui_kit::{
 use super::aura;
 use crate::input::style::system_font;
 use crate::platform;
-use crate::text::{self, Text, TextStyle, WhiteSpace};
-use asrs_canvas::text::dom::Direction;
+use crate::text::{self, Direction, Text, TextStyle, WhiteSpace};
+
 use crate::theme::Appearance;
 
 const PADDING: [f32; 4] = [4.0, 8.0, 5.0, 8.0];
@@ -26,7 +26,10 @@ fn style(direction: Direction) -> TextStyle {
 /// The text inside the marks `GetWrappedTooltipText` puts around a right-to-left title.
 fn unwrapped(text: &str) -> (Direction, &str) {
     match text.strip_prefix('\u{202b}') {
-        Some(text) => (Direction::Rtl, text.strip_suffix('\u{202c}').unwrap_or(text)),
+        Some(text) => (
+            Direction::Rtl,
+            text.strip_suffix('\u{202c}').unwrap_or(text),
+        ),
         None => (Direction::Ltr, text),
     }
 }

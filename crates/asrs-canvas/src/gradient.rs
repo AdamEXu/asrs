@@ -2,12 +2,14 @@
 
 //! Gradient fills as Chromium's CPU canvas shades them: Blink's stop padding, Skia's gradient
 //! colour stages and device-to-unit matrices, then the raster pipeline's highp tail (premul,
-//! paint alpha, the ordered dither Blink turns on for every gradient, round-to-nearest-even
-//! store). Arithmetic follows Skia on ARM64, where the pipeline's `mad` is a fused multiply-add.
+//! paint alpha, the ordered dither Blink turns on for every gradient, the float blend,
+//! round-to-nearest-even store). Arithmetic follows Skia on ARM64, where the pipeline's `mad` is a fused multiply-add.
 
-use tiny_skia::{Pixmap, Transform};
+use tiny_skia::Pixmap;
 
+use crate::blit::Spans;
 use crate::color::Rgba;
+use crate::matrix::Matrix;
 
 const NEARLY_ZERO: f32 = 1.0 / 4096.0;
 const DEGENERATE: f32 = 1.0 / 32768.0;
@@ -174,49 +176,147 @@ impl Colors {
 /// Where a device pixel centre lands in gradient space: the pipeline's matrix stage and the
 /// shader's own `t` stages.
 pub enum Geometry {
-    Linear(Transform),
-    Radial(Transform),
+    Linear(Matrix),
+    Radial(Matrix),
     Concentric {
-        matrix: Transform,
+        matrix: Matrix,
         scale: f32,
         bias: f32,
     },
+    Strip {
+        matrix: Matrix,
+        radius2: f32,
+    },
+    Focal {
+        matrix: Matrix,
+        focal: Focal,
+    },
 }
 
-fn pts_to_unit(p0: (f32, f32), p1: (f32, f32)) -> Transform {
-    let (vx, vy) = (p1.0 - p0.0, p1.1 - p0.1);
-    let mag2 = vx * vx + vy * vy;
-    let mag = if mag2.is_finite() {
+fn length(x: f32, y: f32) -> f32 {
+    let mag2 = x * x + y * y;
+    if mag2.is_finite() {
         mag2.sqrt()
     } else {
-        (f64::from(vx) * f64::from(vx) + f64::from(vy) * f64::from(vy)).sqrt() as f32
-    };
+        (f64::from(x) * f64::from(x) + f64::from(y) * f64::from(y)).sqrt() as f32
+    }
+}
+
+fn pts_to_unit(p0: (f32, f32), p1: (f32, f32)) -> Matrix {
+    let (vx, vy) = (p1.0 - p0.0, p1.1 - p0.1);
+    let mag = length(vx, vy);
     let inv = if mag != 0.0 { 1.0 / mag } else { 0.0 };
     let (sin, cos) = (-(vy * inv), vx * inv);
     let one_minus_cos = 1.0 - cos;
-    let tx = sin * p0.1 + one_minus_cos * p0.0;
-    let ty = -sin * p0.0 + one_minus_cos * p0.1;
-    let m = Transform::from_row(cos, sin, -sin, cos, tx + -p0.0, ty + -p0.1);
-    m.post_scale(inv, inv)
+    let m = Matrix {
+        sx: cos,
+        kx: -sin,
+        tx: sin * p0.1 + one_minus_cos * p0.0,
+        ky: sin,
+        sy: cos,
+        ty: -sin * p0.0 + one_minus_cos * p0.1,
+    };
+    m.post_translate(-p0.0, -p0.1).post_scale(inv, inv)
 }
 
-fn radius_to_unit(center: (f32, f32), radius: f32) -> Transform {
+fn radius_to_unit(center: (f32, f32), radius: f32) -> Matrix {
     let inv = 1.0 / radius;
-    Transform::from_translate(-center.0, -center.1).post_scale(inv, inv)
+    Matrix::scale_translate(1.0, 1.0, -center.0, -center.1).post_scale(inv, inv)
 }
 
 fn center_distance([x0, y0, _, x1, y1, _]: [f32; 6]) -> f32 {
-    let (dx, dy) = (x0 - x1, y0 - y1);
-    (dx * dx + dy * dy).sqrt()
+    length(x0 - x1, y0 - y1)
 }
 
-/// Whether Skia treats the two circles of a radial gradient as concentric.
-pub fn shares_center(g: [f32; 6]) -> bool {
-    center_distance(g) <= NEARLY_ZERO
+/// `SkMatrix::Poly2Proc`.
+fn poly2(p0: (f32, f32), p1: (f32, f32)) -> Matrix {
+    Matrix {
+        sx: p1.1 - p0.1,
+        ky: p0.0 - p1.0,
+        kx: p1.0 - p0.0,
+        sy: p1.1 - p0.1,
+        tx: p0.0,
+        ty: p0.1,
+    }
+}
+
+/// `SkMatrix::PolyToPoly` of two points.
+fn poly_to_poly(from: [(f32, f32); 2], to: [(f32, f32); 2]) -> Option<Matrix> {
+    let inverse = poly2(from[0], from[1]).invert()?;
+    Some(poly2(to[0], to[1]).concat(&inverse))
+}
+
+/// `SkConicalGradient::FocalData`.
+pub struct Focal {
+    r1: f32,
+    x: f32,
+    swapped: bool,
+}
+
+impl Focal {
+    fn new(r0: f32, r1: f32, matrix: &mut Matrix) -> Option<Focal> {
+        let (mut r0, mut r1) = (r0, r1);
+        let mut x = r0 / (r0 - r1);
+        let mut swapped = false;
+        if (x - 1.0).abs() <= NEARLY_ZERO {
+            *matrix = matrix.post_translate(-1.0, 0.0).post_scale(-1.0, 1.0);
+            std::mem::swap(&mut r0, &mut r1);
+            x = 0.0;
+            swapped = true;
+        }
+        let to_focal = poly_to_poly([(x, 0.0), (1.0, 0.0)], [(0.0, 0.0), (1.0, 0.0)])?;
+        *matrix = to_focal.concat(matrix);
+        let scale = (1.0 - x).abs();
+        let focal = Focal {
+            r1: r1 / scale,
+            x,
+            swapped,
+        };
+        *matrix = if focal.on_circle() {
+            matrix.post_scale(0.5, 0.5)
+        } else {
+            let d = focal.r1 * focal.r1 - 1.0;
+            matrix.post_scale(focal.r1 / d, 1.0 / d.abs().sqrt())
+        };
+        *matrix = matrix.post_scale(scale, scale);
+        Some(focal)
+    }
+
+    fn on_circle(&self) -> bool {
+        (1.0 - self.r1).abs() <= NEARLY_ZERO
+    }
+
+    fn well_behaved(&self) -> bool {
+        !self.on_circle() && self.r1 > 1.0
+    }
+
+    /// The `2pt_conical` stages, `None` outside the cone.
+    fn t(&self, x: f32, y: f32) -> Option<f32> {
+        let p0 = 1.0 / self.r1;
+        let mut t = if self.on_circle() {
+            x + y * y / x
+        } else if self.well_behaved() {
+            (x * x + y * y).sqrt() - x * p0
+        } else if self.swapped || 1.0 - self.x < 0.0 {
+            -(x * x - y * y).sqrt() - x * p0
+        } else {
+            (x * x - y * y).sqrt() - x * p0
+        };
+        if !self.well_behaved() && (t <= 0.0 || t.is_nan()) {
+            return None;
+        }
+        if 1.0 - self.x < 0.0 {
+            t = -t;
+        }
+        if self.x.abs() > NEARLY_ZERO {
+            t += self.x;
+        }
+        Some(if self.swapped { 1.0 - t } else { t })
+    }
 }
 
 /// `SkRasterPipeline::appendMatrix` and the stage it picks.
-fn apply(m: &Transform, x: f32, y: f32) -> (f32, f32) {
+fn apply(m: &Matrix, x: f32, y: f32) -> (f32, f32) {
     if m.is_identity() {
         (x, y)
     } else if m.is_translate() {
@@ -233,36 +333,54 @@ fn apply(m: &Transform, x: f32, y: f32) -> (f32, f32) {
 
 impl Geometry {
     /// The linear gradient from `p0` to `p1` under `ctm`, or `None` when the CTM is singular.
-    pub fn linear(ctm: Transform, p0: (f32, f32), p1: (f32, f32)) -> Option<Geometry> {
-        Some(Geometry::Linear(
-            ctm.invert()?.post_concat(pts_to_unit(p0, p1)),
-        ))
+    pub fn linear(ctm: &Matrix, p0: (f32, f32), p1: (f32, f32)) -> Option<Geometry> {
+        Some(Geometry::Linear(pts_to_unit(p0, p1).concat(&ctm.invert()?)))
     }
 
-    /// `SkShaders::TwoPointConicalGradient` for circles that `shares_center` accepts:
-    /// `SkRadialGradient` when the start radius is nearly zero, else the concentric `kRadial`
-    /// conical. `None` when Skia draws nothing.
-    pub fn radial(ctm: Transform, g: [f32; 6]) -> Option<Geometry> {
+    /// `SkGradientShader::MakeTwoPointConical`. `None` when Skia draws nothing.
+    pub fn radial(ctm: &Matrix, g: [f32; 6]) -> Option<Geometry> {
         let [x0, y0, r0, x1, y1, r1] = g;
         let inverse = ctm.invert()?;
-        if center_distance(g) <= DEGENERATE && r0 <= DEGENERATE && (r0 - r1).abs() > DEGENERATE {
+        let distance = center_distance(g);
+        if distance <= DEGENERATE && r0 <= DEGENERATE && (r0 - r1).abs() > DEGENERATE {
             return Some(Geometry::Radial(
-                inverse.post_concat(radius_to_unit((x0, y0), r1)),
+                radius_to_unit((x0, y0), r1).concat(&inverse),
             ));
         }
-        if r0.max(r1) <= NEARLY_ZERO || (r0 - r1).abs() <= NEARLY_ZERO {
-            return None;
+        if distance <= NEARLY_ZERO {
+            if r0.max(r1) <= NEARLY_ZERO || (r0 - r1).abs() <= NEARLY_ZERO {
+                return None;
+            }
+            let d = r1 - r0;
+            return Some(Geometry::Concentric {
+                matrix: radius_to_unit((x1, y1), r0.max(r1)).concat(&inverse),
+                scale: r0.max(r1) / d,
+                bias: -r0 / d,
+            });
         }
-        let d = r1 - r0;
-        Some(Geometry::Concentric {
-            matrix: inverse.post_concat(radius_to_unit((x1, y1), r0.max(r1))),
-            scale: r0.max(r1) / d,
-            bias: -r0 / d,
+        let mut to_unit = poly_to_poly([(x0, y0), (x1, y1)], [(0.0, 0.0), (1.0, 0.0)])?;
+        if (r1 - r0).abs() <= NEARLY_ZERO {
+            let r = r0 / distance;
+            return Some(Geometry::Strip {
+                matrix: to_unit.concat(&inverse),
+                radius2: r * r,
+            });
+        }
+        let focal = Focal::new(r0 / distance, r1 / distance, &mut to_unit)?;
+        Some(Geometry::Focal {
+            matrix: to_unit.concat(&inverse),
+            focal,
         })
     }
 
-    fn t(&self, x: f32, y: f32) -> f32 {
-        match self {
+    /// Whether the shader covers the plane: Skia takes every two-point conical for one that may
+    /// not.
+    fn covers(&self) -> bool {
+        matches!(self, Geometry::Linear(_) | Geometry::Radial(_))
+    }
+
+    fn t(&self, x: f32, y: f32) -> Option<f32> {
+        Some(match self {
             Geometry::Linear(m) => apply(m, x, y).0,
             Geometry::Radial(m) => {
                 let (x, y) = apply(m, x, y);
@@ -275,14 +393,18 @@ impl Geometry {
             } => {
                 let (x, y) = apply(matrix, x, y);
                 let r = (x * x + y * y).sqrt();
-                apply(
-                    &Transform::from_row(*scale, 0.0, 0.0, 1.0, *bias, 0.0),
-                    r,
-                    y,
-                )
-                .0
+                apply(&Matrix::scale_translate(*scale, 1.0, *bias, 0.0), r, y).0
             }
-        }
+            Geometry::Strip { matrix, radius2 } => {
+                let (x, y) = apply(matrix, x, y);
+                let t = x + (radius2 - y * y).sqrt();
+                return (!t.is_nan()).then_some(t);
+            }
+            Geometry::Focal { matrix, focal } => {
+                let (x, y) = apply(matrix, x, y);
+                return focal.t(x, y);
+            }
+        })
     }
 }
 
@@ -293,39 +415,86 @@ fn dither(x: u32, y: u32) -> f32 {
     (m as f32).mul_add(2.0 / 128.0, -63.0 / 128.0)
 }
 
-/// The premultiplied, dithered and stored colour of one device pixel: paint alpha
-/// (`scale_1_float`), then `dither` at rate 1/255 clamped to `[0, a]`, then `store_8888`.
-pub fn shade_pixel(c: Channels, paint_alpha: f32, x: u32, y: u32) -> [u8; 4] {
-    let c = if paint_alpha != 1.0 {
-        c.map(|v| v * paint_alpha)
-    } else {
-        c
-    };
-    let d = dither(x, y);
-    let a = c[3];
-    let store = |v: f32| (v * 255.0).clamp(0.0, 255.0).round_ties_even() as u8;
-    let rgb = |v: f32| store(d.mul_add(1.0 / 255.0, v).min(a).max(0.0));
-    [rgb(c[0]), rgb(c[1]), rgb(c[2]), store(a)]
+/// A gradient as a paint: the colour half of a `SkRasterPipelineBlitter`.
+pub struct Paint {
+    geometry: Geometry,
+    colors: Colors,
+    alpha: f32,
 }
 
-/// Shades every pixel of a `width` x `height` device into a premultiplied pixmap.
-pub fn shade(
-    geometry: &Geometry,
-    colors: &Colors,
-    paint_alpha: f32,
-    width: u32,
-    height: u32,
-) -> Option<Pixmap> {
-    let mut out = Pixmap::new(width, height)?;
-    let data = out.data_mut();
-    for y in 0..height {
-        for x in 0..width {
-            let t = geometry.t(x as f32 + 0.5, y as f32 + 0.5);
-            let i = ((y * width + x) * 4) as usize;
-            data[i..i + 4].copy_from_slice(&shade_pixel(colors.at(t), paint_alpha, x, y));
+impl Paint {
+    pub fn new(geometry: Geometry, colors: Colors, alpha: f32) -> Paint {
+        Paint {
+            geometry,
+            colors,
+            alpha,
         }
     }
-    Some(out)
+
+    /// Skia strength-reduces source-over with an opaque shader to a copy, which lerps where it
+    /// would scale.
+    fn opaque(&self) -> bool {
+        self.colors.opaque && self.alpha == 1.0 && self.geometry.covers()
+    }
+
+    /// The premultiplied, dithered colour of a device pixel: the shader, the paint alpha
+    /// (`scale_1_float`), `dither` at rate 1/255 clamped to `[0, a]`, then `clamp_01`.
+    fn at(&self, x: u32, y: u32) -> Channels {
+        let c = match self.geometry.t(x as f32 + 0.5, y as f32 + 0.5) {
+            Some(t) => self.colors.at(t),
+            None => [0.0; 4],
+        };
+        let c = if self.alpha != 1.0 {
+            c.map(|v| v * self.alpha)
+        } else {
+            c
+        };
+        let d = dither(x, y);
+        let a = c[3];
+        let rgb = |v: f32| d.mul_add(1.0 / 255.0, v).min(a).max(0.0);
+        [rgb(c[0]), rgb(c[1]), rgb(c[2]), a].map(|v| v.clamp(0.0, 1.0))
+    }
+}
+
+/// Blends a gradient through `spans` in blit order as `SkRasterPipelineBlitter` does: in float,
+/// from the 8-bit destination and back, with the coverage in float too.
+pub fn blit(pixmap: &mut Pixmap, spans: &Spans, paint: &Paint) {
+    let opaque = paint.opaque();
+    let stride = pixmap.width() as usize;
+    let data = pixmap.data_mut();
+    for (x0, y, coverage) in spans.iter() {
+        let row = y as usize * stride;
+        for (i, &c) in coverage.iter().enumerate() {
+            if c == 0 {
+                continue;
+            }
+            let x = x0 as usize + i;
+            let k = (row + x) * 4;
+            let dst = &mut data[k..k + 4];
+            let mut src = paint.at(x as u32, y as u32);
+            let scale = f32::from(c) * (1.0 / 255.0);
+            if opaque {
+                if c != 255 {
+                    for (s, &d) in src.iter_mut().zip(dst.iter()) {
+                        let d = f32::from(d) * (1.0 / 255.0);
+                        *s = (*s - d).mul_add(scale, d);
+                    }
+                }
+            } else {
+                if c != 255 {
+                    src = src.map(|v| v * scale);
+                }
+                let inv = 1.0 - src[3];
+                for (s, &d) in src.iter_mut().zip(dst.iter()) {
+                    let d = f32::from(d) * (1.0 / 255.0);
+                    *s = d.mul_add(inv, *s);
+                }
+            }
+            for (d, s) in dst.iter_mut().zip(src) {
+                *d = (s * 255.0).clamp(0.0, 255.0).round_ties_even() as u8;
+            }
+        }
+    }
 }
 
 #[cfg(test)]

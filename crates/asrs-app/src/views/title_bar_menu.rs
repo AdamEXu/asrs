@@ -1,7 +1,7 @@
 //! `div.title-bar-menu` of `www/hub.html`, which Windows and Linux show over the sidebar: its
 //! table's columns as Blink's automatic table layout makes them, and the buttons.
 
-use asrs_ui::button::FocusRing;
+use asrs_ui::focus::FocusRing;
 use asrs_ui::gpui::{
     AnyElement, App, Div, InteractiveElement, IntoElement, MouseButton, ParentElement,
     ScrollHandle, Stateful, StatefulInteractiveElement, Styled, Window, div, px, rgb, rgba,

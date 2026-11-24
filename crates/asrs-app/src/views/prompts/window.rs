@@ -6,6 +6,7 @@ use asrs_js::value::JsValue;
 use asrs_tabs::form::NumberInput;
 use asrs_tabs::prompts::{Control, ControlValue, PromptEvent, PromptPage, TableRow};
 use asrs_ui::button::IconButton;
+use asrs_ui::focus::{self, LINK_OUTLINE_OFFSET, TransformedOutline};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Bounds, ClickEvent, Context, Div, Entity, EventEmitter,
     FocusHandle, Focusable, InteractiveElement, IntoElement, KeyboardButton, ParentElement, Pixels,
@@ -68,7 +69,6 @@ pub struct PromptWindow {
     exit: FocusHandle,
     confirm: FocusHandle,
     help: FocusHandle,
-    help_from_keyboard: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -108,7 +108,6 @@ impl PromptWindow {
             exit: cx.focus_handle(),
             confirm: cx.focus_handle(),
             help: cx.focus_handle().tab_stop(true),
-            help_from_keyboard: false,
             _subscriptions: subscriptions,
         }
     }
@@ -468,15 +467,13 @@ impl PromptWindow {
         window: &Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
-        let theme = Appearance::of(window, cx).theme();
+        let appearance = Appearance::of(window, cx);
+        let theme = appearance.theme();
         let (w, h) = text::measure(cx, &help_style(), "Help", scale);
         let left = width - HELP_RIGHT - HELP_WIDTH;
         let top = height - BUTTON_BOTTOM - BUTTON_SIZE;
         let x = left + HELP_WIDTH / 2.0 - w / 2.0;
         let y = top + BUTTON_SIZE / 2.0 - h / 2.0;
-        let focused = self.help.is_focused(window);
-        self.help_from_keyboard =
-            focused && (self.help_from_keyboard || window.last_input_was_keyboard());
         let mut link = div()
             .id(HELP)
             .track_focus(&self.help)
@@ -504,18 +501,15 @@ impl PromptWindow {
                     )
                     .probe("a"),
             );
-        if self.help_from_keyboard && window.is_window_active() {
-            link = link.child(
-                div()
-                    .absolute()
-                    .top(px(-2.0))
-                    .left(px(-2.0))
-                    .right(px(-2.0))
-                    .bottom(px(-2.0))
-                    .border(px(2.0))
-                    .border_color(rgb(theme.focus_ring))
-                    .rounded(px(5.0)),
-            );
+        if focus::focus_visible(&self.help, window, cx) {
+            let outline = TransformedOutline {
+                size: [w, h],
+                offset: LINK_OUTLINE_OFFSET,
+                subpixel: [x, y].map(|v| f64::from(snap_remainder(v as f32, scale))),
+                translate: [-w / 2.0, -h / 2.0],
+                appearance,
+            };
+            link = link.child(outline.element());
         }
         let boxed = div()
             .absolute()

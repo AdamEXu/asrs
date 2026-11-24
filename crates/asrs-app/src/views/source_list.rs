@@ -524,7 +524,14 @@ fn item_body(
     .child(translated_button(
         IconButton::new(("sl-remove", index), symbol("close.svg"))
             .title("Remove field")
-            .on_click(on(dispatch, ListPointer::RemoveClick(index))),
+            .on_click({
+                let remove = on(dispatch, ListPointer::RemoveClick(index));
+                move |event, window, cx| {
+                    // The focused button goes with its item.
+                    window.blur(cx);
+                    remove(event, window, cx);
+                }
+            }),
         origin_x,
         width - 15.0 - 2.0 * half,
         half,
