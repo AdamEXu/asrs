@@ -7,7 +7,8 @@ use asrs_field3d::render::{
     Mesh, NodeKind, PhongMaterial, RenderThread, Renderer, Scene, build_frame, edge_mask,
 };
 use asrs_field3d::three::{
-    ArrayData, BufferAttribute, BufferGeometry, Color, PerspectiveCamera, Vector3, primitives,
+    ArrayData, BufferAttribute, BufferGeometry, Color, Euler, EulerOrder, PerspectiveCamera,
+    Vector3, primitives,
 };
 
 const W: u32 = 64;
@@ -220,61 +221,81 @@ fn an_indexed_line_strip_draws() {
     assert_eq!(lit, 1);
 }
 
-fn line_between(samples: u32, y: f32) -> (Scene, PerspectiveCamera, FrameOptions) {
-    let (mut scene, camera) = scene_with_box_at(100.0);
+fn floor_with_line(z: Option<f32>) -> (Scene, PerspectiveCamera) {
+    let (mut scene, mut camera) = scene_with_box_at(100.0);
     let root = scene.root;
-    let mut geometry = BufferGeometry::default();
-    geometry.set_attribute(
-        "position",
-        BufferAttribute::new(
-            ArrayData::Float32(vec![-9.0, y, 0.0, 9.0, y, 0.0]),
-            3,
-            false,
-        ),
-    );
-    scene.add(
-        root,
-        NodeKind::Line(Line {
-            geometry: Geometry::new(geometry),
-            material: Arc::new(LineBasicMaterial::new(Color::hex(16777215.0))),
-            segments: true,
-        }),
-    );
-    let options = FrameOptions {
-        samples,
-        ..FrameOptions::new(f64::from(W), f64::from(H), 1.0, true)
+    let material = PhongMaterial {
+        color: Color::hex(0.0),
+        emissive: Color::hex(16711680.0),
+        ..PhongMaterial::new()
     };
-    (scene, camera, options)
+    let floor = Geometry::new(primitives::plane_geometry(40.0, 40.0, 1.0, 1.0));
+    let floor = scene.add_mesh(root, Mesh::new(floor, Arc::new(material)));
+    scene.graph.object_mut(floor).set_rotation(Euler::new(
+        -std::f64::consts::FRAC_PI_2,
+        0.0,
+        0.0,
+        EulerOrder::Xyz,
+    ));
+    if let Some(z) = z {
+        let mut geometry = BufferGeometry::default();
+        geometry.set_attribute(
+            "position",
+            BufferAttribute::new(
+                ArrayData::Float32(vec![-9.0, 0.0, z, 9.0, 0.0, z]),
+                3,
+                false,
+            ),
+        );
+        scene.add(
+            root,
+            NodeKind::Line(Line {
+                geometry: Geometry::new(geometry),
+                material: Arc::new(LineBasicMaterial::new(Color::hex(16777215.0))),
+                segments: true,
+            }),
+        );
+    }
+    camera.object.position = Vector3::new(0.0, 3.0, 6.0);
+    camera.look_at(Vector3::new(0.0, 0.0, 0.0));
+    (scene, camera)
 }
 
 #[test]
-fn every_pixel_a_line_lights_is_an_edge_pixel() {
+fn every_pixel_a_line_lights_on_a_coplanar_floor_is_an_edge_pixel() {
     let Some(mut renderer) = renderer() else {
         return;
     };
-    let pixel_height = (2.0 * 6.0 * 25f32.to_radians().tan()) / H as f32;
-    let mut mixed_rows = 0;
+    let mut only_mixed = 0;
     for samples in [1, 4] {
-        for step in 0..8 {
-            let y = step as f32 * pixel_height / 8.0;
-            let (mut scene, mut camera, options) = line_between(samples, y);
+        let options = FrameOptions {
+            samples,
+            ..FrameOptions::new(f64::from(W), f64::from(H), 1.0, true)
+        };
+        let mut render = |z| {
+            let (mut scene, mut camera) = floor_with_line(z);
             let frame = build_frame(&mut scene, &mut camera, options);
             let mut bgra = Vec::new();
             renderer.render(&frame, &mut bgra);
-            let aux = renderer.render_aux(&frame);
+            (bgra, renderer.render_aux(&frame))
+        };
+        let (bare, _) = render(None);
+        for step in 0..32 {
+            let (bgra, mut aux) = render(Some(step as f32 / 64.0));
             let edges = edge_mask(&aux);
             let lit: Vec<usize> = (0..(W * H) as usize)
-                .filter(|&i| bgra[i * 4] != 0x22)
+                .filter(|&i| bgra[i * 4..i * 4 + 4] != bare[i * 4..i * 4 + 4])
                 .collect();
-            assert!(lit.len() >= W as usize, "{samples} samples, step {step}");
-            for i in lit {
+            for &i in &lit {
                 assert!(edges[i], "{samples} samples, step {step}, pixel {i}");
             }
-            assert!(samples > 1 || aux.mixed.iter().all(|m| !m));
-            mixed_rows += aux.mixed.iter().filter(|m| **m).count() / W as usize;
+            assert!(samples > 1 || !aux.mixed.contains(&true));
+            aux.mixed.fill(false);
+            let single = edge_mask(&aux);
+            only_mixed += lit.iter().filter(|&&i| !single[i]).count();
         }
     }
-    assert!(mixed_rows > 0);
+    assert!(only_mixed > 0);
 }
 
 #[test]
