@@ -114,11 +114,6 @@ impl NativeMenu {
         let id = usize::try_from(chosen.0).ok()?;
         self.paths.get(id.checked_sub(1)?).cloned()
     }
-
-    #[cfg(feature = "parity")]
-    pub fn paths(&self) -> &[MenuPath] {
-        &self.paths
-    }
 }
 
 impl Drop for NativeMenu {

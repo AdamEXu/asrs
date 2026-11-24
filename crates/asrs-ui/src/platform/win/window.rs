@@ -21,7 +21,6 @@ pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
 }
 
 /// How much larger a titled, resizable window's bounds are than its content at scale 1.
-#[cfg(feature = "parity")]
 pub fn titled_frame() -> (i32, i32) {
     use windows::Win32::UI::HiDpi::AdjustWindowRectExForDpi;
     use windows::Win32::UI::WindowsAndMessaging::{WINDOW_EX_STYLE, WS_OVERLAPPEDWINDOW};

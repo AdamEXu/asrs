@@ -1,9 +1,11 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[cfg(not(windows))]
+use gpui_kit::platform;
 use gpui_kit::{
     AnyWindowHandle, App, AssetSource, Entity, HeadlessAppContext, Pixels,
-    PlatformHeadlessRenderer, Render, Result, Size, Window, WindowHandle, platform,
+    PlatformHeadlessRenderer, Render, Result, Size, Window, WindowHandle,
 };
 
 #[derive(Clone, PartialEq, Eq)]

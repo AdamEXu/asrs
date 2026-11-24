@@ -6,9 +6,9 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use gpui_kit::{
-    Bounds, DevicePixels, Empty, Platform, PlatformAtlas, PlatformHeadlessRenderer, PlatformWindow,
-    Result, Scene, Size, WindowBackgroundAppearance, WindowHandle, WindowId, WindowKind,
-    WindowParams, point, px, size,
+    Bounds, DevicePixels, Empty, GraphicalEnvironment, Platform, PlatformAtlas,
+    PlatformHeadlessRenderer, PlatformWindow, Result, Scene, Size, WindowBackgroundAppearance,
+    WindowHandle, WindowId, WindowKind, WindowParams, point, px, size,
 };
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use windows::Win32::Foundation::HWND;
@@ -20,7 +20,13 @@ use windows::Win32::UI::WindowsAndMessaging::{
 use super::window::{client_rect, frame};
 
 thread_local! {
-    static PLATFORM: Rc<dyn Platform> = gpui_kit::platform::current_platform(false);
+    static PLATFORM: Rc<dyn Platform> = {
+        let platform = gpui_kit::platform::current_platform(false);
+        // What `Platform::run` does first. Its failure is `open_window`'s.
+        let environment = GraphicalEnvironment::detect();
+        drop(platform.request_windowing(WindowingRequest::Windowed(environment)));
+        platform
+    };
 }
 
 pub fn platform() -> Rc<dyn Platform> {
