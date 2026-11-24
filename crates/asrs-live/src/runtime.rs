@@ -3,8 +3,10 @@
 use std::future::Future;
 use std::io;
 
-use tokio::runtime::{Builder, Handle, Runtime};
+use tokio::runtime::{Builder, Runtime};
 use tokio::task::JoinHandle;
+
+pub use tokio::runtime::Handle as RuntimeHandle;
 
 pub struct LiveRuntime {
     runtime: Option<Runtime>,
@@ -38,8 +40,13 @@ impl LiveRuntime {
         self.runtime.as_ref().expect("only taken on drop")
     }
 
-    pub fn handle(&self) -> &Handle {
+    pub fn handle(&self) -> &RuntimeHandle {
         self.runtime().handle()
+    }
+
+    /// Tasks spawned on the runtime that have not finished.
+    pub fn alive_tasks(&self) -> usize {
+        self.handle().metrics().num_alive_tasks()
     }
 
     pub fn spawn<F>(&self, future: F) -> LiveTask

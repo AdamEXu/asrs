@@ -22,6 +22,6 @@ pub use live_data_source::{
 };
 pub use live_data_tuner::{LiveDataTuner, TunedValue};
 pub use net_options::{Dial, NetOptions};
-pub use runtime::{LiveRuntime, LiveTask};
+pub use runtime::{LiveRuntime, LiveTask, RuntimeHandle};
 pub use thrown::Thrown;
 pub use timers::{ManualClock, MonotonicClock, TimerId, TimerQueue};

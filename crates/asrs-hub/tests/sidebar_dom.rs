@@ -103,31 +103,42 @@ struct StubTuner {
 }
 
 impl Tuner for StubTuner {
-    fn has_tunable_fields(&self) -> bool {
+    fn has_tunable_fields(&self, _log: &Log) -> bool {
         !self.keys.is_empty()
     }
-    fn is_tunable(&self, key: &JsString) -> bool {
+    fn is_tunable(&self, _log: &Log, key: &JsString) -> bool {
         self.keys.contains(key)
     }
-    fn publish(&self, key: &JsString, value: &JsValue) {
+    fn publish(
+        &self,
+        _window: &mut TunerWindow<'_>,
+        key: &JsString,
+        value: TunedValue,
+    ) -> Result<(), Thrown> {
+        let value = match value {
+            TunedValue::Number(n) => JsValue::Number(n),
+            TunedValue::Boolean(b) => JsValue::Bool(b),
+        };
         self.events.borrow_mut().push(Emit {
             values: vec![(
                 "tuner",
                 Value::Array(vec![
                     cve_string(&js("publish")),
                     cve_string(key),
-                    js_json::from_js(value),
+                    js_json::from_js(&value),
                 ]),
             )],
         });
+        Ok(())
     }
-    fn unpublish(&self, key: &JsString) {
+    fn unpublish(&self, _window: &mut TunerWindow<'_>, key: &JsString) -> Result<(), Thrown> {
         self.events.borrow_mut().push(Emit {
             values: vec![(
                 "tuner",
                 Value::Array(vec![cve_string(&js("unpublish")), cve_string(key)]),
             )],
         });
+        Ok(())
     }
 }
 
@@ -854,6 +865,8 @@ macro_rules! senv {
             log: $runner.ctx.log,
             selection: &mut *$runner.ctx.selection.borrow_mut(),
             tuner: $runner.ctx.tuner.borrow().as_ref().map(|t| t as &dyn Tuner),
+            realm: &mut $runner.realm,
+            clock: $runner.ctx.clock,
             dark_theme: $runner.ctx.dark_theme,
             inner_height: $runner.ctx.inner_height,
             loading_fields: &$runner.ctx.loading_fields,
@@ -866,6 +879,7 @@ struct Ctx<'a> {
     log: &'a Rc<RefCell<Log>>,
     selection: &'a RefCell<SelectionImpl>,
     tuner: &'a RefCell<Option<StubTuner>>,
+    clock: &'a dyn Clock,
     loading_fields: &'a HashSet<JsString>,
     dark_theme: bool,
     inner_height: f64,

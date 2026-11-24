@@ -22,6 +22,7 @@ asrs-field3d = { path = "../asrs-field3d" }
 asrs-formats = { path = "../asrs-formats" }
 asrs-hub = { path = "../asrs-hub" }
 asrs-js = { path = "../asrs-js" }
+asrs-live = { path = "../asrs-live" }
 asrs-log = { path = "../asrs-log" }
 asrs-model = { path = "../asrs-model" }
 asrs-ocr = { path = "../asrs-ocr" }

@@ -6,6 +6,7 @@
 //! tabs and sidebar report, and `window.sendMainMessage`.
 
 use std::cell::{RefCell, RefMut};
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use asrs_formats::custom_schemas::{self, SchemaError};
@@ -323,8 +324,9 @@ impl Nt4Source {
     /// The `activeFields` set of the low-bandwidth path.
     fn active_fields(&self, window: &Nt4Window) -> Vec<JsString> {
         let mut active: Vec<JsString> = Vec::new();
+        let mut seen: HashSet<JsString> = HashSet::new();
         let mut add = |field: JsString| {
-            if !active.contains(&field) {
+            if seen.insert(field.clone()) {
                 active.push(field);
             }
         };
@@ -378,15 +380,12 @@ impl Nt4Source {
             }
         }
 
-        let copy = active.clone();
-        for field0 in &copy {
-            for field1 in &copy {
-                if field0 != field1 && field0.starts_with(field1, None) {
-                    active.retain(|field| field != field0);
-                }
-            }
-        }
-        active
+        let covered = |field: &JsString| {
+            active
+                .iter()
+                .any(|other| other != field && field.starts_with(other, None))
+        };
+        active.iter().filter(|f| !covered(f)).cloned().collect()
     }
 }
 

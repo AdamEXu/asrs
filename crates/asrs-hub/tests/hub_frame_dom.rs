@@ -29,7 +29,7 @@ use asrs_hub::frame::{
     renderer_top,
 };
 use asrs_hub::hub::{
-    HubFrame, HubHost, HubInterval, HubModel, HubTimeout, HubView, LiveSourceKind,
+    HubFrame, HubHost, HubInterval, HubModel, HubTimeout, HubView,
 };
 use asrs_hub::sidebar::{NoLayout, SidebarGeometry};
 use asrs_js::number;
@@ -181,21 +181,14 @@ impl HubHost for Host {
         self.failures.push(format!("exception in {task}: {error}"));
     }
 
-    fn start_live_source(&mut self, _kind: LiveSourceKind, _address: &JsString) {
-        self.failures.push("live source".into());
+    fn live_net(&mut self, _role: LiveRole) -> Result<LiveNet, String> {
+        self.failures.push("live network".into());
+        Err("no network".into())
     }
 
-    fn stop_live_source(&mut self) {}
-
-    fn live_data(&mut self, _data: &JsValue) {
-        self.failures.push("live-data".into());
+    fn timer_clock(&self) -> Rc<dyn Clock> {
+        Rc::new(SetClock(0.0))
     }
-
-    fn start_publisher(&mut self, _is_sim: &JsValue) {
-        self.failures.push("publisher".into());
-    }
-
-    fn stop_publisher(&mut self) {}
 }
 
 fn err(s: impl Into<String>) -> String {

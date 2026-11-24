@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel};
@@ -7,19 +8,23 @@ use std::time::{Duration, Instant};
 use asrs_formats::export::{ExportError, ExportOptions, Format, Output, Sampling, export};
 use asrs_formats::historical::{MainRequest, WorkerName};
 use asrs_formats::worker::{Abort, DecodeWorker, Request, WorkerMessage, WorkerThread};
-use asrs_hub::hub::{ExportReply, HubFrame, HubHost, HubInterval, HubTimeout, LiveSourceKind};
+use asrs_hub::hub::{ExportReply, HubFrame, HubHost, HubInterval, HubTimeout};
+use asrs_hub::live::{LiveNet, LiveRole};
 use asrs_hub::tabs::SatelliteUpdate;
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng, V8MathRandom};
 use asrs_js::value::JsValue;
+use asrs_live::nt4::TokioTransport;
+use asrs_live::{Dial, NetOptions};
 use asrs_log::log::{Log, SerializedLog};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_services::fs::RealFs;
 use asrs_services::historical_start::{FileOpen, Outcome, UPSTREAM_HAS_LZMA};
-use asrs_ui::gpui::{AnyWindowHandle, AppContext, Context, Task};
+use asrs_ui::gpui::{AnyWindowHandle, App, AppContext, Context, Task};
 
 use super::{Hub, HubEvent, WorkerRealm, frame_time};
+use crate::live::{self, Slice};
 
 /// `requestAnimationFrame` without a window.
 const FRAME_PERIOD: Duration = Duration::from_micros(16_667);
@@ -114,6 +119,9 @@ pub(super) struct HostState {
     terminated: Vec<WorkerThread>,
     exports: Vec<(u64, Task<()>)>,
     posted: (SyncSender<()>, Receiver<()>),
+    dial: Option<Dial>,
+    live_pumps: HashMap<LiveRole, Task<()>>,
+    live_timer: live::Alarm,
 }
 
 impl HostState {
@@ -123,6 +131,7 @@ impl HostState {
         frame_origin: Instant,
         worker_realm: WorkerRealm,
         temp_dir: String,
+        dial: Option<Dial>,
     ) -> Self {
         HostState {
             window,
@@ -139,6 +148,9 @@ impl HostState {
             terminated: Vec::new(),
             exports: Vec::new(),
             posted: sync_channel(1),
+            dial,
+            live_pumps: HashMap::new(),
+            live_timer: live::Alarm::default(),
         }
     }
 
@@ -149,6 +161,22 @@ impl HostState {
             .chain(&self.terminated)
             .filter(|t| !t.is_finished())
             .count()
+    }
+
+    fn timer_clock(&self, cx: &App) -> live::ExecutorClock {
+        live::ExecutorClock::new(self.frame_origin, cx)
+    }
+
+    pub(super) fn posted(&self) -> SyncSender<()> {
+        self.posted.0.clone()
+    }
+
+    pub(super) fn dial(&self) -> Option<Dial> {
+        self.dial.clone()
+    }
+
+    pub(super) fn wait_for_live(&self, timeout: Duration) -> bool {
+        self.posted.1.recv_timeout(timeout).is_ok()
     }
 
     pub(super) fn wait_for_threads(&self, timeout: Duration) -> Result<bool, RecvTimeoutError> {
@@ -171,13 +199,6 @@ impl<'a, 'b> GpuiHost<'a, 'b> {
 
     fn emit(&mut self, event: HubEvent) {
         self.cx.emit(event);
-    }
-
-    fn unmodeled(&mut self, task: &'static str, what: &str) {
-        self.emit(HubEvent::Exception {
-            task,
-            error: format!("unmodeled: {what}"),
-        });
     }
 
     fn schedule_frame(&mut self) {
@@ -212,6 +233,36 @@ impl Hub {
     fn run_timeout(&mut self, cx: &mut Context<'_, Self>) {
         if let Some(timeout) = self.host.timeouts.pop_front() {
             self.task(cx, |model, host| model.run_timeout(timeout, host));
+        }
+    }
+
+    /// Arms the host's one timer for whichever live timer is due first.
+    pub(super) fn arm_live_timer(&mut self, cx: &mut Context<'_, Self>) {
+        let due = self.model.next_live_timer();
+        let now = self.host.timer_clock(cx).now();
+        self.host.live_timer.arm(due, now, cx, |hub: &mut Hub, cx| {
+            hub.host.live_timer.clear();
+            hub.task(cx, |model, host| model.fire_live_timers(host));
+        });
+    }
+
+    /// Dispatches what has arrived on `net`, one task per event, until `slice` is used up.
+    fn live_events(
+        &mut self,
+        role: LiveRole,
+        net: &Rc<RefCell<TokioTransport>>,
+        slice: Slice,
+        cx: &mut Context<'_, Self>,
+    ) -> bool {
+        loop {
+            let event = net.borrow_mut().next_event();
+            let Some(event) = event else {
+                return false;
+            };
+            self.task(cx, |model, host| model.live_event(role, &event, host));
+            if slice.is_over() {
+                return true;
+            }
         }
     }
 
@@ -511,19 +562,40 @@ impl HubHost for GpuiHost<'_, '_> {
         self.emit(HubEvent::Exception { task, error });
     }
 
-    fn start_live_source(&mut self, kind: LiveSourceKind, _address: &JsString) {
-        self.unmodeled("live", &format!("a {kind:?} live source"));
+    fn live_net(&mut self, role: LiveRole) -> Result<LiveNet, String> {
+        let handle = live::runtime(self.cx)?;
+        let (wake, ready) = async_channel::bounded::<()>(1);
+        let posted = self.state.posted.0.clone();
+        let options = NetOptions {
+            handle,
+            notify: Arc::new(move || {
+                let _ = wake.try_send(());
+                let _ = posted.try_send(());
+            }),
+            dial: self.state.dial.clone(),
+        };
+        let whole_bodies = role == LiveRole::Source { whole_bodies: true };
+        let net = Rc::new(RefCell::new(if whole_bodies {
+            TokioTransport::with_bodies(options)
+        } else {
+            TokioTransport::new(options)
+        }));
+        let weak = Rc::downgrade(&net);
+        let pump = self.cx.spawn(async move |this, cx| {
+            live::pump(ready, cx, |slice, cx| {
+                let net = weak.upgrade()?;
+                this.update(cx, |hub, cx| hub.live_events(role, &net, slice, cx))
+                    .ok()
+            })
+            .await;
+        });
+        self.state.live_pumps.insert(role, pump);
+        Ok(net)
     }
 
-    fn stop_live_source(&mut self) {}
-
-    fn live_data(&mut self, _data: &JsValue) {}
-
-    fn start_publisher(&mut self, _is_sim: &JsValue) {
-        self.unmodeled("live", "the NT4 publisher");
+    fn timer_clock(&self) -> Rc<dyn Clock> {
+        Rc::new(self.state.timer_clock(self.cx))
     }
-
-    fn stop_publisher(&mut self) {}
 }
 
 #[cfg(test)]

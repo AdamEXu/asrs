@@ -10,6 +10,7 @@ publish.workspace = true
 asrs-canvas = { path = "../asrs-canvas" }
 asrs-formats = { path = "../asrs-formats" }
 asrs-js = { path = "../asrs-js" }
+asrs-live = { path = "../asrs-live" }
 asrs-log = { path = "../asrs-log" }
 asrs-model = { path = "../asrs-model" }
 asrs-tabs = { path = "../asrs-tabs" }
