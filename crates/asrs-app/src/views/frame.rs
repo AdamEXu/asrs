@@ -32,7 +32,8 @@ use asrs_ui::gpui::{
     Entity, ExternalPaths, FocusHandle, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent,
     MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
     Render, ScrollDelta, ScrollEvent, ScrollHandle, SharedString, StatefulInteractiveElement,
-    Styled, Subscription, Window, WindowControlArea, canvas, div, point, px, rgb, rgba,
+    Styled, Subscription, TouchDragEvent, TouchPhase, Window, WindowControlArea, canvas, div,
+    point, px, rgb, rgba,
 };
 use asrs_ui::icon::IconFit;
 use asrs_ui::input;
@@ -101,6 +102,10 @@ pub trait FrameHost: 'static {
     fn source_list_geometry(&self) -> ListsGeometry;
     /// Scrolls `div.side-bar` to what has the focus in it, at this client y and height.
     fn scroll_side_bar(&mut self, _focused: [f64; 2]) {}
+    /// The sidebar field whose label a touch just started on, by flat index.
+    fn take_touched_field(&mut self) -> Option<usize> {
+        None
+    }
     /// The boxes of `div.title-bar-menu`'s buttons, as last laid out.
     fn set_menu_buttons(&mut self, _rects: Vec<[f64; 4]>) {}
     /// The contents of `slot`, laid out in a box of the slot's size.
@@ -713,6 +718,31 @@ impl<H: FrameHost> HubFrame<H> {
         cx.notify();
     }
 
+    fn touch_drag(&mut self, event: &TouchDragEvent, cx: &mut Context<'_, Self>) {
+        let x = f64::from(f32::from(event.position.x));
+        let y = f64::from(f32::from(event.position.y));
+        let touched = self.host.take_touched_field();
+        let (shell, geometry) = (&mut self.shell, &self.geometry);
+        let result = self.host.input(cx, |hub| {
+            geometry.sync(hub);
+            match event.phase {
+                TouchPhase::Started => {
+                    if let Some(field) = touched {
+                        shell.field_touch_start(hub, field, x, y);
+                    }
+                    Ok(())
+                }
+                TouchPhase::Moved => shell.window_touch_move(hub, x, y),
+                TouchPhase::Ended => shell.window_touch_end(hub),
+                TouchPhase::Cancelled => Ok(()),
+            }
+        });
+        if let Err(e) = result {
+            eprintln!("asrs: {e}");
+        }
+        cx.notify();
+    }
+
     fn tab_bar_mouse_down(&mut self, event: &MouseDownEvent, cx: &mut Context<'_, Self>) {
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
@@ -1215,6 +1245,12 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     }
                 });
                 let frame = entity.clone();
+                window.on_mouse_event(move |event: &TouchDragEvent, phase, _, cx| {
+                    if phase == DispatchPhase::Bubble {
+                        let _ = frame.update(cx, |frame, cx| frame.touch_drag(event, cx));
+                    }
+                });
+                let frame = entity.clone();
                 window.on_mouse_event(move |event: &MouseExitEvent, phase, _, cx| {
                     if phase == DispatchPhase::Bubble && event.pressed_button.is_none() {
                         let _ = frame.update(cx, |frame, cx| {
@@ -1642,7 +1678,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     item: list_item,
                     width,
                 } => item
-                    .child(source_list::drag_item(&list_item, width, appearance))
+                    .child(source_list::drag_item(
+                        &list_item, width, blurred, appearance,
+                    ))
                     .into_any_element(),
             };
             root = root.child(item);

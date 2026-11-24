@@ -632,6 +632,8 @@ pub struct HubModel {
     body_classes: Vec<&'static str>,
     fullscreen: bool,
     focused: bool,
+    /// The source lists whose own buttons the last `set-focused` blurred: those that were there.
+    blurred_lists: Vec<String>,
     battery: bool,
     fps: bool,
     update_button: Option<bool>,
@@ -789,6 +791,7 @@ impl HubModel {
             body_classes: Vec::new(),
             fullscreen: false,
             focused: true,
+            blurred_lists: Vec::new(),
             battery: false,
             fps: false,
             update_button: None,
@@ -906,6 +909,12 @@ impl HubModel {
     /// Whether buttons are drawn unblurred.
     pub fn is_focused(&self) -> bool {
         self.focused
+    }
+
+    /// Whether a source list's edit, clear and help buttons are drawn blurred. Unlike the other
+    /// buttons they are not cloned from blurred templates in a list made after `set-focused`.
+    pub fn list_buttons_blurred(&self, uuid: &str) -> bool {
+        self.blurred_lists.iter().any(|list| list == uuid)
     }
 
     pub fn is_battery(&self) -> bool {
@@ -2019,7 +2028,15 @@ impl HubModel {
                 self.fullscreen = truthy(data);
                 self.update_fancy_window();
             }
-            MainToHub::SetFocused => self.focused = truthy(data),
+            MainToHub::SetFocused => {
+                self.focused = truthy(data);
+                self.blurred_lists.clear();
+                if !self.focused {
+                    let tabs = self.tabs.tabs();
+                    let lists = tabs.flat_map(|tab| tab.controller().source_lists());
+                    self.blurred_lists = lists.map(|list| list.uuid().to_owned()).collect();
+                }
+            }
             MainToHub::SetBattery => {
                 self.battery = truthy(data);
                 self.page.battery = self.battery;

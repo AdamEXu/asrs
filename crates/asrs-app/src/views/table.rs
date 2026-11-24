@@ -823,6 +823,7 @@ impl<H: FrameHost> HubFrame<H> {
                 grid.place([*left, y, *w, header_height]),
             ));
         }
+        let blurred = !self.host().hub(cx).is_focused();
         // `updateFields` replaces every header cell after the first, which drops the focus of one's
         // button. Tab goes on from before them.
         let mut headers = DefaultHasher::new();
@@ -899,6 +900,7 @@ impl<H: FrameHost> HubFrame<H> {
                 deletes.push((delete.clone(), [left, w]));
                 let button = IconButton::new(SharedString::from(id), symbol("close.svg"))
                     .title("")
+                    .blurred(blurred)
                     .track_focus(&delete)
                     .on_click(cx.listener(move |frame, _, _, cx| frame.table_close(index, cx)));
                 th = th.child(grid.button(button, at));
@@ -914,6 +916,7 @@ impl<H: FrameHost> HubFrame<H> {
         let jump_at = [first[0] + jx, y + jy, jw, jh];
         let jump_id = SharedString::from(format!("table-jump-{shown_key:?}"));
         let button = IconButton::new(jump_id, symbol("verticalalignbottom.svg"))
+            .blurred(blurred)
             .title("Go to timestamp")
             .on_click(cx.listener(|frame, _, _, cx| frame.table_jump(cx)));
         let button_at = [first[0] + JUMP_BUTTON_LEFT, y + BUTTON_TOP];
