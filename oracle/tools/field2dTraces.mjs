@@ -17,8 +17,9 @@ const PICKS = [
   ["field2d-trace-objects-light-1x", "objects", 4, false],
   ["field2d-trace-aliasing-light-1x", "aliasing", 2, false],
   ["field2d-trace-edges-light-1x", "edges", 3, false],
-  // Frames 3 to 5 of ftc-grid hit the nearest-neighbour drawImage tie of #186.
   ["field2d-trace-ftc-grid-light-2x", "ftc-grid", 6, false],
+  // Samples its image on pixel boundaries.
+  ["field2d-trace-ftc-ties-light-2x", "ftc-grid", 3, false],
   ["field2d-trace-satellite-dark-1.5x", "satellite", 3, true]
 ];
 

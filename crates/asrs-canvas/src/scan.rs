@@ -5,7 +5,7 @@
 //! pixel of the union (after snapping edge end points); tiny-skia only has Skia's retired 4x
 //! supersampler, which quantizes thin and near-axis edges to quarter pixels.
 
-use crate::blit::Spans;
+use crate::blit::{Kind, Spans};
 use tiny_skia::{PathSegment, Pixmap};
 
 use crate::clip::{self, ClipRect, Piece};
@@ -812,7 +812,7 @@ pub fn blit_spans_solid(pixmap: &mut Pixmap, spans: &Spans, color: [u8; 4]) {
     let opaque = color[3] == 255;
     let stride = pixmap.width() as usize;
     let data = pixmap.data_mut();
-    for (x0, y, alphas, pair) in spans.iter_kinds() {
+    for (x0, y, alphas, kind) in spans.iter_kinds() {
         let row = y as usize * stride;
         for (i, &c) in alphas.iter().enumerate() {
             if c == 0 {
@@ -821,7 +821,7 @@ pub fn blit_spans_solid(pixmap: &mut Pixmap, spans: &Spans, color: [u8; 4]) {
             let k = (row + x0 as usize + i) * 4;
             let dst = &mut data[k..k + 4];
             let c = u32::from(c);
-            if pair && !black {
+            if kind == Kind::Pair && !black {
                 if opaque {
                     let scale = c + (c >> 7);
                     for (d, &s) in dst.iter_mut().zip(&pm) {

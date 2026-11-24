@@ -22,7 +22,7 @@ use core_text::run::CTRun;
 use core_text::string_attributes::kCTFontAttributeName;
 
 use super::font::FontKey;
-use super::shaping::{emoji_clusters, hb_scale, round, words};
+use super::shaping::{effective, emoji_clusters, hb_scale, round, words};
 use super::{
     Bounds, Family, FontMetrics, FontSpec, Glyph, Mask, Shaped, ShapedGlyph, TextBackend, relax,
 };
@@ -631,6 +631,7 @@ impl CoreText {
 
 impl TextBackend for CoreText {
     fn shape(&mut self, spec: &FontSpec, text: &str, zoom: f32) -> Shaped {
+        let spec = &effective(spec, zoom);
         if spec.size <= 0.0 {
             return Shaped {
                 glyphs: Vec::new(),
@@ -649,6 +650,7 @@ impl TextBackend for CoreText {
     }
 
     fn shape_run(&mut self, spec: &FontSpec, text: &str, zoom: f32) -> Shaped {
+        let spec = &effective(spec, zoom);
         let mut glyphs = Vec::new();
         if spec.size <= 0.0 || text.is_empty() {
             return Shaped { glyphs, width: 0.0 };
@@ -676,6 +678,7 @@ impl TextBackend for CoreText {
     }
 
     fn metrics(&mut self, spec: &FontSpec) -> FontMetrics {
+        let spec = &effective(spec, 1.0);
         if spec.size <= 0.0 {
             return FontMetrics {
                 ascent: 0.0,

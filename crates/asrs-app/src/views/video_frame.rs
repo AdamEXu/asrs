@@ -3,7 +3,8 @@
 use std::path::PathBuf;
 
 use asrs_canvas::Pixmap;
-use asrs_canvas::mip::{Mip, downsample};
+use asrs_canvas::mip::{Level, Mip, downsample};
+use asrs_canvas::skpath::Rect;
 use asrs_js::math;
 use asrs_js::string::JsString;
 use asrs_ui::svg::Backend;
@@ -187,11 +188,16 @@ const SHARPEN: f64 = 0.475;
 pub fn resample(image: &Pixmap, width: u32, height: u32) -> Option<Vec<u8>> {
     let natural = [image.width(), image.height()];
     let scale = [
-        f64::from(width) / f64::from(natural[0]),
-        f64::from(height) / f64::from(natural[1]),
+        width as f32 / natural[0] as f32,
+        height as f32 / natural[1] as f32,
     ];
-    let whole = [0.0, 0.0, f64::from(natural[0]), f64::from(natural[1])];
-    let Some(mip) = Mip::of(whole, scale, natural) else {
+    let whole = Rect {
+        left: 0.0,
+        top: 0.0,
+        right: natural[0] as f32,
+        bottom: natural[1] as f32,
+    };
+    let Level::Mip(mip) = Mip::of(&whole, scale, natural) else {
         return Some(linear(image, width, height));
     };
     if Backend::HOST == Backend::Raster {

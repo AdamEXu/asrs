@@ -1071,7 +1071,7 @@ impl Ctx<'_> {
                     let row: Vec<u8> = (l..r)
                         .map(|x| self.mask_index(x, y).map_or(0, |i| self.mask_data(i)))
                         .collect();
-                    self.out.anti_h(l, y, &row);
+                    self.out.mask(l, y, &row);
                 }
             }
             Additive::Rle { .. } => self.flush(),

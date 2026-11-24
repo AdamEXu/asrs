@@ -637,6 +637,7 @@ pub fn spans(seg: Segment, width: u32, height: u32) -> Option<Spans> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::blit::Kind;
     use tiny_skia::PathBuilder;
 
     fn path(points: &[(f32, f32)], close: bool) -> tiny_skia::Path {
@@ -726,7 +727,7 @@ mod tests {
         spans
             .iter_kinds()
             .filter(|&(sx, sy, a, _)| sy == y && (sx..sx + a.len() as i32).contains(&x))
-            .map(|(sx, _, a, pair)| (a[(x - sx) as usize], pair))
+            .map(|(sx, _, a, kind)| (a[(x - sx) as usize], kind == Kind::Pair))
             .collect()
     }
 
@@ -745,13 +746,17 @@ mod tests {
     #[test]
     fn slanted_lines_blit_pixel_pairs_only_without_the_clip() {
         let inside = spans(seg((10.0, 10.5), (90.0, 30.5), true), 100, 100).unwrap();
-        assert!(inside.iter_kinds().all(|(.., pair)| pair));
+        assert!(inside.iter_kinds().all(|(.., kind)| kind == Kind::Pair));
         let past_the_end = spans(seg((10.0, 10.5), (99.8, 30.5), true), 100, 100).unwrap();
-        assert!(past_the_end.iter_kinds().all(|(.., pair)| pair));
+        assert!(
+            past_the_end
+                .iter_kinds()
+                .all(|(.., kind)| kind == Kind::Pair)
+        );
         let edge = spans(seg((10.0, 0.3), (90.0, 20.5), true), 100, 100).unwrap();
-        assert!(edge.iter_kinds().all(|(.., pair)| !pair));
+        assert!(edge.iter_kinds().all(|(.., kind)| kind == Kind::Plain));
         let unclipped = spans(seg((10.0, 0.3), (90.0, 20.5), false), 100, 100).unwrap();
-        assert!(unclipped.iter_kinds().all(|(.., pair)| pair));
+        assert!(unclipped.iter_kinds().all(|(.., kind)| kind == Kind::Pair));
     }
 
     #[test]
