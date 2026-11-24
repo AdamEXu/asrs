@@ -687,7 +687,7 @@ const colorSyntaxRows = (() => {
   }
   for (let i = 0; i < 300; i++) {
     const ch = [hue(false), pct(), pct()];
-    rows.push(["open", `hsla(${ch.join(", ")}, ${Math.round(rand() * 1000) / 10}%)`]);
+    rows.push(["hsl", `hsla(${ch.join(", ")}, ${Math.round(rand() * 1000) / 10}%)`]);
   }
   const hexDigits = (n) => Array.from({ length: n }, () => pick([..."0123456789abcdefABCDEF"])).join("");
   for (let i = 0; i < 400; i++) {
@@ -706,12 +706,44 @@ const colorSyntaxRows = (() => {
     "none red", "rgb (1,2,3)", "rgb(\n1,2,3)", "", " ", "garbage", "not a color", "12px", "1e3", "-1", "+5", "1.5", "1ab", "0001ff", "-abc", "--abc", "_abc"
   ]) rows.push(["rgb", c]);
   for (const c of [
-    "hsl(120deg, 50%, 50%)", "hsl(0.5turn 50% 50%)", "hsl(1rad, 50%, 50%)", "hsl(100grad 50% 50%)", "hsl(120 50 50)", "hwb(120 10% 10%)",
     "lab(50% 40 59)", "lch(50% 40 59)", "oklab(0.5 0.1 0.1)", "oklch(0.5 0.1 120)", "color(srgb 1 0 0)", "color-mix(in srgb, red, blue)",
-    "light-dark(red, blue)", "rgb(none 0 0)", "rgb(calc(10), 0, 0)", "rgb(/**/10,0,0)", "rgb(infinity, 0, 0)", "rgb(calc(infinity), 0, 0)",
-    "hsl(120 50% 50% / 50%)", "hsl(120, 150%, 50%)", "hsl(1e2, 50%, 50%)", "red /**/", "/**/red", "r\\65 d", "'red'", "url(#a)", "url(#a) red",
-    "rgb(from red r g b)", "var(--x)", "rgb(var(--x), 0, 0)", " #ff0000", "réd", "context-fill red"
+    "light-dark(red, blue)", "rgb(calc(10), 0, 0)", "rgb(/**/10,0,0)", "rgb(infinity, 0, 0)", "rgb(calc(infinity), 0, 0)",
+    "red /**/", "/**/red", "r\\65 d", "'red'", "url(#a)", "url(#a) red", "rgb(from red r g b)", "var(--x)", "rgb(var(--x), 0, 0)",
+    " #ff0000", "réd", "context-fill red", "red var(--x)", "rgb(1px var(--x) 3)", "hsl(1 2% 3%) env(x)", "#fff attr(x)",
+    "rgb(1px 2 3) if(else: red)", "red --foo()", "rgb(1 2 3 4) inherit(--x)", "hwb(calc(10) 0% 0%)", "hwba(1 2% 3%)", "hsl(1\\64 eg 2% 3%)", "rgb(n\\6fne 0 0)"
   ]) rows.push(["open", c]);
+  for (const c of [
+    "hsl(120deg, 50%, 50%)", "hsl(0.5turn 50% 50%)", "hsl(1rad, 50%, 50%)", "hsl(100grad 50% 50%)", "hsl(120 50 50)", "hwb(120 10% 10%)",
+    "rgb(none 0 0)", "hsl(120 50% 50% / 50%)", "hsl(120, 150%, 50%)", "hsl(1e2, 50%, 50%)", "rgb(none, 0, 0)", "rgb(0, 0, 0, none)",
+    "rgb(0 0 0 / none)", "rgb(none none none / none)", "rgb(none 50% 20)", "rgb(NONE 1 2)", "rgb(none1 2 3)", "rgb(none-1 2 3)", "rgb(none/1 2 3)",
+    "rgb(1 2 none/.5)", "rgb(nonenone 1 2)", "rgb(1deg 2 3)", "rgb(1 2 3 / 1deg)", "hsl(none 50% 50%)", "hsl(none, 50%, 50%)", "hsl(1, none, 50%)",
+    "hsl(1 none none / none)", "hsl(50% 50% 50%)", "hsl(1px 50% 50%)", "hsl(1deg 2deg 3%)", "hsl(1-deg 2% 3%)", "hsl(1e 2% 3%)", "hsl(1e2deg 50% 50%)",
+    "hsl(1E-1TURN 50% 50%)", "hsl(1, 50, 50%)", "hsl(1, 50%, 50)", "hsl(1 50% 50)", "hsl(1 50 50%)", "hsl(1, 50% 50%)", "hsl(1 50%, 50%)",
+    "hsl(1, 50%, 50% / 1)", "hsl(1 50% 50%, 1)", "hsl(1e400 50% 50%)", "hsl(-1e400 50% 50%)", "hsl(1e400turn 50% 50%)", "hsl(1 1e400 50%)",
+    "hsl(1 50% 1e400)", "hsl(1 50% 1e400%)", "hsl(1 -5% 50%)", "hsl(1 50% -5%)", "hsl(1 500% 50%)", "hsl(359.9999999 100% 50%)", "hsl(-0 100% 50%)",
+    "hsl(360 100% 50%)", "hsl(1 2 3", "hsl(1 2 3 / 50%", "hsl(1 2 3) ", "hsl(1 2 3)x", "HSLA(1 2 3 / 4e-1)", "hsl()", "hsl(1)", "hsl(1 2)", "hsl(1 2 3 4)",
+    "hwb(1, 2%, 3%)", "hwb(1 2 3)", "hwb(1 2% 3)", "hwb(none none none)", "hwb(0 60% 60%)", "hwb(0 50% 50%)", "hwb(0 1000% 0%)", "hwb(0 -5% 5%)",
+    "hwb(0 1e400 1%)", "hwb(0 1% 1e400)", "hwb(0.25turn 1% 2% / 50%)", "hwb(10% 1% 2%)", "HWB(1 2% 3%)", "hwb(1 2% 3%",
+    "hwb(1 2% 3% / none)", "hwb(1 2% 3%, 1)", "hwb (1 2% 3%)"
+  ]) rows.push([/^rgb/i.test(c) ? "rgb" : "hsl", c]);
+  const number = () => (rand() < 0.1 ? pick(["+5", ".5", "1e1", "-1e1", "2.5E1", "0", "-0"]) : num());
+  const pctOrNumber = () => (rand() < 0.5 ? pct() : String(Math.round(rand() * 1e4) / 100));
+  const orNone = (v) => (rand() < 0.1 ? "none" : v);
+  const slowHue = () => (rand() < 0.1 ? number() : hue(true));
+  for (let i = 0; i < 900; i++) {
+    const withAlpha = rand() < 0.5, fn = pick(["hsl", "hsla", "hwb"]);
+    const ch = [orNone(slowHue()), orNone(pctOrNumber()), orNone(pctOrNumber())];
+    rows.push(["hsl", `${fn}(${ch.join(" ")}${withAlpha ? " / " + orNone(alpha()) : ""})`]);
+  }
+  for (let i = 0; i < 200; i++) {
+    const ch = [slowHue(), pctOrNumber(), pct()];
+    rows.push(["hsl", `hsl(${ch.join(", ")}${rand() < 0.5 ? ", " + alpha() : ""})`]);
+  }
+  for (let i = 0; i < 200; i++) rows.push(["hsl", `${pick(["hsl", "hwb"])}(${slowHue()} ${Math.round(rand() * 3e4) / 100} ${Math.round(rand() * 3e4) / 100})`]);
+  for (let i = 0; i < 200; i++) {
+    const ch = [0, 1, 2].map(() => orNone(rand() < 0.5 ? number() : pct()));
+    rows.push(["rgb", `rgb(${ch.join(" ")}${rand() < 0.5 ? " / " + orNone(alpha()) : ""})`]);
+  }
   return rows;
 })();
 

@@ -38,7 +38,7 @@ impl Rgba {
 pub enum Parsed {
     /// `kSRGBLegacy` (hex, named, `rgb()`): channels in 0..=255.
     Legacy([f32; 3], f32),
-    /// `kHSL`, already through `HSLToSRGB`: channels in 0..=1.
+    /// `kHSL` and `kHWB`, already through `HSLToSRGB` and `HWBToSRGB`.
     Hsl([f32; 3], f32),
 }
 
@@ -90,13 +90,9 @@ pub fn parse_color(css: &str) -> Option<Parsed> {
         // CSS closes a function left open at the end of input, so Blink takes
         // `rgb(0 0 0 / 10%` (Field2dRenderer's FTC grid colour) as written.
         let rest = &s[open + 1..];
-        return match name {
-            "rgb" | "rgba" => match parse_rgb_tokens(rest) {
-                Slow::Valid(parsed) => Some(parsed),
-                Slow::Invalid | Slow::Unmodeled => None,
-            },
-            "hsl" | "hsla" => parse_hsl(rest.strip_suffix(')').unwrap_or(rest)),
-            _ => None,
+        return match parse_function(Function::from_name(name)?, rest) {
+            Slow::Valid(parsed) => Some(parsed),
+            Slow::Invalid | Slow::Unmodeled => None,
         };
     }
     if s == "transparent" {
@@ -503,15 +499,30 @@ fn fast_hsl(current: &[u8]) -> Option<Parsed> {
 
 /// `Color::FromHSLA` through `gfx::HSLToSRGB`.
 fn hsl(h: f32, s: f32, l: f32, alpha: f32) -> Parsed {
+    Parsed::Hsl(hsl_to_srgb(h, s, l), alpha)
+}
+
+fn hsl_to_srgb(h: f32, s: f32, l: f32) -> [f32; 3] {
     if s == 0.0 {
-        return Parsed::Hsl([l; 3], alpha);
+        return [l; 3];
     }
     let f = |n: f32| {
         let k = (f64::from(n + h / 30.0) % 12.0) as f32;
         let a = s * l.min(1.0 - l);
         l - a * (-1.0f32).max((k - 3.0).min(9.0 - k).min(1.0))
     };
-    Parsed::Hsl([f(0.0), f(8.0), f(4.0)], alpha)
+    [f(0.0), f(8.0), f(4.0)]
+}
+
+/// `Color::FromHWBA` through `gfx::HWBToSRGB`.
+fn hwb(h: f32, w: f32, b: f32, alpha: f32) -> Parsed {
+    if w + b >= 1.0 {
+        return Parsed::Hsl([w / (w + b); 3], alpha);
+    }
+    Parsed::Hsl(
+        hsl_to_srgb(h, 1.0, 0.5).map(|c| c + (w - (w + b) * c)),
+        alpha,
+    )
 }
 
 /// What Blink's full parser makes of a function's arguments.
@@ -519,26 +530,59 @@ fn hsl(h: f32, s: f32, l: f32, alpha: f32) -> Parsed {
 pub enum Slow<T> {
     Valid(T),
     Invalid,
-    /// Arguments outside the plain number and percentage tokens modelled here.
+    /// Arguments outside the plain number, percentage, angle and `none` tokens modelled here.
     Unmodeled,
+}
+
+/// The colour functions whose arguments [`parse_function`] models.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Function {
+    Rgb,
+    Hsl,
+    Hwb,
+}
+
+impl Function {
+    /// `name` in lower case.
+    pub fn from_name(name: &str) -> Option<Function> {
+        match name {
+            "rgb" | "rgba" => Some(Function::Rgb),
+            "hsl" | "hsla" => Some(Function::Hsl),
+            "hwb" => Some(Function::Hwb),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Clone, Copy, PartialEq)]
 enum ArgToken {
     Number(f64),
     Percent(f64),
+    /// In degrees.
+    Angle(f64),
+    None,
     Comma,
     Slash,
 }
 
-/// The tokens of `rgb(` arguments up to the closing `)` (or the end of input).
-fn rgb_arg_tokens(args: &str) -> Slow<Vec<ArgToken>> {
+/// The tokens of a colour function's arguments up to the closing `)` (or the end of input).
+fn arg_tokens(args: &str) -> Slow<Vec<ArgToken>> {
     let b = args.as_bytes();
     let mut tokens = Vec::new();
     let mut i = 0;
     while i < b.len() {
         let c = b[i];
         let digit_at = |j: usize| b.get(j).is_some_and(u8::is_ascii_digit);
+        let name_start = |j: usize| {
+            b.get(j)
+                .is_some_and(|&n| n.is_ascii_alphabetic() || n == b'_' || n >= 0x80)
+        };
+        let name_end = |j: usize| {
+            j + b[j..]
+                .iter()
+                .take_while(|n| n.is_ascii_alphanumeric() || matches!(n, b'_' | b'-' | 0x80..))
+                .count()
+        };
         let starts_number = c.is_ascii_digit()
             || (c == b'.' && digit_at(i + 1))
             || (matches!(c, b'+' | b'-')
@@ -584,22 +628,42 @@ fn rgb_arg_tokens(args: &str) -> Slow<Vec<ArgToken>> {
             let Ok(value) = args[start..i].parse::<f64>() else {
                 return Slow::Unmodeled;
             };
-            let name_start = |j: usize| {
-                b.get(j)
-                    .is_some_and(|&n| n.is_ascii_alphabetic() || n == b'_' || n >= 0x80)
-            };
+            let value = value.clamp(-f64::from(f32::MAX), f64::from(f32::MAX));
             let dimension = name_start(i)
-                || (b.get(i) == Some(&b'-') && (name_start(i + 1) || b.get(i + 1) == Some(&b'-')))
-                || b.get(i) == Some(&b'\\');
-            if dimension {
-                return Slow::Invalid;
+                || (b.get(i) == Some(&b'-') && (name_start(i + 1) || b.get(i + 1) == Some(&b'-')));
+            if b.get(i) == Some(&b'\\') {
+                return Slow::Unmodeled;
             }
-            if b.get(i) == Some(&b'%') {
+            if dimension {
+                let unit = &args[i..name_end(i)];
+                i += unit.len();
+                if b.get(i) == Some(&b'\\') {
+                    return Slow::Unmodeled;
+                }
+                tokens.push(ArgToken::Angle(match unit.to_ascii_lowercase().as_str() {
+                    "deg" => value,
+                    "rad" => value * (180.0 / std::f64::consts::PI),
+                    "grad" => value * (360.0 / 400.0),
+                    "turn" => value * 360.0,
+                    _ => return Slow::Invalid,
+                }));
+            } else if b.get(i) == Some(&b'%') {
                 tokens.push(ArgToken::Percent(value));
                 i += 1;
             } else {
                 tokens.push(ArgToken::Number(value));
             }
+        } else if name_start(i) {
+            let end = name_end(i);
+            if matches!(b.get(end), Some(b'(' | b'\\')) {
+                return Slow::Unmodeled;
+            }
+            match args[i..end].to_ascii_lowercase().as_str() {
+                "none" => tokens.push(ArgToken::None),
+                "from" => return Slow::Unmodeled,
+                _ => return Slow::Invalid,
+            }
+            i = end;
         } else if b".+-!;#<>=?@$&*^~|`".contains(&c) {
             return Slow::Invalid;
         } else {
@@ -609,13 +673,13 @@ fn rgb_arg_tokens(args: &str) -> Slow<Vec<ArgToken>> {
     Slow::Valid(tokens)
 }
 
-/// `ColorFunctionParser::ConsumeFunctionalSyntaxColor` for `rgb(`/`rgba(` arguments made only
-/// of number and percentage tokens. A comma after the first or second channel switches to the
-/// legacy syntax, which then needs commas for the rest and one channel type throughout.
-/// Channels and alpha are stored as floats, legacy alpha quantized to n/255.
-pub fn parse_rgb_tokens(args: &str) -> Slow<Parsed> {
-    use ArgToken::{Comma, Number, Percent, Slash};
-    let tokens = match rgb_arg_tokens(args) {
+/// `ColorFunctionParser::ConsumeFunctionalSyntaxColor` for arguments made only of number,
+/// percentage, angle and `none` tokens. A comma after the first or second channel switches to
+/// the legacy syntax, which then needs commas for the rest and takes neither `none` nor mixed
+/// channel types. A missing channel or alpha paints and serializes as 0 in these spaces.
+pub fn parse_function(function: Function, args: &str) -> Slow<Parsed> {
+    use ArgToken::{Angle, Comma, Number, Percent, Slash};
+    let tokens = match arg_tokens(args) {
         Slow::Valid(tokens) => tokens,
         Slow::Invalid => return Slow::Invalid,
         Slow::Unmodeled => return Slow::Unmodeled,
@@ -628,11 +692,17 @@ pub fn parse_rgb_tokens(args: &str) -> Slow<Parsed> {
         }
         _ => None,
     };
-    let is_value = |t: &ArgToken| matches!(t, Number(_) | Percent(_));
+    let is_value = |t: &ArgToken| matches!(t, Number(_) | Percent(_) | ArgToken::None);
+    let is_hue = |t: &ArgToken| matches!(t, Number(_) | Angle(_) | ArgToken::None);
     let mut channels = [Comma; 3];
     let mut legacy = false;
     for (i, channel) in channels.iter_mut().enumerate() {
-        let Some(t) = take(&is_value) else {
+        let t = if i == 0 && function != Function::Rgb {
+            take(&is_hue)
+        } else {
+            take(&is_value)
+        };
+        let Some(t) = t else {
             return Slow::Invalid;
         };
         *channel = t;
@@ -656,106 +726,43 @@ pub fn parse_rgb_tokens(args: &str) -> Slow<Parsed> {
     if !rest.is_empty() {
         return Slow::Invalid;
     }
-    if legacy
-        && !(channels.iter().all(|t| matches!(t, Number(_)))
-            || channels.iter().all(|t| matches!(t, Percent(_))))
-    {
-        return Slow::Invalid;
-    }
-    let channels = channels.map(|t| {
-        let v = match t {
-            Percent(p) => p / 100.0 * 255.0,
-            Number(v) => v,
-            Comma | Slash => unreachable!("channels are values"),
+    if legacy {
+        let percents = |c: &[ArgToken]| c.iter().all(|t| matches!(t, Percent(_)));
+        let numbers = |c: &[ArgToken]| c.iter().all(|t| matches!(t, Number(_)));
+        let consistent = match function {
+            Function::Rgb => percents(&channels) || numbers(&channels),
+            Function::Hsl => channels[0] != ArgToken::None && percents(&channels[1..]),
+            Function::Hwb => false,
         };
-        (if v.is_finite() {
-            v.clamp(0.0, 255.0)
-        } else if v > 0.0 {
-            255.0
+        if !consistent || alpha == Some(ArgToken::None) {
+            return Slow::Invalid;
+        }
+    }
+    let resolve = |t: ArgToken, percentage_base: f64| match t {
+        Percent(p) => p / 100.0 * percentage_base,
+        Number(v) | Angle(v) => v,
+        ArgToken::None => 0.0,
+        Comma | Slash => unreachable!("channels and alpha are values"),
+    };
+    let alpha = alpha.map_or(1.0, |t| resolve(t, 1.0).clamp(0.0, 1.0));
+    if function == Function::Rgb {
+        let channels = channels.map(|t| resolve(t, 255.0).clamp(0.0, 255.0) as f32);
+        let alpha = ((alpha * 255.0).round() / 255.0) as f32;
+        return Slow::Valid(Parsed::Legacy(channels, alpha));
+    }
+    let hue = ((resolve(channels[0], 1.0) % 360.0 + 360.0) % 360.0) as f32;
+    let [p1, p2] = [channels[1], channels[2]].map(|t| {
+        let v = resolve(t, 100.0) / 100.0;
+        (if legacy {
+            v.clamp(0.0, 1.0)
         } else {
-            0.0
+            v.max(0.0)
         }) as f32
     });
-    let alpha = alpha.map_or(1.0, |t| {
-        let a = match t {
-            Percent(p) => p / 100.0,
-            Number(v) => v,
-            Comma | Slash => unreachable!("alpha is a value"),
-        };
-        ((a.clamp(0.0, 1.0) * 255.0).round() / 255.0) as f32
-    });
-    Slow::Valid(Parsed::Legacy(channels, alpha))
-}
-
-enum Token {
-    Number(f64),
-    Percent(f64),
-}
-
-fn number(token: &str) -> Option<f64> {
-    let valid = !token.is_empty()
-        && token
-            .bytes()
-            .all(|b| b.is_ascii_digit() || matches!(b, b'.' | b'-' | b'+' | b'e'));
-    if !valid {
-        return None;
-    }
-    token.parse::<f64>().ok().filter(|v| v.is_finite())
-}
-
-fn token(raw: &str) -> Option<Token> {
-    match raw.strip_suffix('%') {
-        Some(p) => number(p).map(Token::Percent),
-        None => number(raw).map(Token::Number),
-    }
-}
-
-fn split_args(body: &str) -> Option<(Vec<&str>, Option<&str>)> {
-    let is_space = |c: char| matches!(c, ' ' | '\t' | '\n' | '\r' | '\x0c');
-    if body.contains(',') {
-        let parts: Vec<&str> = body.split(',').map(|p| p.trim_matches(is_space)).collect();
-        return match parts.len() {
-            3 => Some((parts, None)),
-            4 => Some((parts[..3].to_vec(), Some(parts[3]))),
-            _ => None,
-        };
-    }
-    let (channels, alpha) = match body.split_once('/') {
-        Some((c, a)) => (c, Some(a.trim_matches(is_space))),
-        None => (body, None),
-    };
-    let parts: Vec<&str> = channels.split(is_space).filter(|p| !p.is_empty()).collect();
-    (parts.len() == 3).then_some((parts, alpha))
-}
-
-fn alpha_value(raw: Option<&str>) -> Option<f32> {
-    let a = match raw.map(token) {
-        None => 1.0,
-        Some(Some(Token::Number(v))) => v,
-        Some(Some(Token::Percent(p))) => p / 100.0,
-        Some(None) => return None,
-    };
-    Some(a.clamp(0.0, 1.0) as f32)
-}
-
-/// The full parser's `hsl()` for the forms the fast path declines, approximated: plain or
-/// `deg` hue, percentage saturation and lightness clamped to 0..=1.
-fn parse_hsl(body: &str) -> Option<Parsed> {
-    let (parts, alpha) = split_args(body)?;
-    let hue = match parts[0]
-        .strip_suffix("deg")
-        .map_or_else(|| token(parts[0]), token)?
-    {
-        Token::Number(h) => h,
-        Token::Percent(_) => return None,
-    };
-    let fraction = |raw: &str| match token(raw)? {
-        Token::Percent(p) => Some((p / 100.0).clamp(0.0, 1.0)),
-        Token::Number(_) => None,
-    };
-    let (s, l) = (fraction(parts[1])?, fraction(parts[2])?);
-    let hue = (hue % 360.0 + 360.0) % 360.0;
-    Some(hsl(hue as f32, s as f32, l as f32, alpha_value(alpha)?))
+    Slow::Valid(match function {
+        Function::Hwb => hwb(hue, p1, p2, alpha as f32),
+        _ => hsl(hue, p1, p2, alpha as f32),
+    })
 }
 
 const NAMED: [(&str, u32); 148] = [
