@@ -254,7 +254,7 @@ impl ShadeCache {
                 return Some(level.pixels.clone());
             }
             Some(level) => mip.build(&level.pixels)?,
-            None => mip.build(&mip.part(image)?)?,
+            None => mip.build(mip.part(image)?.as_ref())?,
         };
         let pixels = Arc::new(pixels);
         self.levels.push(ImageLevel {
@@ -2439,7 +2439,11 @@ mod shade_tests {
     use crate::display::Canvas2d;
 
     fn image() -> Arc<Pixmap> {
-        let mut pixmap = Pixmap::new(90, 60).unwrap();
+        sized(90, 60)
+    }
+
+    fn sized(width: u32, height: u32) -> Arc<Pixmap> {
+        let mut pixmap = Pixmap::new(width, height).unwrap();
         for (i, p) in pixmap
             .data_mut()
             .as_chunks_mut::<4>()
@@ -2493,5 +2497,33 @@ mod shade_tests {
             let (fresh, _) = draw(&wider, &other, ShadeCache::default());
             assert!(cached.data() == fresh.data(), "{width}");
         }
+    }
+
+    #[test]
+    fn levels_stay_with_their_image_and_make_the_smaller_ones() {
+        let image = sized(91, 61);
+        let at = |width: f64, height: f64| {
+            let mut c = Canvas2d::new(120, 80);
+            c.draw_image_scaled("a", 3.25, 2.5, width, height);
+            c
+        };
+        let (_, shades) = draw(&at(40.0, 28.0), &image, ShadeCache::default());
+        let half = Arc::as_ptr(&shades.levels[0].pixels);
+        let (_, shades) = draw(&at(41.5, 28.0), &image, shades);
+        assert_eq!(shades.levels.len(), 1);
+        assert_eq!(Arc::as_ptr(&shades.levels[0].pixels), half);
+
+        let (chained, shades) = draw(&at(20.0, 14.0), &image, shades);
+        let (fresh, _) = draw(&at(20.0, 14.0), &image, ShadeCache::default());
+        assert_eq!(shades.levels[0].mip.size, [46, 31]);
+        assert_eq!(shades.levels[1].mip.size, [23, 16]);
+        assert!(chained.data() != fresh.data());
+
+        let (_, shades) = (1..90).fold(draw(&at(2.0, 2.0), &image, shades), |(_, s), w| {
+            draw(&at(f64::from(w), f64::from(w) / 1.5), &image, s)
+        });
+        assert!(shades.levels.len() <= 7);
+        let (_, shades) = draw(&at(40.0, 28.0), &Arc::new((*image).clone()), shades);
+        assert_eq!(shades.levels.len(), 1);
     }
 }

@@ -4,6 +4,8 @@
 //! the image: the smallest level still at least as large as the image is drawn, at any filter
 //! quality but nearest.
 
+use std::borrow::Cow;
+
 use tiny_skia::Pixmap;
 
 use crate::image::scale_pixels;
@@ -90,10 +92,10 @@ impl Mip {
     }
 
     /// The part itself.
-    pub fn part(&self, image: &Pixmap) -> Option<Pixmap> {
+    pub fn part<'a>(&self, image: &'a Pixmap) -> Option<Cow<'a, Pixmap>> {
         let [x, y, width, height] = self.src;
         if [x, y, width, height] == [0, 0, image.width(), image.height()] {
-            return Some(image.clone());
+            return Some(Cow::Borrowed(image));
         }
         let mut part = Pixmap::new(width, height)?;
         let row = width as usize * 4;
@@ -102,7 +104,7 @@ impl Mip {
             part.data_mut()[line * row..(line + 1) * row]
                 .copy_from_slice(&image.data()[from..from + row]);
         }
-        Some(part)
+        Some(Cow::Owned(part))
     }
 
     /// The level out of the part, or out of a level of it at least as large:
@@ -118,7 +120,11 @@ impl Mip {
                 break;
             }
         }
-        scale_pixels(pixels.as_ref().unwrap_or(from), base, self.size)
+        match pixels {
+            // `scale_pixels` would copy it pixel by pixel.
+            Some(level) if [level.width(), level.height()] == self.size => Some(level),
+            pixels => scale_pixels(pixels.as_ref().unwrap_or(from), base, self.size),
+        }
     }
 }
 
@@ -212,5 +218,33 @@ mod tests {
         let level = downsample(&src).expect("level");
         let sum = 1 + 2 * 2 + 3 + 4 + 2 * 5 + 7;
         assert_eq!(level.data(), [sum >> 3, sum >> 3, sum >> 3, 255]);
+    }
+
+    #[test]
+    fn scaling_a_level_to_its_own_size_copies_it() {
+        for base in [
+            [1920, 1080],
+            [1366, 768],
+            [254, 190],
+            [3256, 1616],
+            [4094, 64],
+        ] {
+            for shift in 1..4 {
+                let size = base.map(|v| v >> shift);
+                let mut level = Pixmap::new(size[0], size[1]).expect("pixmap");
+                for (i, p) in level
+                    .data_mut()
+                    .as_chunks_mut::<4>()
+                    .0
+                    .iter_mut()
+                    .enumerate()
+                {
+                    let v = if i % 2 == 0 { 255 } else { (i % 251) as u8 };
+                    *p = [v, 255 - v, 0, 255];
+                }
+                let scaled = scale_pixels(&level, base, size).expect("level");
+                assert!(scaled.data() == level.data(), "{base:?} to {size:?}");
+            }
+        }
     }
 }
