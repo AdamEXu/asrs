@@ -47,7 +47,7 @@ const SUPPLIED: &[(&str, &str, &str)] = &[
     ("xim-ctext", "0.3.0", "xim-rs.txt"),
     ("xim-parser", "0.2.2", "xim-rs.txt"),
 ];
-/// What the SPDX templates leave for the copyright holder to fill in.
+/// What license templates leave for the copyright holder to fill in, in lower case.
 const PLACEHOLDERS: &[&str] = &[
     "<year>",
     "<owner>",
@@ -56,7 +56,10 @@ const PLACEHOLDERS: &[&str] = &[
     "<name of author>",
     "[year]",
     "[fullname]",
+    "year by author email",
 ];
+/// Licenses whose SPDX text is the whole license, with no copyright notice of the holder's.
+const WITHOUT_NOTICE: &[&str] = &["Apache-2.0", "BSL-1.0", "CC0-1.0", "MPL-2.0", "Unlicense"];
 
 const LIBM_CRATE: &str = "crates/asrs-libm-lgpl";
 const LIBM_STANDALONE_MANIFEST: &str = concat!(
@@ -185,7 +188,9 @@ impl Report {
                     repository: text(package, "repository").ok(),
                 });
             }
-            if !is_template(&found) {
+            let own = license.get("source_path").and_then(Json::as_str).is_some()
+                || WITHOUT_NOTICE.contains(&id.as_str());
+            if own && !has_placeholder(&found) {
                 licenses.push(License {
                     name,
                     id,
@@ -210,7 +215,8 @@ impl Report {
     }
 }
 
-fn is_template(text: &str) -> bool {
+fn has_placeholder(text: &str) -> bool {
+    let text = text.to_lowercase();
     PLACEHOLDERS.iter().any(|p| text.contains(p))
 }
 
@@ -228,7 +234,7 @@ fn supplied(user: &Crate, root: &Path) -> Result<String> {
     let path = root.join(CRATE_TEXTS).join(file);
     let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let text = text.replace("\r\n", "\n");
-    if is_template(&text) {
+    if has_placeholder(&text) {
         return Err(format!("{} has a placeholder", path.display()));
     }
     Ok(text)
@@ -336,4 +342,62 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<usize> {
         count += 1;
     }
     Ok(count)
+}
+
+#[cfg(test)]
+mod tests {
+    use asrs_parity::json;
+
+    use super::*;
+
+    fn report(id: &str, text: &str, source: &str, name: &str, version: &str) -> Result<Report> {
+        let text = text.replace('\n', "\\n");
+        let about = format!(
+            r#"{{"overview":[],"licenses":[{{"name":"{id}","id":"{id}","text":"{text}","source_path":{source},"used_by":[{{"crate":{{"name":"{name}","version":"{version}"}}}}]}}]}}"#
+        );
+        Report::read(&json::parse(&about).expect("JSON"), &workspace_root())
+    }
+
+    #[test]
+    fn a_template_needs_a_supplied_text() {
+        for (id, text) in [
+            ("MIT", "Copyright (c) <year> <copyright holders>"),
+            ("MIT-0", "Copyright <YEAR> <COPYRIGHT HOLDER>"),
+            ("0BSD", "Copyright (C) YEAR by AUTHOR EMAIL"),
+            ("Zlib", "This software is provided 'as-is'"),
+        ] {
+            for source in ["null", r#""LICENSE""#] {
+                if id == "Zlib" && source != "null" {
+                    continue;
+                }
+                let error = report(id, text, source, "unknown", "1.0.0").err();
+                let error = error.unwrap_or_else(|| panic!("{id} {source} passed"));
+                assert!(error.contains("unknown 1.0.0"), "{error}");
+            }
+        }
+        assert!(report("MIT", "<year>", "null", "taffy", "0.0.1").is_err());
+
+        let supplied = report("MIT", "<year>", "null", "taffy", "0.15.1").expect("supplied");
+        assert!(supplied.licenses[0].text.contains("Visly Inc."));
+        for (id, text, source) in [
+            ("MIT", "Copyright (c) 2020 A", r#""LICENSE""#),
+            ("Apache-2.0", "Copyright [yyyy] [name]", "null"),
+        ] {
+            let kept = report(id, text, source, "unknown", "1.0.0").expect(id);
+            assert_eq!(kept.licenses[0].text, text);
+        }
+    }
+
+    #[test]
+    fn supplied_texts_have_no_placeholder() {
+        for (name, version, _) in SUPPLIED {
+            let user = Crate {
+                name: (*name).to_owned(),
+                version: (*version).to_owned(),
+                repository: None,
+            };
+            let text = supplied(&user, &workspace_root()).expect(name);
+            assert!(text.len() > 500, "{name} {version}");
+        }
+    }
 }
