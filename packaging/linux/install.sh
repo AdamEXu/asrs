@@ -1,7 +1,7 @@
 #!/bin/sh
 # Adds asrs to this user's desktop: a menu entry, an icon and the log file types, with asrs
 # offered for them but never as their default. Run it again after moving this folder.
-# --uninstall takes everything back out.
+# --uninstall takes them back out (defaults pinned below stay: they were the defaults before).
 set -eu
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
@@ -30,6 +30,14 @@ if [ "${1:-}" = --uninstall ]; then
     exit 0
 fi
 
+# GLib looks for a program named in Exec before it expands %%, so no escape works for both.
+case $here in
+*%*)
+    echo "asrs cannot be added to the menu from a folder with % in its path: $here" >&2
+    exit 1
+    ;;
+esac
+
 mkdir -p "$data/applications" "$data/mime/packages"
 for size in $sizes; do
     icons=$data/icons/hicolor/${size}x$size/apps
@@ -51,7 +59,10 @@ if command -v xdg-mime >/dev/null 2>&1; then
     done
 fi
 
-exe=$(printf '%s' "$here/asrs" | sed 's/[\\"`$]/\\&/g; s/[\\&|]/\\&/g')
+# Exec is unescaped twice, as a string and then as a quoted argument. The last expression is for
+# the replacement below.
+exe=$(printf '%s' "$here/asrs" |
+    sed 's/\\/\\\\\\\\/g; s/["`$]/\\\\&/g; s/[\\&|]/\\&/g')
 sed "s|^Exec=.*|Exec=\"$exe\" %F|" "$here/share/applications/asrs.desktop" >"$desktop"
 refresh
 for pin in $pinned; do

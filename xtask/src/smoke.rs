@@ -26,7 +26,8 @@ target/smoke:
 - it runs with an asrs-libm-lgpl built from the source in the package in place of its own, and
   refuses one with another ABI version and a missing one;
 - on Windows, the installer registers the file types without becoming their default, and
-  uninstalls; on Linux, install.sh does the same and the AppImage runs.";
+  uninstalls; on Linux, install.sh does the same and the AppImage runs; on macOS, Launch Services
+  does, with which the app is registered while this runs.";
 
 const CLIP: &str = "banner-lower-2025";
 const START_TIMEOUT: Duration = Duration::from_secs(90);
@@ -50,6 +51,9 @@ function run(argv) {
   return paths.join("\n");
 }"#;
 
+/// Other programs' files, of the type asrs names for CSV files on macOS.
+const TEXT_TYPES: &[&str] = &["csv", "tsv"];
+
 /// Prints the program Windows opens CSV files with.
 const CSV_PROGRAM: &str = r#"
 $query = Add-Type -PassThru -Namespace Asrs -Name Assoc -MemberDefinition @'
@@ -61,6 +65,28 @@ $text = New-Object System.Text.StringBuilder 1024
 [uint32]$length = 1024
 [void]$query::AssocQueryString(0, 2, '.csv', [NullString]::Value, $text, [ref]$length)
 $text.ToString()
+"#;
+
+/// Prints what of asrs and its file types the current user and the machine have registered.
+const WINDOWS_TRACES: &str = r#"
+foreach ($root in 'HKCU:\Software\Classes', 'HKLM:\Software\Classes') {
+  foreach ($ext in 'wpilog', 'wpilogxz', 'rlog', 'revlog', 'csv', 'dslog', 'dsevents', 'hoot') {
+    foreach ($key in "$root\.$ext", "$root\.$ext\OpenWithProgids", "$root\asrs.$ext") {
+      if (Test-Path $key) { "$key $((Get-Item $key).Property -join ',')" }
+    }
+  }
+  foreach ($key in "$root\Applications\asrs.exe", "$root\AppUserModelId\AdamXu.asrs") {
+    if (Test-Path $key) { $key }
+  }
+}
+foreach ($root in 'HKCU:\Software', 'HKLM:\Software', 'HKLM:\Software\WOW6432Node') {
+  $key = "$root\Microsoft\Windows\CurrentVersion\Uninstall\net.adamxu.asrs_is1"
+  if (Test-Path $key) { $key }
+}
+foreach ($menu in 'Programs', 'CommonPrograms') {
+  $link = Join-Path ([Environment]::GetFolderPath($menu)) 'asrs.lnk'
+  if (Test-Path $link) { $link }
+}
 "#;
 
 const LICENSE_FILES: &[&str] = &[
@@ -357,6 +383,7 @@ impl Smoke {
             return Err(format!("wrong documentation:\n{report}"));
         }
         value("assets")?;
+        value("textures")?;
         value("licenses")?;
         Ok(())
     }
@@ -384,12 +411,18 @@ impl Smoke {
         let folder = self.dir.join("files");
         fs::create_dir_all(&folder).map_err(at(&folder))?;
         let file = |extension: &str| folder.join(format!("file.{extension}"));
-        for extension in bundle::extensions().chain(["hoot"]) {
+        for extension in bundle::extensions().chain(["hoot", "tsv"]) {
             fs::write(file(extension), "").map_err(at(&folder))?;
         }
         launch_services("-u")?;
         thread::sleep(SETTLE);
-        let csv = handlers(&file("csv"))?;
+        let defaults = || -> Result<Vec<Option<PathBuf>>> {
+            TEXT_TYPES
+                .iter()
+                .map(|extension| Ok(handlers(&file(extension))?.into_iter().next()))
+                .collect()
+        };
+        let before = defaults()?;
         launch_services("-f")?;
         thread::sleep(SETTLE);
         let checked = bundle::extensions()
@@ -400,10 +433,10 @@ impl Smoke {
                 }
                 Ok(())
             })
-            .and_then(|()| match (handlers(&file("csv"))?.first(), csv.first()) {
-                (Some(now), Some(before)) if now == before => Ok(()),
-                (now, before) => Err(format!(
-                    "the default for .csv went from {before:?} to {now:?}"
+            .and_then(|()| match defaults()? {
+                now if now == before && before.iter().all(Option::is_some) => Ok(()),
+                now => Err(format!(
+                    "the defaults for {TEXT_TYPES:?} went from {before:?} to {now:?}"
                 )),
             })
             .and_then(|()| match handlers(&file("hoot"))? {
@@ -516,6 +549,7 @@ impl Smoke {
         let setup = &self.bundle.packages()[1];
         let installed = self.dir.join("installed");
         let csv = powershell(CSV_PROGRAM)?;
+        let traces = powershell(WINDOWS_TRACES)?;
         run_tool(
             Command::new(setup)
                 .args(["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"])
@@ -537,6 +571,9 @@ impl Smoke {
              $folder = (New-Object -ComObject Shell.Application).Namespace((Split-Path $lnk))
              $folder.ParseName('asrs.lnk').ExtendedProperty('System.AppUserModel.ID')",
         )?;
+        if powershell(WINDOWS_TRACES)?.trim() == traces.trim() {
+            return Err("the installer left no traces to look for".to_owned());
+        }
         let now = powershell(CSV_PROGRAM)?;
         if now != csv {
             return Err(format!("the default for .csv went from {csv:?} to {now:?}"));
@@ -558,14 +595,21 @@ impl Smoke {
             }
             thread::sleep(POLL);
         }
-        if exe.exists() {
-            return Err("the uninstaller left asrs.exe".to_owned());
+        let deadline = Instant::now() + START_TIMEOUT;
+        while installed.exists() {
+            if Instant::now() > deadline {
+                return Err(format!("the uninstaller left {}", installed.display()));
+            }
+            thread::sleep(POLL);
         }
-        powershell(
-            "if (Test-Path 'HKCU:\\Software\\Classes\\asrs.wpilog') { throw 'left asrs.wpilog' }
-             if (Test-Path 'HKCU:\\Software\\Classes\\.wpilog') { throw 'left .wpilog' }",
-        )
-        .map(drop)
+        let left = powershell(WINDOWS_TRACES)?;
+        if left.trim() == traces.trim() {
+            Ok(())
+        } else {
+            Err(format!(
+                "before installing: {traces:?}, after uninstalling: {left:?}"
+            ))
+        }
     }
 
     fn install_script(&self) -> Result {
@@ -580,6 +624,12 @@ impl Smoke {
                     .env("XDG_CONFIG_HOME", &config),
             )
         };
+        let other = data.join("applications/other.desktop");
+        bundle::write(
+            &other,
+            "[Desktop Entry]\nType=Application\nName=other\nExec=true %f\n\
+             MimeType=application/x-rlog;\n",
+        )?;
         run(&[])?;
         let entry = data.join("applications/asrs.desktop");
         let text = fs::read_to_string(&entry).map_err(at(&entry))?;
@@ -610,9 +660,54 @@ impl Smoke {
         if !handlers.contains("asrs.desktop") {
             return Err(format!("no asrs among the handlers: {handlers}"));
         }
+        let handlers = gio(&["mime", "application/x-rlog"])?;
+        let default = handlers.lines().next().unwrap_or_default();
+        if !default.ends_with("other.desktop") || !handlers.contains("asrs.desktop") {
+            return Err(format!("asrs took another program's file type: {handlers}"));
+        }
         run(&["--uninstall"])?;
-        if entry.exists() {
-            return Err("--uninstall left the menu entry".to_owned());
+        let left = named(&data, &["asrs", "x-wpilog"]);
+        if !left.is_empty() {
+            return Err(format!("--uninstall left {left:?}"));
+        }
+        self.install_script_path()
+    }
+
+    /// The menu entry starts a program in a folder whose name needs every escape the entry has.
+    fn install_script_path(&self) -> Result {
+        let folder = self.dir.join("a \"b\" `c` $d \\e &|'");
+        copy_tree(&self.program.join("share"), &folder.join("share"))?;
+        let script = folder.join("install.sh");
+        copy(&self.program.join("install.sh"), &script)?;
+        let program = folder.join("asrs");
+        copy(&script, &program)?;
+        bundle::write(&program, "#!/bin/sh\n: >\"${0%/*}/started\"\n")?;
+        let data = self.dir.join("data-path");
+        let env = |command: &mut Command| {
+            run_tool(
+                command
+                    .env("XDG_DATA_HOME", &data)
+                    .env("XDG_CONFIG_HOME", self.dir.join("config-path")),
+            )
+        };
+        env(&mut Command::new(&script))?;
+        let entry = data.join("applications/asrs.desktop");
+        run_tool(Command::new("desktop-file-validate").arg(&entry))?;
+        env(Command::new("gio").arg("launch").arg(&entry))?;
+        let started = folder.join("started");
+        let deadline = Instant::now() + SETTLE;
+        while !started.exists() {
+            if Instant::now() > deadline {
+                return Err(format!("{} starts nothing", entry.display()));
+            }
+            thread::sleep(POLL);
+        }
+        env(Command::new(&script).arg("--uninstall"))?;
+
+        let percent = self.dir.join("a%f");
+        fs::rename(&folder, &percent).map_err(at(&folder))?;
+        if env(&mut Command::new(percent.join("install.sh"))).is_ok() || entry.exists() {
+            return Err("install.sh wrote a menu entry that starts nothing".to_owned());
         }
         Ok(())
     }
@@ -623,6 +718,21 @@ impl Smoke {
         let report = self_test(image, &self.frame, &extract)?;
         self.check_report(&report, &self.library_path())
     }
+}
+
+/// The files under `dir` with one of `parts` in their name.
+fn named(dir: &Path, parts: &[&str]) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    for entry in fs::read_dir(dir).into_iter().flatten().flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if path.is_dir() {
+            found.extend(named(&path, parts));
+        } else if parts.iter().any(|part| name.contains(part)) {
+            found.push(path);
+        }
+    }
+    found
 }
 
 fn plist_keys(text: &str) -> Vec<String> {
