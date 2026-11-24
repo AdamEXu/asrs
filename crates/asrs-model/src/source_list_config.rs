@@ -184,6 +184,14 @@ impl SourceListItemState {
         })
     }
 
+    /// What reading `item[key]` throws.
+    pub fn require(&self, key: &str) -> Result<(), JsError> {
+        match self.raw.as_deref() {
+            Some(raw @ (JsValue::Null | JsValue::Undefined)) => Err(ops::cannot_read(raw, key)),
+            _ => Ok(()),
+        }
+    }
+
     /// `item.options[key]`.
     pub fn option(&self, key: &str) -> Result<JsValue, JsError> {
         match &self.raw {

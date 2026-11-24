@@ -578,6 +578,73 @@
         "capture": [
           "sourceLists"
         ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": null, \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": {\"a\": 1}, \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": [\"/Drive/LeftVelocity\"], \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": true, \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}, null])"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.LIST.children[0].querySelector('button.remove').click()"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.LIST.children[0].querySelector('button.remove').click()"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.LIST.children[0].querySelector('button.hide').click()"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.LIST.children[0].querySelector('button.type').click()"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
       }
     ]
   }

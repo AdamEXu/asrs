@@ -1327,8 +1327,8 @@ impl Harness {
             }
             "remove" => {
                 let i = index(at(&args, 1))?;
-                controller.source_list_mut().remove(i);
-                None
+                let removed = controller.source_list_mut().remove(i);
+                removed.err().map(|e| e.to_string())
             }
             "promptType" | "contextMenu" | "typeResponse" | "clearClick" | "clearResponse"
             | "mouseDown" | "mouseUp" | "mouseMove" | "itemDrag" | "fieldDrag"

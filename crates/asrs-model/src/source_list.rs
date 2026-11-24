@@ -272,6 +272,8 @@ pub struct RenderedItem {
     /// The `type-name` text, e.g. `"Robot/Blue:"`, or empty.
     pub type_name: String,
     pub log_key: JsString,
+    /// The key span's `innerText`, where `null` is empty.
+    pub key_text: JsString,
     /// False draws the key struck through.
     pub available: bool,
     pub visible: bool,
@@ -499,9 +501,7 @@ impl SourceList {
         let mut parent_available = false;
         let mut displayed = Vec::new();
         for item in &self.state {
-            if item.is_nullish() {
-                return Err(item.member("logKey").map(drop).unwrap_err().into());
-            }
+            item.require("logKey")?;
             let available = is_field_available(log, item);
             let type_config = self.type_config(&item.item_type);
             if type_config.is_some_and(|t| t.parent_key.is_some()) {
@@ -534,10 +534,8 @@ impl SourceList {
         shows: impl Fn(&SourceListItemState) -> bool,
     ) -> Result<&[SourceListItemState]> {
         for item in &self.state {
-            if item.is_nullish() {
-                return Err(item.member("visible").map(drop).unwrap_err().into());
-            }
-            if shows(item) {
+            item.require("visible")?;
+            if item.raw.is_some() && shows(item) {
                 self.require_modeled(item)?;
             }
         }
@@ -547,6 +545,9 @@ impl SourceList {
     /// The commands read options as strings, so one that draws an item with other options is
     /// not ported, except that reading any of `undefined` or `null` throws.
     fn require_modeled(&self, item: &SourceListItemState) -> Result {
+        if item.raw.is_none() {
+            return Ok(());
+        }
         let Some(type_config) = self.type_config(&item.item_type) else {
             return Ok(());
         };
@@ -598,9 +599,9 @@ impl SourceList {
 
     /// Call when a new set of log fields may be available.
     pub fn refresh(&mut self, env: &mut Env<'_>) -> Result {
-        if let Some(item) = self.state.iter().find(|item| item.is_nullish()) {
-            item.member("logKey")?;
-        }
+        self.state
+            .iter()
+            .try_for_each(|item| item.require("logKey"))?;
         let displayed: Vec<&JsString> = self.state.iter().map(|item| &item.log_key).collect();
         let mut current: Vec<JsString> = Vec::new();
         for key in env.log.field_keys() {
@@ -648,14 +649,12 @@ impl SourceList {
         option_config.values = values.clone();
         for index in 0..self.state.len() {
             let item = &self.state[index];
-            item.member("type")?;
+            item.require("type")?;
             if !eq_str(&item.item_type, type_key) {
                 continue;
             }
             let value = item.option(option)?;
-            let valid = values
-                .iter()
-                .any(|x| ops::strict_equals(&JsValue::string(&x.key), &value));
+            let valid = values.iter().any(|x| is_str(&value, &x.key));
             if !valid {
                 let first = values
                     .first()
@@ -727,9 +726,7 @@ impl SourceList {
             if final_type.is_empty() {
                 continue;
             }
-            if let Some(item) = nullish {
-                item.member("type")?;
-            }
+            nullish.map_or(Ok(()), |item| item.require("type"))?;
             possible.push(Possible {
                 config: type_config,
                 log_type: final_type,
@@ -750,7 +747,7 @@ impl SourceList {
             let remembered = ops::get(memory, "type")?;
             if let Some(i) = possible
                 .iter()
-                .position(|p| ops::strict_equals(&JsValue::string(&p.config.key), &remembered))
+                .position(|p| is_str(&remembered, &p.config.key))
             {
                 let chosen = possible.remove(i);
                 possible.insert(0, chosen);
@@ -768,10 +765,7 @@ impl SourceList {
                     let mut uses = 0;
                     for item in &with_supplemental {
                         if item.has_option(&option_config.key)?
-                            && ops::strict_equals(
-                                &item.option(&option_config.key)?,
-                                &JsValue::string(&value.key),
-                            )
+                            && is_str(&item.option(&option_config.key)?, &value.key)
                         {
                             uses += 1;
                         }
@@ -807,7 +801,7 @@ impl SourceList {
         match parent_index {
             Some(parent) => {
                 let mut insert = parent + 1;
-                while insert < self.state.len() && self.is_child(insert) {
+                while insert < self.state.len() && self.is_child(insert)? {
                     insert += 1;
                 }
                 self.add_list_item(env, state, Some(insert))
@@ -837,21 +831,19 @@ impl SourceList {
         }
         let same_list = payload.uuid == self.uuid;
         let count = self.items.len();
-        let is_valid_target = |list: &SourceList, target: usize| {
-            if payload.is_child {
-                if !same_list {
-                    return false;
-                }
-                list.parent_of(payload.index as isize) == list.parent_of(target as isize)
+        let is_valid_target = |list: &SourceList, target: usize| -> Result<bool> {
+            Ok(if payload.is_child {
+                same_list
+                    && list.parent_of(payload.index as isize)? == list.parent_of(target as isize)?
             } else {
-                !(target < count && list.is_child(target))
-            }
+                !(target < count && list.is_child(target)?)
+            })
         };
 
         let mut closest_dist = f64::INFINITY;
         let mut closest_index = 0;
         for index in 0..count {
-            if !is_valid_target(self, index) {
+            if !is_valid_target(self, index)? {
                 continue;
             }
             let dist = (y - env.dom.item_rect(&self.uuid, index).top()).abs();
@@ -860,7 +852,7 @@ impl SourceList {
                 closest_index = index;
             }
         }
-        if count > 0 && is_valid_target(self, count) {
+        if count > 0 && is_valid_target(self, count)? {
             let dist = (y - env.dom.item_rect(&self.uuid, count - 1).bottom()).abs();
             if dist < closest_dist {
                 closest_index = count;
@@ -891,7 +883,7 @@ impl SourceList {
             let mut n = 0;
             loop {
                 n += 1;
-                if start_index + n >= self.state.len() || !self.is_child(start_index + n) {
+                if start_index + n >= self.state.len() || !self.is_child(start_index + n)? {
                     break n;
                 }
             }
@@ -976,9 +968,9 @@ impl SourceList {
             }
         }
 
-        if let Some(item) = self.state.iter().find(|item| item.is_nullish()) {
-            item.member("type")?;
-        }
+        self.state
+            .iter()
+            .try_for_each(|item| item.require("type"))?;
         let log = env.log;
         let is_type_valid = |source_types: &[&str]| {
             dragged.iter().any(|field| {
@@ -1069,7 +1061,7 @@ impl SourceList {
             let count = self.state.len().min(self.items.len());
             for index in 0..count {
                 let state = &self.state[index];
-                state.member("type")?;
+                state.require("type")?;
                 let available = is_field_available(env.log, state);
                 let preview_setting = self
                     .type_config(&state.item_type)
@@ -1114,10 +1106,12 @@ impl SourceList {
         dom: &mut dyn SourceListDom,
         x: f64,
         y: f64,
-    ) -> Option<ItemDragStart> {
-        let (down_x, down_y) = self.mouse_down?;
+    ) -> Result<Option<ItemDragStart>> {
+        let Some((down_x, down_y)) = self.mouse_down else {
+            return Ok(None);
+        };
         if (x - down_x).abs() < DRAG_THRESHOLD_PX && (y - down_y).abs() < DRAG_THRESHOLD_PX {
-            return None;
+            return Ok(None);
         }
         let mut index = None;
         for i in 0..self.items.len() {
@@ -1131,10 +1125,12 @@ impl SourceList {
             }
         }
         self.mouse_down = None;
-        let index = index?;
+        let Some(index) = index else {
+            return Ok(None);
+        };
         let client_width = dom.item_client_width(&self.uuid, index);
         let rect = dom.item_rect(&self.uuid, index);
-        Some(ItemDragStart {
+        Ok(Some(ItemDragStart {
             x,
             y,
             offset_x: x - rect.left(),
@@ -1144,9 +1140,9 @@ impl SourceList {
                 uuid: self.uuid.clone(),
                 config_str: self.config_str.clone(),
                 index,
-                is_child: self.is_child(index),
+                is_child: self.is_child(index)?,
             },
-        })
+        }))
     }
 
     /// The type button of an item was clicked. Returns the prompt to send to main; its answer
@@ -1217,13 +1213,13 @@ impl SourceList {
             return Ok(());
         }
         let index = position.map_or(0, |i| i + 1);
-        if !self.is_child(index) {
+        if !self.is_child(index)? {
             return Ok(());
         }
         let mut child_count = 0;
         while index + child_count < self.state.len() {
             child_count += 1;
-            if !self.is_child(index + child_count) {
+            if !self.is_child(index + child_count)? {
                 break;
             }
         }
@@ -1247,7 +1243,7 @@ impl SourceList {
         if !is_child {
             let mut search = index + 1;
             while search < self.state.len() {
-                if !self.is_child(search) {
+                if !self.is_child(search)? {
                     break;
                 }
                 self.state[search].set_visible(visible);
@@ -1255,7 +1251,7 @@ impl SourceList {
                 search += 1;
             }
         } else if visible
-            && let Some(parent) = self.parent_of(index as isize)
+            && let Some(parent) = self.parent_of(index as isize)?
             && !self.state[parent].visible
         {
             self.state[parent].set_visible(true);
@@ -1280,21 +1276,22 @@ impl SourceList {
     }
 
     /// The remove button of an item: removes it, and a parent's children with it.
-    pub fn remove(&mut self, index: usize) {
+    pub fn remove(&mut self, index: usize) -> Result {
         let Some(item) = self.items.get(index).filter(|item| item.interactive) else {
-            return;
+            return Ok(());
         };
         let is_child = item.created_as_child;
         let mut count = 0;
         while index + count < self.state.len() {
             count += 1;
-            if is_child || !self.is_child(index + count) {
+            if is_child || !self.is_child(index + count)? {
                 break;
             }
         }
         self.state.drain(index..index + count);
         self.items.drain(index..index + count);
         self.update_hand_icon();
+        Ok(())
     }
 
     /// The clear button: main is asked to confirm with `source-list-clear-prompt`.
@@ -1330,20 +1327,22 @@ impl SourceList {
             .map(|(_, v)| v.as_str())
     }
 
-    fn is_child(&self, index: usize) -> bool {
-        self.state
-            .get(index)
-            .and_then(|item| self.type_config(&item.item_type))
-            .is_some_and(|t| t.child_of.is_some())
+    fn is_child(&self, index: usize) -> Result<bool> {
+        let Some(item) = self.state.get(index) else {
+            return Ok(false);
+        };
+        item.require("type")?;
+        let type_config = self.type_config(&item.item_type);
+        Ok(type_config.is_some_and(|t| t.child_of.is_some()))
     }
 
     /// The nearest non-child item above `index`.
-    fn parent_of(&self, index: isize) -> Option<usize> {
+    fn parent_of(&self, index: isize) -> Result<Option<usize>> {
         let mut parent = index - 1;
-        while parent >= 0 && self.is_child(parent as usize) {
+        while parent >= 0 && self.is_child(parent as usize)? {
             parent -= 1;
         }
-        (parent >= 0).then_some(parent as usize)
+        Ok((parent >= 0).then_some(parent as usize))
     }
 
     fn update_hand_icon(&mut self) {
@@ -1421,8 +1420,9 @@ impl SourceList {
                 _ => type_config.color.clone(),
             }
         } else {
-            let option = match &state.option(&type_config.color)? {
-                JsValue::String(option) => option.clone(),
+            let option = state.option(&type_config.color)?;
+            let option = match &option {
+                JsValue::String(option) => option,
                 JsValue::Undefined => {
                     return Err(SourceListError::type_error("undefined", "startsWith"));
                 }
@@ -1451,10 +1451,7 @@ impl SourceList {
         for option_config in &type_config.options {
             if option_config.show_in_type_name {
                 let key = state.option(&option_config.key)?;
-                let value = option_config
-                    .values
-                    .iter()
-                    .find(|v| ops::strict_equals(&JsValue::string(&v.key), &key));
+                let value = option_config.values.iter().find(|v| is_str(&key, &v.key));
                 components.extend(value.map(|v| v.display.as_str()));
             }
         }
@@ -1479,6 +1476,10 @@ impl SourceList {
             symbol_path: format!("symbols/sourceList/{}.svg", type_config.symbol),
             type_name,
             log_key: state.log_key.clone(),
+            key_text: match state.raw.as_ref().and_then(|raw| raw.get("logKey")) {
+                Some(JsValue::Null) => JsString::new(),
+                _ => state.log_key.clone(),
+            },
             available: is_field_available(env.log, state),
             visible: state.visible,
         };
@@ -1486,19 +1487,26 @@ impl SourceList {
     }
 }
 
+fn is_str(value: &JsValue, s: &str) -> bool {
+    value.as_str().is_some_and(|value| eq_str(value, s))
+}
+
 /// `isFieldAvailable`: the field still has the type the item was added with. A `null` `logType`
 /// is the structured type of any field without one.
 pub fn is_field_available(log: &Log, item: &SourceListItemState) -> bool {
-    let log_type = match &item.raw {
-        Some(_) => item.member("logType").unwrap_or_default(),
-        None => item.log_type.to_js(),
-    };
+    if item.raw.is_none() {
+        return log
+            .get_type(&item.log_key)
+            .is_some_and(|t| eq_str(&item.log_type, t.name()))
+            || log.get_structured_type(&item.log_key) == Some(&item.log_type);
+    }
+    let log_type = item.member("logType").unwrap_or_default();
     let structured = match log.get_structured_type(&item.log_key) {
         Some(structured) => structured.to_js(),
         None => JsValue::Null,
     };
     log.get_type(&item.log_key)
-        .is_some_and(|t| ops::strict_equals(&JsValue::string(t.name()), &log_type))
+        .is_some_and(|t| is_str(&log_type, t.name()))
         || ops::strict_equals(&structured, &log_type)
 }
 

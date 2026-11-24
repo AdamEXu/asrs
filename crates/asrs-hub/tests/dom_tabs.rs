@@ -1678,7 +1678,7 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
                 .trim()
                 .parse::<f64>()
                 .map_err(|_| err("remove needs an index"))? as usize;
-            list.remove(i);
+            list.remove(i).map_err(|e| js_error(e).message)?;
             return Ok(JsValue::Undefined);
         }
         if let Some(arg) = op

@@ -176,7 +176,10 @@ fn pointer<C: SourceListCx + ?Sized>(
             None
         }
         ListPointer::Move { x, y } => {
-            out.drag = list.mouse_move(cx.list_parts().dom, x, y);
+            match list.mouse_move(cx.list_parts().dom, x, y) {
+                Ok(drag) => out.drag = drag,
+                Err(e) => report(Err(e)),
+            }
             None
         }
         ListPointer::ContextMenu { index, x, y } => list.context_menu(index, x, y),
@@ -190,7 +193,7 @@ fn pointer<C: SourceListCx + ?Sized>(
             None
         }
         ListPointer::RemoveClick(index) => {
-            list.remove(index);
+            report(list.remove(index));
             None
         }
         ListPointer::ClearClick => {

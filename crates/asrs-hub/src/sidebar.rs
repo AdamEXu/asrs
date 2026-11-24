@@ -564,12 +564,8 @@ fn expanded_set(value: &JsValue) -> Result<IndexMap<ExpandedKey, JsValue>, JsErr
         .collect())
 }
 
-fn numeric(width: &JsValue) -> f64 {
-    ops::to_number(width).unwrap_or(f64::NAN)
-}
-
-fn negated(width: &JsValue) -> f64 {
-    match -numeric(width) {
+fn negated(width: f64) -> f64 {
+    match -width {
         n if n.is_nan() => f64::NAN,
         n => n,
     }
@@ -586,6 +582,8 @@ pub struct Sidebar {
     sidebar_handle_active: bool,
     /// Whatever number, string or object a layout held; upstream applies JS operators to it.
     sidebar_width: Rc<JsValue>,
+    /// `Number(sidebarWidth)`, which joins every entry of an array.
+    width_number: f64,
     field_count: usize,
     is_tuning_mode: bool,
     last_field_keys: Vec<JsString>,
@@ -623,6 +621,7 @@ impl Sidebar {
             get_filenames: Box::new(get_filenames),
             sidebar_handle_active: false,
             sidebar_width: Rc::new(JsValue::Number(DEFAULT_SIDEBAR_WIDTH)),
+            width_number: DEFAULT_SIDEBAR_WIDTH,
             field_count: 0,
             is_tuning_mode: false,
             last_field_keys: Vec::new(),
@@ -702,7 +701,7 @@ impl Sidebar {
                 .expanded_fields
                 .keys()
                 .all(|k| !matches!(k, ExpandedKey::Object(_)) && expanded.contains_key(k));
-        self.sidebar_width = Rc::new(width);
+        self.set_width(width);
         self.expanded_fields = expanded;
         Ok(match expanded_equal {
             true => EventOutcome::Ok,
@@ -714,15 +713,15 @@ impl Sidebar {
     pub fn toggle_visible(&mut self) {
         let width = match *self.sidebar_width {
             JsValue::Number(0.0) => DEFAULT_SIDEBAR_WIDTH,
-            ref width => negated(width),
+            _ => negated(self.width_number),
         };
-        self.sidebar_width = Rc::new(JsValue::Number(width));
+        self.set_width(JsValue::Number(width));
     }
 
     /// `--side-bar-width`, `Math.max(sidebarWidth, 0)`; a restored width that is no number
     /// makes it `NaN`.
     pub fn applied_width(&self) -> f64 {
-        max2(numeric(&self.sidebar_width), 0.0)
+        max2(self.width_number, 0.0)
     }
 
     /// `--show-side-bar`.
@@ -758,7 +757,7 @@ impl Sidebar {
             }
             width = 0.0;
         }
-        self.sidebar_width = Rc::new(JsValue::Number(width));
+        self.set_width(JsValue::Number(width));
     }
 
     /// The field labels' `window` `mousemove` listeners, which run after hub.ts's `dragMove`,
@@ -1587,7 +1586,7 @@ impl Sidebar {
                 let value_str = match value {
                     None => JsString::new(),
                     Some(v) => {
-                        let max_characters = round(numeric(&self.sidebar_width) * 0.03);
+                        let max_characters = round(self.width_number * 0.03);
                         if (v.len() as f64) > max_characters {
                             let mut truncated = v.substring(0.0, Some(max_characters - 1.0));
                             truncated.push_str(&js("\u{2026}"));
@@ -2159,7 +2158,12 @@ impl Sidebar {
     }
 
     fn width_is_positive(&self) -> bool {
-        numeric(&self.sidebar_width) > 0.0
+        self.width_number > 0.0
+    }
+
+    fn set_width(&mut self, width: JsValue) {
+        self.width_number = ops::to_number(&width).unwrap_or(f64::NAN);
+        self.sidebar_width = Rc::new(width);
     }
 
     pub fn shadow_shown(&self) -> bool {

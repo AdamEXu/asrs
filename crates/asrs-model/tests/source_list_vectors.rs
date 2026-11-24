@@ -489,7 +489,7 @@ fn item_dump(view: &ItemView) -> JsValue {
             out.push(r.symbol_path.to_js());
             out.push(r.color.to_js());
             out.push(r.type_name.to_js());
-            out.push(r.log_key.to_js());
+            out.push(r.key_text.to_js());
             out.push(if r.available { "" } else { "line-through" }.to_js());
             out.push(r.log_key.to_js());
             out.push(r.hide_icon().to_js());
@@ -817,14 +817,13 @@ impl Harness {
                 Ok(())
             }
             "mouseMove" => {
-                if let Some(start) = self.lists[id].list.mouse_move(
-                    &mut self.dom,
-                    num(at(args, 1))?,
-                    num(at(args, 2))?,
-                ) {
-                    self.pending_drag = Some((id, start));
-                }
-                Ok(())
+                let (x, y) = (num(at(args, 1))?, num(at(args, 2))?);
+                let start = self.lists[id].list.mouse_move(&mut self.dom, x, y);
+                start.map(|start| {
+                    if let Some(start) = start {
+                        self.pending_drag = Some((id, start));
+                    }
+                })
             }
             "contextMenu" => {
                 self.pending_prompt = self.lists[id].list.context_menu(
@@ -854,10 +853,7 @@ impl Harness {
                 let (mut env, lists) = self.env(dark);
                 lists[id].list.name_click(&mut env, i, now)
             }
-            "remove" => {
-                self.lists[id].list.remove(index(at(args, 1))?);
-                Ok(())
-            }
+            "remove" => self.lists[id].list.remove(index(at(args, 1))?),
             "clearClick" => {
                 self.pending_clear = Some(self.lists[id].list.request_clear(&mut self.dom));
                 Ok(())

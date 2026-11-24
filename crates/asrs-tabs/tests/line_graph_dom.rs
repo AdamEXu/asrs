@@ -1145,8 +1145,8 @@ impl Harness {
             }
             "remove" => {
                 let i = index(at(&args, 1))?;
-                controller.with_list(list, |l, _| l.remove(i));
-                None
+                let removed = controller.with_list(list, |l, _| l.remove(i));
+                removed.err().map(|e| e.to_string())
             }
             "clearClick" => {
                 let mut prompt = None;
