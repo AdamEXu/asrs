@@ -196,6 +196,7 @@ struct Scenario {
     themes: Vec<String>,
     gl: bool,
     copies: bool,
+    classic_scrollbars: bool,
 }
 
 fn scenarios_dir(paths: &Paths) -> PathBuf {
@@ -272,6 +273,10 @@ fn load_scenarios(paths: &Paths, only: &[String]) -> Result<Vec<Scenario>> {
                 scales: numbers("scales", &SCALES),
                 themes: strings("themes", &THEMES),
                 gl: value.get("gl") == Some(&Json::Bool(true)),
+                classic_scrollbars: value
+                    .get("scrollbars")
+                    .and_then(Json::as_str)
+                    .is_some_and(|style| style.to_string() == "classic"),
                 copies: value
                     .get("actions")
                     .and_then(Json::as_array)
@@ -337,6 +342,7 @@ fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path)
         .arg(format!("--gl={gl}"))
         .arg(format!("--colour={colour}"))
         .args(robot.iter().map(|r| format!("--robot={}", r.port)))
+        .args(scrollbar_defaults(scenario.classic_scrollbars))
         .current_dir(&paths.root)
         .env_remove("ELECTRON_RUN_AS_NODE");
     oracle::pin_environment(&mut command, oracle::DEFAULT_ZONE);
@@ -368,6 +374,15 @@ fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path)
         ));
     }
     Ok(())
+}
+
+/// The scrollbar style, whatever the user's preference and devices are.
+fn scrollbar_defaults(classic: bool) -> &'static [&'static str] {
+    match (cfg!(target_os = "macos"), classic) {
+        (false, _) => &[],
+        (true, false) => &["-AppleShowScrollBars", "WhenScrolling"],
+        (true, true) => &["-AppleShowScrollBars", "Always"],
+    }
 }
 
 /// Gives Electron a pasteboard of its own (macOS): the user's would hold what scenarios copy.
