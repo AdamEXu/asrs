@@ -1,0 +1,864 @@
+#![allow(clippy::disallowed_methods)]
+
+//! The Windows window and menu checks on a real desktop, beside the oracle's Electron: the content
+//! size, bounds, track sizes, `WS_EX_TOPMOST` and DWM backdrop of every window `main.ts` opens,
+//! satellites' aspect ratios in a live resize, `isVisible()`, wheel deltas as Chromium's DOM
+//! events carry them, native menus driven by real pointer and key events, and the hub's own
+//! window against the capture scenario mode makes of it.
+//!
+//! Needs the logged-in desktop at scale 1 and the oracle's Electron (`ASRS_ELECTRON` or
+//! `cargo xtask oracle setup`); skipped under `ASRS_CI=1` and off Windows. It moves the pointer.
+
+#[cfg(windows)]
+mod desktop {
+    use std::cell::RefCell;
+    use std::io::{BufRead, BufReader, Write as _};
+    use std::path::{Path, PathBuf};
+    use std::process::{Child, Command, Stdio};
+    use std::rc::Rc;
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    use asrs_app::main_process;
+    use asrs_app::menus::accelerator::Accelerator;
+    use asrs_app::scenario;
+    use asrs_app::views::hub_host::{HubEntityHost, boot_messages};
+    use asrs_app::windows::{self, Rect, SatellitePlacement, WindowId, WindowKind, Windows};
+    use asrs_model::messages::{MainToHub, NamedMessage};
+    use asrs_parity::json::{self, Json};
+    use asrs_parity::{pixel, vectors};
+    use asrs_services::fs::RealFs;
+    use asrs_services::lifecycle::{AppPaths, MainState};
+    use asrs_services::path::PathStyle;
+    use asrs_services::window_manager::{OptionValue, Platform, WindowOptions};
+    use asrs_services::windows::WindowSystem;
+    use asrs_ui::gpui::{
+        AnyWindowHandle, App, AppContext, AsyncApp, Context, Entity, InteractiveElement,
+        IntoElement, Render, ScrollEvent, Styled, Window, div, px, size,
+    };
+    use asrs_ui::platform::probe::{self, MouseAction, WheelSample};
+    use asrs_ui::platform::{self, MenuPath, PopupEntry, PopupMenu};
+    use asrs_ui::selection::colors::ForcedActive;
+    use asrs_ui::theme::ThemeSource;
+
+    const ELECTRON_MAIN: &str = r#"
+const { app, BrowserWindow, Menu } = require("electron");
+const readline = require("readline");
+const out = (line) => process.stdout.write(line + "\n");
+const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const id = (win) => win.getNativeWindowHandle().readUInt32LE(0);
+app.whenReady().then(() => {
+  Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "App", submenu: [{ label: "Item" }] }]));
+  const parent = new BrowserWindow({ x: 60, y: 420, width: 1100, height: 650 });
+  let win = null;
+  out("ready " + process.versions.electron);
+  readline.createInterface({ input: process.stdin }).on("line", async (line) => {
+    const request = JSON.parse(line);
+    if (request.op === "open") {
+      const options = { ...request.options };
+      if (options.parent) options.parent = parent;
+      win = new BrowserWindow({ ...options, show: false });
+      if (!request.hub) win.setMenu(null);
+      win.setMenuBarVisibility(false);
+      win.once("ready-to-show", () => win.show());
+      await win.loadURL("data:text/html,<body style='margin:0;height:5000px'>");
+      await wait(900);
+      out("open " + JSON.stringify([id(win), ...win.getContentSize(), ...Object.values(win.getBounds())]));
+    } else if (request.op === "aspect") {
+      const [ratio, lock, width, height] = request.step;
+      win.setAspectRatio(lock ? ratio : 0);
+      if (ratio !== 0) win.setContentSize(width, height);
+      await wait(500);
+      out("aspect " + JSON.stringify(win.getContentSize()));
+    } else if (request.op === "visible") {
+      const seen = [win.isVisible()];
+      win.minimize();
+      await wait(1200);
+      seen.push(win.isVisible());
+      out("visible " + JSON.stringify(seen));
+    } else if (request.op === "wheel") {
+      await win.webContents.executeJavaScript(
+        "window.__wheel = []; window.addEventListener('wheel', (e) => window.__wheel.push([e.deltaX, e.deltaY, e.deltaMode])); true"
+      );
+      win.focus();
+      await wait(300);
+      out("wheel ready");
+    } else if (request.op === "wheels") {
+      out("wheels " + JSON.stringify(await win.webContents.executeJavaScript("window.__wheel")));
+    } else if (request.op === "close") {
+      win.destroy();
+      await wait(300);
+      out("closed");
+    } else {
+      app.quit();
+    }
+  });
+});
+"#;
+
+    fn electron_binary() -> PathBuf {
+        if let Some(path) = std::env::var_os("ASRS_ELECTRON") {
+            return PathBuf::from(path);
+        }
+        let package =
+            vectors::workspace_root().join("target/oracle/upstream/node_modules/electron");
+        let rel = std::fs::read_to_string(package.join("path.txt")).expect(
+            "Electron is not installed; run `cargo xtask oracle setup` or set ASRS_ELECTRON",
+        );
+        package.join("dist").join(rel.trim())
+    }
+
+    struct Electron {
+        child: RefCell<Child>,
+        lines: mpsc::Receiver<String>,
+    }
+
+    impl Electron {
+        fn start() -> Self {
+            let dir =
+                std::env::temp_dir().join(format!("asrs-windows-desktop-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).expect("temp dir");
+            std::fs::write(dir.join("main.js"), ELECTRON_MAIN).expect("main.js");
+            let mut child = Command::new(electron_binary())
+                .args(["--force-device-scale-factor=1"])
+                .arg(format!("--user-data-dir={}", dir.join("data").display()))
+                .arg(dir.join("main.js"))
+                .env_remove("ELECTRON_RUN_AS_NODE")
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("Electron");
+            let stdout = child.stdout.take().expect("stdout");
+            let (send, lines) = mpsc::channel();
+            std::thread::spawn(move || {
+                for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                    if send.send(line).is_err() {
+                        return;
+                    }
+                }
+            });
+            Electron {
+                child: RefCell::new(child),
+                lines,
+            }
+        }
+
+        async fn reply(&self, cx: &mut AsyncApp, prefix: &str) -> String {
+            for _ in 0..600 {
+                while let Ok(line) = self.lines.try_recv() {
+                    if let Some(rest) = line.strip_prefix(prefix) {
+                        return rest.to_owned();
+                    }
+                }
+                sleep(cx, 50).await;
+            }
+            panic!("Electron did not answer {prefix:?}");
+        }
+
+        async fn request(&self, cx: &mut AsyncApp, request: &str, prefix: &str) -> String {
+            {
+                let mut child = self.child.borrow_mut();
+                let stdin = child.stdin.as_mut().expect("stdin");
+                writeln!(stdin, "{request}").expect("request");
+            }
+            self.reply(cx, prefix).await
+        }
+
+        async fn numbers(&self, cx: &mut AsyncApp, request: &str, prefix: &str) -> Vec<f64> {
+            let reply = self.request(cx, request, prefix).await;
+            let values = json::parse(&reply).expect("json");
+            let values = values.as_array().expect("array").iter();
+            values.map(|v| v.as_f64().expect("number")).collect()
+        }
+    }
+
+    impl Drop for Electron {
+        fn drop(&mut self) {
+            let child = self.child.get_mut();
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+
+    async fn sleep(cx: &mut AsyncApp, ms: u64) {
+        cx.background_executor()
+            .timer(Duration::from_millis(ms))
+            .await;
+    }
+
+    type WheelLog = Rc<RefCell<Vec<(f64, f64)>>>;
+
+    #[derive(Default)]
+    struct Blank {
+        wheel: WheelLog,
+    }
+
+    impl Render for Blank {
+        fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
+            let wheel = self.wheel.clone();
+            div()
+                .size_full()
+                .on_scroll(move |event: &ScrollEvent, _, _| {
+                    let delta = platform::wheel_delta(event);
+                    wheel
+                        .borrow_mut()
+                        .push((-f64::from(delta.x), -f64::from(delta.y)));
+                })
+        }
+    }
+
+    #[derive(Default)]
+    struct Report {
+        failed: Vec<String>,
+        passed: usize,
+    }
+
+    impl Report {
+        fn check(&mut self, name: &str, ok: bool, detail: impl std::fmt::Display) {
+            println!("{} {name}: {detail}", if ok { "PASS" } else { "FAIL" });
+            if ok {
+                self.passed += 1;
+            } else {
+                self.failed.push(name.to_owned());
+            }
+        }
+    }
+
+    fn blank(_: &mut Window, cx: &mut App) -> Entity<Blank> {
+        cx.new(|_| Blank::default())
+    }
+
+    fn with_window<R>(
+        cx: &mut AsyncApp,
+        handle: AnyWindowHandle,
+        f: impl FnOnce(&mut Window) -> R,
+    ) -> R {
+        cx.update(|cx| handle.update(cx, |_, window, _| f(window)))
+            .expect("window")
+    }
+
+    fn handle_of(cx: &mut AsyncApp, id: WindowId) -> AnyWindowHandle {
+        cx.update(|cx| Windows::handle(cx, id)).expect("handle")
+    }
+
+    fn electron_options(kind: WindowKind, options: &WindowOptions) -> String {
+        let entries = options.electron_entries().into_iter().filter_map(|(k, v)| {
+            let json = match v {
+                OptionValue::Undefined => return None,
+                OptionValue::Bool(b) => Json::Bool(b),
+                OptionValue::Number(n) => Json::Number(n),
+                OptionValue::String(s) => Json::string(s),
+                OptionValue::Window(_) => Json::Bool(true),
+            };
+            Some((k, json))
+        });
+        Json::object([
+            ("op", Json::string("open")),
+            ("hub", Json::Bool(kind == WindowKind::Hub)),
+            ("options", Json::object(entries)),
+        ])
+        .to_compact()
+    }
+
+    const KINDS: [WindowKind; 11] = [
+        WindowKind::Hub,
+        WindowKind::Satellite,
+        WindowKind::EditRange,
+        WindowKind::EditFov,
+        WindowKind::UnitConversion,
+        WindowKind::RenameTab,
+        WindowKind::Export,
+        WindowKind::SourceListHelp,
+        WindowKind::Preferences,
+        WindowKind::Download,
+        WindowKind::Licenses,
+    ];
+
+    const SATELLITE: Rect = Rect {
+        x: 160.0,
+        y: 160.0,
+        width: 900.0,
+        height: 500.0,
+    };
+
+    fn open_kind(cx: &mut App, kind: WindowKind, parent: WindowId) -> (WindowId, WindowOptions) {
+        let mut manager = asrs_services::window_manager::WindowManager::new();
+        let (model_parent, _) = manager.create_hub(None);
+        if let Some(bounds) = Windows::manager(cx).bounds(parent) {
+            manager.set_bounds(model_parent, bounds);
+            manager.focus(model_parent);
+        }
+        let new = |opened| match opened {
+            asrs_services::window_manager::Opened::New(_, options) => options,
+            asrs_services::window_manager::Opened::Focus(_) => panic!("already open"),
+        };
+        let only = |opened: asrs_ui::gpui::Result<Option<(WindowId, Entity<Blank>)>>| {
+            opened.expect("open").expect("new").0
+        };
+        match kind {
+            WindowKind::Hub => (
+                windows::open_hub(cx, None, blank).expect("open").0,
+                manager.create_hub(None).1,
+            ),
+            WindowKind::Satellite => (
+                windows::open_satellite(cx, "s", SatellitePlacement::Saved(SATELLITE), blank)
+                    .expect("open")
+                    .0,
+                manager
+                    .create_satellite("s", SatellitePlacement::Saved(SATELLITE))
+                    .1,
+            ),
+            WindowKind::SourceListHelp => (
+                windows::open_source_list_help(cx, parent, blank)
+                    .expect("open")
+                    .0,
+                manager.open_source_list_help(model_parent).1,
+            ),
+            WindowKind::Preferences => (
+                only(windows::open_preferences(cx, parent, blank)),
+                new(manager.open_preferences(model_parent)),
+            ),
+            WindowKind::Download => (
+                only(windows::open_download(cx, parent, blank)),
+                new(manager.open_download(model_parent)),
+            ),
+            WindowKind::Licenses => (
+                only(windows::open_licenses(cx, parent, blank)),
+                new(manager.open_licenses(model_parent)),
+            ),
+            kind => (
+                windows::open_modal(cx, kind, parent, blank)
+                    .expect("open")
+                    .0,
+                manager.create_modal(kind, model_parent).1,
+            ),
+        }
+    }
+
+    async fn sizes(cx: &mut AsyncApp, electron: &Electron, report: &mut Report, parent: WindowId) {
+        for kind in KINDS {
+            let (id, options) = cx.update(|cx| open_kind(cx, kind, parent));
+            let name = format!("{kind:?} {}x{}", options.width, options.height);
+            let handle = handle_of(cx, id);
+            sleep(cx, 1200).await;
+            let ours = with_window(cx, handle, |w| probe::content_size(w)).expect("content size");
+            let bounds = with_window(cx, handle, |w| platform::window_bounds(w)).expect("bounds");
+            let number = with_window(cx, handle, |w| probe::window_number(w)).expect("window id");
+            let hints = with_window(cx, handle, |w| probe::size_hints(w, number)).expect("hints");
+            let backdrop = probe::backdrop_type(number);
+            let theirs = electron
+                .numbers(cx, &electron_options(kind, &options), "open ")
+                .await;
+            let number = theirs[0] as u32;
+            let their_hints =
+                with_window(cx, handle, |w| probe::size_hints(w, number)).expect("hints");
+            report.check(
+                &format!("{name} content size"),
+                ours == (theirs[1], theirs[2]),
+                format!("ours {ours:?}, Electron {:?}", &theirs[1..3]),
+            );
+            let bounds = [bounds.0, bounds.1, bounds.2, bounds.3];
+            report.check(
+                &format!("{name} bounds"),
+                bounds == theirs[3..7],
+                format!("ours {bounds:?}, Electron {:?}", &theirs[3..7]),
+            );
+            let frame = |window: u32| {
+                let [window, client] = probe::rects(window).expect("rects");
+                let side = |r: [i32; 4], i: usize| r[i + 2] - r[i];
+                [0, 1].map(|i| side(window, i) - side(client, i))
+            };
+            let ours = with_window(cx, handle, |w| probe::window_number(w)).expect("window id");
+            let content = |min: Option<(i32, i32)>, frame: [i32; 2]| {
+                min.map(|(w, h)| (w - frame[0], h - frame[1]))
+            };
+            let limited = options.min_width.is_some() || options.max_width.is_some();
+            if limited {
+                let mine = content(hints.min, frame(ours));
+                let other = content(their_hints.min, frame(number));
+                report.check(
+                    &format!("{name} minimum content size"),
+                    mine == other,
+                    format!("ours {mine:?}, Electron {other:?}"),
+                );
+            }
+            report.check(
+                &format!("{name} WS_EX_TOPMOST"),
+                hints.above == their_hints.above && hints.above == options.always_on_top,
+                format!("ours {}, Electron {}", hints.above, their_hints.above),
+            );
+            if kind == WindowKind::Hub {
+                report.check(
+                    "the hub's backdrop type",
+                    backdrop == Some(3),
+                    format!("{backdrop:?}"),
+                );
+            }
+            electron.request(cx, r#"{"op":"close"}"#, "closed").await;
+            cx.update(|cx| windows::close(cx, id));
+            sleep(cx, 400).await;
+        }
+    }
+
+    async fn aspects(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
+        const RATIOS: [(f64, bool); 7] = [
+            (1.0, true),
+            (5.0, true),
+            (0.5, true),
+            (16.0 / 9.0, true),
+            (16.0 / 9.0, false),
+            (0.0, false),
+            (1.3333, true),
+        ];
+        let rect = Rect {
+            x: 160.0,
+            y: 160.0,
+            width: 300.0,
+            height: 160.0,
+        };
+        let opened = cx
+            .update(|cx| windows::open_satellite(cx, "a", SatellitePlacement::Saved(rect), blank));
+        let (id, _) = opened.expect("open window");
+        let handle = handle_of(cx, id);
+        sleep(cx, 800).await;
+        let number = with_window(cx, handle, |w| probe::window_number(w)).expect("window id");
+        let request = r#"{"op":"open","options":{"x":160,"y":160,"width":300,"height":160,"minWidth":200,"minHeight":100,"resizable":true}}"#;
+        let theirs = electron.numbers(cx, request, "open ").await[0] as u32;
+        for (ratio, lock) in RATIOS {
+            let content =
+                with_window(cx, handle, |w| probe::content_size(w)).expect("content size");
+            let (width, height) = match ratio {
+                0.0 => (0.0, 0.0),
+                _ => main_process::content_size(content, ratio).expect("a size"),
+            };
+            let message = (ratio != 0.0).then_some(ratio);
+            cx.update(|cx| main_process::set_aspect_ratio(cx, id, message, lock));
+            let request = format!(r#"{{"op":"aspect","step":[{ratio},{lock},{width},{height}]}}"#);
+            let size = electron.numbers(cx, &request, "aspect ").await;
+            sleep(cx, 500).await;
+            let ours = with_window(cx, handle, |w| probe::content_size(w)).expect("content size");
+            report.check(
+                &format!("satellite ratio {ratio} lock {lock} content"),
+                [ours.0, ours.1] == size[..],
+                format!("ours {ours:?}, Electron {size:?}"),
+            );
+            let mut answers = Vec::new();
+            for edge in 1..=8 {
+                let dragged = [160, 160, 160 + 431, 160 + 277];
+                answers.push((
+                    edge,
+                    probe::sizing(number, edge, dragged),
+                    probe::sizing(theirs, edge, dragged),
+                ));
+            }
+            let differing: Vec<_> = answers.iter().filter(|(_, a, b)| a != b).collect();
+            report.check(
+                &format!("satellite ratio {ratio} lock {lock} live resize"),
+                differing.is_empty(),
+                format!("(edge, ours, Electron) {differing:?}"),
+            );
+        }
+        let mut ours = vec![cx.update(|cx| Windows::is_visible(cx, id))];
+        with_window(cx, handle, |w| w.minimize_window());
+        sleep(cx, 1200).await;
+        ours.push(cx.update(|cx| Windows::is_visible(cx, id)));
+        let reply = electron
+            .request(cx, r#"{"op":"visible"}"#, "visible ")
+            .await;
+        report.check(
+            "isVisible() shown and minimized",
+            reply == format!("[{},{}]", ours[0], ours[1]),
+            format!("ours {ours:?}, Electron {reply}"),
+        );
+        electron.request(cx, r#"{"op":"close"}"#, "closed").await;
+        cx.update(|cx| windows::close(cx, id));
+        sleep(cx, 400).await;
+    }
+
+    async fn wheel(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
+        const UNITS: [[i32; 2]; 9] = [
+            [120, 0],
+            [-120, 0],
+            [-360, 0],
+            [40, 0],
+            [-40, 0],
+            [-80, 0],
+            [0, 120],
+            [0, -120],
+            [0, 40],
+        ];
+        let rect = Rect {
+            x: 1300.0,
+            y: 200.0,
+            width: 400.0,
+            height: 300.0,
+        };
+        let opened = cx
+            .update(|cx| windows::open_satellite(cx, "w", SatellitePlacement::Saved(rect), blank));
+        let (id, view) = opened.expect("open window");
+        let handle = handle_of(cx, id);
+        let log = cx.update(|cx| view.read(cx).wheel.clone());
+        let request = r#"{"op":"open","options":{"x":1300,"y":700,"width":400,"height":300}}"#;
+        let opened = electron.numbers(cx, request, "open ").await;
+        let theirs = (opened[3] + 200.0, opened[4] + 150.0);
+        electron
+            .request(cx, r#"{"op":"wheel"}"#, "wheel ready")
+            .await;
+        let (x, y, w, h) = with_window(cx, handle, |w| platform::window_bounds(w)).expect("bounds");
+        for (x, y) in [(x + w / 2.0, y + h / 2.0), theirs] {
+            probe::post_mouse(MouseAction::Drag, x - 3.0, y);
+            sleep(cx, 200).await;
+            for delta in UNITS {
+                probe::post_wheel_at(
+                    x,
+                    y,
+                    &WheelSample {
+                        delta,
+                        ..WheelSample::default()
+                    },
+                );
+                sleep(cx, 700).await;
+            }
+        }
+        let reply = electron.request(cx, r#"{"op":"wheels"}"#, "wheels ").await;
+        let dom = json::parse(&reply).expect("json");
+        let number = |v: &Json, i: usize| v.as_array().expect("event")[i].as_f64().expect("number");
+        let ours = log.borrow().clone();
+        let events: Vec<(f64, f64)> = dom
+            .as_array()
+            .expect("events")
+            .iter()
+            .map(|e| (number(e, 0) + 0.0, number(e, 1) + 0.0))
+            .collect();
+        let plain: Vec<(f64, f64)> = ours.iter().map(|(x, y)| (x + 0.0, y + 0.0)).collect();
+        report.check(
+            "wheel notches and 40 units",
+            !plain.is_empty() && plain == events,
+            format!("ours {plain:?}, Chromium {events:?}"),
+        );
+        electron.request(cx, r#"{"op":"close"}"#, "closed").await;
+        cx.update(|cx| windows::close(cx, id));
+        sleep(cx, 400).await;
+    }
+
+    fn menu() -> PopupMenu {
+        let inner = PopupMenu::new()
+            .entry(PopupEntry::new("Inner"))
+            .entry(PopupEntry::new("Inner two"));
+        PopupMenu::new()
+            .entry(PopupEntry::new("First"))
+            .entry(PopupEntry::new("Disabled").enabled(false))
+            .separator()
+            .entry(PopupEntry::new("More").submenu(inner))
+            .entry(PopupEntry::new("Last"))
+    }
+
+    const ESCAPE: u32 = 0x1b;
+    const DOWN: u32 = 0x28;
+    const RETURN: u32 = 0x0d;
+    const CONTROL: u32 = 0x11;
+    const SHIFT: u32 = 0x10;
+
+    fn rich_menu() -> PopupMenu {
+        menu()
+            .entry(
+                PopupEntry::new("&Open\u{2026}")
+                    .shortcut("Ctrl+O")
+                    .checked(true),
+            )
+            .entry(PopupEntry::new("Red").swatch([0xd0, 0x20, 0x18]))
+    }
+
+    async fn menus(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
+        let rich = rich_menu();
+        let read = probe::native_menu_roundtrip(&rich);
+        report.check(
+            "the native menu reads back as it was built",
+            read.as_ref() == Some(&rich),
+            format!("{read:?}"),
+        );
+        let handle = handle_of(cx, hub);
+        with_window(cx, handle, |w| w.activate_window());
+        sleep(cx, 800).await;
+        let number = with_window(cx, handle, |w| probe::window_number(w)).expect("window id");
+        let [_, client] = probe::rects(number).expect("rects");
+        let (x, y) = (f64::from(client[0]), f64::from(client[1]));
+        let closed: Rc<RefCell<Vec<Option<MenuPath>>>> = Rc::default();
+        let names = [
+            "a click chooses an entry",
+            "a click on a disabled entry chooses nothing until Escape closes the menu",
+            "a click outside closes the menu",
+            "keys drive the menu",
+            "a submenu takes keys",
+            "closePopup",
+        ];
+        for (index, name) in names.into_iter().enumerate() {
+            let sink = closed.clone();
+            cx.update(|cx| {
+                handle.update(cx, |_, window, cx| {
+                    platform::popup_menu(window, cx, menu(), 100, 120, move |path, _| {
+                        sink.borrow_mut().push(path);
+                    });
+                })
+            })
+            .expect("window");
+            sleep(cx, 900).await;
+            let frames = probe::menu_window_frames();
+            let Some(frame) = frames.first().copied() else {
+                report.check(&format!("{name}: opens"), false, "no menu window");
+                continue;
+            };
+            let at = frame.x == x + 100.0 && frame.y == y + 120.0;
+            report.check(
+                &format!("{name}: opens at its position"),
+                at,
+                format!("{frame:?}"),
+            );
+            let row = frame.height / 5.0;
+            let want = match index {
+                0 => {
+                    click(cx, (frame.x + 40.0, frame.y + row / 2.0)).await;
+                    Some(vec![0])
+                }
+                1 => {
+                    click(cx, (frame.x + 40.0, frame.y + 1.6 * row)).await;
+                    let open = !probe::menu_window_frames().is_empty();
+                    report.check("a disabled entry keeps the menu open", open, "");
+                    probe::post_keys(&[ESCAPE]);
+                    None
+                }
+                2 => {
+                    click(cx, (x + 700.0, y + 450.0)).await;
+                    None
+                }
+                3 => {
+                    for key in [DOWN, DOWN, DOWN, DOWN, RETURN] {
+                        probe::post_keys(&[key]);
+                        sleep(cx, 200).await;
+                    }
+                    Some(vec![4])
+                }
+                4 => {
+                    for key in [DOWN, DOWN, DOWN, RETURN, DOWN, RETURN] {
+                        probe::post_keys(&[key]);
+                        sleep(cx, 300).await;
+                    }
+                    Some(vec![3, 1])
+                }
+                _ => {
+                    with_window(cx, handle, |w| platform::close_popup_menu(w));
+                    None
+                }
+            };
+            sleep(cx, 900).await;
+            let left = probe::menu_window_frames().len();
+            let got = closed.take();
+            report.check(
+                name,
+                got == [want] && left == 0,
+                format!("{got:?}, {left} menus left"),
+            );
+        }
+    }
+
+    /// The accelerator table of the hidden menu bar, on real keys.
+    async fn accelerators(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
+        let cases: [(&str, &[u32]); 4] = [
+            ("CommandOrControl+Plus", &[CONTROL, SHIFT, 0xbb]),
+            ("CmdOrCtrl+Shift+O", &[CONTROL, SHIFT, 'O' as u32]),
+            ("CmdOrCtrl+,", &[CONTROL, 0xbc]),
+            ("F11", &[0x7a]),
+        ];
+        let table = cases
+            .iter()
+            .enumerate()
+            .map(|(i, (accelerator, _))| {
+                let parsed =
+                    Accelerator::parse(accelerator, Platform::Windows).expect("accelerator");
+                (parsed.gpui_keystroke().expect("keystroke"), vec![i])
+            })
+            .collect();
+        let seen: Rc<RefCell<Vec<MenuPath>>> = Rc::default();
+        let sink = seen.clone();
+        cx.update(|cx| {
+            asrs_ui::menu::install_accelerators(cx, table, move |path, _, _| {
+                sink.borrow_mut().push(path);
+            });
+        });
+        let handle = handle_of(cx, hub);
+        with_window(cx, handle, |w| w.activate_window());
+        sleep(cx, 600).await;
+        for (i, (accelerator, keys)) in cases.iter().enumerate() {
+            probe::post_keys(keys);
+            sleep(cx, 400).await;
+            let got = seen.take();
+            report.check(
+                &format!("accelerator {accelerator}"),
+                got == [vec![i]],
+                format!("{got:?}"),
+            );
+        }
+    }
+
+    async fn click(cx: &mut AsyncApp, (x, y): (f64, f64)) {
+        for action in [MouseAction::Drag, MouseAction::Down, MouseAction::Up] {
+            probe::post_mouse(action, x, y);
+            sleep(cx, 250).await;
+        }
+    }
+
+    struct NoScreen;
+
+    impl WindowSystem for NoScreen {
+        fn window_bounds(&self, _: f64) -> Option<Rect> {
+            None
+        }
+
+        fn displays(&self) -> Vec<Rect> {
+            vec![self.primary_display()]
+        }
+
+        fn primary_display(&self) -> Rect {
+            Rect {
+                x: 0.0,
+                y: 0.0,
+                width: 1280.0,
+                height: 800.0,
+            }
+        }
+    }
+
+    /// What main sends the hub of a first launch in the light theme.
+    fn fresh_boot(user_data: &Path) -> Vec<NamedMessage<MainToHub>> {
+        std::fs::create_dir_all(user_data).expect("userData");
+        std::fs::write(user_data.join("prefs.json"), r#"{"theme":"light"}"#).expect("prefs.json");
+        let path = |path: &Path| path.to_str().expect("path").to_owned();
+        let assets = vectors::workspace_root().join("reference/AdvantageScope/bundledAssets");
+        let paths = AppPaths {
+            style: PathStyle::host(),
+            user_data: path(user_data),
+            temp: path(&user_data.join("temp")),
+            bundled_assets: path(&assets),
+            packaged: false,
+        };
+        let started = MainState::start(&RealFs, &NoScreen, paths, main_process::process_platform());
+        let (main, _) = started.unwrap_or_else(|e| panic!("{e:?}"));
+        let preferences = main
+            .preferences(&RealFs)
+            .unwrap_or_else(|e| panic!("{e:?}"));
+        boot_messages(main.assets.set_assets_data(), true, preferences, Vec::new())
+    }
+
+    /// The hub as `windows::open_hub` opens it, drawn by GPUI in its own window, against the capture
+    /// scenario mode makes of the same page.
+    async fn own_window(cx: &mut AsyncApp, report: &mut Report) {
+        let root = vectors::workspace_root();
+        let out = std::env::temp_dir().join(format!("asrs-own-window-{}", std::process::id()));
+        let status = Command::new(std::env::current_exe().expect("test binary"))
+            .arg("--capture")
+            .arg(&out)
+            .status()
+            .expect("the capture process");
+        report.check("the scenario runs", status.success(), status);
+        cx.update(|cx| {
+            cx.set_global(ThemeSource::Light);
+            cx.set_global(ForcedActive(false));
+        });
+        let opened = cx.update(|cx| {
+            windows::open_hub(cx, None, |window, cx| {
+                let boot = fresh_boot(&out.join("own"));
+                HubEntityHost::open_with(window, false, boot, None, cx)
+            })
+        });
+        let handle = handle_of(cx, opened.expect("hub").0);
+        let number = with_window(cx, handle, |w| probe::window_number(w)).expect("window id");
+        for scale in [1u32, 2] {
+            probe::change_scale(number, scale);
+            with_window(cx, handle, |w| w.resize(size(px(1100.0), px(650.0))));
+            sleep(cx, 6000).await;
+            let own = with_window(cx, handle, |w| w.render_to_image()).expect("render_to_image");
+            let file = out.join(format!("{scale}x-light/captures/launch.png"));
+            let scenario = pixel::read_png(&file).expect("the scenario's capture");
+            let same_size = (own.width(), own.height()) == (scenario.width, scenario.height);
+            let differing = own
+                .as_raw()
+                .chunks(4)
+                .zip(scenario.data.chunks(4))
+                .filter(|(a, b)| a != b)
+                .count();
+            report.check(
+                &format!("the hub's own window at {scale}x equals the scenario's capture"),
+                same_size && differing == 0,
+                format!("{}x{}, {differing} px differ", own.width(), own.height()),
+            );
+        }
+        let _ = std::fs::remove_dir_all(&out);
+    }
+
+    pub fn capture(out: &str) {
+        let root = vectors::workspace_root();
+        let scenario = root.join("parity/scenarios/hub-empty.json");
+        let assets = root.join("reference/AdvantageScope/bundledAssets");
+        let args = [
+            "--parity-scenario",
+            scenario.to_str().expect("path"),
+            "--out",
+            out,
+            "--bundled-assets",
+            assets.to_str().expect("path"),
+            "--theme",
+            "light",
+        ];
+        scenario::run(&args.map(str::to_owned)).unwrap_or_else(|e| panic!("{e}"));
+    }
+
+    pub fn run() {
+        asrs_ui::gpui::application().run(|cx: &mut App| {
+            asrs_ui::init(cx);
+            windows::init(cx);
+            cx.spawn(async move |cx| {
+                let electron = Electron::start();
+                let version = electron.reply(cx, "ready ").await;
+                let mut report = Report::default();
+                report.check("Electron is upstream's", version == "39.2.7", &version);
+                let hub = cx
+                    .update(|cx| windows::open_hub(cx, None, blank))
+                    .expect("hub")
+                    .0;
+                sleep(cx, 1500).await;
+                menus(cx, &mut report, hub).await;
+                accelerators(cx, &mut report, hub).await;
+                wheel(cx, &electron, &mut report).await;
+                aspects(cx, &electron, &mut report).await;
+                sizes(cx, &electron, &mut report, hub).await;
+                drop(electron);
+                own_window(cx, &mut report).await;
+                println!(
+                    "windows desktop: {} passed, {} failed {:?}",
+                    report.passed,
+                    report.failed.len(),
+                    report.failed
+                );
+                std::process::exit(i32::from(!report.failed.is_empty()));
+            })
+            .detach();
+        });
+    }
+}
+
+fn main() {
+    if asrs_parity::ci::skip_in_ci("windows desktop", "a desktop and the oracle's Electron") {
+        return;
+    }
+    #[cfg(not(windows))]
+    println!("windows desktop: skipped on this platform");
+    #[cfg(windows)]
+    {
+        let args: Vec<String> = std::env::args().collect();
+        match args.iter().position(|a| a == "--capture") {
+            Some(at) => desktop::capture(&args[at + 1]),
+            None => desktop::run(),
+        }
+    }
+}
