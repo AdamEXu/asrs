@@ -217,8 +217,8 @@ returns comes from the C library's `fmod`). It lists `<os>-<arch>` tags and make
 `<id>/<tag>` per platform, which only a host of that platform generates and checks for
 content; elsewhere `gen` skips it and warns when it is stale, and `gen --check` checks only
 its manifest entry. Generate one from the dev machine with
-`cargo xtask host <name> gen <id>`, which syncs, runs `oracle gen` on the host and copies the
-vector and its manifest entry back. Rust tests load the current platform's vector with
+`cargo xtask host <name> gen <id>` (`windows` is x86_64, `windows-arm` and `linux` aarch64), which
+syncs, runs `oracle gen` on the host and copies the vector and its manifest entry back. Rust tests load the current platform's vector with
 `asrs_parity::vectors::platform_vector("<id>")`.
 
 `gen` with no ids regenerates every vector and drops manifest entries and files no spec

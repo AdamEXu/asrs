@@ -19,8 +19,8 @@ records which rasterizers are in use).
 
   windows      Windows 11 x86_64 (QEMU), the Windows reference: ~/vms/win11-x64 on omarchy
                (ASRS_WINDOWS_VM; README.md there). ASRS_WINDOWS_VIA is the ssh destination of the
-               machine it runs on, empty when that is this one. Both hops use the VM's own vm.sh,
-               which knows the port and the key. `start` takes the VM's lock directory `in-use`
+               machine it runs on, empty when that is this one. The VM's own vm.sh does the rest: it
+               knows the port and the key. `start` takes the VM's lock directory `in-use`
                for this ASRS_HOST_DIR and `stop` gives it back; a lock of anyone else's is
                refused. Start it cold (`restart`) for captures: once Windows' shell has been used
                for a while its Snap Layouts flyout can cover a hovered caption button.
@@ -33,6 +33,11 @@ records which rasterizers are in use).
                :0, 2880x1800 so that a 2200x1300 window (1100x650 at scale 2) fits. SSH
                admin@$(tart ip asrs-linux) with /Volumes/T9/asrs/hosts/asrs-linux/id_ed25519
                (ASRS_LINUX_KEYS).
+
+Another Linux machine can run the `local` commands and the suites with the same fonts and a
+display of the same size, without touching its own desktop: unpack the fonts with
+xtask/hosts/linux/fonts.sh and run `FONTCONFIG_FILE=<dir>/gray.conf
+xtask/hosts/linux/display.sh <command>`. It is a check on another architecture, not a reference.
 
 Checkouts are C:\work\asrs and ~/asrs, oracle packs C:\work\asrs-pack.tar.zst and
 ~/asrs-pack.tar.zst. ASRS_HOST_DIR=<name> replaces `asrs` in those paths (and suffixes the Windows
