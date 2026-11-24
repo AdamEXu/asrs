@@ -74,13 +74,16 @@ use asrs_model::preferences::{Preferences, Timestamps};
 use asrs_model::selection::{Selection, SelectionMode, TimeSupplier};
 use asrs_model::source_list::Undisplayed;
 use asrs_model::source_list::{
-    Env, ItemView, Length, ListButton, ListInput, ListPointer, Rect, SourceList, SourceListDom,
+    ClearPrompt, Env, ItemView, Length, ListButton, ListInput, ListPointer, Rect, SourceList,
+    SourceListDom, TypePrompt,
 };
 use asrs_model::source_list_config::{
     SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
 };
 use asrs_model::tab_controller::TabController;
 use asrs_parity::Value;
+use asrs_parity::json::Json;
+use asrs_parity::tally::Tally;
 use asrs_parity::vectors::{Record, load, vectors_dir};
 use asrs_tabs::cx::TabCx;
 use asrs_tabs::line_graph::{
@@ -499,6 +502,63 @@ fn encode(v: &JsValue) -> String {
     js_json::from_js(v).encode()
 }
 
+/// Kinds this replay does not model, with the suite that compares them. `state`, `command`
+/// and `selection` are window-level captures spanning tabs and widgets outside this harness;
+/// the fixtures' only `eval` is `window.tabs.getActiveFields()`, likewise across every tab.
+const COVERED: [(&str, &str); 5] = [
+    ("state", "asrs-hub's dom_tabs"),
+    ("command", "asrs-hub's dom_tabs"),
+    ("eval", "asrs-hub's dom_tabs"),
+    ("selection", "asrs-hub's selection harnesses"),
+    ("main:show", "the hub window replay (asrs-hub's dom_tabs)"),
+];
+
+fn kind_of(record: &Record) -> String {
+    for key in ["lg", "main"] {
+        if let Some(name) = record.string(key) {
+            return format!("{key}:{name}");
+        }
+    }
+    match &record.json {
+        Json::Object(pairs) if !pairs.is_empty() => pairs[0].0.to_string_lossy(),
+        _ => format!("line {}", record.line),
+    }
+}
+
+/// Counts a record the harness consumed as compared, unless its kind is [`COVERED`].
+fn mark(tally: &mut Tally, record: &Record) {
+    let kind = kind_of(record);
+    if !COVERED.iter().any(|(k, _)| *k == kind) {
+        tally.compared(&kind);
+    }
+}
+
+fn rect_js(rect: Rect) -> JsValue {
+    let mut o = JsObject::new();
+    o.insert("x", JsValue::Number(rect.x));
+    o.insert("y", JsValue::Number(rect.y));
+    o.insert("width", JsValue::Number(rect.width));
+    o.insert("height", JsValue::Number(rect.height));
+    JsValue::Object(o)
+}
+
+/// What `list_cx` turns a prompt into, for `host.sent`.
+fn type_prompt_message(prompt: &TypePrompt) -> NamedMessage<HubToMain> {
+    let mut o = JsObject::new();
+    o.insert("uuid", JsValue::string(&prompt.uuid));
+    o.insert("config", prompt.config.to_js());
+    o.insert("state", prompt.state.to_js());
+    o.insert("rect", rect_js(prompt.rect));
+    NamedMessage::new(HubToMain::SourceListTypePrompt, JsValue::Object(o))
+}
+
+fn clear_prompt_message(prompt: &ClearPrompt) -> NamedMessage<HubToMain> {
+    let mut o = JsObject::new();
+    o.insert("uuid", JsValue::string(&prompt.uuid));
+    o.insert("rect", rect_js(prompt.rect));
+    NamedMessage::new(HubToMain::SourceListClearPrompt, JsValue::Object(o))
+}
+
 fn error_text(e: &JsError) -> String {
     if e.name.is_empty() {
         e.message.clone()
@@ -691,10 +751,6 @@ impl Harness {
         Ok(())
     }
 
-    fn list_of(&self, sl: usize) -> Option<(usize, ListId)> {
-        self.bound.get(self.list_uuids.get(&sl)?).copied()
-    }
-
     fn set_context(&mut self, record: &Record) -> Result<(), String> {
         if let Ok(Value::Bool(dark)) = record.value("dark") {
             self.host.dark = dark;
@@ -733,7 +789,13 @@ impl Harness {
         }
     }
 
-    fn bracket(&mut self, record: &Record, inner: Vec<Record>, end: &Record) -> Result<(), String> {
+    fn bracket(
+        &mut self,
+        record: &Record,
+        inner: Vec<Record>,
+        end: &Record,
+        tally: &mut Tally,
+    ) -> Result<(), String> {
         let id = lg_id(record)?;
         let name = record.string("lg").unwrap_or_default();
         self.set_context(record)?;
@@ -796,7 +858,7 @@ impl Harness {
         self.stats.calls += 1;
         same_error(&name, threw(end), result.err().map(|e| error_text(&e)))?;
         for r in rest {
-            self.record(r)?;
+            self.record(r, tally)?;
         }
         Ok(())
     }
@@ -969,16 +1031,24 @@ impl Harness {
             }
             "promptType" => {
                 let i = index(at(&args, 1))?;
+                let mut prompt = None;
                 controller.with_list(list, |l, _| {
-                    l.prompt_type(Undisplayed::dom(), i);
+                    prompt = l.prompt_type(Undisplayed::dom(), i);
                 });
+                if let Some(prompt) = prompt {
+                    host.sent.push(type_prompt_message(&prompt));
+                }
                 None
             }
             "contextMenu" => {
                 let (i, x, y) = (index(at(&args, 1))?, num(at(&args, 2))?, num(at(&args, 3))?);
+                let mut prompt = None;
                 controller.with_list(list, |l, _| {
-                    l.context_menu(i, x, y);
+                    prompt = l.context_menu(i, x, y);
                 });
+                if let Some(prompt) = prompt {
+                    host.sent.push(type_prompt_message(&prompt));
+                }
                 None
             }
             "typeResponse" => {
@@ -1014,9 +1084,13 @@ impl Harness {
                 None
             }
             "clearClick" => {
+                let mut prompt = None;
                 controller.with_list(list, |l, _| {
-                    l.request_clear(Undisplayed::dom());
+                    prompt = Some(l.request_clear(Undisplayed::dom()));
                 });
+                if let Some(prompt) = prompt {
+                    host.sent.push(clear_prompt_message(&prompt));
+                }
                 None
             }
             "clearResponse" => {
@@ -1219,6 +1293,7 @@ impl Harness {
         record: &Record,
         kind: &str,
         records: &mut std::slice::Iter<'_, Record>,
+        tally: &mut Tally,
     ) -> Result<(), String> {
         match kind {
             "create" => {
@@ -1361,6 +1436,7 @@ impl Harness {
                     let next = records
                         .next()
                         .ok_or_else(|| format!("{name} never ended"))?;
+                    mark(tally, next);
                     if next.string("lg").as_deref() == Some(name)
                         && next.string("phase").as_deref() == Some("end")
                         && next.field("id").cloned() == id
@@ -1369,23 +1445,24 @@ impl Harness {
                     }
                     inner.push(next.clone());
                 };
-                self.bracket(record, inner, end)
+                self.bracket(record, inner, end, tally)
             }
         }
     }
 
-    fn record(&mut self, record: &Record) -> Result<(), String> {
+    fn record(&mut self, record: &Record, tally: &mut Tally) -> Result<(), String> {
         let mut empty = [].iter();
-        self.record_in(record, &mut empty)
+        self.record_in(record, &mut empty, tally)
     }
 
     fn record_in(
         &mut self,
         record: &Record,
         records: &mut std::slice::Iter<'_, Record>,
+        tally: &mut Tally,
     ) -> Result<(), String> {
         if let Some(kind) = record.string("lg") {
-            return self.handle_lg(record, &kind, records);
+            return self.handle_lg(record, &kind, records, tally);
         }
         if let Some(ops) = record.field("slLog") {
             let ops = Value::from_json(ops).map_err(|e| e.0)?;
@@ -1395,6 +1472,16 @@ impl Harness {
             let value = js(record, "slTypeMemory")?;
             self.host.memory = SourceListTypeMemoryEntry::memory_from_js(&value)
                 .ok_or("slTypeMemory does not parse")?;
+            return Ok(());
+        }
+        if record.field("slMemory").is_some() {
+            let expected = encode(&js(record, "slMemory")?);
+            let actual = encode(&self.host.memory.to_js());
+            if expected != actual {
+                return Err(format!(
+                    "type memory\n upstream {expected}\n port     {actual}"
+                ));
+            }
             return Ok(());
         }
         if record.string("main").as_deref() == Some("ask-edit-axis") {
@@ -1415,6 +1502,40 @@ impl Harness {
         if record.string("main").as_deref() == Some("update-preferences") {
             return self.help_timer(record);
         }
+        if let Some(name) = record.string("main")
+            && matches!(
+                name.as_str(),
+                "source-list-type-prompt" | "source-list-clear-prompt"
+            )
+        {
+            let want = if name == "source-list-type-prompt" {
+                HubToMain::SourceListTypePrompt
+            } else {
+                HubToMain::SourceListClearPrompt
+            };
+            // `rect` comes from layout reads the `Undisplayed` dom answers as zero.
+            let mut expected = js(record, "data")?;
+            expected.as_object_mut().and_then(|o| o.remove("rect"));
+            let pos = self
+                .host
+                .sent
+                .iter()
+                .position(|m| m.name == want)
+                .ok_or_else(|| format!("upstream sent a {name}, the port did not"))?;
+            let mut actual = self.host.sent.remove(pos).data;
+            actual.as_object_mut().and_then(|o| o.remove("rect"));
+            let (expected, actual) = (encode(&expected), encode(&actual));
+            if expected != actual {
+                return Err(format!("{name}\n upstream {expected}\n port     {actual}"));
+            }
+            return Ok(());
+        }
+        if let Some(name) = record.string("main") {
+            return match name.as_str() {
+                "show" => Ok(()),
+                other => Err(format!("the main message {other} is not modeled here")),
+            };
+        }
         if record.string("exception").as_deref() == Some("event") {
             let error = record.string("error").unwrap_or_default();
             return match self.pending_errors.pop_front() {
@@ -1423,6 +1544,11 @@ impl Harness {
                     "event exception: upstream {error:?}, port {port:?}"
                 )),
             };
+        }
+        if record.field("exception").is_some() {
+            // An upstream async artifact (an unhandled promise rejection after an op
+            // whose `threw` was already compared); the port's surface cannot raise one.
+            return Ok(());
         }
         if record.field("capture").is_some() {
             if self.pending_prompt.is_some() {
@@ -1434,9 +1560,17 @@ impl Harness {
                     self.pending_errors
                 ));
             }
+            return Ok(());
+        }
+        if record.field("state").is_some()
+            || record.field("command").is_some()
+            || record.field("eval").is_some()
+            || record.field("selection").is_some()
+        {
+            return Ok(());
         }
         let Some(sl) = record.field("sl") else {
-            return Ok(());
+            return Err(format!("record kind {:?} is not modeled", kind_of(record)));
         };
         let sl = index(&js_json::to_js(&Value::from_json(sl).map_err(|e| e.0)?)?)?;
         if record.field("create").is_some() {
@@ -1450,7 +1584,10 @@ impl Harness {
             self.list_uuids.insert(sl, uuid);
             return Ok(());
         }
-        let Some((ctrl, list)) = self.list_of(sl) else {
+        let Some(uuid) = self.list_uuids.get(&sl) else {
+            return Err(format!("source list {sl} was never created"));
+        };
+        let Some((ctrl, list)) = self.bound.get(uuid).copied() else {
             return Ok(());
         };
         if record.field("op").is_some() {
@@ -1470,8 +1607,9 @@ impl Harness {
                     "{list:?} list dump\n upstream {expected}\n port     {actual}"
                 ));
             }
+            return Ok(());
         }
-        Ok(())
+        Err("sl record without create, op or dump".to_owned())
     }
 }
 
@@ -1578,20 +1716,67 @@ fn case_ids() -> Vec<String> {
 
 fn run_case(id: &str) -> Result<Stats, String> {
     let records = load(id)?;
+    let mut tally = Tally::new(id, &records, kind_of);
+    for (kind, by) in COVERED {
+        if records.iter().any(|r| kind_of(r) == kind) {
+            tally.covered_elsewhere(kind, by);
+        }
+    }
     let mut harness = Harness::new();
     let mut iter = records.iter();
+    let mut result = Ok(());
     while let Some(record) = iter.next() {
-        harness
-            .record_in(record, &mut iter)
-            .map_err(|e| format!("{id} line {}: {e}", record.line))?;
+        match harness.record_in(record, &mut iter, &mut tally) {
+            Ok(()) => mark(&mut tally, record),
+            Err(e) => {
+                result = Err(format!("{id} line {}: {e}", record.line));
+                break;
+            }
+        }
     }
-    if harness.pending_prompt.is_some() {
-        return Err(format!("{id}: the port asked to edit an axis at the end"));
+    let result = result.and_then(|()| {
+        if harness.pending_prompt.is_some() {
+            return Err(format!("{id}: the port asked to edit an axis at the end"));
+        }
+        if harness.controllers.is_empty() {
+            return Err(format!("{id}: no line graph controller was recorded"));
+        }
+        let unsent = harness
+            .host
+            .sent
+            .iter()
+            .filter(|m| {
+                !matches!(
+                    m.name,
+                    HubToMain::SaveState
+                        | HubToMain::SaveTypeMemory
+                        | HubToMain::UpdateTouchBarSlider
+                )
+            })
+            .count();
+        if unsent > 0 {
+            return Err(format!(
+                "{id}: the port sent {unsent} main messages upstream never saw"
+            ));
+        }
+        Ok(harness.stats)
+    });
+    match result {
+        Err(e) => {
+            std::mem::forget(tally);
+            Err(e)
+        }
+        Ok(stats) => {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tally.finish())).map_err(
+                |p| {
+                    p.downcast::<String>()
+                        .map(|s| *s)
+                        .unwrap_or_else(|_| "tally failed".to_owned())
+                },
+            )?;
+            Ok(stats)
+        }
     }
-    if harness.controllers.is_empty() {
-        return Err(format!("{id}: no line graph controller was recorded"));
-    }
-    Ok(harness.stats)
 }
 
 #[test]

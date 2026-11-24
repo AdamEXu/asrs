@@ -71,6 +71,8 @@ use asrs_model::source_list_config::{
 use asrs_model::tab_type::TabType;
 use asrs_parity::Value;
 use asrs_parity::geometry::{GeometryRecord, ScriptedReads};
+use asrs_parity::json::Json;
+use asrs_parity::tally::Tally;
 use asrs_parity::vectors::{Record, load, vectors_dir};
 
 const CASES: &str = "dom/source-list";
@@ -436,6 +438,32 @@ fn keys(v: &JsValue) -> Result<Vec<JsString>, String> {
 
 fn encode(v: &JsValue) -> String {
     js_json::from_js(v).encode()
+}
+
+/// Kinds this replay does not model, with the suite that compares them: the window's `show`
+/// and the field controllers' coordinate warnings, none of which a bare source list sends.
+const COVERED: [(&str, &str); 3] = [
+    ("main:show", "asrs-hub's dom_tabs"),
+    ("main:frc-coordinate-system-warning", "asrs-hub's dom_tabs"),
+    ("main:ftc-coordinate-system-warning", "asrs-hub's dom_tabs"),
+];
+
+fn kind_of(record: &Record) -> String {
+    if let Some(name) = record.string("main") {
+        return format!("main:{name}");
+    }
+    match &record.json {
+        Json::Object(pairs) if !pairs.is_empty() => pairs[0].0.to_string_lossy(),
+        _ => format!("line {}", record.line),
+    }
+}
+
+/// Counts a record the harness consumed as compared, unless its kind is [`COVERED`].
+fn mark(tally: &mut Tally, record: &Record) {
+    let kind = kind_of(record);
+    if !COVERED.iter().any(|(k, _)| *k == kind) {
+        tally.compared(&kind);
+    }
 }
 
 fn item_dump(view: &ItemView) -> JsValue {
@@ -997,8 +1025,16 @@ impl Harness {
             }
             return Ok(());
         }
+        if let Some(name) = record.string("main") {
+            return match name.as_str() {
+                "show" | "frc-coordinate-system-warning" | "ftc-coordinate-system-warning" => {
+                    Ok(())
+                }
+                other => Err(format!("the main message {other} is not modeled here")),
+            };
+        }
         let Some(id) = record.field("sl") else {
-            return Ok(());
+            return Err(format!("record kind {:?} is not modeled", kind_of(record)));
         };
         let id = Value::from_json(id)
             .map_err(|e| e.0)?
@@ -1057,7 +1093,7 @@ impl Harness {
             }
             return Ok(());
         }
-        Ok(())
+        Err("sl record without create, op, dragStart or dump".to_owned())
     }
 }
 
@@ -1175,17 +1211,7 @@ fn case_ids() -> Vec<String> {
     ids
 }
 
-fn run_case(id: &str) -> Result<Stats, String> {
-    let records = load(id)?;
-    let mut harness = Harness::new(&records)?;
-    for record in &records {
-        harness
-            .record(record)
-            .map_err(|e| format!("{id} line {}: {e}", record.line))?;
-        if let Some(e) = harness.dom.error.take() {
-            return Err(format!("{id} line {}: {e}", record.line));
-        }
-    }
+fn finish_case(id: &str, mut harness: Harness) -> Result<Stats, String> {
     harness.stats.checked = harness.dom.checked;
     let (type_names, scroll_writes) = (harness.dom.type_names, harness.dom.scroll_writes);
     harness.stats.reads = harness
@@ -1205,6 +1231,16 @@ fn run_case(id: &str) -> Result<Stats, String> {
             "{id}: list {list} started a drag at the end: {start:?}"
         ));
     }
+    if let Some(prompt) = harness.pending_prompt.take() {
+        return Err(format!(
+            "{id}: the port prompted for a type at the end: {prompt:?}"
+        ));
+    }
+    if let Some(prompt) = harness.pending_clear.take() {
+        return Err(format!(
+            "{id}: the port prompted to clear at the end: {prompt:?}"
+        ));
+    }
     if !harness.pending_errors.is_empty() {
         return Err(format!(
             "{id}: port errors never thrown: {:?}",
@@ -1212,6 +1248,49 @@ fn run_case(id: &str) -> Result<Stats, String> {
         ));
     }
     Ok(harness.stats)
+}
+
+fn run_case(id: &str) -> Result<Stats, String> {
+    let records = load(id)?;
+    let mut tally = Tally::new(id, &records, kind_of);
+    for (kind, by) in COVERED {
+        if records.iter().any(|r| kind_of(r) == kind) {
+            tally.covered_elsewhere(kind, by);
+        }
+    }
+    let mut harness = Harness::new(&records)?;
+    let mut result = Ok(());
+    for record in &records {
+        match harness.record(record) {
+            Err(e) => {
+                result = Err(format!("{id} line {}: {e}", record.line));
+                break;
+            }
+            Ok(()) => {
+                mark(&mut tally, record);
+                if let Some(e) = harness.dom.error.take() {
+                    result = Err(format!("{id} line {}: {e}", record.line));
+                    break;
+                }
+            }
+        }
+    }
+    match result.and_then(|()| finish_case(id, harness)) {
+        Err(e) => {
+            std::mem::forget(tally);
+            Err(e)
+        }
+        Ok(stats) => {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tally.finish())).map_err(
+                |p| {
+                    p.downcast::<String>()
+                        .map(|s| *s)
+                        .unwrap_or_else(|_| "tally failed".to_owned())
+                },
+            )?;
+            Ok(stats)
+        }
+    }
 }
 
 #[test]

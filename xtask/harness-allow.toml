@@ -170,28 +170,15 @@ reason = 'an empty selector contains no "timeline", so the rule is not one that 
 
 [[allow]]
 file = "crates/asrs-hub/tests/dom_tabs.rs"
-function = "*"
-rule = "no-tally"
-reason = "compare() walks the port's records and the vector's together and fails on either leftover; kinds it skips are #305"
-
-[[allow]]
-file = "crates/asrs-hub/tests/dom_tabs.rs"
 function = "capture"
 rule = "default-slot"
 reason = "an empty expression is one run_eval does not know, and fails"
 
 [[allow]]
 file = "crates/asrs-hub/tests/dom_tabs.rs"
-function = "capture"
-rule = "skipped-kind"
-reason = "kinds other harnesses compare (dom_tab_views, the canvas suites, asrs-model source lists); counting them is #305"
-
-[[allow]]
-file = "crates/asrs-hub/tests/dom_tabs.rs"
 function = "dispatch_event"
 rule = "default-slot"
-count = 2
-reason = "an event init without the key has the empty string, as in Blink, and rsplit always yields a piece; the effects are compared"
+reason = "an event init without the key has the empty string, as in Blink; the effects are compared"
 
 [[allow]]
 file = "crates/asrs-hub/tests/dom_tabs.rs"
@@ -469,8 +456,8 @@ reason = "compared with the port's error, which is never empty, so an absent one
 [[allow]]
 file = "crates/asrs-model/tests/source_list_vectors.rs"
 function = "record"
-rule = "silent-return"
-reason = "hole: a record kind the harness does not know passes; #305"
+rule = "skipped-kind"
+reason = "the mains the tally declares covered_elsewhere: dom_tabs replays them"
 
 [[allow]]
 file = "crates/asrs-model/tests/unit_dialog_vectors.rs"
@@ -711,7 +698,14 @@ reason = "compared with the port's error, which is never empty, so an absent one
 file = "crates/asrs-tabs/tests/line_graph_dom.rs"
 function = "record_in"
 rule = "silent-return"
-reason = "hole: a record kind the harness does not know passes; #305"
+count = 2
+reason = "exceptions are an upstream browser artifact the port cannot raise; the covered kinds are declared covered_elsewhere in the tally"
+
+[[allow]]
+file = "crates/asrs-tabs/tests/line_graph_dom.rs"
+function = "record_in"
+rule = "skipped-kind"
+reason = "the mains the tally declares covered_elsewhere: dom_tabs replays them"
 
 [[allow]]
 file = "crates/asrs-tabs/tests/mechanism_points_dom.rs"
@@ -884,12 +878,6 @@ file = "crates/asrs-log/tests/msgpack_vectors.rs"
 function = "of"
 rule = "default-slot"
 reason = "a call that drew no random number records none, and the number of draws is compared"
-
-[[allow]]
-file = "crates/asrs-model/tests/source_list_vectors.rs"
-function = "*"
-rule = "no-tally"
-reason = "hole: record kinds are not counted; #305"
 
 [[allow]]
 file = "crates/asrs-services/tests/download_vectors.rs"
