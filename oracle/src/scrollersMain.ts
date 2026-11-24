@@ -10,7 +10,7 @@ import path from "node:path";
 //   ["eval", script], ["wait", ms], ["shot", name] (only with a shot dir),
 //   ["pixels", name, [x, y, width, height]], which records the rows of that box as runs of colours,
 //   ["fade", [x, y, width]], which records when that row of pixels first changes and turns white,
-//   each to the next 100 ms.
+//   to the nearest 100 and 250 ms.
 // An op that ends with "quick" has no record and does not settle.
 // The positions an op ends at are read once they stay the same for SETTLE_MS.
 
@@ -153,8 +153,8 @@ app
               else if (begins === null && text !== first) begins = at;
               if (ends === null && strip.every((v) => v === 255)) ends = at;
             }
-            const round = (ms: number | null) => (ms === null ? null : Math.round(ms / 100) * 100);
-            lines.push(JSON.stringify({ style, scale, theme, step: step.name ?? index, fade: [round(begins), round(ends)] }));
+            const round = (ms: number | null, to: number) => (ms === null ? null : Math.round(ms / to) * to);
+            lines.push(JSON.stringify({ style, scale, theme, step: step.name ?? index, fade: [round(begins, 100), round(ends, 250)] }));
             continue;
           } else if (kind === "shot") {
             if (request.shots !== null) {

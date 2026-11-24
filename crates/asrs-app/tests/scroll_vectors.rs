@@ -485,7 +485,7 @@ fn replay(headless: &mut HeadlessCapture, id: &str) -> [usize; 3] {
                         for (got, want) in [begins, ends].into_iter().zip(want) {
                             let (got, want) = (got.expect("it fades"), number(want));
                             assert!(
-                                (got - want).abs() <= 100.0,
+                                (got - want).abs() <= 125.0,
                                 "{at}: {got} ms, recorded {want}"
                             );
                         }

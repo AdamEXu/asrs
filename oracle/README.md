@@ -1247,7 +1247,7 @@ macOS the style and `"jump"` (a press on a track goes there) are `AppleShowScrol
 `AppleScrollerPagingBehavior` in the argument domain of the recorder's own process, whatever the
 user's preferences are; elsewhere the only style is Fluent. A key's `commands` are the editing
 commands AppKit's key bindings send with it. Offsets and settled pixels reproduce; how far a press
-held on a track goes can differ by a frame, and fade times are rounded to 100 ms.
+held on a track goes can differ by a frame, and a fade's begin and end are rounded to 100 and 250 ms.
 `crates/asrs-app/tests/scroll_vectors.rs` replays the vectors. The entry's generator hash also
 covers `scrollersMain` (`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
 
