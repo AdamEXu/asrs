@@ -118,6 +118,11 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "tooltip_hosts"
+harness = false
+required-features = ["parity"]
+
+[[test]]
 name = "tooltips"
 harness = false
 required-features = ["parity"]

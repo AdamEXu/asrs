@@ -10,9 +10,9 @@ use std::collections::HashMap;
 
 use gpui_kit::{
     AnyElement, App, AppContext, Bounds, DispatchPhase, Element, ElementId, Entity, Global,
-    GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, IntoElement, KeyDownEvent,
-    LayoutId, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, Pixels, ScrollEvent,
-    SharedString, Task, Window, WindowId,
+    GlobalElementId, Hitbox, HitboxBehavior, InspectorElementId, IntoElement, LayoutId,
+    MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, Pixels, ScrollEvent,
+    SharedString, Subscription, Task, Window, WindowId,
 };
 
 use crate::platform;
@@ -97,8 +97,8 @@ struct WindowTooltips {
     given: Vec<String>,
 }
 
-/// Holds the observer of a window's activation.
-struct Activation;
+/// Holds the observers of a window's activation and keys.
+struct Activation(#[allow(dead_code)] Subscription);
 
 /// A tooltip [`Host::Aura`] shows.
 #[derive(Clone, Debug, PartialEq)]
@@ -332,7 +332,12 @@ fn listen(window: &mut Window, cx: &mut App) {
                 }
             })
             .detach();
-            Activation
+            let this = window.window_handle();
+            Activation(cx.intercept_keystrokes(move |_, window, cx| {
+                if window.window_handle() == this {
+                    control(window, cx, aura::Controller::reset);
+                }
+            }))
         });
         state(window, cx, |state| state.activation = Some(activation));
     }
@@ -366,11 +371,6 @@ fn listen(window: &mut Window, cx: &mut App) {
     window.on_mouse_event(|_: &ScrollEvent, phase, window, cx| {
         if phase == DispatchPhase::Capture {
             control(window, cx, aura::Controller::wheel);
-        }
-    });
-    window.on_key_event(|_: &KeyDownEvent, phase, window, cx| {
-        if phase == DispatchPhase::Capture {
-            control(window, cx, aura::Controller::reset);
         }
     });
 }
