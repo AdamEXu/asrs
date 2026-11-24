@@ -326,6 +326,8 @@ struct Tab<Cx: ?Sized> {
     renderer: Box<dyn TabRenderer<Cx>>,
     uuid: JsValue,
     controls_height: JsValue,
+    /// Added once the page's own frame loop had started.
+    late: bool,
 }
 
 /// The mutable halves of one tab and the `controller.UUID` `Tabs` owns: control events
@@ -475,6 +477,7 @@ pub struct Tabs<Cx: ?Sized> {
     messages: Vec<NamedMessage<HubToMain>>,
     bar_sensor: ScrollSensor,
     shadows: [Option<&'static str>; 2],
+    started: bool,
 }
 
 impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
@@ -499,6 +502,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             messages: Vec::new(),
             bar_sensor: ScrollSensor::default(),
             shadows: [None, None],
+            started: false,
         }
     }
 
@@ -520,6 +524,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             renderer: parts.renderer,
             uuid: JsValue::String(parts.uuid),
             controls_height: num(0.0),
+            late: false,
         }];
         self.selected = num(0.0);
         Ok(())
@@ -542,6 +547,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             })
             .and_then(|()| tabs.set_selected(cx, &num(1.0)));
         debug_assert!(start.is_ok());
+        tabs.started = true;
         tabs
     }
 
@@ -607,6 +613,17 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             out.edit = out.edit.or(o.edit);
         }
         (out, errors)
+    }
+
+    /// One run of the source lists' frame loops: those of the tabs the constructor added, which
+    /// run before `periodic`, or the `late` ones, which run after it.
+    pub fn source_list_frames(&mut self, cx: &mut Cx, late: bool) -> Vec<JsError> {
+        let mut errors = Vec::new();
+        for tab in self.tabs.iter_mut().filter(|tab| tab.late == late) {
+            tab.controller
+                .source_list_input(cx, ListInput::Frame, &mut errors);
+        }
+        errors
     }
 
     /// The frame callbacks every tab's renderer requested itself.
@@ -884,6 +901,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
                 renderer: parts.renderer,
                 uuid: JsValue::String(parts.uuid),
                 controls_height: num(controls_height),
+                late: self.started,
             },
         );
         self.selected = add(&self.selected, &num(1.0));

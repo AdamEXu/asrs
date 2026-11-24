@@ -78,9 +78,7 @@ use asrs_model::preferences::{CoordinateSystemPreference, Preferences, Timestamp
 use asrs_model::selection::{Selection, SelectionMode, TimeSupplier};
 use asrs_model::source_list::Undisplayed;
 use asrs_model::source_list::{Env, ItemView, Length, SourceList};
-use asrs_model::source_list_config::{
-    SourceListItemState,
-};
+use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{TabController, TabRenderer};
 use asrs_parity::Value;
 use asrs_parity::vectors::{Record, load, vectors_dir};
@@ -434,7 +432,10 @@ fn list_dump(list: &SourceList, log: &Log) -> JsValue {
     let mut o = JsObject::new();
     o.insert("title", list.title().to_js());
     o.insert("state", list.state().to_js());
-    o.insert("displayed", list.displayed_state(log).expect("modeled items").to_js());
+    o.insert(
+        "displayed",
+        list.displayed_state(log).expect("modeled items").to_js(),
+    );
     o.insert("stopped", list.is_stopped().to_js());
     let hand = if list.hand_icon_shown() {
         ["0.15", "opacity 1s ease-in 1s"]

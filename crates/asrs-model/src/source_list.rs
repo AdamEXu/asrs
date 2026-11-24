@@ -545,12 +545,16 @@ impl SourceList {
     }
 
     /// The commands read options as strings, so one that draws an item with other options is
-    /// not ported.
+    /// not ported, except that reading any of `undefined` or `null` throws.
     fn require_modeled(&self, item: &SourceListItemState) -> Result {
-        let reads_options = self
-            .type_config(&item.item_type)
-            .is_some_and(|t| !t.options.is_empty());
-        if reads_options && !item.options_are_strings() {
+        let Some(type_config) = self.type_config(&item.item_type) else {
+            return Ok(());
+        };
+        let Some(first) = type_config.options.first() else {
+            return Ok(());
+        };
+        item.option(&first.key)?;
+        if !item.options_are_strings() {
             return Err(SourceListError::Thrown(
                 "Unmodeled: drawing a source item whose options are not strings".to_owned(),
             ));
@@ -756,40 +760,40 @@ impl SourceList {
 
         let mut options: JsObject<JsString> = JsObject::new();
         for option_config in &best.config.options {
-            let value =
-                if self.config.auto_advance == AutoAdvance::Option(option_config.key.clone()) {
-                    let mut counts: Vec<(&SourceListOptionValueConfig, usize)> = Vec::new();
-                    for value in &option_config.values {
-                        let mut uses = 0;
-                        for item in &with_supplemental {
-                            if item.has_option(&option_config.key)?
-                                && ops::strict_equals(
-                                    &item.option(&option_config.key)?,
-                                    &JsValue::string(&value.key),
-                                )
-                            {
-                                uses += 1;
-                            }
+            let value = if self.config.auto_advance
+                == AutoAdvance::Option(option_config.key.clone())
+            {
+                let mut counts: Vec<(&SourceListOptionValueConfig, usize)> = Vec::new();
+                for value in &option_config.values {
+                    let mut uses = 0;
+                    for item in &with_supplemental {
+                        if item.has_option(&option_config.key)?
+                            && ops::strict_equals(
+                                &item.option(&option_config.key)?,
+                                &JsValue::string(&value.key),
+                            )
+                        {
+                            uses += 1;
                         }
-                        counts.push((value, uses));
                     }
-                    array_sort(&mut counts, |a, b| a.1 as f64 - b.1 as f64);
-                    let first = counts
-                        .first()
-                        .ok_or_else(|| SourceListError::type_error("undefined", "valueConfig"))?;
-                    JsString::from(first.0.key.as_str())
-                } else if let Some(remembered) =
-                    remembered_option(memory.as_ref(), &option_config.key)?
-                        .filter(|v| option_config.values.iter().any(|x| eq_str(v, &x.key)))
-                {
-                    remembered
-                } else {
-                    let first = option_config
-                        .values
-                        .first()
-                        .ok_or_else(|| SourceListError::type_error("undefined", "key"))?;
-                    JsString::from(first.key.as_str())
-                };
+                    counts.push((value, uses));
+                }
+                array_sort(&mut counts, |a, b| a.1 as f64 - b.1 as f64);
+                let first = counts
+                    .first()
+                    .ok_or_else(|| SourceListError::type_error("undefined", "valueConfig"))?;
+                JsString::from(first.0.key.as_str())
+            } else if let Some(remembered) = remembered_option(memory.as_ref(), &option_config.key)?
+                .filter(|v| option_config.values.iter().any(|x| eq_str(v, &x.key)))
+            {
+                remembered
+            } else {
+                let first = option_config
+                    .values
+                    .first()
+                    .ok_or_else(|| SourceListError::type_error("undefined", "key"))?;
+                JsString::from(first.key.as_str())
+            };
             options.insert(option_config.key.as_str(), value);
         }
         let state = SourceListItemState {

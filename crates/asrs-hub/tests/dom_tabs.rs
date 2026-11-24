@@ -56,7 +56,7 @@ use asrs_tabs::field3d::Field3dController;
 use asrs_tabs::joysticks::JoysticksController;
 use asrs_tabs::joysticks_renderer::JoysticksRenderer;
 use asrs_tabs::line_graph::{LineGraphController, ListId};
-use asrs_tabs::list_cx::{ListParts, SourceListCx, js_error, source_state, with_env};
+use asrs_tabs::list_cx::{ListParts, SourceListCx, js_error, with_env};
 use asrs_tabs::mechanism::MechanismController;
 use asrs_tabs::mechanism_renderer::MechanismRenderer;
 use asrs_tabs::points::{Dimension, PointsController, PointsSelect};
@@ -1660,8 +1660,8 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
             .strip_prefix("setState(")
             .and_then(|s| s.strip_suffix(')'))
         {
-            let items = source_state(&parse_arg(arg)?).map_err(|e| e.message)?;
-            with_env(host, |env| list.set_state(env, items)).map_err(|e| js_error(e).message)?;
+            let value = parse_arg(arg)?;
+            with_env(host, |env| list.restore(env, &value)).map_err(|e| js_error(e).message)?;
             return Ok(JsValue::Undefined);
         }
         if op == "getState()" {
@@ -1963,8 +1963,7 @@ fn replay(
         host.assets = assets_from_js(&assets).map_err(err)?;
     }
     if let Some(memory) = fixture.get("typeMemory") {
-        host.type_memory = type_memory_from_js(&js_json::to_js(&Value::from_json_lenient(memory))?)
-            .map_err(err)?;
+        host.type_memory = js_json::to_js(&Value::from_json_lenient(memory))?;
     }
     if let Some(prefs) = fixture.get("preferences") {
         let prefs = js_json::to_js(&Value::from_json_lenient(prefs))?;

@@ -577,7 +577,8 @@ fn negated(width: &JsValue) -> f64 {
 
 /// `this.sidebarWidth === lastSidebarWidth`: an object is only the same until it is replaced.
 fn same_width(a: &Rc<JsValue>, b: &Rc<JsValue>) -> bool {
-    ops::strict_equals(&**a, &**b) || (Rc::ptr_eq(a, b) && matches!(**a, JsValue::Array(_) | JsValue::Object(_)))
+    ops::strict_equals(&**a, &**b)
+        || (Rc::ptr_eq(a, b) && matches!(**a, JsValue::Array(_) | JsValue::Object(_)))
 }
 
 pub struct Sidebar {

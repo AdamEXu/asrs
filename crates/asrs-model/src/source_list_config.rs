@@ -188,7 +188,10 @@ impl SourceListItemState {
     pub fn option(&self, key: &str) -> Result<JsValue, JsError> {
         match &self.raw {
             Some(raw) => ops::get(&ops::get(raw, "options")?, key),
-            None => Ok(self.options.get(key).map_or(JsValue::Undefined, ToJs::to_js)),
+            None => Ok(self
+                .options
+                .get(key)
+                .map_or(JsValue::Undefined, ToJs::to_js)),
         }
     }
 

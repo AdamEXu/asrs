@@ -40,9 +40,7 @@ use asrs_model::preferences::Preferences;
 use asrs_model::selection::{Selection, TimeSupplier};
 use asrs_model::selection_impl::{SelectionContext, SelectionImpl, SharedLog};
 use asrs_model::source_list::{ListInput, ListOutput, Rect, SourceListDom};
-use asrs_model::source_list_config::{
-    SourceListItemState,
-};
+use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
 use asrs_tabs::console::controller::{ConsoleController, ConsoleRenderer};
@@ -101,9 +99,11 @@ pub enum HubFrame {
     Sidebar,
     /// `Tabs`' per-frame loop.
     Tabs,
-    /// Every source list's own loop (previews, and re-rendering on a theme change), then what the
-    /// renderers requested themselves.
+    /// The source lists' own loops (previews, and re-rendering on a theme change) on the tabs the
+    /// page starts with, then what the renderers requested themselves.
     SourceLists,
+    /// The same for the tabs added since, whose lists requested their frames after `Tabs` did.
+    LateSourceLists,
     /// `show-when-ready`.
     Show,
     /// A historical source's mock progress.
@@ -687,6 +687,7 @@ impl HubModel {
         let tabs = Tabs::new(Box::new(HubTabFactory::new()), &mut page);
         host.request_animation_frame(HubFrame::SourceLists);
         host.request_animation_frame(HubFrame::Tabs);
+        host.request_animation_frame(HubFrame::LateSourceLists);
         host.set_interval(HubInterval::SaveState, STATE_SAVE_PERIOD_MS);
         host.set_interval(HubInterval::SaveTypeMemory, TYPE_MEMORY_SAVE_PERIOD_MS);
         host.set_interval(HubInterval::TouchBarSlider, TOUCH_BAR_PERIOD_MS);
@@ -1411,14 +1412,18 @@ impl HubModel {
                 }
             }
             HubFrame::SourceLists => {
-                let (_, mut errors) = self
-                    .tabs
-                    .source_list_input(&mut self.page, ListInput::Frame);
+                let mut errors = self.tabs.source_list_frames(&mut self.page, false);
                 errors.extend(self.tabs.animation_frame(&mut self.page));
                 for e in errors {
                     uncaught::<()>("requestAnimationFrame", Err(e.into()), host);
                 }
                 host.request_animation_frame(HubFrame::SourceLists);
+            }
+            HubFrame::LateSourceLists => {
+                for e in self.tabs.source_list_frames(&mut self.page, true) {
+                    uncaught::<()>("requestAnimationFrame", Err(e.into()), host);
+                }
+                host.request_animation_frame(HubFrame::LateSourceLists);
             }
             HubFrame::Show => host.send_main_message(NamedMessage::without_data(HubToMain::Show)),
             HubFrame::Source(uuid) => {

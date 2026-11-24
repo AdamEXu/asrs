@@ -518,7 +518,10 @@ fn list_dump(list: &SourceList, log: &Log) -> JsValue {
     let mut o = JsObject::new();
     o.insert("title", list.title().to_js());
     o.insert("state", list.state().to_js());
-    o.insert("displayed", list.displayed_state(log).expect("modeled items").to_js());
+    o.insert(
+        "displayed",
+        list.displayed_state(log).expect("modeled items").to_js(),
+    );
     o.insert("stopped", list.is_stopped().to_js());
     let hand = if list.hand_icon_shown() {
         ["0.15", "opacity 1s ease-in 1s"]

@@ -1000,7 +1000,8 @@ impl Runner {
             "sourceList.getState(true)" => {
                 let displayed = controller
                     .source_list()
-                    .displayed_state(&self.host.log.borrow());
+                    .displayed_state(&self.host.log.borrow())
+                    .map_err(|e| EvalError::Fatal(e.to_string()))?;
                 js_json::from_js(&JsValue::Array(displayed.iter().map(ToJs::to_js).collect()))
             }
             other => return Err(fatal(format!("unsupported eval member {other}"))),

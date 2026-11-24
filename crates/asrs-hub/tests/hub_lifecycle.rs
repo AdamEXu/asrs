@@ -28,7 +28,9 @@ use std::sync::Arc;
 use asrs_formats::export::{ExportError, ExportOptions, Format, Output, Sampling, export};
 use asrs_formats::historical::{MainReply, MainRequest, WorkerName};
 use asrs_formats::worker::{Abort, DecodeWorker, Request, WorkerMessage, WorkerThread};
-use asrs_hub::hub::{ExportReply, HubFrame, HubHost, HubInterval, HubModel, HubPage, HubTimeout, HubView};
+use asrs_hub::hub::{
+    ExportReply, HubFrame, HubHost, HubInterval, HubModel, HubPage, HubTimeout, HubView,
+};
 use asrs_hub::live::{LiveNet, LiveRole};
 use asrs_hub::sidebar::{NoLayout, SidebarGeometry};
 use asrs_js::string::{JsError, JsString};
@@ -1115,10 +1117,7 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
         ("show-update-button", JsValue::Bool(false)),
         ("show-feedback-button", JsValue::Bool(false)),
         ("show-when-ready", JsValue::Undefined),
-        (
-            "set-preferences",
-            ToJs::to_js(&Preferences::default()),
-        ),
+        ("set-preferences", ToJs::to_js(&Preferences::default())),
         ("set-active-satellites", JsValue::Array(Vec::new())),
     ];
     for (name, data) in boot {

@@ -455,8 +455,7 @@
         ]
       },
       {
-        "main": "new-tab",
-        "data": 1
+        "eval": "window.tabs.setSelected(1)"
       },
       {
         "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.leftSourceList.setState([{\"type\": \"stepped\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": null}])"

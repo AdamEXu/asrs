@@ -577,17 +577,8 @@ impl FrameLayout {
         );
         push(FrameElement::AddTab, tab_control(false, 12.0), (0.0, 0.0));
 
-        let side_bar_background = (!c.side_bar_mac).then(|| {
-            abs(
-                Some(0.0),
-                None,
-                sw,
-                Some(0.0),
-                Some(0.0),
-                None,
-                viewport,
-            )
-        });
+        let side_bar_background = (!c.side_bar_mac)
+            .then(|| abs(Some(0.0), None, sw, Some(0.0), Some(0.0), None, viewport));
         push(
             FrameElement::SideBarBackground,
             side_bar_background,

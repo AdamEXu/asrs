@@ -656,13 +656,7 @@ impl LineGraphController {
                 .discrete_list
                 .state_for_command(|item| is_available(&log, item))
                 .map_err(js_error)?;
-            add_discrete(
-                &log,
-                discrete,
-                time_range,
-                dark,
-                &mut discrete_fields,
-            )?;
+            add_discrete(&log, discrete, time_range, dark, &mut discrete_fields)?;
             let alerts = add_alerts(&log, discrete, time_range);
             (
                 left_fields,

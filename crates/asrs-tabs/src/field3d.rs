@@ -521,7 +521,10 @@ impl Field3dController {
         let log = &*parts.log;
         let mut objects: Vec<JsValue> = Vec::new();
         let mut camera_override = JsValue::Null;
-        let sources = self.source_list.drawn_state(log).map_err(list_cx::js_error)?;
+        let sources = self
+            .source_list
+            .drawn_state(log)
+            .map_err(list_cx::js_error)?;
         let mut i = 0;
         while i < sources.len() {
             let source = &sources[i];
