@@ -1319,7 +1319,8 @@ script runs (the driver exits naming the expected set when one is missing):
 
 What the driver pins besides switches: windows are shown inactive (`show` becomes
 `showInactive`, except for modal prompts, whose `show` begins a sheet) at the primary display's work-area origin plus 16 px with the scenario's content
-size, ignore the real pointer, and never open DevTools; `fetch` and `net.fetch` in the main
+size, ignore the real pointer, never open DevTools, and on macOS cannot take the focus (a run
+in which one does fails); `fetch` and `net.fetch` in the main
 process and non-loopback HTTP and WebSocket requests from pages are refused (the refused URLs
 are in `run.json`); every `dialog` call is answered from the scenario's `dialog` actions, and an
 unscripted one fails the run; `prefs.json` is the scenario's `prefs` plus its theme, and
