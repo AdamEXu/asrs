@@ -573,6 +573,7 @@ impl<H: FrameHost> HubFrame<H> {
             self.console_hidden(left, window, cx);
         }
         self.console.tabs.retain(|key, _| live.contains(key));
+        self.text_retain(|owner| !matches!(owner, Owner::Console(key) if !live.contains(key)));
         self.console.shown = shown.as_ref().map(|(s, ..)| *s);
         let (shown, dom, layout) = shown?;
         let layout = layout?;

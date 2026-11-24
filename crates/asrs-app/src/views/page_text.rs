@@ -467,6 +467,14 @@ impl<H: FrameHost> HubFrame<H> {
         cx.notify();
     }
 
+    /// Forgets the selection of a tab that is gone, whose key another may get.
+    pub(super) fn text_retain(&mut self, live: impl FnOnce(&Owner) -> bool) {
+        if self.text.owner.as_ref().is_some_and(|owner| !live(owner)) {
+            self.text.state.clear();
+            self.text.owner = None;
+        }
+    }
+
     pub(super) fn text_frame(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         let frame = cx.entity().downgrade();
         window.defer(cx, move |window, cx| {

@@ -638,8 +638,6 @@ async function perform(action: Action) {
     await copy(contents, action.copy);
   } else if ("focus" in action) {
     await emulateFocus(contents, action.focus);
-  } else if ("log" in action) {
-    console.error("LOG " + JSON.stringify(await exec(action.log, active())));
   } else if ("capture" in action) {
     await capture(action.capture, action.probes ?? [], action.masks ?? []);
   }

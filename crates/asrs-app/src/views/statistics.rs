@@ -655,6 +655,7 @@ impl<H: FrameHost> HubFrame<H> {
             keep
         });
         self.statistics.tabs = tabs;
+        self.text_retain(|owner| !matches!(owner, Owner::Statistics(key) if !live.contains(key)));
         for mut presenter in dropped {
             presenter.release(cx);
         }
