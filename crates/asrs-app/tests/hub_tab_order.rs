@@ -5,10 +5,12 @@
 //! `document.activeElement` at each `traverse` step of the scenarios and the hovered time at each
 //! `hover`. `data/focus_macos.jsonl` is of `focus-order` on macOS, from before the recorder kept
 //! `stop` and values. `data/focus_linux.jsonl` is of every scenario here on Linux x86_64 under the
-//! render host's fonts. The logs in `parity/scenarios/inputs` are what the driver generates.
+//! render host's fonts (`xtask/hosts/linux/fonts.sh`). An argument picks one. The logs in `parity/scenarios/inputs` are what the driver generates.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::process::Command;
+use std::sync::Mutex;
 
 use asrs_app::scenario;
 use asrs_parity::json::{self, Json};
@@ -16,6 +18,8 @@ use asrs_parity::{focus, vectors};
 
 const MACOS: &str = include_str!("data/focus_macos.jsonl");
 const LINUX: &str = include_str!("data/focus_linux.jsonl");
+
+const ONE: &str = "--one-scenario";
 
 /// Upstream's classic scrollbars on Linux take space the port gives to what they are beside (#268):
 /// a source list, a table, settings and a satellite's statistics.
@@ -49,6 +53,29 @@ fn run(root: &Path, inputs: &Path, name: &str, out: &Path) {
     scenario::run(&args).unwrap_or_else(|e| panic!("{name}: {e}"));
 }
 
+/// Each scenario in a process of its own, as many at once as there are cores.
+fn run_all<'a>(names: impl Iterator<Item = &'a String> + Send, inputs: &Path, dir: &Path) {
+    let exe = std::env::current_exe().unwrap();
+    let names = Mutex::new(names);
+    let cores = std::thread::available_parallelism().map_or(1, usize::from);
+    std::thread::scope(|scope| {
+        for _ in 0..cores.min(8) {
+            scope.spawn(|| {
+                loop {
+                    let Some(name) = names.lock().unwrap().next() else {
+                        break;
+                    };
+                    let status = Command::new(&exe)
+                        .args([ONE, name])
+                        .args([inputs, &dir.join(name)])
+                        .status();
+                    assert!(status.unwrap().success(), "{name}");
+                }
+            });
+        }
+    });
+}
+
 fn text(record: &Json, key: &str) -> Option<String> {
     Some(record.get(key)?.as_str()?.to_string_lossy())
 }
@@ -78,7 +105,17 @@ fn main() {
         println!("hub tab order: skipped, not recorded on this platform");
         return;
     };
+    if cfg!(target_os = "linux") && std::env::var_os("FONTCONFIG_FILE").is_none() {
+        println!("hub tab order: skipped without the render host's fonts");
+        return;
+    }
     let root = vectors::workspace_root();
+    let args: Vec<String> = std::env::args().collect();
+    if let [_, flag, name, inputs, out] = &args[..]
+        && flag == ONE
+    {
+        return run(&root, Path::new(inputs), name, Path::new(out));
+    }
     let assets = root.join("reference/AdvantageScope/bundledAssets").is_dir();
     let dir = std::env::temp_dir().join(format!("asrs-hub-tab-order-{}", std::process::id()));
     let inputs = inputs(&root, &dir);
@@ -86,13 +123,17 @@ fn main() {
     for line in recorded.lines() {
         let record = json::parse(line).unwrap();
         let name = text(&record, "scenario").unwrap();
-        scenarios.entry(name).or_default().push(record);
+        // Without the fields there is no source link.
+        let shown = assets || name != "traverse-fields";
+        if shown && args.get(1).is_none_or(|only| *only == name) {
+            scenarios.entry(name).or_default().push(record);
+        }
     }
+    run_all(scenarios.keys(), &inputs, &dir);
     let (mut compared, mut beside, mut without_assets) = (0, 0, 0);
     let mut differences = Vec::new();
     for (name, records) in &scenarios {
         let out = dir.join(name);
-        run(&root, &inputs, name, &out);
         let files = out.join("1x-light/files");
         for record in records {
             if let Some(hover) = text(record, "hover") {

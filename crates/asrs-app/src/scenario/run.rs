@@ -71,6 +71,9 @@ Electron driver does, and captures nothing else.";
 /// A tick of the page: one animation frame and this much executor time, which the page's `Date`
 /// and its scroll sensors' frame clock both run on.
 const FRAME: Duration = Duration::from_millis(16);
+
+/// What a frame of a wait takes when nothing is captured.
+const COARSE_FRAME: Duration = Duration::from_millis(64);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 /// Long enough for a satellite's last state to reach `state.json`.
 const SAVE_SETTLE: Duration = Duration::from_millis(1500);
@@ -312,6 +315,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 scale,
                 theme,
                 dir: &dir,
+                wait_frame: match options.no_captures {
+                    true => COARSE_FRAME,
+                    false => FRAME,
+                },
                 window: None,
                 prompt: None,
                 hub: None,
@@ -361,6 +368,7 @@ struct Variant<'a> {
     scale: u32,
     theme: Theme,
     dir: &'a Path,
+    wait_frame: Duration,
     window: Option<AnyWindowHandle>,
     /// The prompt window input and captures go to until it closes.
     prompt: Option<AnyWindowHandle>,
@@ -696,8 +704,12 @@ impl Variant<'_> {
 
     /// One animation frame, `FRAME` of executor time, and everything that then runs.
     fn tick(&mut self) -> Result<(), String> {
+        self.tick_by(FRAME)
+    }
+
+    fn tick_by(&mut self, frame: Duration) -> Result<(), String> {
         self.adopt_satellites()?;
-        self.headless.context().advance_clock(FRAME);
+        self.headless.context().advance_clock(frame);
         for window in self.open_windows() {
             self.headless
                 .context()
@@ -1064,8 +1076,8 @@ impl Variant<'_> {
                 let deadline = Duration::from_secs_f64(ms / 1000.0);
                 let mut waited = Duration::ZERO;
                 while waited < deadline {
-                    self.tick()?;
-                    waited += FRAME;
+                    self.tick_by(self.wait_frame)?;
+                    waited += self.wait_frame;
                 }
             }
             Action::Idle => self.wait_idle()?,
