@@ -352,6 +352,16 @@
         }
       },
       {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "Comma"
+          }
+        }
+      },
+      {
         "capture": [
           "commands",
           "selection",
