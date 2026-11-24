@@ -653,7 +653,7 @@ impl Host {
                 self.upload(&hosts.join("linux/provision.sh"), "$HOME/asrs-provision.sh")?;
                 self.upload(&hosts.join("linux/fonts.sh"), "$HOME/asrs-fonts.sh")?;
                 self.script(&format!(
-                    "set -e\nbash $HOME/asrs-provision.sh\ntest -f {dir}/packages.txt || bash $HOME/asrs-fonts.sh $HOME/.cache/asrs-fonts {dir}\nsync"
+                    "set -e\nexec 9>>$HOME/.asrs-gui.lock\nflock 9\nbash $HOME/asrs-provision.sh\nif [ -e {dir} ]; then gio trash {dir}; fi\nbash $HOME/asrs-fonts.sh $HOME/.cache/asrs-fonts {dir}\nsync"
                 ))
             }
             Os::Windows => {
@@ -1767,7 +1767,8 @@ fn font_rules() -> Result<Json> {
         .filter_map(|e| Some(e.ok()?.path()))
         .collect();
     rules.sort();
-    let mut bytes = Vec::new();
+    let profile = String::from_utf8_lossy(&oracle::read(&file)?).into_owned();
+    let mut bytes = profile.replace(&dir.display().to_string(), "").into_bytes();
     for rule in &rules {
         bytes.extend(oracle::read(rule)?);
     }

@@ -94,15 +94,15 @@
     "osRelease": "7.0.0-38-generic",
     "osVersion": "#38~24.04.4-Ubuntu SMP PREEMPT_DYNAMIC Mon Sep 14 17:12:37 UTC 2",
     "cpus": 6,
-    "memoryBytes": 8298901504,
+    "memoryBytes": 6189174784,
     "electron": "39.2.7",
     "chrome": "142.0.7444.235",
     "darkTheme": false,
     "displays": [
       {
         "size": {
-          "width": 1920,
-          "height": 1200
+          "width": 2880,
+          "height": 1800
         },
         "scaleFactor": 1,
         "colorSpace": "{primaries:BT709, transfer:SRGB, matrix:RGB, range:FULL}",
@@ -139,21 +139,38 @@
       "xServer": "The X.Org Foundation"
     },
     "displayProfile": "none (sRGB)",
+    "fontRules": {
+      "profile": "gray",
+      "rules": "64225c71e02becf0de69d9919a89b9ae6bd3fe5a224a8bf83fb91c0f4a5e0aed",
+      "fontconfig": "2.15.0-1.1ubuntu2",
+      "packages": {
+        "fonts-dejavu-core_2.37-8_all.deb": "40049660c194f3b8a2541fc7369efebb10e9f94bdac836a2f38fafedd10fa73a",
+        "fonts-dejavu-mono_2.37-8_all.deb": "8a599d6553307db7ecb795d2f0e5a301e03234afc75c7358b0ba43466454c89a",
+        "fonts-liberation_2.1.5-3_all.deb": "065c2ab1abc9108b17d401016dc594b79750904390f095845c93bb06e1153acc",
+        "fonts-noto-color-emoji_2.047-0ubuntu0.24.04.1_all.deb": "b102b62ce6a7313315223cff5e052bdf8fc0ad162c9e961ce0dc2202bc139ce2",
+        "fontconfig-config_2.15.0-1.1ubuntu2_amd64.deb": "9df0579cd298a1f2b7a40efd519c849745aecd193a09733cf4d1032284a62bbf"
+      }
+    },
+    "updates": {
+      "apt-daily.timer": "masked",
+      "apt-daily-upgrade.timer": "masked",
+      "unattended-upgrades.service": "masked"
+    },
     "fonts": {
       "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf": "ae7b7855e115a5966d8b1b3f80f254ccc117ec86f9965e202ee2940453837280",
       "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf": "5c1247acef7f2b8522a31742c76d6adcb5569bacc0be7ceaa4dc39dd252ce895",
       "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf": "8f2c103bfa3fd5de71f1b92b18f21906b5a26871fb7e19a9a4c9af539c3cc7ab",
       "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf": "c805f9436dbc268644c1d9584f01a601a653e028e08fd74b9b949f6cf8304d88",
       "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf": "3a3c502eeff669a231549e80df9f7c49de109bafe303170409e905d0b31a38fe",
+      "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Oblique.ttf": "3d7955616e69721f7edb8e1b7a580f8fbd7d737111c6b54266ddc1d9ef13202f",
       "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf": "395fa5ab8d40c8eba390ced528744ea75a7f69aabf3e68b6f925ca0e39a27370",
       "/usr/share/fonts/truetype/liberation/LiberationMono-Bold.ttf": "626655e94dd82f3f42549daf995c921b0915fa8ab1f4b839559e8892ea41d240",
-      "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf": "93cdc4ee9aa40e2afceecc63da0ca05ec7aab4bec991ece51a6b52389f48a477",
-      "/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Oblique.ttf": "3d7955616e69721f7edb8e1b7a580f8fbd7d737111c6b54266ddc1d9ef13202f",
       "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf": "4659bc0c58c5028dd488ec928d41d9265db43d9b669fc14ca8b0832daca7b144",
       "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf": "3973aa5054fb467dd5627245d3dc82e37bf16fe075756156a570455871351582",
       "/usr/share/fonts/truetype/liberation/LiberationSans-Italic.ttf": "830c5fa600505fb4c1a271b4271c53c44bae43f492b2a240d0e98a3a7a380121",
       "/usr/share/fonts/truetype/liberation/LiberationSans-BoldItalic.ttf": "c80fa7f2ffa0e01d4d8dcd6a6d1e43eda665222d1b4db597dde1174c456006cf",
-      "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf": "705903ae1382f0150f115d6f10a30f5b2f3d6ade649c474afe6366c39174fb65"
+      "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf": "705903ae1382f0150f115d6f10a30f5b2f3d6ade649c474afe6366c39174fb65",
+      "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf": "93cdc4ee9aa40e2afceecc63da0ca05ec7aab4bec991ece51a6b52389f48a477"
     }
   }
 }
