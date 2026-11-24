@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
+use std::sync::Arc;
 
 use asrs_canvas::text::coverage::{TextOp, render_coverage};
 use asrs_canvas::text::lut::{self, MaskGammaLut};
@@ -103,14 +104,19 @@ fn uses_text(cmds: &[JsValue]) -> bool {
     })
 }
 
-/// Replays one scene command list. The scene-only commands `image` (a source from straight
-/// RGBA) and `canvas` (a nested canvas) only define sources, so they run before the rest;
-/// `frame` (`canvas.width = canvas.width`) and `resize` start a new frame on the same canvas.
+struct Source {
+    pixmap: Arc<Pixmap>,
+    element: bool,
+}
+
+/// Replays one scene command list. The scene-only commands `image` (a canvas source from straight
+/// RGBA), `img` (an `<img>` of them) and `canvas` (a nested canvas) only define sources, so they
+/// run before the rest; `frame` (`canvas.width = canvas.width`) and `resize` start a new frame on the same canvas.
 fn render_list(
     width: u32,
     height: u32,
     cmds: &[JsValue],
-    images: &mut HashMap<String, Pixmap>,
+    images: &mut HashMap<String, Source>,
     glyphs: &mut Option<(Box<dyn TextBackend>, MaskGammaLut)>,
 ) -> Result<Pixmap, String> {
     let mut frames: Vec<((u32, u32), Vec<Call>)> = Vec::new();
@@ -127,7 +133,7 @@ fn render_list(
             ))
         };
         match name.as_str() {
-            "image" => {
+            "image" | "img" => {
                 let (w, h) = size()?;
                 let spec = JsValue::Object(
                     [
@@ -143,7 +149,11 @@ fn render_list(
                 };
                 let pixmap =
                     pixels::pixmap_from_straight_rgba(w, h, &data.data).ok_or("image: bad size")?;
-                images.insert(id.ok_or("image: no id")?, pixmap);
+                let source = Source {
+                    pixmap: Arc::new(pixmap),
+                    element: name == "img",
+                };
+                images.insert(id.ok_or("image: no id")?, source);
             }
             "canvas" => {
                 let (w, h) = size()?;
@@ -152,7 +162,11 @@ fn render_list(
                     .and_then(JsValue::as_array)
                     .ok_or("canvas: no commands")?;
                 let pixmap = render_list(w, h, inner, images, glyphs)?;
-                images.insert(id.ok_or("canvas: no id")?, pixmap);
+                let source = Source {
+                    pixmap: Arc::new(pixmap),
+                    element: false,
+                };
+                images.insert(id.ok_or("canvas: no id")?, source);
             }
             "frame" => frames.push((frame_size, std::mem::take(&mut calls))),
             "resize" => {
@@ -180,8 +194,12 @@ fn render_list(
                 lut,
             });
         }
-        for (id, pixmap) in images.iter() {
-            raster.add_image(id, pixmap.clone());
+        for (id, source) in images.iter() {
+            if source.element {
+                raster.add_image_element(id, source.pixmap.clone());
+            } else {
+                raster.add_image(id, source.pixmap.clone());
+            }
         }
         raster.run(&calls);
         state = raster.state();
