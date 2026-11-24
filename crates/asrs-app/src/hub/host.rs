@@ -607,7 +607,18 @@ impl HubHost for GpuiHost<'_, '_> {
 
 #[cfg(test)]
 mod tests {
+    use asrs_log::log::proto_decoder::SerializedProtoDecoder;
+
     use super::*;
+
+    #[test]
+    fn an_export_whose_log_replay_throws_fails() {
+        let anon = *b"\x22\x12\x0a\x04Anon\x12\x0a\x0a\x01x\x18\x01\x20\x01\x28\x05";
+        let mut log = Log::new(true).to_serialized();
+        log.proto_decoder = SerializedProtoDecoder(vec![anon.to_vec(), anon.to_vec()]);
+        let reply = run_export(log, &JsValue::Null, &mut |_| {});
+        assert!(matches!(reply, ExportMessage::Reply(ExportReply::Failed)));
+    }
 
     #[test]
     fn intervals_stay_on_their_period_grid() {

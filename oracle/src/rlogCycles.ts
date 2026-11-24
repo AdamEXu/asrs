@@ -23,9 +23,11 @@ class Cycles extends RlogBuilder {
     const value = new Bytes().u8(2).be(id, 2).u8(7).finish().length + 2;
     return this.rawBytes(new Bytes().u8(2).be(id, 2).u8(7).be(to - (this.length + value), 2).finish());
   }
-  /** A value whose length lands on the low byte of its own id, read again as a key record. */
+  /** A value that returns into the one before it, which holds a key record spanning this one. */
   backOnce(): this {
-    return this.value(1, "", -3).rawBytes(new Bytes().be(1, 2).raw("Z").be(1, 2).raw("s").finish());
+    const start = this.length + 5;
+    const record = new Bytes().u8(1).be(9, 2).be(5, 2).finish();
+    return this.value(1, record).back(1, start).rawBytes(new Bytes().be(1, 2).raw("s").finish());
   }
   rawBytes(bytes: Uint8Array): this {
     (this as any).out.raw(bytes);

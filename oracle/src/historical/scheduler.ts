@@ -64,10 +64,11 @@ export class Scheduler implements WorkerRouter {
       }
       try {
         slot.worker.deliver(slot.inbox.shift());
-      } catch {
-        // A browser reports a throw out of a task and goes on with the next one; a hub
-        // `onmessage` that throws (a serialized Log its `fromSerialized` rejects) leaves
-        // the source where it was and the settle continues.
+      } catch (error) {
+        // A browser reports a throw out of the source's `onmessage` and goes on with the next
+        // task. `Log.fromSerialized` adding a proto descriptor again is the one throw known
+        // here; anything else stops the run.
+        if (!(error instanceof Error && error.message.startsWith("duplicate name '"))) throw error;
       }
     }
   }

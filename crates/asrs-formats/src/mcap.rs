@@ -299,7 +299,6 @@ pub struct McapWriter {
     next_schema_id: u32,
     out: Vec<u8>,
     written: u64,
-    measuring: bool,
     queued: VecDeque<Continuation>,
     reentered: bool,
     exhausted: bool,
@@ -321,7 +320,6 @@ impl Default for McapWriter {
             next_schema_id: 1,
             out: Vec::new(),
             written: 0,
-            measuring: false,
             queued: VecDeque::new(),
             reentered: false,
             exhausted: false,
@@ -346,7 +344,6 @@ impl McapWriter {
     /// A writer that keeps every length but no bytes, to see whether an export fits.
     pub fn measuring() -> Self {
         let mut writer = Self::default();
-        writer.measuring = true;
         writer.record_writer.measuring = true;
         writer.chunk_builder.records.measuring = true;
         writer
