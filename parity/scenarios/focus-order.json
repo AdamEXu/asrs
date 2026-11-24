@@ -1,0 +1,891 @@
+{
+  "about": "Tab and Shift+Tab (#375, #369) in the hub with a 2D field: where the order goes on from presses, from tab titles after Enter and Space, and from a source hidden and removed with Enter",
+  "scales": [
+    1
+  ],
+  "themes": [
+    "light"
+  ],
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 2,
+              "title": "Field",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "heatmap",
+                    "logKey": "/Odometry/Robot3d",
+                    "logType": "Pose3d",
+                    "visible": true,
+                    "options": {
+                      "timeRange": "full"
+                    }
+                  }
+                ],
+                "field": "FRC:Evergreen",
+                "orientation": 0,
+                "size": "large"
+              },
+              "controllerUUID": "field2d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "focus": true
+    },
+    {
+      "wait": 200
+    },
+    {
+      "mouse": "move",
+      "x": 800,
+      "y": 64
+    },
+    {
+      "mouse": "down",
+      "x": 800,
+      "y": 64,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 800,
+      "y": 64,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-tabbarempty",
+      "count": 0,
+      "back": false
+    },
+    {
+      "traverse": "p-tabbarempty-f",
+      "count": 1,
+      "back": false
+    },
+    {
+      "mouse": "move",
+      "x": 800,
+      "y": 64
+    },
+    {
+      "mouse": "down",
+      "x": 800,
+      "y": 64,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 800,
+      "y": 64,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-tabbarempty-b",
+      "count": 1,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 250,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 250,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-canvas",
+      "count": 0,
+      "back": false
+    },
+    {
+      "traverse": "p-canvas-f",
+      "count": 1,
+      "back": false
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 250,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 250,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-canvas-b",
+      "count": 1,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 462
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 462,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 462,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-srctitle",
+      "count": 0,
+      "back": false
+    },
+    {
+      "traverse": "p-srctitle-f",
+      "count": 1,
+      "back": false
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 462
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 462,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 462,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-srctitle-b",
+      "count": 1,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 495
+    },
+    {
+      "mouse": "down",
+      "x": 500,
+      "y": 495,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 495,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-srckey",
+      "count": 0,
+      "back": false
+    },
+    {
+      "traverse": "p-srckey-f",
+      "count": 1,
+      "back": false
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 495
+    },
+    {
+      "mouse": "down",
+      "x": 500,
+      "y": 495,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 495,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-srckey-b",
+      "count": 1,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 600
+    },
+    {
+      "mouse": "down",
+      "x": 500,
+      "y": 600,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 600,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-srcempty",
+      "count": 0,
+      "back": false
+    },
+    {
+      "traverse": "p-srcempty-f",
+      "count": 1,
+      "back": false
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 600
+    },
+    {
+      "mouse": "down",
+      "x": 500,
+      "y": 600,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 600,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-srcempty-b",
+      "count": 1,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 980,
+      "y": 525
+    },
+    {
+      "mouse": "down",
+      "x": 980,
+      "y": 525,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 980,
+      "y": 525,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-settingtitle",
+      "count": 0,
+      "back": false
+    },
+    {
+      "traverse": "p-settingtitle-f",
+      "count": 1,
+      "back": false
+    },
+    {
+      "mouse": "move",
+      "x": 980,
+      "y": 525
+    },
+    {
+      "mouse": "down",
+      "x": 980,
+      "y": 525,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 980,
+      "y": 525,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-settingtitle-b",
+      "count": 1,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 900,
+      "y": 500
+    },
+    {
+      "mouse": "down",
+      "x": 900,
+      "y": 500,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 900,
+      "y": 500,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-settingblank",
+      "count": 0,
+      "back": false
+    },
+    {
+      "traverse": "p-settingblank-f",
+      "count": 1,
+      "back": false
+    },
+    {
+      "mouse": "move",
+      "x": 900,
+      "y": 500
+    },
+    {
+      "mouse": "down",
+      "x": 900,
+      "y": 500,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 900,
+      "y": 500,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-settingblank-b",
+      "count": 1,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 445
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 445,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 445,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-handle",
+      "count": 0,
+      "back": false
+    },
+    {
+      "traverse": "p-handle-f",
+      "count": 1,
+      "back": false
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 445
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 445,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 445,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-handle-b",
+      "count": 1,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 110
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 110,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 110,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-timeline",
+      "count": 0,
+      "back": false
+    },
+    {
+      "traverse": "p-timeline-f",
+      "count": 1,
+      "back": false
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 110
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 110,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 110,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "p-timeline-b",
+      "count": 1,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "e0",
+      "count": 3,
+      "back": false
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "e0-after",
+      "count": 0,
+      "back": false
+    },
+    {
+      "traverse": "e0-f",
+      "count": 1,
+      "back": false
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "e1",
+      "count": 3,
+      "back": false
+    },
+    {
+      "key": " "
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "e1-after",
+      "count": 0,
+      "back": false
+    },
+    {
+      "traverse": "e1-b",
+      "count": 1,
+      "back": true
+    },
+    {
+      "key": " "
+    },
+    {
+      "wait": 100
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 2,
+              "title": "Field",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "heatmap",
+                    "logKey": "/Odometry/Robot3d",
+                    "logType": "Pose3d",
+                    "visible": true,
+                    "options": {
+                      "timeRange": "full"
+                    }
+                  }
+                ],
+                "field": "FRC:Evergreen",
+                "orientation": 0,
+                "size": "large"
+              },
+              "controllerUUID": "field2d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 495
+    },
+    {
+      "mouse": "down",
+      "x": 500,
+      "y": 495,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 495,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "h0",
+      "count": 1,
+      "back": false
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "h0-after",
+      "count": 0,
+      "back": false
+    },
+    {
+      "traverse": "h0-f",
+      "count": 1,
+      "back": false
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "r0-after",
+      "count": 0,
+      "back": false
+    },
+    {
+      "traverse": "r0-b",
+      "count": 2,
+      "back": true
+    },
+    {
+      "wait": 60
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 2,
+              "title": "Field",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "heatmap",
+                    "logKey": "/Odometry/Robot3d",
+                    "logType": "Pose3d",
+                    "visible": true,
+                    "options": {
+                      "timeRange": "full"
+                    }
+                  }
+                ],
+                "field": "FRC:Evergreen",
+                "orientation": 0,
+                "size": "large"
+              },
+              "controllerUUID": "field2d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60,
+      "button": "left"
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60,
+      "button": "left"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "m",
+      "count": 1,
+      "back": false
+    },
+    {
+      "key": "Tab",
+      "modifiers": [
+        "control"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "traverse": "m-ctrl",
+      "count": 0,
+      "back": false
+    },
+    {
+      "key": "Tab",
+      "modifiers": [
+        "alt"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "traverse": "m-alt",
+      "count": 0,
+      "back": false
+    },
+    {
+      "key": "Tab",
+      "modifiers": [
+        "meta"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "traverse": "m-meta",
+      "count": 0,
+      "back": false
+    },
+    {
+      "capture": "end"
+    }
+  ]
+}
