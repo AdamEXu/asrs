@@ -1,4 +1,5 @@
 #![cfg(windows)]
+#![allow(clippy::disallowed_methods)]
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
