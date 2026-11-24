@@ -90,7 +90,7 @@ impl Rect {
 }
 
 /// `SkMatrix::mapPoints` for an affine matrix: scale-translate matrices map as `x * sx + tx`,
-/// general ones as `tx + x * sx + y * kx`.
+/// general ones as `x * sx + y * kx + tx`, as `Affine_vpts` orders the sum.
 pub fn map_point(m: &Affine, p: P) -> P {
     let [sx, ky, kx, sy, tx, ty] = [m.a, m.b, m.c, m.d, m.e, m.f].map(|v| v as f32);
     if kx == 0.0 && ky == 0.0 {
@@ -100,8 +100,8 @@ pub fn map_point(m: &Affine, p: P) -> P {
         }
     } else {
         P {
-            x: tx + p.x * sx + p.y * kx,
-            y: ty + p.x * ky + p.y * sy,
+            x: p.x * sx + p.y * kx + tx,
+            y: p.y * sy + p.x * ky + ty,
         }
     }
 }
