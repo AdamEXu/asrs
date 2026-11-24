@@ -734,7 +734,7 @@ app.whenReady().then(() => {
     /// The window's premultiplied pixels as a capture has them.
     fn straight(width: u32, height: u32, pixels: &[u8]) -> Rgba {
         let mut data = pixels.to_vec();
-        for pixel in data.chunks_exact_mut(4) {
+        for pixel in data.as_chunks_mut::<4>().0 {
             let alpha = u32::from(pixel[3]);
             if alpha != 0 && alpha != 255 {
                 for c in &mut pixel[..3] {
@@ -1082,10 +1082,10 @@ app.whenReady().then(() => {
                 .filter(|i| own.data[*i..i + 4] != scenario.data[*i..i + 4])
                 .map(|i| (i as u32 / 4 % own.width, i as u32 / 4 / own.width))
                 .collect();
-            let corner =
-                |f: fn((u32, u32), (u32, u32)) -> (u32, u32)| pixels.iter().copied().reduce(f);
-            let min = corner(|a, b| (a.0.min(b.0), a.1.min(b.1)));
-            let max = corner(|a, b| (a.0.max(b.0), a.1.max(b.1)));
+            let columns = pixels.iter().map(|p| p.0);
+            let rows = pixels.iter().map(|p| p.1);
+            let min = columns.clone().min().zip(rows.clone().min());
+            let max = columns.max().zip(rows.max());
             if off > 1 {
                 let flat = |image: &Rgba| pixel::composite(image, [255, 255, 255]);
                 dump(
