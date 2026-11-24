@@ -392,9 +392,9 @@ fn expand(rows: &Json) -> Vec<Vec<[u8; 3]>> {
 /// The first pixel that differs by more than antialiasing does between rasterizers.
 fn differs(want: &[Vec<[u8; 3]>], got: &[Vec<[u8; 3]>]) -> Option<String> {
     assert_eq!(want.len(), got.len(), "rows");
-    for (y, (want, got)) in want.iter().zip(got).enumerate() {
-        assert_eq!(want.len(), got.len(), "columns");
-        for (x, (want, got)) in want.iter().zip(got).enumerate() {
+    for (y, (want_row, got_row)) in want.iter().zip(got).enumerate() {
+        assert_eq!(want_row.len(), got_row.len(), "columns");
+        for (x, (want, got)) in want_row.iter().zip(got_row).enumerate() {
             let off = (0..3).map(|c| (i32::from(want[c]) - i32::from(got[c])).abs());
             if off.max() > Some(LEVELS) {
                 return Some(format!(
