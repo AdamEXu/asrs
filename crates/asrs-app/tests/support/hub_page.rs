@@ -4,10 +4,11 @@ use std::time::Duration;
 
 use asrs_app::hub::Hub;
 use asrs_app::views::frame::HubFrame;
-use asrs_app::views::hub_host::HubEntityHost;
+use asrs_app::views::hub_host::{HubEntityHost, boot_messages};
 use asrs_hub::hub::HubModel;
-use asrs_js::value::JsValue;
+use asrs_js::value::{JsValue, ToJs};
 use asrs_model::messages::{MainToHub, NamedMessage};
+use asrs_model::preferences::Preferences;
 use asrs_model::selection::{Selection, SelectionMode};
 use asrs_model::tab_type::TabType;
 use asrs_ui::capture::HeadlessCapture;
@@ -18,6 +19,7 @@ use asrs_ui::gpui::{
 const WIDTH: f32 = 1100.0;
 const HEIGHT: f32 = 650.0;
 const FRAME: Duration = Duration::from_millis(16);
+const RANDOM_SEED: u64 = 1;
 
 type Window = WindowHandle<HubFrame<HubEntityHost>>;
 
@@ -31,7 +33,9 @@ impl Page<'_> {
     pub fn open(headless: &mut HeadlessCapture, scale: f32) -> Page<'_> {
         let window = headless
             .open_window(size(px(WIDTH), px(HEIGHT)), scale, |window, cx| {
-                HubEntityHost::open(window, false, false, Vec::new(), cx)
+                let preferences = Preferences::default().to_js();
+                let boot = boot_messages(JsValue::Null, false, preferences, Vec::new());
+                HubEntityHost::open_with(window, false, boot, Some(RANDOM_SEED), cx)
             })
             .expect("hub window");
         let hub = headless
