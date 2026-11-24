@@ -1249,7 +1249,8 @@ so no display is needed. Presses on the select and keys that open its popup are 
 record: the backgrounds of focused fields, which window captures mask.
 
 `crates/asrs-ui/tests/focus_rings.rs` and `focus_fields.rs` replay them. Each is generated on macOS
-and on Linux x86_64; on the latter with `cargo xtask oracle gen` in a checkout there.
+and on Linux x86_64; on the latter with `cargo xtask oracle gen` in a checkout there. Windows
+has no records (#379): the port applies the rule that the two recorded platforms share.
 
 ### Text selection vectors
 
