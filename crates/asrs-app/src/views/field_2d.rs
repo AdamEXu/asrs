@@ -10,7 +10,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use asrs_canvas::pixels::transform_bilinear;
-use asrs_canvas::{Canvas2d, Pixmap, Raster, RasterState};
+use asrs_canvas::{Canvas2d, Pixmap, Raster, RasterState, ShadeCache};
 use asrs_hub::hub::{HubModel, HubPage};
 use asrs_hub::tabs::TabRef;
 use asrs_js::math;
@@ -231,6 +231,7 @@ struct SelectView {
 struct TabView {
     sensor: ScrollSensor,
     raster: RasterState,
+    shades: ShadeCache,
     bitmap: Option<Arc<Pixmap>>,
     style: Option<CanvasStyle>,
     presenter: FramePresenter,
@@ -374,12 +375,16 @@ fn rasterize(
     frame: &Canvas2d,
     images: &[(String, Arc<Pixmap>)],
     state: &mut RasterState,
+    shades: &mut ShadeCache,
 ) -> Option<Pixmap> {
     let Some(mut raster) = Raster::new(frame.width, frame.height) else {
         *state = RasterState::default();
+        *shades = ShadeCache::default();
         return None;
     };
-    raster = raster.with_state(*state);
+    raster = raster
+        .with_state(*state)
+        .with_shades(std::mem::take(shades));
     for (id, pixmap) in images {
         if id == HEATMAP_IMAGE {
             raster.add_image(id, pixmap.clone());
@@ -389,6 +394,7 @@ fn rasterize(
     }
     raster.run(&frame.calls);
     *state = raster.state();
+    *shades = raster.take_shades();
     Some(raster.into_pixmap())
 }
 
@@ -519,7 +525,8 @@ impl<H: FrameHost> HubFrame<H> {
             if let Some(heatmap) = painted.heatmap {
                 images.push((HEATMAP_IMAGE.to_owned(), Arc::new(heatmap)));
             }
-            tab.bitmap = rasterize(&painted.frame, &images, &mut tab.raster).map(Arc::new);
+            let (raster, shades) = (&mut tab.raster, &mut tab.shades);
+            tab.bitmap = rasterize(&painted.frame, &images, raster, shades).map(Arc::new);
             tab.style = painted.style;
             tab.presented = None;
         }

@@ -5,6 +5,7 @@ use std::f32::consts::{FRAC_1_SQRT_2, PI, TAU};
 use tiny_skia::PathBuilder;
 
 use crate::hairline::P;
+use crate::matrix::Matrix;
 
 const NEARLY_ZERO: f32 = 1.0 / 4096.0;
 
@@ -136,27 +137,9 @@ impl Affine {
         })
     }
 
-    pub fn is_scale_translate(&self) -> bool {
-        self.b == 0.0 && self.c == 0.0
-    }
-
-    pub fn to_skia(self) -> tiny_skia::Transform {
-        tiny_skia::Transform::from_row(
-            self.a as f32,
-            self.b as f32,
-            self.c as f32,
-            self.d as f32,
-            self.e as f32,
-            self.f as f32,
-        )
-    }
-
     fn map32(&self, p: Pt) -> Pt {
-        let m = self.to_skia();
-        pt(
-            p.x * m.sx + p.y * m.kx + m.tx,
-            p.x * m.ky + p.y * m.sy + m.ty,
-        )
+        let p = Matrix::from(self).map_point_affine(P { x: p.x, y: p.y });
+        pt(p.x, p.y)
     }
 }
 
@@ -526,10 +509,10 @@ impl Path {
     }
 
     /// The path as an `SkPath`, mapped through `m` first when given.
-    pub fn to_sk(&self, m: Option<&Affine>) -> crate::skpath::SkPath {
+    pub fn to_sk(&self, m: Option<&Matrix>) -> crate::skpath::SkPath {
         let map = |p: Pt| {
             let p = P { x: p.x, y: p.y };
-            m.map_or(p, |m| crate::skpath::map_point(m, p))
+            m.map_or(p, |m| m.map_point(p))
         };
         let mut out = crate::skpath::SkPath::new();
         for v in &self.verbs {
@@ -547,8 +530,13 @@ impl Path {
 
     /// The path as tiny-skia geometry, mapped through `m` first when given, with conics split
     /// into quads to within `conic_tolerance` (Skia uses 0.25 device pixels).
-    pub fn to_skia(&self, m: Option<&Affine>, conic_tolerance: f32) -> Option<tiny_skia::Path> {
-        let map = |p: Pt| m.map_or(p, |m| m.map32(p));
+    pub fn to_skia(&self, m: Option<&Matrix>, conic_tolerance: f32) -> Option<tiny_skia::Path> {
+        let map = |p: Pt| {
+            m.map_or(p, |m| {
+                let p = m.map_point_affine(P { x: p.x, y: p.y });
+                pt(p.x, p.y)
+            })
+        };
         let mut builder = PathBuilder::new();
         let mut last = pt(0.0, 0.0);
         for v in &self.verbs {

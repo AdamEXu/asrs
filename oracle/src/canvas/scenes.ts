@@ -1,6 +1,7 @@
 import field2dTraces from "./field2dTraces.json";
 import histogramTraces from "./histogramTraces.json";
 import lineGraphTraces from "./lineGraphTraces.json";
+import { encodePng } from "./png";
 import r07Traces from "./r07Traces.json";
 import timelineTraces from "./timelineTraces.json";
 
@@ -1407,6 +1408,360 @@ function clipping(name: string, dpr: number): Scene {
   return scene(name, "coverage", "pixel", [400, 280], dpr, LIGHT, r.cmds);
 }
 
+// Transforms whose f32 steps Skia takes and Blink's doubles do not: translations past half of
+// FLT_MAX, long runs of small steps, and the matrices a readback makes Blink rebuild.
+function floatMatrix(dpr: number): Scene {
+  const r = new Rec();
+  r.call("scale", dpr, dpr);
+  const cell = (i: number) => r.call("setTransform", dpr, 0, 0, dpr, (10 + (i % 6) * 50) * dpr, (10 + Math.floor(i / 6) * 40) * dpr);
+  r.set("fillStyle", "#2b66a2");
+  ([
+    [1e38, 1],
+    [2e38, 1],
+    [3e38, 1],
+    [1.7e38, 2],
+    [1.8e38, 2],
+    [3.4e38, 0.5]
+  ] as [number, number][]).forEach(([far, scale], i) => {
+    r.call("save");
+    cell(i);
+    r.call("scale", scale, 1);
+    r.call("translate", far, 0);
+    r.call("translate", -far, 0);
+    r.call("fillRect", 0, 0, 30 / scale, 20);
+    r.call("restore");
+  });
+  r.set("strokeStyle", "#af2437");
+  r.set("lineWidth", 2);
+  for (let i = 0; i < 3; i++) {
+    r.call("save");
+    cell(6 + i);
+    r.call("translate", [1e16, 16777216, 65536][i], 0);
+    r.call("translate", -[1e16, 16777216, 65536][i] + 0.3, 0.3);
+    r.call("strokeRect", 0, 0, 30.5, 20.25);
+    r.call("beginPath");
+    r.call("moveTo", 2, 2);
+    r.call("lineTo", 28, 18);
+    r.call("stroke");
+    r.call("restore");
+  }
+  const steps = (i: number, step: (k: number) => void) => {
+    r.call("save");
+    cell(i);
+    for (let k = 0; k < 400; k++) step(k);
+    r.set("fillStyle", "rgba(63, 163, 77, 0.6)");
+    r.call("fillRect", 0, 0, 20, 14);
+    r.set("strokeStyle", "#222");
+    r.set("lineWidth", 1);
+    r.call("strokeRect", 0.5, 0.5, 24, 18);
+    r.call("restore");
+  };
+  steps(9, () => r.call("translate", 0.025, 0.0125));
+  steps(10, (k) => r.call("scale", k % 2 === 0 ? 1.1 : 1 / 1.1, k % 2 === 0 ? 0.9 : 1 / 0.9));
+  steps(11, () => r.call("rotate", (2 * Math.PI) / 400));
+  steps(12, (k) => {
+    r.call("rotate", 0.1);
+    r.call("translate", k % 2 === 0 ? 0.7 : -0.7, 0.01);
+    r.call("rotate", -0.1);
+  });
+  r.call("save");
+  cell(13);
+  r.call("translate", 5.1, 3.3);
+  r.call("rotate", Math.PI / 2);
+  r.call("translate", 0, -16);
+  r.set("fillStyle", "#e48b32");
+  r.call("fillRect", 0.3, 0.3, 10.2, 6.6);
+  r.call("getImageData", 0, 0, 1, 1, "$flush");
+  r.set("fillStyle", "#e5b31b");
+  r.call("fillRect", 12.3, 0.3, 10.2, 6.6);
+  r.call("strokeRect", 12.3, 9.3, 10.2, 4.6);
+  r.call("restore");
+  r.call("save");
+  cell(14);
+  for (let k = 0; k < 300; k++) r.call("translate", 0.1, 0.05);
+  r.call("fillRect", -30, -15, 12.5, 8.25);
+  r.call("getImageData", 0, 0, 1, 1, "$flush");
+  r.call("fillRect", -15, -15, 12.5, 8.25);
+  r.call("beginPath");
+  r.call("arc", -20, 2, 5, 0, Math.PI * 2);
+  r.call("fill");
+  r.call("restore");
+  return scene(`floatmatrix-${dpr}x`, "coverage", "pixel", [310, 130], dpr, LIGHT, r.cmds);
+}
+
+// Quarter turns, which keep rects rects for Skia: through rotate(), setTransform() and flips, at
+// fractional offsets, with fills, strokes, dashes, clips, clears and gradients, and the doubles of
+// a matrix rebuilt after a readback, which are no quarter turn any more.
+function quarterTurns(dpr: number): Scene {
+  const r = new Rec();
+  const cells: ((x: number, y: number) => void)[] = [
+    () => r.call("rotate", Math.PI / 2),
+    () => r.call("rotate", -Math.PI / 2),
+    () => r.call("rotate", Math.PI),
+    () => r.call("rotate", (5 * Math.PI) / 2),
+    (x, y) => r.call("setTransform", 0, dpr, -dpr, 0, x, y),
+    (x, y) => r.call("setTransform", 0, 1.5 * dpr, 0.75 * dpr, 0, x, y),
+    () => {
+      r.call("rotate", Math.PI / 2);
+      r.call("scale", 1.3, -0.7);
+    },
+    () => {
+      r.call("rotate", Math.PI / 4);
+      r.call("rotate", Math.PI / 4);
+    }
+  ];
+  cells.forEach((turn, i) => {
+    r.call("save");
+    const [x, y] = [(45.3 + (i % 4) * 90) * dpr, (45.7 + Math.floor(i / 4) * 90) * dpr];
+    r.call("setTransform", dpr, 0, 0, dpr, x, y);
+    turn(x, y);
+    r.set("fillStyle", "#2b66a2");
+    r.call("fillRect", -30.4, -30.2, 22.6, 14.3);
+    r.set("fillStyle", "rgba(228, 139, 50, 0.6)");
+    r.call("fillRect", -18.7, -24.1, 30.3, 12.8);
+    r.call("fillRect", 16.2, -30, 0.4, 20);
+    r.set("strokeStyle", "#222");
+    [0.4, 1, 2.5].forEach((lw, k) => {
+      r.set("lineWidth", lw);
+      r.call("strokeRect", -30.3 + k * 17, -5.6, 12.4, 9.7);
+    });
+    r.set("lineJoin", "round");
+    r.call("strokeRect", 21.3, -5.6, 9.4, 9.7);
+    r.set("lineJoin", "miter");
+    r.set("strokeStyle", "rgba(175, 36, 55, 0.7)");
+    r.set("lineWidth", 2);
+    r.call("setLineDash", [3, 3]);
+    r.call("beginPath");
+    r.call("moveTo", -30.5, 8.2);
+    r.call("lineTo", 30.5, 8.2);
+    r.call("stroke");
+    r.call("setLineDash", []);
+    r.set("fillStyle", { linearGradient: [-30, 0, 10, 0], stops: [[0, "#af2437"], [1, "rgba(63, 163, 77, 0.4)"]] });
+    r.call("fillRect", -30.6, 12.3, 40.2, 8.4);
+    r.call("clearRect", -24.4, 14.2, 6.3, 3.6);
+    r.call("beginPath");
+    r.call("rect", 12.4, 12.6, 18.2, 16.3);
+    r.call("clip");
+    r.set("fillStyle", "#3fa34d");
+    r.call("fillRect", 8, 15.25, 30, 30);
+    r.call("restore");
+  });
+  r.call("save");
+  r.call("setTransform", dpr, 0, 0, dpr, 60.3 * dpr, 200.7 * dpr);
+  r.call("rotate", Math.PI / 2);
+  r.call("getImageData", 0, 0, 1, 1, "$flush");
+  r.set("fillStyle", "#2b66a2");
+  r.call("fillRect", -10.4, -20.2, 22.6, 34.3);
+  r.set("strokeStyle", "#222");
+  r.set("lineWidth", 2);
+  r.call("strokeRect", -10.6, 20.4, 22.2, 24.3);
+  r.call("restore");
+  return scene(`quarterturns-${dpr}x`, "coverage", "pixel", [360, 225], dpr, LIGHT, r.cmds);
+}
+
+const GRADIENT_KINDS: [string, (x: number, y: number) => { linearGradient?: number[]; radialGradient?: number[] }][] = [
+  ["linear", (x, y) => ({ linearGradient: [x, y, x + 34, y + 20] })],
+  ["radial", (x, y) => ({ radialGradient: [x + 18, y + 14, 0, x + 18, y + 14, 22] })],
+  ["ring", (x, y) => ({ radialGradient: [x + 18, y + 14, 4, x + 18, y + 14, 20] })],
+  ["inside", (x, y) => ({ radialGradient: [x + 14, y + 12, 0, x + 18, y + 14, 22] })],
+  ["cone", (x, y) => ({ radialGradient: [x + 6, y + 14, 3, x + 28, y + 14, 9] })],
+  ["shrinking", (x, y) => ({ radialGradient: [x + 8, y + 14, 12, x + 26, y + 14, 5] })],
+  ["strip", (x, y) => ({ radialGradient: [x + 6, y + 14, 8, x + 28, y + 14, 8] })],
+  ["touching", (x, y) => ({ radialGradient: [x + 4, y + 14, 0, x + 14, y + 14, 10] })]
+];
+
+// Partly covered gradient pixels, which Chromium blends in float: every kind of gradient, opaque
+// and not, over opaque, translucent and empty pixels, through fills, hairlines, strokes, text,
+// and clips off the pixel grid.
+function gradientEdges(dpr: number, dark: boolean): Scene {
+  const r = new Rec();
+  const stops = {
+    opaque: [[0, "#2b66a2"], [0.4, "#e5b31b"], [1, "#af2437"]],
+    translucent: [[0, "rgba(43, 102, 162, 0.9)"], [0.5, "rgba(229, 179, 27, 0.15)"], [1, "rgba(175, 36, 55, 0.55)"]]
+  } as { [kind: string]: [number, string][] };
+  r.call("scale", dpr, dpr);
+  r.set("fillStyle", dark ? "#555" : "#ddd");
+  r.call("fillRect", 0, 0, 340, 100);
+  r.set("fillStyle", "rgba(63, 163, 77, 0.35)");
+  r.call("fillRect", 0, 100, 340, 100);
+  GRADIENT_KINDS.forEach(([, gradient], i) => {
+    Object.values(stops).forEach((s, j) => {
+      for (let k = 0; k < 3; k++) {
+        const [x, y] = [4 + i * 42, 4 + j * 50 + k * 100];
+        r.set("globalAlpha", k === 2 ? 0.7 : 1);
+        r.set("fillStyle", { ...gradient(x, y), stops: s });
+        r.call("beginPath");
+        r.call("moveTo", x + 0.3, y + 20.4);
+        r.call("lineTo", x + 17.7, y + 0.6);
+        r.call("lineTo", x + 36.2, y + 15.1);
+        r.call("bezierCurveTo", x + 30, y + 34, x + 12, y + 18, x + 0.3, y + 20.4);
+        r.call("fill");
+        r.call("fillRect", x + 0.6, y + 28.3, 14.5, 6.4);
+        r.set("strokeStyle", { ...gradient(x, y + 24), stops: s });
+        r.set("lineWidth", 0.6);
+        r.call("beginPath");
+        r.call("moveTo", x + 17, y + 28);
+        r.call("lineTo", x + 37, y + 34.6);
+        r.call("stroke");
+        r.set("lineWidth", 2.3);
+        r.call("strokeRect", x + 1.4, y + 37.3, 34.2, 5.1);
+      }
+    });
+  });
+  r.set("globalAlpha", 1);
+  r.set("font", `16px ${SYSTEM_FONT}`);
+  r.set("textBaseline", "middle");
+  r.set("fillStyle", { linearGradient: [4, 310, 80, 330], stops: [[0, "#2b66a2"], [1, "#af2437"]] });
+  r.call("fillText", "Gradient", 4, 320);
+  r.call("save");
+  r.call("beginPath");
+  r.call("arc", 130, 322, 17.4, 0, Math.PI * 2);
+  r.call("clip");
+  r.set("fillStyle", { linearGradient: [110, 305, 150, 340], stops: stops.opaque });
+  r.call("fillRect", 100, 300, 60, 45);
+  r.call("restore");
+  r.call("save");
+  r.call("translate", 190, 322);
+  r.call("rotate", 0.4);
+  r.call("scale", 1.2, 0.8);
+  r.set("fillStyle", { radialGradient: [0, 0, 2, 3, 1, 18], stops: stops.translucent });
+  r.call("fillRect", -18.3, -14.2, 36.4, 28.7);
+  r.call("restore");
+  return scene(`gradientedges-${dark ? "dark" : "light"}-${dpr}x`, "coverage", "pixel", [340, 345], dpr, dark ? DARK : LIGHT, r.cmds);
+}
+
+// drawImage of canvases at other sizes: up and down, parts, mirrored, rotated, off the grid,
+// translucent, clipped, smoothed and not, with sample points on pixel boundaries.
+function scaledImages(dpr: number): Scene {
+  const r = new Rec();
+  r.call("image", "opaque", 24, 16, testImage(24, 16, false));
+  r.call("image", "alpha", 24, 16, testImage(24, 16, true));
+  r.call("image", "field", 180, 120, fieldImage(180, 120));
+  r.call("image", "line", 1, 16, testImage(2, 8, true));
+  r.call("canvas", "soft", 40, 40, [
+    ["=", "fillStyle", { radialGradient: [20, 20, 3, 20, 20, 20], stops: [[0, "rgba(43,102,162,1)"], [1, "rgba(229,179,27,0)"]] }],
+    ["fillRect", 0, 0, 40, 40]
+  ]);
+  r.call("scale", dpr, dpr);
+  r.set("fillStyle", "#cfd8dc");
+  r.call("fillRect", 0, 0, 400, 60);
+  [true, false].forEach((smooth, j) => {
+    const y = 6 + j * 150;
+    r.set("imageSmoothingEnabled", smooth);
+    r.call("drawImage", "@opaque", 6, y, 60, 40);
+    r.call("drawImage", "@alpha", 72.3, y + 0.6, 50.5, 41.7);
+    r.call("drawImage", "@soft", 128, y, 71.5, 33.25);
+    r.call("drawImage", "@field", 205, y, 83, 55.333);
+    r.call("drawImage", "@field", 20, 10, 101, 73, 294.4, y + 0.3, 47.6, 35.2);
+    r.call("drawImage", "@opaque", 4, 2, 12, 10, 348, y, 30.4, 25.6);
+    r.call("drawImage", "@opaque", 3.4, 2.3, 12.5, 9.2, 348, y + 30, 30.4, 25.6);
+    r.call("drawImage", "@alpha", -4, -3, 20, 30, 382, y, 20, 24);
+    r.set("globalAlpha", 0.4);
+    r.call("drawImage", "@alpha", 6, y + 60, 48.5, 32.5);
+    r.call("drawImage", "@opaque", 60.25, y + 60.5);
+    r.call("drawImage", "@opaque", 90, y + 60);
+    r.set("globalAlpha", 1);
+    r.call("drawImage", "@opaque", 120.5, y + 60.5);
+    r.call("drawImage", "@alpha", 5, 3, 14, 9, 150, y + 60, 14, 9);
+    r.call("drawImage", "@line", 170, y + 60, 20, 40);
+    r.call("drawImage", "@opaque", 195, y + 60, 0.5, 30);
+    r.call("drawImage", "@opaque", 198.4, y + 60.3, 30, 0.3);
+    r.call("save");
+    r.call("translate", 250, y + 60);
+    r.call("scale", -1, 1);
+    r.call("drawImage", "@opaque", 0, 0, 40, 27);
+    r.call("restore");
+    r.call("save");
+    r.call("translate", 260, y + 95);
+    r.call("scale", 1.25, -1);
+    r.call("drawImage", "@alpha", 0, 0);
+    r.call("restore");
+    r.call("save");
+    r.call("translate", 320, y + 62);
+    r.call("rotate", 0.4);
+    r.call("drawImage", "@opaque", 0, 0, 48, 32);
+    r.call("drawImage", "@alpha", 4, 2, 12, 10, 20, -12, 22, 14);
+    r.call("restore");
+    r.call("save");
+    r.call("translate", 400, y + 60);
+    r.call("rotate", Math.PI / 2);
+    r.call("drawImage", "@field", 0, 0, 60.5, 40);
+    r.set("globalAlpha", 0.5);
+    r.call("drawImage", "@field", 30.3, 45.7, 60.5, 40);
+    r.call("restore");
+    r.call("save");
+    r.call("beginPath");
+    r.call("arc", 40, y + 115, 18.3, 0, Math.PI * 2);
+    r.call("clip");
+    r.call("drawImage", "@field", 18, y + 95, 46.5, 41);
+    r.call("restore");
+    r.call("save");
+    r.call("beginPath");
+    r.call("rect", 70.4, y + 100.3, 40.5, 30.2);
+    r.call("clip");
+    r.call("drawImage", "@opaque", 66, y + 98);
+    r.call("drawImage", "@opaque", 92.5, y + 98.5);
+    r.call("drawImage", "@soft", 80, y + 110, 60, 30);
+    r.call("restore");
+  });
+  r.set("imageSmoothingEnabled", false);
+  r.call("drawImage", "@field", 0, 0, 180, 120, 234 / dpr, 590 / dpr, 166 / dpr, 110 / dpr);
+  r.call("drawImage", "@field", 0, 0, 180, 120, 10, 305, 45, 30);
+  r.call("drawImage", "@field", 0, 0, 180, 120, 60, 305, 90, 60);
+  r.call("drawImage", "@opaque", 160, 305, 36, 24);
+  r.set("imageSmoothingEnabled", true);
+  r.call("drawImage", "@field", 0, 0, 180, 120, 250, 305, 45, 30);
+  r.call("drawImage", "@field", 300, 305, 90, 60);
+  return scene(`scaledimages-${dpr}x`, "coverage", "pixel", [420, 370], dpr, LIGHT, r.cmds);
+}
+
+// drawImage of <img> elements, which Chromium draws from a mip level of the decoded image: whole
+// and odd sizes, parts, every level down to a target that rounds to nothing, opaque and not.
+function imageElements(dpr: number): Scene {
+  const r = new Rec();
+  const img = (id: string, width: number, height: number, rgba: string) =>
+    r.call("img", id, width, height, rgba, encodePng(width, height, Buffer.from(rgba, "base64")).toString("base64"));
+  img("field", 192, 128, fieldImage(192, 128));
+  img("odd", 151, 97, fieldImage(151, 97));
+  img("alpha", 61, 43, testImage(61, 43, true));
+  img("thin", 200, 3, testImage(200, 3, true));
+  r.call("scale", dpr, dpr);
+  [true, false].forEach((smooth, j) => {
+    const y = 5 + j * 130;
+    r.set("imageSmoothingEnabled", smooth);
+    let x = 5;
+    for (const [k, id] of ["field", "odd", "alpha"].entries()) {
+      x = 5;
+      for (const width of [100, 70, 40, 24.5, 11, 5, 2, 0.8]) {
+        r.call("drawImage", `@${id}`, x + k * 0.3, y + k * 40, width / (k + 1), 35 / (k + 1));
+        x += width / (k + 1) + 4;
+      }
+    }
+    r.call("drawImage", "@field", 40, 30, 100, 70, 290, y, 40, 28);
+    r.call("drawImage", "@odd", 10.5, 7.25, 101.3, 80.1, 335.4, y + 0.4, 30.2, 25.6);
+    r.call("drawImage", "@odd", -20, 30, 120, 90, 370, y, 20, 30);
+    r.call("drawImage", "@thin", 290, y + 32, 50, 2);
+    r.call("drawImage", "@thin", 290, y + 36, 50, 1);
+    r.call("drawImage", "@thin", 290, y + 40, 400, 0.4);
+    r.call("drawImage", "@odd", 290, y + 45, 0.2, 20);
+    r.set("globalAlpha", 0.5);
+    r.call("drawImage", "@alpha", 345, y + 40);
+    r.call("drawImage", "@odd", 295, y + 50, 45, 30);
+    r.set("globalAlpha", 1);
+    r.call("save");
+    r.call("translate", 330, y + 85);
+    r.call("rotate", 0.3);
+    r.call("drawImage", "@odd", 0, 0, 40, 26);
+    r.call("restore");
+    r.call("save");
+    r.call("translate", 415, y + 80);
+    r.call("rotate", Math.PI / 2);
+    r.call("drawImage", "@field", 0, 0, 40, 27);
+    r.call("restore");
+  });
+  return scene(`imgelements-${dpr}x`, "coverage", "pixel", [420, 265], dpr, LIGHT, r.cmds);
+}
+
 // Frames recorded from upstream's Timeline in dom/timeline vectors (asrs-hub's timeline
 // traces equal them call for call), extracted to plain JSON numbers.
 function timelineScenes(): Scene[] {
@@ -1504,6 +1859,7 @@ export function allScenes(): Scene[] {
     out.push(textEmoji(dpr, false), textEmoji(dpr, true));
     out.push(offCanvas(dpr), gradientText(dpr, false), gradientText(dpr, true));
     out.push(curves(dpr), hugeCoords(dpr), strokeRects(dpr), multiFrame(dpr, ""), multiFrame(dpr, "-single"), multiFrame(dpr, "-resized"));
+    out.push(floatMatrix(dpr), quarterTurns(dpr), gradientEdges(dpr, false), gradientEdges(dpr, true), scaledImages(dpr), imageElements(dpr));
   }
   return out;
 }

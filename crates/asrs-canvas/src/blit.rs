@@ -4,11 +4,21 @@
 //! runs, clipped to the canvas. Order matters because Skia blends straight into the pixels, so a
 //! pixel that two blits touch is blended twice rather than having its coverage summed.
 
+/// The blitter call a run came from, where blitters treat calls apart.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Kind {
+    Plain,
+    /// `blitAntiH2` or `blitAntiV2`.
+    Pair,
+    /// `blitMask`.
+    Mask,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct Spans {
     width: i32,
     height: i32,
-    runs: Vec<(i32, i32, u32, u32, bool)>,
+    runs: Vec<(i32, i32, u32, u32, Kind)>,
     alpha: Vec<u8>,
 }
 
@@ -35,22 +45,27 @@ impl Spans {
 
     /// `blitAntiH`: per-pixel coverage starting at `(x, y)`.
     pub fn anti_h(&mut self, x: i32, y: i32, alphas: &[u8]) {
-        self.push(x, y, alphas, false);
+        self.push(x, y, alphas, Kind::Plain);
+    }
+
+    /// One row of a `blitMask`.
+    pub fn mask(&mut self, x: i32, y: i32, alphas: &[u8]) {
+        self.push(x, y, alphas, Kind::Mask);
     }
 
     /// `blitAntiH2`: two pixels side by side, which the legacy blitters blend with their own
     /// arithmetic.
     pub fn anti_h2(&mut self, x: i32, y: i32, a0: u8, a1: u8) {
-        self.push(x, y, &[a0, a1], true);
+        self.push(x, y, &[a0, a1], Kind::Pair);
     }
 
     /// `blitAntiV2`: two pixels one above the other.
     pub fn anti_v2(&mut self, x: i32, y: i32, a0: u8, a1: u8) {
-        self.push(x, y, &[a0], true);
-        self.push(x, y + 1, &[a1], true);
+        self.push(x, y, &[a0], Kind::Pair);
+        self.push(x, y + 1, &[a1], Kind::Pair);
     }
 
-    fn push(&mut self, x: i32, y: i32, alphas: &[u8], pair: bool) {
+    fn push(&mut self, x: i32, y: i32, alphas: &[u8], kind: Kind) {
         if y < 0 || y >= self.height {
             return;
         }
@@ -68,7 +83,7 @@ impl Spans {
             y,
             self.alpha.len() as u32,
             slice.len() as u32,
-            pair,
+            kind,
         ));
         self.alpha.extend_from_slice(slice);
     }
@@ -111,14 +126,14 @@ impl Spans {
         self.iter_kinds().map(|(x, y, a, _)| (x, y, a))
     }
 
-    /// Every run in blit order as `(x, y, coverage, blitted by blitAntiH2 or blitAntiV2)`.
-    pub fn iter_kinds(&self) -> impl Iterator<Item = (i32, i32, &[u8], bool)> {
-        self.runs.iter().map(|&(x, y, start, len, pair)| {
+    /// Every run in blit order as `(x, y, coverage, kind)`.
+    pub fn iter_kinds(&self) -> impl Iterator<Item = (i32, i32, &[u8], Kind)> {
+        self.runs.iter().map(|&(x, y, start, len, kind)| {
             (
                 x,
                 y,
                 &self.alpha[start as usize..(start + len) as usize],
-                pair,
+                kind,
             )
         })
     }

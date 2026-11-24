@@ -1,5 +1,5 @@
 type Cmd = unknown[];
-type Source = HTMLCanvasElement;
+type Source = HTMLCanvasElement | HTMLImageElement;
 type Context = CanvasRenderingContext2D;
 
 interface ReplayScene {
@@ -52,6 +52,17 @@ function arg(replay: Replay, value: unknown): unknown {
   return value;
 }
 
+async function decodeImages(replay: Replay, cmds: Cmd[]) {
+  for (const cmd of cmds) {
+    if (cmd[0] !== "img") continue;
+    const [, id, , , , png] = cmd as [string, string, number, number, string, string];
+    const img = new Image();
+    img.src = `data:image/png;base64,${png}`;
+    await img.decode();
+    replay.sources.set(id, img);
+  }
+}
+
 function run(replay: Replay, ctx: Context, cmds: Cmd[]) {
   for (const cmd of cmds) {
     const [name, ...args] = cmd as [string, ...unknown[]];
@@ -68,6 +79,8 @@ function run(replay: Replay, ctx: Context, cmds: Cmd[]) {
         replay.sources.set(id, canvas);
         break;
       }
+      case "img":
+        break;
       case "canvas": {
         const [id, width, height, inner] = args as [string, number, number, Cmd[]];
         const canvas = document.createElement("canvas");
@@ -119,13 +132,15 @@ function toBase64(data: Uint8ClampedArray): string {
   return btoa(binary);
 }
 
-function replay(scene: ReplayScene, cpu: boolean) {
+async function replay(scene: ReplayScene, cpu: boolean) {
   const canvas = document.createElement("canvas");
   canvas.width = scene.width * scene.dpr;
   canvas.height = scene.height * scene.dpr;
   document.body.appendChild(canvas);
   const ctx = newContext(canvas, cpu);
-  run({ sources: new Map(), registers: new Map(), cpu }, ctx, scene.cmds);
+  const state: Replay = { sources: new Map(), registers: new Map(), cpu };
+  await decodeImages(state, scene.cmds);
+  run(state, ctx, scene.cmds);
   const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
   canvas.remove();
   return { width: canvas.width, height: canvas.height, rgba: toBase64(data) };
