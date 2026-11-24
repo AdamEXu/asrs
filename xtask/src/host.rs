@@ -95,8 +95,8 @@ commands on the machine itself (cargo xtask host local ...):
   launch                  start the real upstream app with isolated userData and capture its hub
   gui-check               describe, colour-patch and launch
   dom-text                Chromium's DOM text at device scale 1 and 2: every text box grayscale
-                          under fontconfig's gray.conf, every one LCD under stock.conf and on
-                          Windows
+                          under fontconfig's gray.conf; under stock.conf and on Windows every one
+                          LCD up to 48 device px and grayscale above
   s1                      run the S1 spike (`auto`) and require that its window opened
 
 Results land in target/parity/host/ on the machine that ran them.";
@@ -1439,7 +1439,7 @@ fn dom_text(paths: &Paths, out: &Path) -> Result {
             let chromatic = rows.iter().filter(|(_, n)| *n > 0).count();
             let wrong: Vec<&str> = rows
                 .iter()
-                .filter(|(_, n)| (*n > 0) != lcd)
+                .filter(|(row, n)| (*n > 0) != (lcd && lcd_sized(row, scale)))
                 .map(|(row, _)| row.as_str())
                 .collect();
             eprintln!(
@@ -1460,6 +1460,13 @@ fn dom_text(paths: &Paths, out: &Path) -> Result {
     } else {
         Err(failures.join("\n"))
     }
+}
+
+/// Skia draws no LCD text above 48 device pixels. A row is named by its font size (`25px/0`).
+fn lcd_sized(row: &str, scale: &str) -> bool {
+    let size = row.split("px").next().and_then(|n| n.parse::<f64>().ok());
+    let scale: f64 = scale.parse().unwrap_or(f64::NAN);
+    size.is_some_and(|size| size * scale <= 48.0)
 }
 
 /// The boxes of grey text, with how many of their pixels are not grey.
