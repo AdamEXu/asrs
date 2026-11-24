@@ -189,3 +189,8 @@ fn matrix_vectors() {
 fn fuzz_vectors() {
     check("log/proto-fuzz");
 }
+
+#[test]
+fn shadow_vectors() {
+    check("log/proto-shadow");
+}

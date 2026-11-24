@@ -229,9 +229,10 @@ pub(super) fn select_popup(
     cx.defer(move |cx| {
         let opened = parent.update(cx, |_, window, _| {
             let bounds = window::screen_bounds(window, anchor);
-            (bounds.unwrap_or(anchor), window.scale_factor())
+            let monitor = window::monitor_bounds(window);
+            (bounds.unwrap_or(anchor), monitor, window.scale_factor())
         });
-        let Ok((anchor, scale)) = opened else {
+        let Ok((anchor, monitor, scale)) = opened else {
             return on_close(None, cx);
         };
         if let Some(open) = LIST.take() {
@@ -239,19 +240,23 @@ pub(super) fn select_popup(
         }
         let on_close = Rc::new(Cell::new(Some(on_close)));
         let close = on_close.clone();
-        let handler: CloseHandler = Rc::new(move |path, _, cx| {
+        let handler: CloseHandler = Rc::new(move |path, list, cx| {
             LIST.take();
+            // A list that closes because another window took the focus leaves it there.
+            let focused = list.is_window_active();
             if let Some(on_close) = close.take() {
                 let chosen = path.and_then(|path| path.first().copied());
                 cx.defer(move |cx| {
-                    parent
-                        .update(cx, |_, window, _| window.activate_window())
-                        .ok();
+                    if focused {
+                        parent
+                            .update(cx, |_, window, _| window.activate_window())
+                            .ok();
+                    }
                     on_close(chosen, cx);
                 });
             }
         });
-        let placement = Placement::Screen(anchor, None);
+        let placement = Placement::Screen(anchor, monitor);
         match MenuView::open(popup, placement, Some(list), scale, cx, handler) {
             Some((handle, _)) => LIST.set(Some(handle)),
             None => {
@@ -263,7 +268,8 @@ pub(super) fn select_popup(
     });
 }
 
-/// GPUI takes half of the frame below a window's content for a frame above it.
+/// GPUI takes half of the frame below a window's content for a frame above it, and opens a window
+/// that is not on the primary monitor somewhere on that.
 pub(super) fn popup_window_opened(
     window: &Window,
     bounds: Bounds<Pixels>,
@@ -276,6 +282,7 @@ pub(super) fn popup_window_opened(
     cx.spawn(async move |_| {
         let px = |v: Pixels| f64::from(f32::from(v));
         native.set_content_origin(px(bounds.origin.x), px(bounds.origin.y));
+        native.set_content_size(px(bounds.size.width), px(bounds.size.height));
     })
     .detach();
 }

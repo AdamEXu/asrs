@@ -37,6 +37,7 @@ pub mod svg;
 pub mod symbols;
 pub mod text;
 pub mod theme;
+pub mod tooltip;
 pub mod webview;
 
 use gpui::{AnyWindowHandle, App, Entity, Render, Window, WindowOptions};

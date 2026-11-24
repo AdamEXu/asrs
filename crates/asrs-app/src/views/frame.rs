@@ -722,11 +722,23 @@ impl<H: FrameHost> HubFrame<H> {
             FrameElement::AddTab => ("add.svg", IconTint::BUTTON, IconFit::BUTTON),
             _ => return None,
         };
+        let title = match element {
+            FrameElement::Update => "Update available",
+            FrameElement::Feedback => "Share feedback",
+            FrameElement::Play => "Play",
+            FrameElement::Pause => "Pause",
+            FrameElement::Lock => "Lock playback to real-time",
+            FrameElement::Unlock => "Unlock playback",
+            FrameElement::Close => "Close tab",
+            FrameElement::Popup => "Pop out tab",
+            _ => "Add tab",
+        };
         let symbol = Symbol::named(symbol)?;
         let entity = cx.entity().downgrade();
         let button = IconButton::new(element.selector(), symbol)
             .tint(tint)
             .fit(fit)
+            .title(title)
             .blurred(blurred)
             .on_click(move |_, _, cx| {
                 let _ = entity.update(cx, |frame, cx| {

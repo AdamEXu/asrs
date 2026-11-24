@@ -8,6 +8,7 @@
     "src/app/patches.ts",
     "src/app/scenario.ts",
     "src/app/tap.ts",
+    "src/app/tooltips.ts",
     "src/appMain.ts",
     "src/canvas/png.ts",
     "src/environment.ts"
@@ -876,5 +877,13 @@
   "shims": [
     "src/environment.ts",
     "src/shims.ts"
+  ],
+  "spinButtons": [
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/spinButtons.ts"
+  ],
+  "spinButtonsMain": [
+    "src/spinButtonsMain.ts"
   ]
 }

@@ -13,12 +13,13 @@ import { busyReasons, domDump, downloadShows, hubReady, sendMainMessage } from "
 import { patchPageHtml } from "./app/patches";
 import { actionKind, parseScenario, type Action, type GlMode, type Scale, type Theme } from "./app/scenario";
 import { installTap } from "./app/tap";
+import { GRID_STEP, titleMap, titleMapArgs, type TitleMap } from "./app/tooltips";
 import { encodePng } from "./canvas/png";
 
 declare const __UPSTREAM_DIR__: string;
 
 const USAGE = `usage: electron <switches> appMain.mjs <scenario.json> <out dir> --scale=<1|2> --theme=<light|dark>
-         [--gl=<mode>] [--colour=srgb|display] [--robot=<port>]
+         [--gl=<mode>] [--colour=srgb|display] [--robot=<port>] [--tooltips]
 
 Starts upstream's bundles/main.js with an isolated userData directory and drives it through the
 scenario with executeJavaScript and sendInputEvent. --gl picks the GL backend switches of a
@@ -27,7 +28,8 @@ d3d11-warp. --colour=srgb (default) has Chromium composite in sRGB; --colour=dis
 display's colour space and stores its ICC profile as display.icc. The driver names the Electron
 switches it needs when they are missing. --robot is where a scenario's robotServer listens: main's
 connections to port 22 of 127.0.0.1 go there. Results go to <out dir>: run.json, captures/, files/,
-inputs/ and, with --colour=display, display.icc.`;
+inputs/ and, with --colour=display, display.icc. --tooltips (macOS, with oracle/tools/tooltips.m
+loaded) records the page's tooltips at each capture instead of its pixels.`;
 
 const WINDOW_ORIGIN = 16;
 const RANDOM_SEED = 1;
@@ -46,6 +48,8 @@ const POINTER_SETTLE_MS = 700;
 // The strip of the hub's title bar its page keeps clear for Electron's caption buttons (`right:
 // 140px` of div.title-bar-text, the overlay's height).
 const CAPTION = { width: 140, height: 38 };
+const TOOLTIP_SETTLE_MS = 300;
+const TOOLTIP_FRAME_MS = 20;
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
 
 function fail(message: string): never {
@@ -68,6 +72,8 @@ if (!["native", "swiftshader", "d3d11-warp"].includes(glMode)) fail(USAGE);
 const robotPort = Number(options.robot);
 const colour = options.colour ?? "srgb";
 if (colour !== "srgb" && colour !== "display") fail(USAGE);
+const tooltipLog = "tooltips" in options ? process.env.ASRS_TOOLTIP_LOG : undefined;
+if ("tooltips" in options && tooltipLog === undefined) fail("--tooltips needs ASRS_TOOLTIP_LOG");
 const scenario = parseScenario(path.basename(scenarioFile, ".json"), fs.readFileSync(scenarioFile, "utf8"));
 if (scenario.page === "app" && (scenario.window.width < 800 || scenario.window.height < 400)) {
   fail(`scenario ${scenario.name}: the hub window has a minimum size of 800x400`);
@@ -459,6 +465,55 @@ async function activate(active: boolean) {
 let displayProfile: DisplayProfile | null = null;
 let displayId: number | null = null;
 
+const pointer: [number, number] = [0, 0];
+
+// What AppKit got since the last call.
+let tooltipBytes = 0;
+function tooltipTexts(): string[] {
+  const bytes = fs.existsSync(tooltipLog!) ? fs.readFileSync(tooltipLog!) : Buffer.alloc(0);
+  const lines = bytes.subarray(tooltipBytes).toString("utf8").split("\n").slice(0, -1);
+  tooltipBytes = bytes.length;
+  return lines.map((line) => JSON.parse(line)[0]);
+}
+
+async function captureTooltips(name: string) {
+  // The moves would be part of a drag.
+  if (pressedButton !== null) return;
+  const win = active();
+  await waitIdle();
+  const move = async (x: number, y: number) => {
+    sendScripted(win.webContents, { type: "mouseMove", x, y });
+    await nextFrames();
+    await sleep(TOOLTIP_FRAME_MS);
+    return tooltipTexts();
+  };
+  // Where no title is, and what the pointer hovers changes no layout.
+  await move(0, 0);
+  await sleep(TOOLTIP_SETTLE_MS);
+  tooltipTexts();
+  const map = await exec<TitleMap>(call(titleMap, ...titleMapArgs), win);
+  const y = map.grid.findIndex((row) => row.includes("."));
+  const bare = y < 0 ? null : [map.grid[y].indexOf("."), y].map((i) => (i + 0.5) * GRID_STEP);
+  const titles = [];
+  for (const { title, rect, point } of map.titles) {
+    // Off every title first, so that the text is a change.
+    if (bare !== null) await move(bare[0], bare[1]);
+    const shown = await move(point[0], point[1]);
+    const corner = await move(Math.ceil(rect[0]) + 2, Math.ceil(rect[1]) + 2);
+    titles.push({ title, rect, point, shown, corner });
+  }
+  let left: string[] | undefined;
+  if (titles.length > 0) {
+    await move(titles[0].point[0], titles[0].point[1]);
+    sendScripted(win.webContents, { type: "mouseLeave", x: -1, y: -1 } as any);
+    await sleep(TOOLTIP_FRAME_MS * 5);
+    left = tooltipTexts();
+  }
+  await move(pointer[0], pointer[1]);
+  fs.writeFileSync(path.join(capturesDir, `${name}.tooltips.json`), JSON.stringify({ titles, left, gridStep: GRID_STEP, texts: map.texts, grid: map.grid }) + "\n");
+  console.error(`  ${scenario.name}: ${name} (${titles.length} titles)`);
+}
+
 async function capture(name: string, probes: string[], maskSelectors: string[]) {
   await waitIdle();
   const win = active();
@@ -659,6 +714,8 @@ async function perform(action: Action) {
     await waitIdle();
   } else if ("mouse" in action) {
     const button = action.button ?? "left";
+    pointer[0] = action.x;
+    pointer[1] = action.y;
     for (const type of MOUSE_TYPES[action.mouse]) {
       // A real mouse reports the held button on its down and moves (PointerEvent.buttons).
       if (type === "mouseDown") pressedButton = button;
@@ -710,7 +767,8 @@ async function perform(action: Action) {
   } else if ("focus" in action) {
     await emulateFocus(contents, action.focus);
   } else if ("capture" in action) {
-    await capture(action.capture, action.probes ?? [], action.masks ?? []);
+    if (tooltipLog === undefined) await capture(action.capture, action.probes ?? [], action.masks ?? []);
+    else await captureTooltips(action.capture);
   }
   if ("mouse" in action || "wheel" in action || "key" in action) await nextFrames();
 }

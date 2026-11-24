@@ -151,7 +151,7 @@ fn write_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> Result<(), St
         .map_err(|e| format!("{}: {e}", path.display()))
 }
 
-fn json(value: &JsValue) -> Result<String, String> {
+pub fn json(value: &JsValue) -> Result<String, String> {
     asrs_js::json::stringify_gap(value, " ")
         .map_err(|e| format!("{e:?}"))?
         .map(|text| text + "\n")

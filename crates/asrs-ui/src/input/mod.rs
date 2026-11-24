@@ -9,6 +9,7 @@ mod segmented;
 mod select;
 pub(crate) mod skia;
 mod slider;
+mod spin;
 pub mod style;
 
 pub use field::{FieldEvent, FieldGeometry, FieldKind, TextField, geometry};

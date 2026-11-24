@@ -363,6 +363,12 @@ pub fn screen_height() -> f64 {
     imp::probe::screen_height()
 }
 
+/// What AppKit gets for tooltips set one after the other on one view, and whether its tooltip
+/// manager then owns the view's tracking rect.
+pub fn tooltip_roundtrip(texts: &[&str]) -> Vec<(Option<String>, bool)> {
+    imp::probe::tooltip_roundtrip(texts)
+}
+
 pub fn is_tagged_srgb(window: &Window) -> Option<bool> {
     imp::probe::is_tagged_srgb(window)
 }

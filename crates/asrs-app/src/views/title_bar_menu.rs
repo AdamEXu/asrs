@@ -10,6 +10,7 @@ use asrs_ui::input::style::CONTROL_FONT;
 use asrs_ui::parity::probed;
 use asrs_ui::text::{self, FontSpec, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, BUTTON_RADIUS, FOCUS_RING_RADIUS};
+use asrs_ui::tooltip::titled;
 
 pub const LABELS: [&str; 6] = ["App", "File", "View", "Tabs", "Window", "Help"];
 const PADDING: f64 = 4.0;
@@ -193,7 +194,7 @@ fn menu_button(
             .top(px(y as f32))
             .w(px(w as f32))
             .h(px(h as f32))
-            .child(button),
+            .child(titled(format!("{text} menu"), button)),
     )
     .into_any_element()
 }

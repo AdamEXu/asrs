@@ -15,6 +15,7 @@ use asrs_ui::gpui::{
 use asrs_ui::input::{Checkbox, PointerState};
 use asrs_ui::parity::probed;
 use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS};
+use asrs_ui::tooltip::{titled, untitled};
 
 use super::layout::{BetaLayout, BetaRow, LuRect, TextBlock, Typesetter};
 use super::page::{self, PageScroll, Placer, ScrolledPage, mix};
@@ -364,8 +365,11 @@ impl BetaWelcomePage {
             boxed = boxed.child(focus::outline(appearance));
         }
         let label = placer.block(text, |_| mix(0xffffff, background, opacity), cx);
+        let label = label
+            .into_iter()
+            .map(|label| untitled(label).into_any_element());
         div()
-            .child(probed("button", boxed))
+            .child(probed("button", titled("Continue", boxed)))
             .children(label)
             .into_any_element()
     }

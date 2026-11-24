@@ -78,6 +78,9 @@ pub(super) struct TypeData {
     /// constructor is first built.
     pub ctor: Option<Vec<FieldId>>,
     pub decode_ready: bool,
+    /// Whether decoding this type can observe `$unknowns`, a shadowed `$type` or
+    /// `hasOwnProperty`, or a truthy default on a message field.
+    pub odd: bool,
     /// The fields the current generated `toObject` covers.
     pub to_object: Option<Vec<FieldId>>,
 }
@@ -893,7 +896,12 @@ fn enum_value_lookup(data: &EnumData, name: &JsString) -> JsDefault {
         return JsDefault::Object(data.values_by_id.clone());
     }
     if is_object_prototype_name(name) {
-        return JsDefault::Function;
+        let function = if js_eq(name, "constructor") {
+            js("Object")
+        } else {
+            name.clone()
+        };
+        return JsDefault::Function(function);
     }
     JsDefault::Undefined
 }

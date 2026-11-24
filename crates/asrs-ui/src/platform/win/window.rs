@@ -64,6 +64,12 @@ pub fn screen_bounds(window: &Window, bounds: Bounds<Pixels>) -> Option<Bounds<P
     Some(Bounds::new(origin + bounds.origin, bounds.size))
 }
 
+/// The work area of the window's monitor.
+pub fn monitor_bounds(window: &Window) -> Option<Bounds<Pixels>> {
+    let native = native(window)?;
+    Some(super::logical(work_area(native.0)?, native.scale() as f32))
+}
+
 /// A window's frame in device px.
 pub struct Frame {
     pub width: i32,
