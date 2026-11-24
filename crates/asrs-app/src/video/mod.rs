@@ -88,11 +88,7 @@ pub fn init(paths: &AppPaths, cx: &mut App) {
                     error
                 }
             };
-            // `showErrorBox` blocks, so the next error waits for this one's box to close.
-            let (closed, wait) = async_channel::bounded::<()>(1);
-            let error = format!("Error: {error}");
-            cx.update(|cx| dispatch::show_uncaught(&error, cx, move |_| drop(closed)));
-            let _ = wait.recv().await;
+            cx.update(|cx| dispatch::show_uncaught(format!("Error: {error}"), cx));
         }
     })
     .detach();

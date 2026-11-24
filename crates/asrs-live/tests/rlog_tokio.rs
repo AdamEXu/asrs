@@ -1,5 +1,6 @@
-//! The RLOG transport over real sockets: held writes, `Connect`/`Data`, `destroy` dropping already-queued data, `localhost` across address families, and a
-//! refused connection.
+//! The RLOG transport over real sockets: held writes, `Connect`/`Data`, `destroy` dropping
+//! already-queued data, `localhost` across address families, a refused connection, a full backlog
+//! and a refused port.
 
 use std::io::{Read, Write};
 use std::net::TcpListener;

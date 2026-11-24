@@ -228,7 +228,7 @@ impl RlogBridge {
         );
         self.arm(cx);
         if let Err(thrown) = result {
-            dispatch::show_uncaught(&thrown.to_string(), cx, |_| {});
+            dispatch::show_uncaught(thrown.to_string(), cx);
         }
     }
 

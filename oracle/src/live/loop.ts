@@ -59,8 +59,9 @@ const realSetImmediate: (cb: () => void) => unknown = g.setImmediate;
  * delayed tasks outside the nesting rules (level 0, never clamped) but in the timers' due-time
  * order. At equal due times precise timers, those with a delay from 1 to 31 ms, run before the
  * others: longer timers, the delayed tasks, and timers without a delay, which join the queue behind
- * what is already due. Each group runs in creation order (`live/net/timers`). The emulated main process shares these rules although Node has no nesting clamp;
- * main.ts never asks for a delay under 4 ms. Exceptions escaping a task are swallowed, as a
+ * what is already due. Each group runs in creation order (`live/net/timers`). The emulated main
+ * process shares these rules although Node has no nesting clamp; main.ts never asks for a delay
+ * under 4 ms. Exceptions escaping a task are swallowed, as a
  * page reports and continues.
  */
 export class LiveLoop {

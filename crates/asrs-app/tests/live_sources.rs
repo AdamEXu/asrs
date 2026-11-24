@@ -822,23 +822,27 @@ fn an_rlog_port_node_refuses_leaves_the_page_searching() {
     page.cx.update(|cx| {
         windows::init(cx);
         cx.set_global(Script {
-            replies: [Reply::Button(0)].into(),
+            replies: [Reply::Button(0), Reply::Button(0)].into(),
             ..Script::default()
         });
     });
     page.preferences(|p| {
         p.live_mode = LiveMode::Rlog;
-        p.rlog_port = 70000.0;
     });
-    page.start_live("robot");
-    page.advance(5000);
-    let shown = page.cx.update(|cx| cx.global::<Script>().shown.clone());
-    assert!(
-        matches!(&shown[..], [(_, Shown::Message(m))]
-            if m.message == "A JavaScript error occurred in the main process"
-                && m.detail == "Uncaught Exception:\nRangeError [ERR_SOCKET_BAD_PORT]: Port should be >= 0 and < 65536. Received type number (70000)."),
-        "{shown:?}"
-    );
+    for port in ["70000", "1.5"] {
+        page.preferences(|p| p.rlog_port = port.parse().unwrap());
+        page.start_live("robot");
+        page.advance(5000);
+        let shown = page
+            .cx
+            .update(|cx| std::mem::take(&mut cx.global_mut::<Script>().shown));
+        assert!(
+            matches!(&shown[..], [(_, Shown::Message(m))]
+                if m.message == "A JavaScript error occurred in the main process"
+                    && m.detail == format!("Uncaught Exception:\nRangeError [ERR_SOCKET_BAD_PORT]: Port should be >= 0 and < 65536. Received type number ({port}).")),
+            "{shown:?}"
+        );
+    }
     assert_eq!(server.connections(), 0);
     assert_eq!(page.runtime_tasks(), 0);
 
