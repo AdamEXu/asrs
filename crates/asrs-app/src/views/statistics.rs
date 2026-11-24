@@ -376,11 +376,11 @@ impl Document for StatisticsText {
         Place {
             cell: true,
             tab: true,
-            newline_before: false,
             newline_after: last,
             closed: last,
             after_other: column == 1,
             gap: title,
+            ..Place::default()
         }
     }
 

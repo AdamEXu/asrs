@@ -82,7 +82,6 @@ impl Document for MetadataText<'_> {
         Place {
             cell: true,
             tab: true,
-            newline_before: false,
             newline_after: last,
             closed: last,
             after_other: column == 0,
@@ -91,6 +90,7 @@ impl Document for MetadataText<'_> {
             } else {
                 1
             },
+            ..Place::default()
         }
     }
 

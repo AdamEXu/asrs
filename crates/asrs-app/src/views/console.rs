@@ -234,12 +234,12 @@ impl Document for ConsoleText<'_> {
         Place {
             cell: true,
             tab: true,
-            newline_before: false,
             newline_after: true,
             closed: true,
             after_other: true,
             // The newline and the tab around the timestamp.
             gap: 2 + self.0[block].timestamp.len(),
+            ..Place::default()
         }
     }
 }
@@ -289,7 +289,11 @@ impl PageText for ConsolePage<'_> {
             origin: origin.map(|v| device(v, self.scale)),
             scale: self.scale,
         };
-        placed.hit(at, backend)
+        let link = placed.node_at(at).and_then(|node| value.link_around(node));
+        Hit {
+            link,
+            ..placed.hit(at, backend)
+        }
     }
 }
 

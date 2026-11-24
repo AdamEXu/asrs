@@ -51,6 +51,8 @@ pub struct Hit {
     pub selectable: bool,
     /// The element is text that can be selected.
     pub text: bool,
+    /// The bytes of the block that are the link it is in.
+    pub link: Option<(usize, usize)>,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -173,6 +175,8 @@ enum State {
 enum TextDrag {
     /// The press was not on the selection.
     No,
+    /// The press was on a link, which is what moving drags.
+    Link,
     Undecided,
     Started,
     TooSoon,
@@ -280,6 +284,20 @@ impl TextSelection {
         Some(document::extract(doc, &self.range(doc)?))
     }
 
+    /// Sets a selection, and the granularity it is extended by. One that is the same as before is
+    /// not set again (`selection_remains_the_same`), and the granularity is as it was.
+    fn set_with(
+        &mut self,
+        doc: &dyn Document,
+        [anchor, focus]: [Position; 2],
+        granularity: Granularity,
+    ) {
+        if self.ends(doc) != Some([anchor, focus]) {
+            self.granularity = granularity;
+        }
+        self.set(doc, anchor, focus);
+    }
+
     fn set(&mut self, doc: &dyn Document, anchor: Position, focus: Position) {
         self.generation = doc.generation();
         self.ends = Some([anchor, focus].map(|p| Endpoint::new(doc, p)));
@@ -367,8 +385,7 @@ impl TextSelection {
         if click_count == 2 && self.behavior.selects_trailing_whitespace() && start != end {
             end = units::skip_whitespace(doc, end);
         }
-        self.granularity = Granularity::Word;
-        self.set(doc, start, end);
+        self.set_with(doc, [start, end], Granularity::Word);
     }
 
     /// `HandleMousePressEvent`, and for the right button the context menu event that follows it.
@@ -378,7 +395,11 @@ impl TextSelection {
         self.mouse = Some(Mouse {
             button: press.button,
             hit,
-            text_drag: TextDrag::No,
+            text_drag: if hit.link.is_some() && press.click_count <= 1 {
+                TextDrag::Link
+            } else {
+                TextDrag::No
+            },
         });
         match (hit.selectable.then_some(hit.caret).flatten(), press.button) {
             (None, _) => {}
@@ -394,8 +415,7 @@ impl TextSelection {
                 let start = units::start_of(doc, caret, Granularity::Paragraph);
                 let end = units::end_of(doc, caret, Granularity::Paragraph);
                 let end = units::within_selectable(doc, caret.position.block, end);
-                self.granularity = Granularity::Paragraph;
-                self.set(doc, start, end);
+                self.set_with(doc, [start, end], Granularity::Paragraph);
             }
             _ => {}
         }
@@ -406,13 +426,14 @@ impl TextSelection {
 
     /// `HandleSingleClick`.
     fn single(&mut self, doc: &dyn Document, hit: Hit, caret: Caret, shift: bool) {
-        if !shift && self.contains(doc, &hit) {
+        let extends = shift && hit.link.is_none();
+        if !extends && self.contains(doc, &hit) {
             if let Some(mouse) = &mut self.mouse {
                 mouse.text_drag = TextDrag::Undecided;
             }
             return;
         }
-        if let (true, Some(ends)) = (shift, self.ends(doc)) {
+        if let (true, Some(ends)) = (extends, self.ends(doc)) {
             let [anchor, focus] = if self.behavior.directional() {
                 self.directional(doc, caret, ends)
             } else {
@@ -421,8 +442,7 @@ impl TextSelection {
             self.set(doc, anchor, focus);
             return;
         }
-        self.granularity = Granularity::Character;
-        self.set(doc, caret.position, caret.position);
+        self.set_with(doc, [caret.position; 2], Granularity::Character);
     }
 
     /// `UpdateSelectionForContextMenuEvent`.
@@ -430,7 +450,14 @@ impl TextSelection {
         if let Some(caret) = hit.caret.filter(|_| {
             hit.text && self.behavior.selects_word_for_menu() && !self.contains(doc, &hit)
         }) {
-            self.select_word(doc, caret, 1);
+            match hit.link {
+                Some((start, end)) => {
+                    let block = caret.position.block;
+                    let ends = [start, end].map(|offset| Position { block, offset });
+                    self.set_with(doc, ends, Granularity::Word);
+                }
+                None => self.select_word(doc, caret, 1),
+            }
         }
     }
 
@@ -458,7 +485,7 @@ impl TextSelection {
             return;
         };
         match text_drag {
-            TextDrag::Started | TextDrag::Undecided => {}
+            TextDrag::Link | TextDrag::Started | TextDrag::Undecided => {}
             // Blink restarts the selection at the press and takes the caret that leaves for the
             // end of the gesture, so it only ever follows the pointer.
             TextDrag::TooSoon => self.set(doc, caret.position, caret.position),

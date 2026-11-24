@@ -287,11 +287,10 @@ impl Document for TableText<'_> {
         Place {
             cell: true,
             tab: block > 0,
-            newline_before: false,
             newline_after: last,
             closed: last,
-            after_other: false,
             gap: 1,
+            ..Place::default()
         }
     }
 }
@@ -446,6 +445,7 @@ impl PageText for TablePage<'_> {
                 })),
                 selectable: true,
                 text: false,
+                link: None,
             };
         };
         let block = cell_block(&cell.cell, &text, column == 0, scale, backend);

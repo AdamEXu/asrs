@@ -16,6 +16,8 @@ pub struct Place {
     pub newline_before: bool,
     /// The block, or an element that ends with it, is not inline.
     pub newline_after: bool,
+    /// No text but the position after a selectable table.
+    pub table_end: bool,
     /// The way to the next block passes an element that cannot be selected.
     pub closed: bool,
     /// Between the last block and this one there is something else: text that cannot be selected
@@ -61,10 +63,10 @@ pub fn extract(doc: &dyn Document, range: &Range<Position>) -> String {
     for block in start.block..=end.block {
         let place = doc.place(block);
         if block != start.block && !out.ends_with('\n') {
-            if place.tab {
-                out.push('\t');
-            } else if place.newline_before {
+            if place.newline_before {
                 out.push('\n');
+            } else if place.tab {
+                out.push('\t');
             }
         }
         let text = doc.text(block);

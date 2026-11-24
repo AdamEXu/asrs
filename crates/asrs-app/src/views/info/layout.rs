@@ -452,8 +452,8 @@ pub struct HelpBand {
     pub bottom: Lu,
     /// The block at each of its parts, left to right, with the part's right edge.
     pub parts: Vec<(Lu, usize)>,
-    /// The blocks of the table it is in.
-    pub table: Option<(LuRect, Range<usize>)>,
+    /// The table it is in and the blocks before and after it.
+    pub table: Option<(LuRect, [usize; 2])>,
     /// The right edge of the icon before its text.
     pub icon: Option<Lu>,
 }
@@ -518,6 +518,7 @@ impl HelpText {
                 push(&mut out, rect, block);
             }
             if let Some((rect, rows)) = &placed.table {
+                out.blocks.push(HelpBlock::edge(false));
                 let first = out.blocks.len();
                 for (r, row) in rows.iter().enumerate() {
                     let index = out.blocks.len();
@@ -525,7 +526,7 @@ impl HelpText {
                     out.bands.push(HelpBand {
                         bottom: row.row[1] + row.row[3],
                         parts: vec![(name_right, index), (whole, index + 1)],
-                        table: Some((*rect, first..first + 2 * rows.len())),
+                        table: Some((*rect, [first - 1, first + 2 * rows.len()])),
                         icon: None,
                     });
                     out.blocks.push(HelpBlock::new(
@@ -550,6 +551,9 @@ impl HelpText {
                     ));
                 }
             }
+            if placed.table.is_some() {
+                out.blocks.push(HelpBlock::edge(true));
+            }
             push(&mut out, &placed.sources, &placed.sources_text);
         }
         out
@@ -557,6 +561,24 @@ impl HelpText {
 }
 
 impl HelpBlock {
+    /// The position before or after a table.
+    fn edge(end: bool) -> HelpBlock {
+        HelpBlock {
+            text: String::new(),
+            block: Block {
+                lines: Vec::new(),
+                font: help_title_style().font,
+                truncates: false,
+            },
+            origin: [0; 2],
+            place: Place {
+                table_end: end,
+                gap: 1,
+                ..Place::default()
+            },
+        }
+    }
+
     fn new(block: &TextBlock, place: Place) -> HelpBlock {
         HelpBlock {
             text: block.flow.text.clone(),

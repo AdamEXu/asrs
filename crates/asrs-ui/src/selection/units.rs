@@ -49,6 +49,18 @@ fn previous(doc: &dyn Document, position: Position) -> Option<Position> {
     Some(at(block, doc.text(block).len()))
 }
 
+/// The position a selection of a whole paragraph that ends at `end` ends at: past the break after
+/// it, and past the end of a table it is the last one of.
+fn past_paragraph(doc: &dyn Document, end: Position) -> Position {
+    let Some(past) = next(doc, end) else {
+        return end;
+    };
+    if !doc.place(past.block).table_end {
+        return past;
+    }
+    next(doc, past).unwrap_or(end)
+}
+
 fn paragraph_start(doc: &dyn Document, position: Position) -> Position {
     let text = doc.text(position.block);
     let start = text[..position.offset].rfind('\n').map_or(0, |n| n + 1);
@@ -131,12 +143,9 @@ pub fn end_of(doc: &dyn Document, caret: Caret, granularity: Granularity) -> Pos
             if doc.place(position.block).cell {
                 return position;
             }
-            next(doc, position).unwrap_or(position)
+            past_paragraph(doc, position)
         }
-        Granularity::Paragraph => {
-            let end = paragraph_end(doc, position);
-            next(doc, end).unwrap_or(end)
-        }
+        Granularity::Paragraph => past_paragraph(doc, paragraph_end(doc, position)),
     }
 }
 

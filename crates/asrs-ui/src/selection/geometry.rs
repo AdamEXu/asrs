@@ -145,15 +145,20 @@ impl Block {
         }
     }
 
+    /// The text node under a point from the block's origin.
+    pub fn node_at(&self, [x, y]: [Lu; 2]) -> Option<usize> {
+        let on = |from: Lu, size: Lu, at: Lu| (from..from + size).contains(&at);
+        self.lines
+            .iter()
+            .filter(|line| on(line.box_top, line.box_height, y))
+            .flat_map(|line| &line.pieces)
+            .find(|piece| on(piece.x, piece.width, x))
+            .map(|piece| piece.node)
+    }
+
     /// Whether a point from the block's origin is on its text.
-    pub fn on_text(&self, [x, y]: [Lu; 2]) -> bool {
-        self.lines.iter().any(|line| {
-            (line.box_top..line.box_top + line.box_height).contains(&y)
-                && line
-                    .pieces
-                    .iter()
-                    .any(|p| (p.x..p.x + p.width).contains(&x))
-        })
+    pub fn on_text(&self, at: [Lu; 2]) -> bool {
+        self.node_at(at).is_some()
     }
 
     /// The boxes `LayoutSelection` paints for a selection of the block's text from `start`,

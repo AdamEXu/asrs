@@ -91,6 +91,25 @@ pub fn value_text(row: &ConsoleRow) -> String {
 }
 
 impl Cell {
+    /// The bytes of the cell's [`value_text`] that are the link node `node` is in.
+    pub fn link_around(&self, node: usize) -> Option<(usize, usize)> {
+        let links = |node: &CellNode| matches!(node, CellNode::Text { link: true, .. });
+        let length = |node: &CellNode| match node {
+            CellNode::Text { text, .. } => text.len(),
+            CellNode::Break => 1,
+        };
+        if !links(self.nodes.get(node)?) {
+            return None;
+        }
+        let before = self.nodes[..node].iter().rposition(|n| !links(n));
+        let first = before.map_or(0, |n| n + 1);
+        let after = self.nodes[node..].iter().position(|n| !links(n));
+        let last = after.map_or(self.nodes.len(), |n| node + n);
+        let start: usize = self.nodes[..first].iter().map(length).sum();
+        let len: usize = self.nodes[first..last].iter().map(length).sum();
+        Some((start, start + len))
+    }
+
     /// The cell's lines, for selecting. `text` is its [`value_text`] and `text_box` the top and
     /// height of a line's text boxes in CSS px.
     pub fn block(&self, text: &str, text_box: (f64, f64), scale: f64) -> geometry::Block {

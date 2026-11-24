@@ -64,6 +64,7 @@ pub(super) fn unselectable(doc: &dyn Document, block: usize) -> Hit {
         caret: next.or_else(|| end(doc)).map(Caret::new),
         selectable: false,
         text: false,
+        link: None,
     }
 }
 
@@ -95,17 +96,27 @@ impl PlacedBlock<'_> {
         }
     }
 
-    pub fn hit(&self, [x, y]: [f64; 2], backend: &mut dyn TextBackend) -> Hit {
-        let at = [
+    fn from_origin(&self, [x, y]: [f64; 2]) -> [Lu; 2] {
+        [
             floor_device(x, self.scale) - self.origin[0],
             floor_device(y, self.scale) - self.origin[1],
-        ];
+        ]
+    }
+
+    /// The text node at a client position.
+    pub fn node_at(&self, at: [f64; 2]) -> Option<usize> {
+        self.block.node_at(self.from_origin(at))
+    }
+
+    pub fn hit(&self, at: [f64; 2], backend: &mut dyn TextBackend) -> Hit {
+        let at = self.from_origin(at);
         let behavior = Behavior::current();
         let mut measure = self.measure(backend);
         Hit {
             caret: Some(self.block.caret_at(self.index, at, behavior, &mut measure)),
             selectable: true,
             text: self.block.on_text(at),
+            link: None,
         }
     }
 

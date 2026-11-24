@@ -122,14 +122,13 @@ impl DocumentText for HelpDocument {
         if let Some(([left, _, width, _], cells)) = &band.table
             && !(*left..=left + width).contains(&x)
         {
-            let before = x - left <= width / 2;
-            let block = if before { cells.start } else { cells.end - 1 };
-            let end = self.0.blocks[block].text.len();
-            let offset = if before { 0 } else { end };
+            let block = cells[usize::from(x - left > width / 2)];
+            let caret = Caret::new(Position { block, offset: 0 });
             return Hit {
-                caret: Some(Caret::new(Position { block, offset })),
+                caret: Some(caret),
                 selectable: true,
                 text: false,
+                link: None,
             };
         }
         let part = band.parts.iter().find(|(right, _)| x < *right);
@@ -209,6 +208,7 @@ impl Painter<'_> {
         }
         if let Some((rect, rows)) = &layout.table {
             self.probe("table.options", *rect);
+            self.next += 1;
             for (row, option) in rows.iter().zip(&item.options) {
                 let behind = [self.behind(), self.behind()];
                 self.boxes.extend(behind.into_iter().flatten());
@@ -220,6 +220,9 @@ impl Painter<'_> {
                 });
                 self.boxes.extend(name.into_iter().chain(values));
             }
+        }
+        if layout.table.is_some() {
+            self.next += 1;
         }
         self.probe("div.source-types", layout.sources);
         let behind = self.behind();

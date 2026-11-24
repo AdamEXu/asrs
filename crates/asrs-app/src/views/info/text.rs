@@ -43,6 +43,7 @@ pub fn caret_in(
         caret: Some(block.caret_at(index, at, Behavior::current(), &mut measure)),
         selectable: true,
         text: block.on_text(at),
+        link: None,
     }
 }
 
@@ -51,6 +52,7 @@ pub fn unselectable(block: usize) -> Hit {
         caret: Some(Caret::new(Position { block, offset: 0 })),
         selectable: false,
         text: false,
+        link: None,
     }
 }
 
