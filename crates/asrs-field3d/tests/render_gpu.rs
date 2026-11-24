@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use asrs_field3d::render::{
     FatLine, FrameOptions, Geometry, Line, LineBasicMaterial, LineMaterial, LineSegmentsGeometry,
-    Mesh, NodeKind, PhongMaterial, RenderThread, Renderer, Scene, build_frame,
+    Mesh, NodeKind, PhongMaterial, RenderThread, Renderer, Scene, build_frame, edge_mask,
 };
 use asrs_field3d::three::{
     ArrayData, BufferAttribute, BufferGeometry, Color, PerspectiveCamera, Vector3, primitives,
@@ -218,4 +218,88 @@ fn an_indexed_line_strip_draws() {
     renderer.render(&frame, &mut bgra);
     let lit = (0..H).filter(|&y| pixel(&bgra, W / 2, y)[0] == 255).count();
     assert_eq!(lit, 1);
+}
+
+fn line_between(samples: u32, y: f32) -> (Scene, PerspectiveCamera, FrameOptions) {
+    let (mut scene, camera) = scene_with_box_at(100.0);
+    let root = scene.root;
+    let mut geometry = BufferGeometry::default();
+    geometry.set_attribute(
+        "position",
+        BufferAttribute::new(
+            ArrayData::Float32(vec![-9.0, y, 0.0, 9.0, y, 0.0]),
+            3,
+            false,
+        ),
+    );
+    scene.add(
+        root,
+        NodeKind::Line(Line {
+            geometry: Geometry::new(geometry),
+            material: Arc::new(LineBasicMaterial::new(Color::hex(16777215.0))),
+            segments: true,
+        }),
+    );
+    let options = FrameOptions {
+        samples,
+        ..FrameOptions::new(f64::from(W), f64::from(H), 1.0, true)
+    };
+    (scene, camera, options)
+}
+
+#[test]
+fn every_pixel_a_line_lights_is_an_edge_pixel() {
+    let Some(mut renderer) = renderer() else {
+        return;
+    };
+    let pixel_height = (2.0 * 6.0 * 25f32.to_radians().tan()) / H as f32;
+    let mut mixed_rows = 0;
+    for samples in [1, 4] {
+        for step in 0..8 {
+            let y = step as f32 * pixel_height / 8.0;
+            let (mut scene, mut camera, options) = line_between(samples, y);
+            let frame = build_frame(&mut scene, &mut camera, options);
+            let mut bgra = Vec::new();
+            renderer.render(&frame, &mut bgra);
+            let aux = renderer.render_aux(&frame);
+            let edges = edge_mask(&aux);
+            let lit: Vec<usize> = (0..(W * H) as usize)
+                .filter(|&i| bgra[i * 4] != 0x22)
+                .collect();
+            assert!(lit.len() >= W as usize, "{samples} samples, step {step}");
+            for i in lit {
+                assert!(edges[i], "{samples} samples, step {step}, pixel {i}");
+            }
+            assert!(samples > 1 || aux.mixed.iter().all(|m| !m));
+            mixed_rows += aux.mixed.iter().filter(|m| **m).count() / W as usize;
+        }
+    }
+    assert!(mixed_rows > 0);
+}
+
+#[test]
+fn a_viewport_wider_than_the_buffer_clips_its_last_column() {
+    let Some(mut renderer) = renderer() else {
+        return;
+    };
+    let (mut scene, mut camera) = scene_with_box_at(1.2);
+    let options = FrameOptions::new(f64::from(W), f64::from(H), 1.0, false);
+    let mut render = |gl_viewport| {
+        let frame = build_frame(
+            &mut scene,
+            &mut camera,
+            FrameOptions {
+                gl_viewport,
+                ..options
+            },
+        );
+        let mut bgra = Vec::new();
+        renderer.render(&frame, &mut bgra);
+        bgra
+    };
+    let exact = render([W, H]);
+    let wide = render([2 * W, H]);
+    assert_eq!(pixel(&exact, W / 2, H / 4), [0, 0, 0xff, 0xff]);
+    assert_eq!(pixel(&wide, W / 2, H / 4), [0x22, 0x22, 0x22, 0xff]);
+    assert_eq!(pixel(&wide, W - 1, H / 4), [0, 0, 0xff, 0xff]);
 }
