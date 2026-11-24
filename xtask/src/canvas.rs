@@ -22,7 +22,8 @@ commands:
                         the platform text backend (asrs-cli canvas lut)
   measure [--check]     write parity/vectors/canvas/measure-<os>.jsonl.zst
   scenes                write parity/vectors/canvas/scenes-<os>/: the display lists and CPU
-                        references of the text scenes `asrs-cli` tests against on that platform
+                        references of the text scenes `asrs-cli` tests against on that platform, and on
+                        Windows the DOM text captures
   diff <port dir> [<scene>...]
                         gate <port dir>/<scene>.png (straight RGBA, like getImageData) against the
                         references; writes <port dir>/report.json and diff/<scene>.png
@@ -254,37 +255,104 @@ fn write_pinned(paths: &Paths, reference: &Path) -> Result {
             ("content", Json::string(&oracle::hash_bytes(&image))),
         ]));
     }
+    if platform() == "windows" {
+        pin_dom_scenes(reference, &dir, &mut entries)?;
+    }
+    let count = entries.len();
     update_manifest(
         paths,
         &reference.join("info.json"),
         "scenes",
         Json::Array(entries),
     )?;
-    eprintln!("wrote {} scenes to {}", PINNED_SCENES.len(), dir.display());
+    eprintln!("wrote {count} scenes to {}", dir.display());
     Ok(())
 }
 
-/// Refuses a Linux host whose fontconfig does not serve the font files the manifest records for
-/// the render host, wherever they are installed.
+/// The DOM text captures, with the text boxes' ids and rects: LCD text that the Windows backend's
+/// three-channel masks are tested against.
+fn pin_dom_scenes(reference: &Path, dir: &Path, entries: &mut Vec<Json>) -> Result {
+    for theme in ["light", "dark"] {
+        for scale in [1, 2] {
+            let name = format!("dom-text-{theme}@{scale}x");
+            let scene = read_json(&reference.join(format!("dom/{name}.json")))?;
+            let rows = scene.get("rows").and_then(Json::as_array);
+            let rows = rows.ok_or_else(|| format!("{name}: no rows"))?.iter();
+            let rows = rows
+                .map(|row| {
+                    let field = |key| row.get(key).cloned().unwrap_or(Json::Null);
+                    Json::object([("id", field("id")), ("rect", field("rect"))])
+                })
+                .collect();
+            let scene = Json::object([("scene", Json::string(&name)), ("rows", Json::Array(rows))]);
+            let image = oracle::read(&reference.join(format!("dom/{name}.png")))?;
+            write(
+                &dir.join(format!("{name}.json")),
+                format!("{}\n", scene.to_pretty()).as_bytes(),
+            )?;
+            write(&dir.join(format!("{name}.png")), &image)?;
+            entries.push(Json::object([
+                ("scene", Json::string(&name)),
+                ("content", Json::string(&oracle::hash_bytes(&image))),
+            ]));
+        }
+    }
+    Ok(())
+}
+
+fn recorded_fonts(paths: &Paths) -> Result<Vec<(String, Option<String>)>> {
+    let name = format!("{}.json", platform());
+    let manifest = read_json(&vectors_dir(paths).join(&name))?;
+    let Some(Json::Object(fonts)) = manifest.get("host").and_then(|h| h.get("fonts")) else {
+        return Err(format!("{name} records no host fonts"));
+    };
+    Ok(fonts
+        .iter()
+        .map(|(path, hash)| {
+            let hash = hash.as_str().map(|h| h.to_string_lossy());
+            (path.to_string_lossy(), hash)
+        })
+        .collect())
+}
+
+/// Refuses a Windows or Linux host whose fonts are not the files the manifest records for the
+/// render host, wherever fontconfig finds them on Linux.
 pub(crate) fn check_fonts(paths: &Paths) -> Result {
-    if platform() != "linux" {
+    match platform() {
+        "linux" => check_fontconfig(paths),
+        "windows" => {
+            let mut problems = Vec::new();
+            for (path, want) in recorded_fonts(paths)? {
+                let found = fs::read(&path).ok().map(|b| crate::sha256_hex(&b));
+                if found != want {
+                    problems.push(format!("{path}: not the recorded file"));
+                }
+            }
+            font_problems(&problems)
+        }
+        _ => Ok(()),
+    }
+}
+
+fn font_problems(problems: &[String]) -> Result {
+    if problems.is_empty() {
         return Ok(());
     }
-    let manifest = read_json(&vectors_dir(paths).join("linux.json"))?;
-    let Some(Json::Object(fonts)) = manifest.get("host").and_then(|h| h.get("fonts")).cloned()
-    else {
-        return Err("linux.json records no host fonts".to_owned());
-    };
+    Err(format!(
+        "the fonts differ from the render host's:\n  {}",
+        problems.join("\n  ")
+    ))
+}
+
+fn check_fontconfig(paths: &Paths) -> Result {
     let listed = Command::new("fc-list")
         .args(["-f", "%{file}\n"])
         .output()
         .map_err(|e| format!("fc-list: {e}"))?;
     let listed = String::from_utf8_lossy(&listed.stdout).into_owned();
     let mut problems = Vec::new();
-    for (path, hash) in &fonts {
-        let path = path.to_string_lossy();
+    for (path, want) in recorded_fonts(paths)? {
         let name = path.rsplit('/').next().unwrap_or_default();
-        let want = hash.as_str().map(|h| h.to_string_lossy());
         let found: Vec<&str> = listed
             .lines()
             .filter(|l| l.rsplit('/').next() == Some(name))
@@ -298,14 +366,7 @@ pub(crate) fn check_fonts(paths: &Paths) -> Result {
             }
         }
     }
-    if problems.is_empty() {
-        Ok(())
-    } else {
-        Err(format!(
-            "the fonts differ from the render host's (set FONTCONFIG_FILE):\n  {}",
-            problems.join("\n  ")
-        ))
-    }
+    font_problems(&problems).map_err(|e| format!("{e}\n(set FONTCONFIG_FILE)"))
 }
 
 fn measure(paths: &Paths, check: bool) -> Result {
@@ -365,7 +426,42 @@ pub(crate) fn read_json(path: &Path) -> Result<Json> {
     json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-pub(crate) fn set_manifest_field(paths: &Paths, platform: &str, key: &str, value: Json) -> Result {
+/// The fonts `recorded` has that are missing from `now` or other files in it.
+fn changed_fonts(recorded: &Json, now: &Json) -> Vec<String> {
+    let Some(Json::Object(fonts)) = recorded.get("fonts") else {
+        return Vec::new();
+    };
+    let now = now.get("fonts");
+    fonts
+        .iter()
+        .filter(|(path, hash)| {
+            now.and_then(|n| n.get(&path.to_string_lossy()).cloned())
+                .as_ref()
+                != Some(hash)
+        })
+        .map(|(path, _)| path.to_string_lossy())
+        .collect()
+}
+
+/// Stores the host description, unless the host's fonts are not the ones the vectors were recorded
+/// with: an operating system update must not move the reference. Deleting the description from
+/// the manifest by hand allows it.
+pub(crate) fn set_manifest_host(paths: &Paths, platform: &str, description: Json) -> Result {
+    let name = format!("{platform}.json");
+    let manifest = read_json(&vectors_dir(paths).join(&name)).unwrap_or(Json::Null);
+    if let Some(recorded) = manifest.get("host") {
+        let changed = changed_fonts(recorded, &description);
+        if !changed.is_empty() {
+            return Err(format!(
+                "{name} records other files than this host's:\n  {}",
+                changed.join("\n  ")
+            ));
+        }
+    }
+    set_manifest_field(paths, platform, "host", description)
+}
+
+fn set_manifest_field(paths: &Paths, platform: &str, key: &str, value: Json) -> Result {
     let path = vectors_dir(paths).join(format!("{platform}.json"));
     let mut fields: Vec<(String, Json)> = match read_json(&path) {
         Ok(Json::Object(pairs)) => pairs
@@ -837,5 +933,28 @@ fn stable(paths: &Paths) -> Result {
             differing.len(),
             differing.join("\n  ")
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_recorded_font_cannot_change() {
+        let host = |fonts: &[(&str, &str)]| {
+            let fonts = fonts.iter().map(|(k, v)| (*k, Json::string(v)));
+            Json::object([("fonts", Json::object(fonts))])
+        };
+        let recorded = host(&[("a.ttf", "1"), ("b.ttf", "2")]);
+        let more = host(&[("a.ttf", "1"), ("b.ttf", "2"), ("c.ttf", "3")]);
+        assert!(changed_fonts(&recorded, &more).is_empty());
+        assert_eq!(
+            changed_fonts(&recorded, &host(&[("a.ttf", "1")])),
+            ["b.ttf"]
+        );
+        let other = host(&[("a.ttf", "9"), ("b.ttf", "2")]);
+        assert_eq!(changed_fonts(&recorded, &other), ["a.ttf"]);
+        assert!(changed_fonts(&Json::Null, &other).is_empty());
     }
 }
