@@ -23,7 +23,36 @@ fn send(message: &FromHost) {
     }
 }
 
+/// `--error <title> <detail>`: the error box of an asrs that cannot start.
+fn show_error() -> Option<Result<(), String>> {
+    let mut args = std::env::args().skip(1);
+    if args.next()? != "--error" {
+        return None;
+    }
+    let (title, detail) = (args.next()?, args.next()?);
+    let shown = gtk::init().map_err(|e| e.to_string()).map(|()| {
+        let dialog = gtk::MessageDialog::new(
+            None::<&gtk::Window>,
+            gtk::DialogFlags::empty(),
+            gtk::MessageType::Error,
+            gtk::ButtonsType::Ok,
+            &title,
+        );
+        dialog.set_title(&title);
+        dialog.set_secondary_text(Some(&detail));
+        dialog.run();
+    });
+    Some(shown)
+}
+
 pub fn run() {
+    if let Some(shown) = show_error() {
+        if let Err(error) = shown {
+            eprintln!("asrs-webview: {error}");
+            std::process::exit(1);
+        }
+        return;
+    }
     let messages = read();
     let view = match open() {
         Ok(view) => view,

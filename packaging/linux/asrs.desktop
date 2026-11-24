@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=asrs
+GenericName=Robot log viewer
+Comment=Robot telemetry and log viewer
+Exec=@EXEC@ %F
+Icon=asrs
+Terminal=false
+Categories=Utility;
+StartupWMClass=asrs
+InitialPreference=0
+MimeType=@MIME_TYPES@

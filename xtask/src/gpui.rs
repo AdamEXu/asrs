@@ -49,8 +49,8 @@ const VENDORED: &[Vendored] = &[
     },
 ];
 
-// rlib metadata lists the names of cfg-stripped items (`TestPlatform`, `VisualTestPlatform`, ...)
-// even without test-support, so markers must be names and literals that only compiled code carries.
+// rlib metadata lists the names of cfg-stripped items, re-exports included, even without
+// test-support, so `scan` skips it and these must be names and literals that object code carries.
 const TEST_SUPPORT_MARKERS: &[&str] = &["HeadlessAppContext", "no HeadlessRenderer configured"];
 
 pub fn run(args: &[String]) -> Result {
@@ -440,8 +440,14 @@ fn enabled_features(selection: &[&str]) -> Result<Vec<(String, Vec<String>)>> {
 }
 
 fn release_audit() -> Result {
-    let without = release_artifacts(&[])?;
-    let found = scan(&without)?;
+    let without = release_build(&[])?;
+    let mut found = scan(&without.files)?;
+    found.extend(
+        without
+            .enabled
+            .iter()
+            .map(|p| format!("test-support enabled in {p}")),
+    );
     if !found.is_empty() {
         return Err(format!(
             "release build without parity contains test-support code:\n  {}",
@@ -450,21 +456,35 @@ fn release_audit() -> Result {
     }
     eprintln!(
         "release without parity: none of {TEST_SUPPORT_MARKERS:?} in {} artifacts",
-        without.len()
+        without.files.len()
     );
-    let with = release_artifacts(&["--features", "parity"])?;
-    let found = scan(&with)?;
-    if found.is_empty() {
-        return Err("release build with parity shows no test-support marker; the audit cannot see what it checks for".to_owned());
+    let with = release_build(&["--features", "parity"])?;
+    let found = scan(&with.files)?;
+    let unseen: Vec<_> = TEST_SUPPORT_MARKERS
+        .iter()
+        .filter(|m| !found.iter().any(|f| f.starts_with(**m)))
+        .collect();
+    if with.enabled.is_empty() || !unseen.is_empty() {
+        return Err(format!(
+            "release build with parity: test-support in {:?}, markers not found {unseen:?}; the audit cannot see what it checks for",
+            with.enabled
+        ));
     }
     eprintln!(
-        "release with parity: markers found in {} artifacts (control)",
-        found.len()
+        "release with parity (control): test-support in {}, markers found:\n  {}",
+        with.enabled.join(", "),
+        found.join("\n  ")
     );
     Ok(())
 }
 
-fn release_artifacts(features: &[&str]) -> Result<Vec<PathBuf>> {
+struct ReleaseBuild {
+    files: Vec<PathBuf>,
+    /// Packages compiled with the `test-support` feature.
+    enabled: Vec<String>,
+}
+
+fn release_build(features: &[&str]) -> Result<ReleaseBuild> {
     let mut args = vec![
         "build",
         "--release",
@@ -491,18 +511,24 @@ fn release_artifacts(features: &[&str]) -> Result<Vec<PathBuf>> {
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     let mut files = Vec::new();
+    let mut enabled = Vec::new();
     for line in stdout
         .lines()
         .filter(|l| l.contains("\"reason\":\"compiler-artifact\""))
     {
-        let Some(start) = line.find("\"filenames\":[") else {
-            continue;
+        let (Some(package), Some(on), Some(filenames)) = (
+            json_field(line, "\"package_id\":\"", '"'),
+            json_field(line, "\"features\":[", ']'),
+            json_field(line, "\"filenames\":[", ']'),
+        ) else {
+            return Err(format!(
+                "cargo reported an artifact without package, features or files: {line}"
+            ));
         };
-        let rest = &line[start + "\"filenames\":[".len()..];
-        let Some(end) = rest.find(']') else {
-            continue;
-        };
-        for name in rest[..end].split("\",\"") {
+        if on.split(',').any(|f| f == "\"test-support\"") {
+            enabled.push(package.to_owned());
+        }
+        for name in filenames.split("\",\"") {
             let name = name.trim_matches('"').replace("\\\\", "\\");
             let path = PathBuf::from(name);
             let keep = path
@@ -519,20 +545,76 @@ fn release_artifacts(features: &[&str]) -> Result<Vec<PathBuf>> {
     {
         return Err("cargo build reported no asrs binary".to_owned());
     }
-    Ok(files)
+    Ok(ReleaseBuild { files, enabled })
 }
 
-fn scan(files: &[PathBuf]) -> Result<Vec<String>> {
+fn json_field<'a>(line: &'a str, start: &str, end: char) -> Option<&'a str> {
+    let rest = &line[line.find(start)? + start.len()..];
+    Some(&rest[..rest.find(end)?])
+}
+
+pub fn scan(files: &[PathBuf]) -> Result<Vec<String>> {
     let mut found = Vec::new();
     for path in files {
         let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let parts = if path.extension().is_some_and(|e| e == "rlib") {
+            rlib_code(&bytes).map_err(|e| format!("{}: {e}", path.display()))?
+        } else {
+            vec![&bytes[..]]
+        };
         for marker in TEST_SUPPORT_MARKERS {
-            if bytes.windows(marker.len()).any(|w| w == marker.as_bytes()) {
+            if parts
+                .iter()
+                .any(|p| p.windows(marker.len()).any(|w| w == marker.as_bytes()))
+            {
                 found.push(format!("{marker} in {}", path.display()));
             }
         }
     }
     Ok(found)
+}
+
+/// The members of the archive other than `lib.rmeta`.
+fn rlib_code(bytes: &[u8]) -> Result<Vec<&[u8]>> {
+    let mut rest = bytes
+        .strip_prefix(b"!<arch>\n")
+        .ok_or("not an ar archive")?;
+    let mut code = Vec::new();
+    let mut metadata = 0;
+    while !rest.is_empty() {
+        let (header, after) = rest.split_at_checked(60).ok_or("truncated header")?;
+        if &header[58..] != b"`\n" {
+            return Err("bad member header".to_owned());
+        }
+        let size = ar_number(&header[48..58])?;
+        let (member, after) = after.split_at_checked(size).ok_or("truncated member")?;
+        let (name, data) = match header[..16].strip_prefix(b"#1/") {
+            Some(length) => member
+                .split_at_checked(ar_number(length)?)
+                .ok_or("truncated member name")?,
+            None => (&header[..16], member),
+        };
+        let name = name.trim_ascii_end();
+        let name = name.strip_suffix(b"/").unwrap_or(name);
+        let end = name.iter().position(|b| *b == 0).unwrap_or(name.len());
+        if &name[..end] == b"lib.rmeta" {
+            metadata += 1;
+        } else {
+            code.push(data);
+        }
+        rest = after.get(size % 2..).unwrap_or_default();
+    }
+    if metadata != 1 {
+        return Err(format!("{metadata} lib.rmeta members instead of one"));
+    }
+    Ok(code)
+}
+
+fn ar_number(field: &[u8]) -> Result<usize> {
+    std::str::from_utf8(field)
+        .ok()
+        .and_then(|s| s.trim().parse().ok())
+        .ok_or_else(|| format!("bad ar number {:?}", String::from_utf8_lossy(field)))
 }
 
 #[cfg(test)]
@@ -584,5 +666,82 @@ mod tests {
         let mut t = tree(&[("f.rs", "a")]);
         apply_patch(&mut t, patch).unwrap();
         assert_eq!(t["f.rs"], b"b\n");
+    }
+
+    fn rlib(name: &str, source: &str) -> PathBuf {
+        let dir = crate::libm::target_dir().join("gpui-scan").join(name);
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("lib.rs"), source).unwrap();
+        let rustc = std::env::var_os("RUSTC").unwrap_or_else(|| "rustc".into());
+        let status = Command::new(rustc)
+            .args(["--edition=2024", "--crate-type=rlib", "--crate-name=leak"])
+            .args(["-Copt-level=3", "lib.rs"])
+            .current_dir(&dir)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        dir.join("libleak.rlib")
+    }
+
+    fn scan_one(rlib: PathBuf) -> Vec<String> {
+        scan(&[rlib]).unwrap()
+    }
+
+    #[test]
+    fn scan_passes_a_stripped_reexport() {
+        let rlib = rlib(
+            "stripped",
+            "#[cfg(any())] pub use gpui::HeadlessAppContext;
+             pub fn used(n: u32) -> u32 { n + 1 }",
+        );
+        let bytes = fs::read(&rlib).unwrap();
+        assert!(bytes.windows(18).any(|w| w == b"HeadlessAppContext"));
+        assert_eq!(scan_one(rlib), Vec::<String>::new());
+    }
+
+    #[test]
+    fn scan_finds_compiled_test_support() {
+        let name = rlib(
+            "name",
+            "pub struct HeadlessAppContext(pub Vec<u32>);
+             impl HeadlessAppContext {
+                 #[inline(never)]
+                 pub fn run(&mut self) { self.0.push(1) }
+             }",
+        );
+        assert!(scan_one(name)[0].starts_with("HeadlessAppContext in"));
+        let literal = rlib(
+            "literal",
+            "#[inline(never)]
+             pub fn run() -> String { String::from(\"no HeadlessRenderer configured\") }",
+        );
+        assert!(scan_one(literal)[0].starts_with("no HeadlessRenderer configured in"));
+    }
+
+    fn ar(members: &[(&str, &[u8])]) -> Vec<u8> {
+        let mut out = b"!<arch>\n".to_vec();
+        for (name, data) in members {
+            let size = data.len();
+            out.extend(format!("{name:<16}{:<32}{size:<10}`\n", 0).bytes());
+            out.extend(*data);
+            out.extend((size % 2 == 1).then_some(b'\n'));
+        }
+        out
+    }
+
+    #[test]
+    fn rlib_code_is_every_member_but_the_metadata() {
+        let gnu = ar(&[
+            ("a.o/", b"odd"),
+            ("lib.rmeta/", b"m"),
+            ("lib.rmeta-link/", b"x"),
+        ]);
+        assert_eq!(rlib_code(&gnu).unwrap(), [&b"odd"[..], b"x"]);
+        let bsd = ar(&[("#1/12", b"lib.rmeta\0\0\0m"), ("#1/4", b"a.o\0code")]);
+        assert_eq!(rlib_code(&bsd).unwrap(), [b"code"]);
+        assert!(rlib_code(&ar(&[("a.o/", b"code")])).is_err());
+        assert!(rlib_code(&ar(&[("lib.rmeta/", b"m"), ("lib.rmeta/", b"m")])).is_err());
+        assert!(rlib_code(&gnu[..gnu.len() - 4]).is_err());
+        assert!(rlib_code(b"!<thin>\n").is_err());
     }
 }
