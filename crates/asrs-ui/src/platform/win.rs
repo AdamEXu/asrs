@@ -22,8 +22,8 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 
 pub(super) use super::fallback::{
-    add_recent_document, dialog, install_edit_commands, numpad_enter, popup_window_opened,
-    selection_colors, set_application_menu, tag_srgb_colorspace,
+    add_recent_document, dialog, install_edit_commands, numpad_enter, selection_colors,
+    set_application_menu, tag_srgb_colorspace,
 };
 use super::{MenuPath, PopupEntry, PopupMenu, SelectMenu, SelectMenuItemKind, WheelDelta};
 use crate::menu::{CloseHandler, ListStyle, MenuView, Placement};
@@ -264,6 +264,23 @@ pub(super) fn select_popup(
             }
         }
     });
+}
+
+/// GPUI takes half of the frame below a window's content for a frame above it.
+pub(super) fn popup_window_opened(
+    window: &Window,
+    bounds: Bounds<Pixels>,
+    _root: bool,
+    cx: &mut App,
+) {
+    let Some(native) = window::native(window) else {
+        return;
+    };
+    cx.spawn(async move |_| {
+        let px = |v: Pixels| f64::from(f32::from(v));
+        native.set_content_origin(px(bounds.origin.x), px(bounds.origin.y));
+    })
+    .detach();
 }
 
 fn logical(rect: RECT, scale: f32) -> Bounds<Pixels> {
