@@ -1,0 +1,133 @@
+{
+  "about": "The caption buttons Electron draws for titleBarOverlay on Windows, at rest, hovered, pressed and with the press dragged off, in the inactive and the active window. The pointer and the pixels are the desktop's, so only the Windows Electron driver runs it. The pointer stays low in the buttons, so that Electron's native tool tip opens below the strip",
+  "platforms": [
+    "win32"
+  ],
+  "actions": [
+    {
+      "capture": "inactive"
+    },
+    {
+      "pointer": "move",
+      "x": 985,
+      "y": 32
+    },
+    {
+      "capture": "inactive-minimize-hover"
+    },
+    {
+      "pointer": "move",
+      "x": 1031,
+      "y": 32
+    },
+    {
+      "capture": "inactive-maximize-hover"
+    },
+    {
+      "pointer": "move",
+      "x": 1077,
+      "y": 32
+    },
+    {
+      "capture": "inactive-close-hover"
+    },
+    {
+      "pointer": "move",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "activate": true
+    },
+    {
+      "capture": "active"
+    },
+    {
+      "pointer": "move",
+      "x": 985,
+      "y": 32
+    },
+    {
+      "capture": "minimize-hover"
+    },
+    {
+      "pointer": "down",
+      "x": 985,
+      "y": 32
+    },
+    {
+      "capture": "minimize-pressed"
+    },
+    {
+      "pointer": "move",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "capture": "minimize-dragged-off"
+    },
+    {
+      "pointer": "up",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "pointer": "move",
+      "x": 1031,
+      "y": 32
+    },
+    {
+      "capture": "maximize-hover"
+    },
+    {
+      "pointer": "down",
+      "x": 1031,
+      "y": 32
+    },
+    {
+      "capture": "maximize-pressed"
+    },
+    {
+      "pointer": "move",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "capture": "maximize-dragged-off"
+    },
+    {
+      "pointer": "up",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "pointer": "move",
+      "x": 1077,
+      "y": 32
+    },
+    {
+      "capture": "close-hover"
+    },
+    {
+      "pointer": "down",
+      "x": 1077,
+      "y": 32
+    },
+    {
+      "capture": "close-pressed"
+    },
+    {
+      "pointer": "move",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "capture": "close-dragged-off"
+    },
+    {
+      "pointer": "up",
+      "x": 700,
+      "y": 400
+    }
+  ]
+}

@@ -4,8 +4,7 @@
 use std::rc::Rc;
 
 use asrs_services::window_manager::Platform;
-use asrs_ui::gpui::{App, Global, Window, point, px};
-use asrs_ui::menu::{CloseHandler, MenuView};
+use asrs_ui::gpui::{App, Global, Window};
 use asrs_ui::platform::{self, MenuPath, PopupEntry, PopupMenu};
 
 use super::accelerator::Accelerator;
@@ -241,9 +240,8 @@ fn show_application_menu(
     }
 }
 
-/// `menu.popup({ window, x, y })` for a context menu template: native on macOS, drawn in windows
-/// of its own on Linux, and on Windows until its native backend exists. `x` and `y` are window content
-/// coordinates.
+/// `menu.popup({ window, x, y })` for a context menu template: native on macOS and Windows, drawn
+/// in windows of its own on Linux. `x` and `y` are window content coordinates.
 pub fn popup_context_menu(
     window: &mut Window,
     cx: &mut App,
@@ -360,16 +358,5 @@ fn show_popup(
     y: i32,
     choose: impl FnOnce(Option<MenuPath>, &mut App) + 'static,
 ) {
-    if !cfg!(windows) {
-        platform::popup_menu(window, cx, menu, x, y, choose);
-    } else {
-        let origin = window.bounds().origin + point(px(x as f32), px(y as f32));
-        let choose = std::cell::Cell::new(Some(choose));
-        let on_close: CloseHandler = Rc::new(move |path, _, cx| {
-            if let Some(choose) = choose.take() {
-                choose(path, cx);
-            }
-        });
-        MenuView::open_window(menu, origin, window.scale_factor(), cx, on_close);
-    }
+    platform::popup_menu(window, cx, menu, x, y, choose);
 }

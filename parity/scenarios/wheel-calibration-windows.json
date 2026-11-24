@@ -1,0 +1,204 @@
+{
+  "about": "wheel-calibration for Windows, from its real wheel: whole notches, then 40 units of a notch's 120, the same native events on both sides. Chromium reads 100 px from a notch and GPUI the system's three lines (X02). The page gets the wheel without the pointer's moves, as it does from sendInputEvent. Only the Windows Electron driver runs it. Chromium caps a tick's scroll at the overlay's size, 32 px here, which 33.3 px of 40 units reach too; windows_desktop compares the deltas themselves",
+  "platforms": [
+    "win32"
+  ],
+  "scales": [
+    1,
+    2
+  ],
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Resized",
+              "controller": {
+                "leftSources": [],
+                "rightSources": [],
+                "discreteSources": [],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "main": "new-tab",
+      "data": 10
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "before",
+      "probes": [
+        ".timeline"
+      ],
+      "masks": [
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
+      "pointer": "wheel",
+      "x": 700,
+      "y": 105,
+      "unitsY": -120
+    },
+    {
+      "wait": 500
+    },
+    {
+      "pointer": "wheel",
+      "x": 700,
+      "y": 105,
+      "unitsY": 360
+    },
+    {
+      "wait": 500
+    },
+    {
+      "pointer": "wheel",
+      "x": 500,
+      "y": 105,
+      "unitsY": -120
+    },
+    {
+      "wait": 500
+    },
+    {
+      "pointer": "wheel",
+      "x": 820,
+      "y": 105,
+      "unitsY": 240
+    },
+    {
+      "wait": 500
+    },
+    {
+      "capture": "notched",
+      "probes": [
+        ".timeline"
+      ],
+      "masks": [
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
+      "pointer": "wheel",
+      "x": 620,
+      "y": 105,
+      "unitsY": 40
+    },
+    {
+      "wait": 500
+    },
+    {
+      "capture": "one-40",
+      "probes": [
+        ".timeline"
+      ],
+      "masks": [
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
+      "pointer": "wheel",
+      "x": 620,
+      "y": 105,
+      "unitsY": 40
+    },
+    {
+      "wait": 500
+    },
+    {
+      "pointer": "wheel",
+      "x": 620,
+      "y": 105,
+      "unitsY": -40
+    },
+    {
+      "wait": 500
+    },
+    {
+      "pointer": "wheel",
+      "x": 560,
+      "y": 105,
+      "unitsY": 80
+    },
+    {
+      "wait": 500
+    },
+    {
+      "pointer": "wheel",
+      "x": 700,
+      "y": 105,
+      "unitsY": 40
+    },
+    {
+      "wait": 500
+    },
+    {
+      "pointer": "wheel",
+      "x": 500,
+      "y": 105,
+      "unitsY": -40
+    },
+    {
+      "wait": 500
+    },
+    {
+      "capture": "units-40",
+      "probes": [
+        ".timeline"
+      ],
+      "masks": [
+        ".renderer-content",
+        ".controls-content"
+      ]
+    }
+  ]
+}

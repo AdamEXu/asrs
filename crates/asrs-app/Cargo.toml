@@ -196,3 +196,13 @@ required-features = ["parity"]
 [[test]]
 name = "linux_windows"
 harness = false
+
+[[test]]
+name = "windows_desktop"
+harness = false
+required-features = ["parity"]
+
+[[test]]
+name = "window_root"
+harness = false
+required-features = ["parity"]
