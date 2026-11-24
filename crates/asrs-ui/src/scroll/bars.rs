@@ -495,7 +495,11 @@ impl Frame {
         } else {
             FLUENT_THUMB
         };
-        let side = ((if pressed { 7.0 } else { 9.0 }) * scale).ceil();
+        let thickness = self.style.thickness() * scale;
+        let room = bar.button.min(thickness);
+        let side = ((if pressed { 7.0 } else { 9.0 }) * scale).ceil().min(room);
+        // Centred in whole pixels.
+        let side = side - (room - side).rem_euclid(2.0).floor();
         let rows = (side / 2.0).ceil();
         // `NativeThemeFluent::GetArrowRect` without its icon font, and `PathForArrow` in it.
         let outward = scale.round() * [-1.0, 1.0][end];
@@ -505,7 +509,6 @@ impl Frame {
         let base = square + side - (height / 2.0).floor() + below;
         let start = [base - rows, 2.0 * square + side - base][end];
         let top = start + [0.0, bar.track - bar.button][end];
-        let thickness = self.style.thickness() * scale;
         for row in 0..rows as usize {
             let wide = if end == 0 {
                 rows - 1.0 - row as f64
