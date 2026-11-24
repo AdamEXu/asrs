@@ -30,8 +30,7 @@ pub(crate) fn runtime(cx: &mut App) -> Result<RuntimeHandle, String> {
 
 /// Connections, requests and closing handshakes the app's live runtime still runs.
 pub fn runtime_tasks(cx: &App) -> usize {
-    cx.try_global::<Runtime>()
-        .map_or(0, |r| r.0.alive_tasks())
+    cx.try_global::<Runtime>().map_or(0, |r| r.0.alive_tasks())
 }
 
 /// Milliseconds since `origin` on the executor's clock, which is simulated under a test
@@ -252,11 +251,15 @@ impl RlogBridge {
     /// [`Self::call`] first runs what came due in the meantime.
     fn arm(&mut self, cx: &mut Context<'_, Self>) {
         let due = self.main.has_socket().then(|| self.timers.next_due());
-        self.alarm
-            .arm(due.flatten(), self.clock.now(), cx, |bridge: &mut Self, cx| {
+        self.alarm.arm(
+            due.flatten(),
+            self.clock.now(),
+            cx,
+            |bridge: &mut Self, cx| {
                 bridge.alarm.clear();
                 bridge.fire_timers();
                 bridge.arm(cx);
-            });
+            },
+        );
     }
 }

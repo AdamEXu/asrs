@@ -194,7 +194,11 @@ fn rlog<R>(
         },
     );
     let mut updates = updates.borrow_mut();
-    updates.extend(calls.into_iter().map(|call| LiveUpdate::Main(rlog_message(call))));
+    updates.extend(
+        calls
+            .into_iter()
+            .map(|call| LiveUpdate::Main(rlog_message(call))),
+    );
     result
 }
 
@@ -225,8 +229,7 @@ impl LiveSession {
         let preferences = window.live_preferences();
         let source = match (net, kind.nt4_mode()) {
             (Some(net), Some(mode)) => {
-                let mut source =
-                    Nt4Source::new(mode, &mut *window.realm.random, date, &mut timers);
+                let mut source = Nt4Source::new(mode, &mut *window.realm.random, date, &mut timers);
                 source.connect(
                     &address,
                     status,

@@ -28,9 +28,7 @@ use std::sync::Arc;
 use asrs_formats::export::{ExportError, ExportOptions, Format, Output, Sampling, export};
 use asrs_formats::historical::{MainReply, MainRequest, WorkerName};
 use asrs_formats::worker::{Abort, DecodeWorker, Request, WorkerMessage, WorkerThread};
-use asrs_hub::hub::{
-    ExportReply, HubFrame, HubHost, HubInterval, HubModel, HubTimeout, HubView,
-};
+use asrs_hub::hub::{ExportReply, HubFrame, HubHost, HubInterval, HubModel, HubTimeout, HubView};
 use asrs_hub::live::{LiveNet, LiveRole};
 use asrs_hub::sidebar::{NoLayout, SidebarGeometry};
 use asrs_js::string::JsString;
@@ -225,7 +223,8 @@ impl Host {
 
     fn drain_trace(&mut self) {
         if let Some(live) = &self.live {
-            self.emitted.extend(live.trace.take().into_iter().map(Emit::Trace));
+            self.emitted
+                .extend(live.trace.take().into_iter().map(Emit::Trace));
         }
     }
 
@@ -806,7 +805,10 @@ impl Runner {
                 cve(&JsValue::String(last))
             }
             "window.__titles.splice(0)" => {
-                let titles = self.titles.as_mut().ok_or_else(|| err("no watched title"))?;
+                let titles = self
+                    .titles
+                    .as_mut()
+                    .ok_or_else(|| err("no watched title"))?;
                 strings(std::mem::take(&mut titles.seen))
             }
             "window.tuner !== null && window.tuner.hasTunableFields()" => {

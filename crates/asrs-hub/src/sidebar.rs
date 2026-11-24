@@ -1915,8 +1915,7 @@ impl Sidebar {
                         first_update: true,
                         ..Default::default()
                     };
-                    state.tunable =
-                        self.is_tuning_mode && env.is_tunable(&full_key);
+                    state.tunable = self.is_tuning_mode && env.is_tunable(&full_key);
                     if !state.tunable {
                         self.tuning_value_cache.remove_key(&full_key);
                     }
@@ -1928,8 +1927,7 @@ impl Sidebar {
                         first_update: true,
                         ..Default::default()
                     };
-                    let tunable =
-                        self.is_tuning_mode && env.is_tunable(&full_key);
+                    let tunable = self.is_tuning_mode && env.is_tunable(&full_key);
                     state.input_hidden = !tunable;
                     state.span_hidden = tunable;
                     if !tunable {

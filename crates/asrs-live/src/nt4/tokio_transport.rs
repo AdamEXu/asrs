@@ -221,10 +221,9 @@ impl Nt4Transport for TokioTransport {
 impl FetchTransport for TokioTransport {
     fn fetch(&mut self, url: &str) -> RequestId {
         let id = RequestId(self.next_id());
-        self.requests
-            .spawn(id, url, &self.events_tx, |event| {
-                NetEvent::Fetch(event).into()
-            });
+        self.requests.spawn(id, url, &self.events_tx, |event| {
+            NetEvent::Fetch(event).into()
+        });
         id
     }
 

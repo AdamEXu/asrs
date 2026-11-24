@@ -11,7 +11,6 @@ use asrs_formats::worker::{Abort, DecodeWorker, Request, WorkerMessage, WorkerTh
 use asrs_hub::hub::{ExportReply, HubFrame, HubHost, HubInterval, HubTimeout};
 use asrs_hub::live::{LiveNet, LiveRole};
 use asrs_hub::tabs::SatelliteUpdate;
-use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng, V8MathRandom};
 use asrs_js::value::JsValue;
 use asrs_live::nt4::TokioTransport;

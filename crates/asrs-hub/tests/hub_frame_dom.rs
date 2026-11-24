@@ -28,9 +28,8 @@ use asrs_hub::frame::{
     BodyClasses, FrameElement, FrameInputs, FrameLayout, Handle, HubShell, client_coordinate,
     renderer_top,
 };
-use asrs_hub::hub::{
-    HubFrame, HubHost, HubInterval, HubModel, HubTimeout, HubView,
-};
+use asrs_hub::hub::{HubFrame, HubHost, HubInterval, HubModel, HubTimeout, HubView};
+use asrs_hub::live::{LiveNet, LiveRole};
 use asrs_hub::sidebar::{NoLayout, SidebarGeometry};
 use asrs_js::number;
 use asrs_js::string::JsString;

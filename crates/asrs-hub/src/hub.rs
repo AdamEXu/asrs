@@ -1617,9 +1617,7 @@ impl HubModel {
     ) -> R {
         let fields = match fields {
             FieldsRead::None => Vec::new(),
-            FieldsRead::Tabs => self
-                .tabs
-                .active_fields(&self.page, &self.page.log.borrow()),
+            FieldsRead::Tabs => self.tabs.active_fields(&self.page, &self.page.log.borrow()),
             FieldsRead::TabsAndSidebar => self.active_fields(),
         };
         let platform = self.platform.platform.to_string_lossy();
@@ -1895,12 +1893,7 @@ impl HubModel {
     }
 
     /// The live source's output callback: its `Log` becomes `window.log`.
-    fn live_output(
-        &mut self,
-        log: LiveLog,
-        time_supplier: TimeSupplier,
-        host: &mut dyn HubHost,
-    ) {
+    fn live_output(&mut self, log: LiveLog, time_supplier: TimeSupplier, host: &mut dyn HubHost) {
         self.live_connected = true;
         self.page.log = log.clone();
         self.page.selection.set_log(log);

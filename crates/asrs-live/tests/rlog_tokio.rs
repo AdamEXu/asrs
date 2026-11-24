@@ -6,8 +6,8 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::time::{Duration, Instant};
 
-use asrs_live::{LiveRuntime, NetOptions};
 use asrs_live::rlog::{RlogNetEvent, RlogTransport, TcpId, TokioRlogTransport};
+use asrs_live::{LiveRuntime, NetOptions};
 
 fn collect(
     net: &mut TokioRlogTransport,
