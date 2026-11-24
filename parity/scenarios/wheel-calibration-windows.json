@@ -1,5 +1,5 @@
 {
-  "about": "wheel-calibration for Windows, from its real wheel: whole notches, then 40 units of a notch's 120, the same native events on both sides. Chromium reads 100 px from a notch and GPUI the system's three lines (X02). Upstream's side needs the Windows desktop; elsewhere the Electron driver refuses the actions",
+  "about": "wheel-calibration for Windows, from its real wheel: whole notches, then 40 units of a notch's 120, the same native events on both sides. Chromium reads 100 px from a notch and GPUI the system's three lines (X02). The page gets the wheel without the pointer's moves, as it does from sendInputEvent. Only the Windows Electron driver runs it",
   "platforms": [
     "win32"
   ],
@@ -71,11 +71,6 @@
       "idle": true
     },
     {
-      "pointer": "move",
-      "x": 700,
-      "y": 400
-    },
-    {
       "capture": "before",
       "probes": [
         ".timeline"
@@ -120,11 +115,6 @@
     },
     {
       "wait": 500
-    },
-    {
-      "pointer": "move",
-      "x": 700,
-      "y": 400
     },
     {
       "capture": "notched",
@@ -180,11 +170,6 @@
     },
     {
       "wait": 500
-    },
-    {
-      "pointer": "move",
-      "x": 700,
-      "y": 400
     },
     {
       "capture": "units-40",

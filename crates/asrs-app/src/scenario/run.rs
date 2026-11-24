@@ -1011,7 +1011,6 @@ impl Variant<'_> {
                 units_x,
                 units_y,
             } => {
-                self.mouse(MouseKind::Move, *x, *y, Button::Left, 1, &[])?;
                 for delta in native_wheel_lines(*units_x, *units_y) {
                     self.dispatch(PlatformInput::Scroll(ScrollEvent {
                         position: point(px(*x as f32), px(*y as f32)),

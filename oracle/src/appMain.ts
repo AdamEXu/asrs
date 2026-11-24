@@ -215,7 +215,8 @@ let target: BrowserWindow | null = null;
 // The prompt window a "prompt" action waited for: input and captures go to it until it closes.
 let prompt: BrowserWindow | null = null;
 let scriptedInput = false;
-let realInput = false;
+// The real input the page gets: what else the pointer does on its way is dropped.
+let realInput: "none" | "all" | "wheel" = "none";
 
 function active(): BrowserWindow {
   if (prompt !== null && prompt.isDestroyed()) prompt = null;
@@ -320,8 +321,9 @@ app.on("browser-window-created", (_event, win) => {
   win.setIgnoreMouseEvents(true);
   // macOS still hands the page a move from the physical cursor when the window appears under
   // it, so every mouse event the scenario did not send is dropped.
-  win.webContents.on("before-mouse-event", (event) => {
-    if (!scriptedInput && !realInput) event.preventDefault();
+  win.webContents.on("before-mouse-event", (event, mouse) => {
+    if (scriptedInput || realInput === "all" || (realInput === "wheel" && mouse.type === "mouseWheel")) return;
+    event.preventDefault();
   });
   win.webContents.on("did-start-navigation", (event: any) => {
     if (target === null && event.isMainFrame && /\/www\/hub\.html$/.test(new URL(event.url).pathname)) {
@@ -434,14 +436,15 @@ async function movePointer(action: Extract<Action, { pointer: string }>) {
   const origin = contentOrigin(target!);
   target!.setIgnoreMouseEvents(false);
   target!.moveTop();
-  realInput = true;
+  const kind = action.pointer;
+  // The timeline zooms about a hovered time, which moves with every step of Chromium's animation.
+  realInput = kind === "wheel" ? "wheel" : "all";
   try {
-    const kind = action.pointer;
     await desktop.pointer(origin.x + Math.round(action.x * scale), origin.y + Math.round(action.y * scale), kind === "down" || kind === "up" ? kind : undefined);
     if (kind === "wheel") await desktop.wheel(action.unitsX ?? 0, action.unitsY ?? 0);
     await sleep(POINTER_SETTLE_MS);
   } finally {
-    realInput = false;
+    realInput = "none";
   }
 }
 

@@ -188,12 +188,19 @@ fn paint(
 fn listen(pointer: Entity<Pointer>, boxes: [Bounds<Pixels>; 3], window: &mut Window) {
     let moved = pointer.clone();
     window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
+        if !phase.capture() {
+            return;
+        }
         let over = over(&boxes, event.position);
-        if phase.capture() && moved.read(cx).over != over {
+        if moved.read(cx).over != over {
             moved.update(cx, |pointer, cx| {
                 pointer.over = over;
                 cx.notify();
             });
+        }
+        // A pressed button has the pointer, as under Chromium, and the page sees nothing of it.
+        if moved.read(cx).pressed.is_some() {
+            cx.stop_propagation();
         }
     });
     let pressed = pointer.clone();
