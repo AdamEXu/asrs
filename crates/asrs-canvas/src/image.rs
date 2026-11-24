@@ -289,7 +289,7 @@ fn lowp_src_over(s: Pixel, d: Pixel, coverage: u8) -> Pixel {
         s.map(|v| lowp_div255(u32::from(v) * u32::from(coverage)) as u8)
     };
     let inverse = 255 - u32::from(s[3]);
-    zip(s, d, |s, d| s + lowp_div255(d * inverse))
+    zip(s, d, |s, d| s + crate::scan::div255(d * inverse))
 }
 
 /// `legacy_shader_can_handle`.
@@ -530,11 +530,11 @@ impl Stages {
             let (x, y) = if m.is_translate() {
                 (px + m.tx, py + m.ty)
             } else if m.is_scale_translate() {
-                (px.mul_add(m.sx, m.tx), py.mul_add(m.sy, m.ty))
+                (px * m.sx + m.tx, py * m.sy + m.ty)
             } else {
                 (
-                    px.mul_add(m.sx, py.mul_add(m.kx, m.tx)),
-                    px.mul_add(m.ky, py.mul_add(m.sy, m.ty)),
+                    px * m.sx + (py * m.kx + m.tx),
+                    px * m.ky + (py * m.sy + m.ty),
                 )
             };
             let p = if self.linear {
