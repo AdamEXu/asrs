@@ -580,6 +580,7 @@ dependencies = [
  "simplecss",
  "svgtypes 0.16.2",
  "tiny-skia",
+ "windows 0.62.2",
  "x11rb",
 ]
 
