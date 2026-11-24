@@ -36,7 +36,6 @@ use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, Theme};
 use asrs_ui::tooltip::titled;
 
-use asrs_ui::scroll::{self, Extent};
 use super::cell_text::{CellLine, CellText, css};
 use super::frame::{FrameHost, HubFrame, wheel_of};
 use super::large_table::{Grid, mean};
@@ -48,6 +47,7 @@ use super::scrollers::{Area, smooth};
 use super::select::FormSelect;
 use super::source_list::{centred_offset, place_in};
 use super::statistics_layout::{CellKind, Placed, StatisticsLayout, cell_style};
+use asrs_ui::scroll::{self, Extent};
 
 const SETTINGS_MAX_WIDTH: f64 = 200.0;
 const SETTINGS_TOP: f64 = 5.0;
@@ -1209,9 +1209,9 @@ impl<H: FrameHost> HubFrame<H> {
             .place(layout.panel)
             .id("stats-settings")
             .overflow_hidden()
-            .capture_any_mouse_down(cx.listener(move |frame, _, _, _| {
-                frame.press_area(&Area::StatisticsSettings(key))
-            }))
+            .capture_any_mouse_down(
+                cx.listener(move |frame, _, _, _| frame.press_area(&Area::StatisticsSettings(key))),
+            )
             .on_scroll(cx.listener(move |frame, event: &ScrollEvent, _, cx| {
                 frame.statistics_settings_wheel(key, layout, event, cx)
             }))

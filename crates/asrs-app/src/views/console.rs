@@ -33,8 +33,6 @@ use super::console_layout::{
     cell_style, value_text,
 };
 use super::frame::{FrameHost, HubFrame, wheel_of};
-use super::scrollers::Area;
-use asrs_ui::scroll;
 use super::large_table::{
     BUTTON, Grid, HandFade, HeaderPalette, hand_icon, header_cell, line_through, plain, symbol,
 };
@@ -42,6 +40,8 @@ use super::number::FormNumber;
 use super::page_text::{
     Owner, PageText, PlacedBlock, Selected, beside_table, device, unselectable,
 };
+use super::scrollers::Area;
+use asrs_ui::scroll;
 
 const JUMP_INPUT: [f64; 4] = [4.0, 4.5, 64.0, 21.0];
 const JUMP_BUTTON_LEFT: f64 = 70.0;

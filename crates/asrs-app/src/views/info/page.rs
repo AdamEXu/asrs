@@ -14,8 +14,8 @@ use asrs_ui::parity::{Recorder, TextRun, record_text};
 use asrs_ui::platform::EditCommand;
 use asrs_ui::scroll::{self, Extent, Request, Scrollbars, scrollbars};
 use asrs_ui::selection;
-use asrs_ui::theme::Appearance;
 use asrs_ui::text::{Align, Text, TextStyle, snap_remainder};
+use asrs_ui::theme::Appearance;
 
 use super::layout::{LuRect, TextBlock, snapped};
 use super::text::{self, DocumentText, PageText};
@@ -84,7 +84,11 @@ impl PageScroll {
         let client = f64::from(f32::from(window.viewport_size().height));
         let overflows = css(snapped(height), scale) > client;
         let bar = scroll::style(cx).reserved() * f64::from(scale);
-        let reserved = if overflows { asrs_js::math::round(bar) as Lu * 64 } else { 0 };
+        let reserved = if overflows {
+            asrs_js::math::round(bar) as Lu * 64
+        } else {
+            0
+        };
         std::mem::replace(&mut self.reserved, reserved) != reserved
     }
 

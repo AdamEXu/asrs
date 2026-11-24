@@ -7,9 +7,9 @@ use std::rc::Rc;
 use asrs_canvas::text::dom::Lu;
 use asrs_canvas::text::{FixedAdvance, TextBackend, platform_backend};
 use asrs_model::scroll_sensor::{Wheel, WheelScroll, assign_scroll_offset};
-use asrs_ui::scroll::Extent;
 use asrs_tabs::statistics::renderer::StatisticsGeometry;
 use asrs_tabs::statistics::values::StatisticsRow;
+use asrs_ui::scroll::Extent;
 use asrs_ui::text::TextStyle;
 use asrs_ui::theme::{FONT_FAMILY, MONOSPACE_FAMILY};
 
@@ -94,12 +94,7 @@ impl Placed {
     /// The largest scroll offset per axis, in CSS px: Blink's is whole device px.
     fn max_scroll(&self) -> [f64; 2] {
         let scroll = self.scroll_size();
-        [0, 1].map(|axis| {
-            css(
-                round(scroll[axis]) - round(self.client[axis]),
-                self.scale,
-            )
-        })
+        [0, 1].map(|axis| css(round(scroll[axis]) - round(self.client[axis]), self.scale))
     }
 }
 

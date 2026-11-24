@@ -475,7 +475,8 @@ impl FrameHost for HubEntityHost {
     }
 
     fn side_bar_smooth(&mut self, by: f64, cx: &mut App) {
-        self.sidebar.update(cx, |view, cx| view.scroll_smooth(by, cx));
+        self.sidebar
+            .update(cx, |view, cx| view.scroll_smooth(by, cx));
     }
 
     fn side_bar_range(&self, cx: &App) -> Option<[[f64; 2]; 2]> {

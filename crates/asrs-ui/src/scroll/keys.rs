@@ -3,7 +3,7 @@
 use gpui_kit::Keystroke;
 
 /// `kPixelsPerLineStep`.
-const LINE: f64 = 40.0;
+pub(super) const LINE: f64 = 40.0;
 /// How much of a scroller a page goes by at least, and the most device px it leaves.
 const PAGE_FRACTION: f64 = 0.875;
 const PAGE_OVERLAP: f64 = 40.0;
@@ -42,6 +42,8 @@ impl Step {
 pub fn step(keystroke: &Keystroke) -> Option<Step> {
     let modifiers = keystroke.modifiers;
     let mac = cfg!(target_os = "macos");
+    // Alt makes a key a system key on Windows.
+    let paging = !cfg!(windows);
     let key = keystroke.key.as_str();
     if key == "space" {
         let plain = !modifiers.control && !modifiers.alt && !modifiers.platform;
@@ -60,8 +62,10 @@ pub fn step(keystroke: &Keystroke) -> Option<Step> {
         (false, false, false, "pagedown") => Some(Step::Page(1.0)),
         (false, false, false, "home") => Some(Step::Document(-1.0)),
         (false, false, false, "end") => Some(Step::Document(1.0)),
-        (false, true, false, "up") if mac => Some(Step::Page(-1.0)),
-        (false, true, false, "down") if mac => Some(Step::Page(1.0)),
+        (true, false, false, "home") if !mac => Some(Step::Document(-1.0)),
+        (true, false, false, "end") if !mac => Some(Step::Document(1.0)),
+        (false, true, false, "up") if paging => Some(Step::Page(-1.0)),
+        (false, true, false, "down") if paging => Some(Step::Page(1.0)),
         (false, false, true, "up") if mac => Some(Step::Document(-1.0)),
         (false, false, true, "down") if mac => Some(Step::Document(1.0)),
         _ => None,

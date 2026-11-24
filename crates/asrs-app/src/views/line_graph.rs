@@ -25,7 +25,7 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, chains};
 
-use super::frame::{FrameHost, HubFrame, wheel_of, overlay_range};
+use super::frame::{FrameHost, HubFrame, overlay_range, wheel_of};
 use super::scrollers::Area;
 
 const SCROLL_BOTTOM: f64 = 35.0;

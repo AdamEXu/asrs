@@ -24,9 +24,9 @@ use asrs_ui::image_icon::{DropShadow, download_icon, image_icon};
 use asrs_ui::parity::probed;
 use asrs_ui::platform;
 use asrs_ui::progress::progress;
+use asrs_ui::scroll::{self, Extent, Request, Scrollbars, Step, scrollbars};
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle};
-use asrs_ui::scroll::{self, Extent, Request, Scrollbars, Step, scrollbars};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, MONOSPACE_FAMILY};
 
 use crate::views::frame::wheel_of;
@@ -601,7 +601,11 @@ impl DownloadWindow {
             self.scroll_to(to);
         }
         let bar = scroll::style(cx).reserved();
-        let width = if self.max_scroll() > 0.0 { width - bar } else { width };
+        let width = if self.max_scroll() > 0.0 {
+            width - bar
+        } else {
+            width
+        };
         let rows = self.shown_rows(cx);
         let mut content = div()
             .absolute()

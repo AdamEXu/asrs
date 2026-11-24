@@ -168,7 +168,13 @@ impl<H: FrameHost> HubFrame<H> {
         self.scrollers.bars.retain(|_, bars| bars.take_laid_out());
     }
 
-    fn area_request(&mut self, area: &Area, request: Request, window: &Window, cx: &mut Context<'_, Self>) {
+    fn area_request(
+        &mut self,
+        area: &Area,
+        request: Request,
+        window: &Window,
+        cx: &mut Context<'_, Self>,
+    ) {
         match request {
             Request::Press => self.press_area(area),
             Request::To(to) => self.area_scroll_to(area, to, f64::from(window.scale_factor()), cx),
@@ -176,7 +182,13 @@ impl<H: FrameHost> HubFrame<H> {
         }
     }
 
-    fn area_scroll_to(&mut self, area: &Area, to: [f64; 2], scale: f64, cx: &mut Context<'_, Self>) {
+    fn area_scroll_to(
+        &mut self,
+        area: &Area,
+        to: [f64; 2],
+        scale: f64,
+        cx: &mut Context<'_, Self>,
+    ) {
         match area {
             Area::Table(_) => self.table_scroll_to(to, cx),
             Area::Console(key) => self.console_scroll_to(*key, to[1], cx),

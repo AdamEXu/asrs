@@ -893,9 +893,7 @@ impl<H: FrameHost> HubFrame<H> {
         };
         div()
             .id("timeline-scroll")
-            .capture_any_mouse_down(
-                cx.listener(|frame, _, _, _| frame.press_area(&Area::Timeline)),
-            )
+            .capture_any_mouse_down(cx.listener(|frame, _, _, _| frame.press_area(&Area::Timeline)))
             .size_full()
             .child(
                 div()

@@ -148,7 +148,10 @@ impl ListLayout {
 
     /// What the list's scrollbar takes of the items' width.
     pub fn taken(&self) -> f64 {
-        let content = self.items.last().map_or(0.0, |(top, height, _)| top + height);
+        let content = self
+            .items
+            .last()
+            .map_or(0.0, |(top, height, _)| top + height);
         if content > self.list_rect().height {
             self.scrollbar
         } else {

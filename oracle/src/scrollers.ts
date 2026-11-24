@@ -16,7 +16,8 @@ const { fixture } = readFixture("scrollers", process.argv[2]);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const css = (fixture.css ?? []).map((name: string) => fs.readFileSync(path.join(UPSTREAM_DIR, "www", name), "utf8"));
 let out = "";
-for (const style of fixture.styles ?? ["overlay"]) {
+const styles = process.platform === "darwin" ? fixture.styles ?? ["overlay"] : ["fluent"];
+for (const style of styles) {
   for (const scale of fixture.scales ?? [1]) {
     const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "asrs-scrollers-"));
     let run;

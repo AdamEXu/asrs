@@ -39,7 +39,7 @@ use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, FONT_FAMIL
 use asrs_ui::tooltip::{titled, untitled};
 
 use super::field_image::{self, FieldImage};
-use super::frame::{FrameHost, HubFrame, wheel_of, overlay_range};
+use super::frame::{FrameHost, HubFrame, overlay_range, wheel_of};
 use super::scrollers::Area;
 use super::select::FormSelect;
 use super::source_list::{centred_offset, place_in};
@@ -606,9 +606,9 @@ impl<H: FrameHost> HubFrame<H> {
                 "div.field-2d-scroll",
                 local(container)
                     .id("field-2d-scroll")
-                .capture_any_mouse_down(
-                    cx.listener(|frame, _, _, _| frame.press_area(&Area::Field2d)),
-                )
+                    .capture_any_mouse_down(
+                        cx.listener(|frame, _, _, _| frame.press_area(&Area::Field2d)),
+                    )
                     .on_any_mouse_down(cx.listener(|frame, event: &MouseDownEvent, _, cx| {
                         frame.field_2d_mouse_down(event, cx)
                     }))

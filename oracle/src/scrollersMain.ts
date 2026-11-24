@@ -8,12 +8,16 @@ import path from "node:path";
 //   commands are the editing commands AppKit's key bindings send along,
 //   ["wheel", x, y, dx, dy], ["move", x, y], ["press", x, y], ["release", x, y], ["click", x, y],
 //   ["eval", script], ["wait", ms], ["shot", name] (only with a shot dir),
-//   ["pixels", name, [x, y, width, height]], which records the rows of that box as runs of colours.
+//   ["pixels", name, [x, y, width, height]], which records the rows of that box as runs of colours,
+//   ["fade", [x, y, width]], which records when that row of pixels first changes and turns white,
+//   each to the next 100 ms.
+// An op that ends with "quick" has no record and does not settle.
 // The positions an op ends at are read once they stay the same for SETTLE_MS.
 
 const request = JSON.parse(fs.readFileSync(process.argv[process.argv.length - 1], "utf8"));
 const SETTLE_MS = 250;
-const TIMEOUT_MS = 300_000;
+const FADE_MS = 1500;
+const TIMEOUT_MS = 600_000;
 const KEYS: { [name: string]: [string, number, string?] } = {
   ArrowLeft: ["ArrowLeft", 37],
   ArrowUp: ["ArrowUp", 38],
@@ -132,21 +136,25 @@ app
             }
             lines.push(JSON.stringify({ style, scale, theme, step: step.name ?? index, pixels: op[1], rows }));
             continue;
-          } else if (kind === "sample") {
+          } else if (kind === "fade") {
             const [x, y, w] = op[1].map((v: number) => v * scale);
             const start = Date.now();
-            const samples: [number, string][] = [];
-            while (Date.now() - start < op[2]) {
+            let first: string | null = null;
+            let begins: number | null = null;
+            let ends: number | null = null;
+            while (Date.now() - start < FADE_MS) {
               const at = Date.now() - start;
               const { data } = await send("Page.captureScreenshot", { format: "png" });
               const image = nativeImage.createFromBuffer(Buffer.from(data, "base64"));
-              const { width } = image.getSize();
-              const bytes = image.toBitmap();
-              let text = "";
-              for (let column = x; column < x + w; column++) text += bytes[(y * width + column) * 4].toString(16).padStart(2, "0");
-              if (samples.length === 0 || samples[samples.length - 1][1] !== text) samples.push([at, text]);
+              const row = y * image.getSize().width + x;
+              const strip = image.toBitmap().subarray(row * 4, (row + w) * 4);
+              const text = strip.toString("hex");
+              if (first === null) first = text;
+              else if (begins === null && text !== first) begins = at;
+              if (ends === null && strip.every((v) => v === 255)) ends = at;
             }
-            lines.push(JSON.stringify({ style, scale, theme, step: step.name ?? index, samples }));
+            const round = (ms: number | null) => (ms === null ? null : Math.round(ms / 100) * 100);
+            lines.push(JSON.stringify({ style, scale, theme, step: step.name ?? index, fade: [round(begins), round(ends)] }));
             continue;
           } else if (kind === "shot") {
             if (request.shots !== null) {

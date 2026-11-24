@@ -40,8 +40,6 @@ use asrs_ui::tooltip::{titled, untitled};
 
 use super::cell_text::following;
 use super::frame::{FrameHost, HubFrame, wheel_of};
-use super::scrollers::{Area, smooth};
-use asrs_ui::scroll::{self, Extent};
 use super::large_table::{
     BUTTON, Grid, HandFade, HeaderPalette, hand_icon, header_cell, line_through, plain, symbol,
 };
@@ -49,6 +47,8 @@ use super::number::FormNumber;
 use super::page_text::{
     Owner, PageText, PlacedBlock, Selected, beside_table, device, unselectable,
 };
+use super::scrollers::{Area, smooth};
+use asrs_ui::scroll::{self, Extent};
 
 const FIRST_COLUMN_MIN: f64 = 97.0;
 const COLUMN_MIN: f64 = 175.0;
@@ -914,7 +914,11 @@ impl<H: FrameHost> HubFrame<H> {
                 grid.place([button_at[0], button_at[1], BUTTON, BUTTON]),
             ));
 
-        let area = self.table.shown.as_ref().map(|s| Area::Table(s.key.clone()));
+        let area = self
+            .table
+            .shown
+            .as_ref()
+            .map(|s| Area::Table(s.key.clone()));
         div()
             .id("data-table-container")
             .absolute()

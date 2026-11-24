@@ -1,5 +1,5 @@
-//! Scrollbars as Chromium's macOS theme draws and works them: overlay ones, which show while a
-//! scroller scrolls, and classic ones, which take space.
+//! Scrollbars as Chromium draws and works them: macOS's overlay ones, which show while a scroller
+//! scrolls, its classic ones, which take space, and the Fluent ones of the other platforms.
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -11,7 +11,7 @@ use gpui_kit::{
     canvas, fill, point, px, rgba, size,
 };
 
-use super::keys::page_step;
+use super::keys::{LINE, page_step};
 use crate::canvas_view::geometry::mouse_client;
 use crate::input::skia;
 
@@ -20,21 +20,39 @@ pub enum Style {
     #[default]
     Overlay,
     Classic,
+    Fluent,
 }
 
 impl Style {
+    /// The platform's style, where only macOS has overlay scrollbars.
+    pub fn of(classic: bool) -> Style {
+        match (cfg!(target_os = "macos"), classic) {
+            (true, false) => Style::Overlay,
+            (true, true) => Style::Classic,
+            (false, _) => Style::Fluent,
+        }
+    }
+
     /// What a bar takes from its scroller's content.
     pub fn reserved(self) -> f64 {
         match self {
             Style::Overlay => 0.0,
-            Style::Classic => 15.0,
+            Style::Classic | Style::Fluent => 15.0,
         }
     }
 
     fn thickness(self) -> f64 {
         match self {
             Style::Overlay => 16.0,
-            Style::Classic => 15.0,
+            Style::Classic | Style::Fluent => 15.0,
+        }
+    }
+
+    /// The length of the button at each end.
+    fn button(self) -> f64 {
+        match self {
+            Style::Fluent => 18.0,
+            _ => 0.0,
         }
     }
 
@@ -42,6 +60,7 @@ impl Style {
         match self {
             Style::Overlay => 26.0,
             Style::Classic => 20.0,
+            Style::Fluent => 17.0,
         }
     }
 
@@ -50,6 +69,7 @@ impl Style {
         match self {
             Style::Overlay => (2.0, 18.0),
             Style::Classic => (3.0, 18.0),
+            Style::Fluent => (0.0, 0.0),
         }
     }
 }
@@ -79,8 +99,7 @@ pub fn set_style(style: Style, jump: bool, cx: &mut App) {
 /// Takes the system's style.
 pub fn use_system_style(cx: &mut App) {
     let (classic, jump) = crate::platform::scrollbar_preferences();
-    let style = if classic { Style::Classic } else { Style::Overlay };
-    set_style(style, jump, cx);
+    set_style(Style::of(classic), jump, cx);
 }
 
 /// A scroller's content in CSS px. Its box is the element's.
@@ -107,14 +126,16 @@ pub enum Request {
 const FADE_DELAY: f64 = 500.0;
 const FADE: f64 = 250.0;
 const EXPANSION: f64 = 250.0;
-/// `kInitialAutoscrollTimerDelay`, and the pages a held press scrolls by a second.
+/// `kInitialAutoscrollTimerDelay`, and the steps a held press scrolls by a second.
 const HELD_DELAY: f64 = 250.0;
-const HELD_PAGES: f64 = 20.0;
+const HELD_STEPS: f64 = 20.0;
 
 /// One bar, in device px: along its axis, and from the box's far edge across it.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Bar {
     pub track: f64,
+    /// Its buttons' length.
+    pub button: f64,
     pub thumb: f64,
     pub length: f64,
     pub max: f64,
@@ -137,19 +158,26 @@ pub fn geometry(style: Style, extent: &Extent, rect: [f64; 2], scale: f64) -> [O
         }
         let other = if shown[1 - a] { reserved } else { 0.0 };
         let client = rect[a] - other;
-        let corner = if shown[1 - a] { style.thickness() * scale } else { 0.0 };
+        let corner = if shown[1 - a] {
+            style.thickness() * scale
+        } else {
+            0.0
+        };
         let track = rect[a] - corner;
-        let length = (track * client / content[a])
+        let button = style.button() * scale;
+        let inner = track - 2.0 * button;
+        let length = (inner * client / content[a])
             .round()
             .max(style.min_thumb() * scale);
         let max = content[a] - client;
-        if length > track {
+        if length > inner {
             return None;
         }
         let offset = (extent.offset[a] * scale).clamp(0.0, max);
         Some(Bar {
             track,
-            thumb: (offset / max * (track - length)).floor(),
+            button,
+            thumb: button + (offset / max * (inner - length)).floor(),
             length,
             max,
         })
@@ -158,11 +186,8 @@ pub fn geometry(style: Style, extent: &Extent, rect: [f64; 2], scale: f64) -> [O
 
 impl Bar {
     fn ratio(&self) -> f64 {
-        if self.track > self.length {
-            self.max / (self.track - self.length)
-        } else {
-            0.0
-        }
+        let travel = self.track - 2.0 * self.button - self.length;
+        if travel > 0.0 { self.max / travel } else { 0.0 }
     }
 
     /// The thumb's drawn start and length.
@@ -191,6 +216,9 @@ struct Held {
     /// Along the bar, in device px.
     pointer: f64,
     direction: f64,
+    /// What a press scrolls by, in CSS px.
+    step: f64,
+    button: bool,
     since: f64,
     /// Where the scroll was when it began to go on, and then.
     going: Option<(f64, f64)>,
@@ -257,7 +285,7 @@ impl State {
 
     fn alpha(&self, style: Style, axis: usize, now: f64) -> f64 {
         let activity = self.axes[axis];
-        if style == Style::Classic || activity.hovered || self.held(axis) {
+        if style != Style::Overlay || activity.hovered || self.held(axis) {
             return 1.0;
         }
         match activity.at {
@@ -362,7 +390,21 @@ impl Frame {
             let Some(bar) = self.bars[axis] else {
                 continue;
             };
-            self.paint_bar(axis, &bar, state.axes[axis].over_thumb || state.held(axis), dark, window, cx);
+            self.paint_bar(
+                axis,
+                &bar,
+                state.axes[axis].over_thumb || state.held(axis),
+                state,
+                dark,
+                window,
+                cx,
+            );
+        }
+        if self.style == Style::Fluent && self.bars.iter().all(Option::is_some) {
+            let thickness = self.style.thickness() * self.scale;
+            let end = self.box_size()[1];
+            let bounds = self.place(1, [end - thickness, thickness], [0.0, thickness]);
+            window.paint_quad(fill(bounds, rgba(FLUENT_TRACK)));
         }
         if self.style == Style::Classic && self.bars.iter().all(Option::is_some) {
             let [w, h] = self.box_size();
@@ -384,11 +426,37 @@ impl Frame {
         }
     }
 
+    fn paint_arrow(&self, axis: usize, bar: &Bar, end: usize, pressed: bool, window: &mut Window) {
+        let scale = self.scale;
+        let color = if pressed {
+            FLUENT_PRESSED
+        } else {
+            FLUENT_THUMB
+        };
+        let side = ((if pressed { 7.0 } else { 9.0 }) * scale).ceil();
+        let rows = (side / 2.0).ceil();
+        let lowered = if axis == 0 && end == 1 { 1.0 } else { 0.0 };
+        let top = ((6.0 + lowered) * scale).floor() + [0.0, bar.track - bar.button][end];
+        let thickness = self.style.thickness() * scale;
+        for row in 0..rows as usize {
+            let wide = if end == 0 {
+                rows - 1.0 - row as f64
+            } else {
+                row as f64
+            };
+            let width = side - 2.0 * wide;
+            let across = [((thickness - width) / 2.0).floor(), width];
+            let bounds = self.place(axis, [top + row as f64, 1.0], across);
+            window.paint_quad(fill(bounds, rgba(color)));
+        }
+    }
+
     fn paint_bar(
         &self,
         axis: usize,
         bar: &Bar,
         active: bool,
+        state: &State,
         dark: bool,
         window: &mut Window,
         cx: &mut App,
@@ -406,6 +474,7 @@ impl Frame {
         };
         let (track, inner, outer, track_alpha) = match (self.style, dark) {
             (Style::Classic, _) => (CLASSIC_TRACK, CLASSIC_INNER, CLASSIC_OUTER, 1.0),
+            (Style::Fluent, _) => (FLUENT_TRACK, FLUENT_TRACK, FLUENT_TRACK, 1.0),
             (Style::Overlay, false) => (0xf8f8f8c6, 0xe0e0e0ff, 0xe8e8e8c6, self.expansion[axis]),
             (Style::Overlay, true) => (0xd8d8d826, 0xe3e3e333, 0xd8d8d828, self.expansion[axis]),
         };
@@ -422,18 +491,42 @@ impl Frame {
         }
         let width = match self.style {
             Style::Classic => 8.0,
+            Style::Fluent => 9.0,
             Style::Overlay => 7.0 + 4.0 * self.expansion[axis],
         };
         let width = (width * scale).round();
-        let far = 3.0 - if self.style == Style::Overlay { 1.0 } else { 0.0 };
+        let far = 3.0
+            - if self.style == Style::Overlay {
+                1.0
+            } else {
+                0.0
+            };
         let color = match (self.style, dark, active) {
+            (Style::Fluent, ..) if state.drag.is_some_and(|d| d.axis == axis) => FLUENT_PRESSED,
+            (Style::Fluent, ..) => FLUENT_THUMB,
             (Style::Classic, _, false) => 0x0000003a,
             (_, false, _) | (Style::Classic, ..) => 0x00000080,
             (Style::Overlay, true, _) => 0xffffff80,
         };
+        if self.style == Style::Fluent {
+            for (end, direction) in [(0, -1.0), (1, 1.0)] {
+                let pressed = state
+                    .held
+                    .is_some_and(|h| h.axis == axis && h.button && h.direction == direction);
+                self.paint_arrow(axis, bar, end, pressed, window);
+            }
+        }
         let [start, length] = bar.drawn(self.style, scale);
-        let bounds = self.place(axis, [start, length], [thickness - far * scale - width, width]);
-        let (w, h) = if axis == 1 { (width, length) } else { (length, width) };
+        let bounds = self.place(
+            axis,
+            [start, length],
+            [thickness - far * scale - width, width],
+        );
+        let (w, h) = if axis == 1 {
+            (width, length)
+        } else {
+            (length, width)
+        };
         let radius = w.min(h) / 2.0;
         let color = faded(color, alpha);
         if alpha < 1.0 {
@@ -446,10 +539,19 @@ impl Frame {
             let body = skia::rect(0.0, 0.0, w, h, radius, &skia::paint_attrs("fill", color));
             skia::svg(w as u32, h as u32, 1.0, &body)
         };
-        skia::paint(("scrollbar-thumb", w as u32, h as u32, color), bounds, draw, window, cx);
+        skia::paint(
+            ("scrollbar-thumb", w as u32, h as u32, color),
+            bounds,
+            draw,
+            window,
+            cx,
+        );
     }
 }
 
+const FLUENT_TRACK: u32 = 0xfcfcfcff;
+const FLUENT_THUMB: u32 = 0x8b8b8bff;
+const FLUENT_PRESSED: u32 = 0x636363ff;
 const CLASSIC_TRACK: u32 = 0xfafafaff;
 const CLASSIC_INNER: u32 = 0xe8e8e8ff;
 const CLASSIC_OUTER: u32 = 0xedededff;
@@ -529,12 +631,13 @@ fn held_step(state: &mut State, frame: &Frame, extent: &Extent, now: f64) -> Opt
         return None;
     }
     let axis = held.axis;
-    let client = (extent.content[axis] * frame.scale - bar.max) / frame.scale;
     let (from, began) = *held.going.get_or_insert((extent.offset[axis], now));
-    let speed = page_step(client, frame.scale) * HELD_PAGES / 1000.0;
+    let speed = held.step * HELD_STEPS / 1000.0;
     let max = bar.max / frame.scale;
     let to = (from + held.direction * speed * (now - began)).clamp(0.0, max);
-    held.reached = held.pointer >= bar.thumb - 1.0 && held.pointer < bar.thumb + bar.length + 1.0;
+    held.reached = !held.button
+        && held.pointer >= bar.thumb - 1.0
+        && held.pointer < bar.thumb + bar.length + 1.0;
     state.held = Some(held);
     let mut offset = extent.offset;
     offset[axis] = to;
@@ -549,9 +652,8 @@ fn listen(
     window: &mut Window,
 ) {
     let client = |p: Point<Pixels>| [p.x, p.y].map(|v| mouse_client(f32::from(v)));
-    let scrolls = move |bar: &Bar, axis: usize, scale: f64| {
-        (extent.content[axis] * scale - bar.max) / scale
-    };
+    let scrolls =
+        move |bar: &Bar, axis: usize, scale: f64| (extent.content[axis] * scale - bar.max) / scale;
     window.on_mouse_event({
         let (frame, state, request) = (frame.clone(), state.clone(), request.clone());
         move |event: &MouseDownEvent, phase, window, cx| {
@@ -576,28 +678,44 @@ fn listen(
                 let mut state = state.borrow_mut();
                 let pointer = client(event.position)[axis];
                 if thumb {
-                    state.drag = Some(Drag { axis, pointer, offset });
-                } else if jump {
+                    state.drag = Some(Drag {
+                        axis,
+                        pointer,
+                        offset,
+                    });
+                } else if jump && bar.button == 0.0 {
                     let half = (bar.length / 2.0).floor();
                     let delta = (at - bar.thumb - half) * bar.ratio() / frame.scale;
                     to[axis] = (offset + delta).clamp(0.0, bar.max / frame.scale);
-                    state.drag = Some(Drag { axis, pointer, offset: to[axis] });
+                    state.drag = Some(Drag {
+                        axis,
+                        pointer,
+                        offset: to[axis],
+                    });
                     drop(state);
                     request(Request::To(to), window, cx);
                 } else {
+                    let button = at < bar.button || at >= bar.track - bar.button;
                     let direction = if at < bar.thumb { -1.0 } else { 1.0 };
+                    let step = if button {
+                        LINE
+                    } else {
+                        page_step(scrolls(&bar, axis, frame.scale), frame.scale)
+                    };
                     let since = state.now(cx);
                     state.held = Some(Held {
                         axis,
                         pointer: at,
                         direction,
+                        step,
+                        button,
                         since,
                         going: None,
                         reached: false,
                     });
                     drop(state);
                     let mut by = [0.0; 2];
-                    by[axis] = direction * page_step(scrolls(&bar, axis, frame.scale), frame.scale);
+                    by[axis] = direction * step;
                     request(Request::By(by), window, cx);
                 }
                 window.refresh();

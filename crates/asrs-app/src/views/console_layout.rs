@@ -10,12 +10,12 @@ use asrs_canvas::text::inline::{self, Breaker, Item, Line};
 use asrs_canvas::text::{FixedAdvance, FontSpec, TextBackend, platform_backend};
 use asrs_js::string::JsString;
 use asrs_model::scroll_sensor::{Wheel, WheelScroll, assign_scroll_offset};
-use asrs_ui::scroll::Extent;
 use asrs_model::source_list::Rect;
 use asrs_tabs::ansi::AnsiStyle;
 use asrs_tabs::console::ConsoleNode;
 use asrs_tabs::console::controller::ConsoleGeometry;
 use asrs_tabs::console::view::ConsoleRow;
+use asrs_ui::scroll::Extent;
 use asrs_ui::selection::geometry;
 use asrs_ui::text::TextStyle;
 

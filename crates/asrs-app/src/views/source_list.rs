@@ -17,8 +17,8 @@ use asrs_model::source_list::{
 use asrs_ui::button::IconButton;
 use asrs_ui::gpui::{
     AnyElement, App, BoxShadow, ClickEvent, Context, Div, Hsla, InteractiveElement, IntoElement,
-    MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, ScrollEvent,
-    Stateful, StatefulInteractiveElement, Styled, Window, div, point, px, rgb, rgba,
+    MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, ScrollEvent, Stateful,
+    StatefulInteractiveElement, Styled, Window, div, point, px, rgb, rgba,
 };
 use asrs_ui::icon::{Icon, IconFit, IconSource};
 use asrs_ui::symbols::Symbol;
@@ -581,10 +581,7 @@ impl<H: FrameHost> HubFrame<H> {
         let bar = scroll::style(cx).reserved();
         let mut lists = HashMap::new();
         for (list, root) in displayed_lists(self.host().hub(cx), rect(controls)) {
-            let scroll = layout
-                .scroll
-                .entry(list.uuid().to_owned())
-                .or_default();
+            let scroll = layout.scroll.entry(list.uuid().to_owned()).or_default();
             scroll.animate(now, f64::from(scale));
             let scroll_top = scroll.top();
             let mut placed = ListLayout::new(root, list.items(), scroll_top);

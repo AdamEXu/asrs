@@ -227,7 +227,11 @@ impl PanelLayout {
         let step = TITLE_HEIGHT + INPUT_MIN_HEIGHT;
         let titles = [0.0, 1.0, 2.0].map(|i| y + TOP_MARGIN + i * step);
         let content_height = TOP_MARGIN + 3.0 * TITLE_HEIGHT + 2.0 * INPUT_MIN_HEIGHT + tall;
-        let content_width = if content_height > h { width - bar } else { width };
+        let content_width = if content_height > h {
+            width - bar
+        } else {
+            width
+        };
         PanelLayout {
             panel,
             content_x: panel[0] + 1.0,
@@ -609,12 +613,7 @@ impl<H: FrameHost> HubFrame<H> {
         }
     }
 
-    pub(in crate::views) fn canvas_settings_scroll_to(
-        &mut self,
-        key: usize,
-        to: f64,
-        scale: f64,
-    ) {
+    pub(in crate::views) fn canvas_settings_scroll_to(&mut self, key: usize, to: f64, scale: f64) {
         if let Some(scroller) = self.canvas_tabs.settings.scrollers.get_mut(&key) {
             scroller.scroll_to(to, scale);
         }
