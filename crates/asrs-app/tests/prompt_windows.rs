@@ -260,13 +260,13 @@ impl Prompt<'_> {
                 click_count: 1,
             }),
         ];
-        self.cx
-            .update_window(self.window, |_, window, cx| {
-                for input in inputs {
+        for input in inputs {
+            self.cx
+                .update_window(self.window, |_, window, cx| {
                     window.dispatch_event(input, cx);
-                }
-            })
-            .expect("the window is open");
+                })
+                .expect("the window is open");
+        }
         self.settle();
     }
 

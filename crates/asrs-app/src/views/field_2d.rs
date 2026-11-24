@@ -893,6 +893,22 @@ impl<H: FrameHost> HubFrame<H> {
         cx.notify();
     }
 
+    /// The pointer left the window.
+    pub(super) fn field_2d_mouse_exit(&mut self, cx: &mut Context<'_, Self>) {
+        let views = &mut self.field_2d;
+        let hovered = std::mem::take(&mut views.hovered);
+        let pointer = views.pointer.take();
+        let (Some(shown), Some([x, y])) = (views.shown.filter(|_| hovered), pointer) else {
+            return;
+        };
+        self.host_mut().input(cx, |hub| {
+            with_renderer(hub, shown.index, |renderer, page| {
+                renderer.mouse(page, "leave", 0.0, false, x, y);
+            })
+        });
+        cx.notify();
+    }
+
     /// The overlay's `mousemove` listeners when the pointer is over it, and its `mouseleave`
     /// when it left.
     pub(super) fn field_2d_mouse_move(

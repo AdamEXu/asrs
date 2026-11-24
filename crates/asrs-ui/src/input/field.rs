@@ -544,7 +544,16 @@ impl<M: FieldModel> Render for TextField<M> {
 
         let mut root = div()
             .id("text-field")
-            .key_context(super::CONTEXT)
+            .key_context(match self.kind {
+                FieldKind::Number => super::NUMBER_CONTEXT,
+                FieldKind::Text | FieldKind::Search => super::CONTEXT,
+            })
+            .on_action(cx.listener(|this, _: &super::StepUp, window, cx| {
+                this.arrow_key(true, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &super::StepDown, window, cx| {
+                this.arrow_key(false, window, cx);
+            }))
             .capture_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(|this, _: &selection::SelectAll, window, cx| {

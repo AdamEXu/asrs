@@ -665,6 +665,17 @@ impl<H: FrameHost> HubFrame<H> {
         }
     }
 
+    /// The pointer left the window.
+    fn timeline_mouse_exit(&mut self, cx: &mut Context<'_, Self>) {
+        if std::mem::take(&mut self.timeline_hovered) {
+            let timeline = &mut self.timeline;
+            self.host.input(cx, |hub| {
+                timeline.mouse_leave(hub.page_mut().selection_mut());
+            });
+            cx.notify();
+        }
+    }
+
     fn mouse_up(&mut self, event: &MouseUpEvent, cx: &mut Context<'_, Self>) {
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
@@ -1173,6 +1184,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                             frame.table_mouse_exit(cx);
                             frame.console_mouse_exit(cx);
                             frame.statistics_mouse_exit(cx);
+                            frame.timeline_mouse_exit(cx);
+                            frame.line_graph_mouse_exit(cx);
+                            frame.field_2d_mouse_exit(cx);
                         });
                     }
                 });

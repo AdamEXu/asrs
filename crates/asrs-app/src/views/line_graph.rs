@@ -455,6 +455,21 @@ impl<H: FrameHost> HubFrame<H> {
         cx.notify();
     }
 
+    /// The pointer left the window.
+    pub(super) fn line_graph_mouse_exit(&mut self, cx: &mut Context<'_, Self>) {
+        let hovered = std::mem::take(&mut self.line_graph_mut().hovered);
+        let Some(shown) = self.line_graph().shown.filter(|_| hovered) else {
+            return;
+        };
+        self.line_graph_mut().pointer = None;
+        self.host_mut().input(cx, |hub| {
+            with_renderer(hub, shown.index, |renderer, page| {
+                renderer.mouse_leave(page.tab_selection());
+            });
+        });
+        cx.notify();
+    }
+
     /// The renderer's window `mouseup` listener.
     pub(super) fn line_graph_mouse_up(&mut self, x: f64, shift: bool, cx: &mut Context<'_, Self>) {
         self.line_graph_mut().pressed = false;

@@ -42,6 +42,7 @@ use gpui::{AnyWindowHandle, App, Entity, Render, Window, WindowOptions};
 
 pub fn init(cx: &mut App) {
     gpui_kit::init(cx);
+    input::init(cx);
     platform::init(cx);
 }
 
