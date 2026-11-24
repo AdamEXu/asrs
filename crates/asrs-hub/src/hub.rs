@@ -1422,11 +1422,10 @@ impl HubModel {
     pub fn animation_frame(&mut self, frame: &HubFrame, host: &mut dyn HubHost) {
         match frame {
             HubFrame::Sidebar => {
-                let now = host.now();
-                self.with_sidebar(|sidebar, env| {
-                    sidebar.fire_timeouts(now);
-                    sidebar.periodic(env);
-                });
+                if self.sidebar.next_timeout().is_some() {
+                    self.sidebar.fire_timeouts(host.now());
+                }
+                self.with_sidebar(Sidebar::periodic);
                 host.request_animation_frame(HubFrame::Sidebar);
             }
             HubFrame::Tabs => {

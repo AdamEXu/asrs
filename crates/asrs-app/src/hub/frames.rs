@@ -25,6 +25,7 @@ pub(super) struct Frames {
     starved: bool,
     /// A frame was requested from the window and has not come.
     requested: bool,
+    running: bool,
     watches: u32,
     last: Instant,
     due: Instant,
@@ -42,6 +43,7 @@ impl Frames {
             hidden: true,
             starved: false,
             requested: false,
+            running: false,
             watches: 0,
             last: now,
             due: now + FRAME_PERIOD,
@@ -76,6 +78,9 @@ impl Frames {
 
     /// Arranges for the page's next frame.
     pub(super) fn schedule(&mut self, cx: &mut Context<'_, Hub>) {
+        if self.running {
+            return;
+        }
         if !self.hidden {
             self.request(cx);
         }
@@ -101,10 +106,15 @@ impl Frames {
         });
     }
 
+    /// Like a display's, frames missed while the foreground was busy are skipped, so ones that
+    /// take longer than their period still leave time for other tasks.
     fn arm(&mut self, cx: &Context<'_, Hub>) {
         let executor = cx.background_executor();
-        let wait = self.due.saturating_duration_since(executor.now());
-        let timer = executor.timer(wait);
+        let now = executor.now();
+        if self.due <= now {
+            self.due = next_fire(self.due, now, self.period);
+        }
+        let timer = executor.timer(self.due - now);
         self.timer = Some(cx.spawn(async move |this, cx| {
             timer.await;
             let _ = this.update(cx, |hub, cx| hub.timer_frame(cx));
@@ -145,17 +155,23 @@ impl Hub {
                 return;
             }
         }
-        frames.last = now;
+        self.run_frame(now, cx);
+    }
+
+    fn run_frame(&mut self, now: Instant, cx: &mut Context<'_, Self>) {
+        self.host.frames.last = now;
+        self.host.frames.running = true;
         self.frame(cx);
+        self.host.frames.running = false;
+        if self.host.frame_requested() {
+            self.host.frames.schedule(cx);
+        }
     }
 
     fn timer_frame(&mut self, cx: &mut Context<'_, Self>) {
         let now = cx.background_executor().now();
-        let frames = &mut self.host.frames;
-        frames.timer = None;
-        frames.due = next_fire(frames.due, now, frames.period);
-        frames.last = now;
-        self.frame(cx);
+        self.host.frames.timer = None;
+        self.run_frame(now, cx);
     }
 
     fn window_visibility(&mut self, visible: bool, cx: &mut Context<'_, Self>) {
