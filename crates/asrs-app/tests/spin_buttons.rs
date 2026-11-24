@@ -160,6 +160,7 @@ impl<'a> Page<'a> {
                 });
                 self.dispatch(moved);
             }
+            "put" => self.at = place(&text(&op[1])),
             "press" => {
                 self.pressed = true;
                 self.dispatch(PlatformInput::MouseDown(MouseDownEvent {

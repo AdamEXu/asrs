@@ -5,6 +5,7 @@ import fs from "node:fs";
 // markup into an offscreen page that emulates focus and applies its ops to the <input>:
 //   ["move", place], where place is "up" or "down" (the middle of that button), "text", "beside-up"
 //   or "beside-down" (left of the buttons), "above" or "outside",
+//   ["put", place], which puts the pointer there without a move,
 //   ["press"], ["release"], ["hold", ms], ["key", "ArrowUp" | "ArrowDown"], ["type", text],
 //   ["blur"].
 // After the markup and every op it writes {"step", "op", "value", "focused", "selected", "events"}.
@@ -113,7 +114,8 @@ app
       await write(null);
       for (const op of step.ops as any[]) {
         const [kind, argument] = op;
-        if (kind === "move") {
+        if (kind === "put") at = places[argument] ?? fail(`unknown place ${argument}`);
+        else if (kind === "move") {
           at = places[argument] ?? fail(`unknown place ${argument}`);
           await mouse("mouseMoved");
         } else if (kind === "press" || kind === "release") {

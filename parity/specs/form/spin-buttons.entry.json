@@ -332,6 +332,29 @@
       "blur"
      ]
     ]
+   },
+   {
+    "name": "unseen",
+    "markup": "<input type=\"number\" style=\"width:200px\" value=\"5\">",
+    "ops": [
+     [
+      "put",
+      "up"
+     ],
+     [
+      "press"
+     ],
+     [
+      "release"
+     ],
+     [
+      "type",
+      "7"
+     ],
+     [
+      "blur"
+     ]
+    ]
    }
   ]
  }

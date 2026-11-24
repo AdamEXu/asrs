@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 
-use gpui_kit::base::input::{Input, InputEvent, InputState, MoveDown, MoveUp, Paste};
+use gpui_kit::base::input::{Input, InputEvent, InputState, MoveDown, MoveUp, Paste, Position};
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, ClipboardItem, Context, DispatchPhase, Entity,
     EntityInputHandler, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement,
@@ -590,6 +590,37 @@ impl<M: FieldModel> TextField<M> {
             )
     }
 
+    /// The place of a hidden spin button, where a press reaches the input after its text.
+    fn hidden_spin_button(
+        &self,
+        [x, y, w, h]: [f32; 4],
+        scale: f32,
+        cx: &mut Context<'_, Self>,
+    ) -> impl IntoElement {
+        let [(left, _), (top, _)] = [x, y].map(|v| split(v, scale));
+        let [(right, _), (bottom, _)] = [x + w, y + h].map(|v| split(v, scale));
+        div()
+            .id("hidden-spin-button")
+            .absolute()
+            .left(px(left))
+            .top(px(top))
+            .w(px(right - left))
+            .h(px(bottom - top))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(|this, _, window, cx| {
+                    if this.disabled {
+                        return;
+                    }
+                    window.prevent_default();
+                    let end = this.value.shown().encode_utf16().count() as u32;
+                    this.editor.update(cx, |editor, cx| {
+                        editor.set_cursor_position(Position::new(0, end), window, cx);
+                    });
+                }),
+            )
+    }
+
     fn text_style(&self) -> TextStyle {
         let mut style = TextStyle::new(self.style.font);
         style.align = self.style.align;
@@ -751,11 +782,13 @@ impl<M: FieldModel> Render for TextField<M> {
                 .absolute(),
             );
         }
-        if let Some(spin) = g.spin
-            && (has_focus || self.hovered || self.spin.pressed)
-            && !disabled
-        {
-            root = root.child(self.spin_button(spin, scale, cx));
+        if let Some(spin) = g.spin {
+            let shown = (has_focus || self.hovered || self.spin.pressed) && !disabled;
+            root = root.child(if shown {
+                self.spin_button(spin, scale, cx).into_any_element()
+            } else {
+                self.hidden_spin_button(spin, scale, cx).into_any_element()
+            });
         }
         if focused {
             root = root.child(
