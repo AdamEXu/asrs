@@ -1200,11 +1200,6 @@ app.whenReady().then(() => {
                     .expect("hub")
                     .0;
                 sleep(cx, 1500).await;
-                if std::env::var_os("ASRS_STATES_ONLY").is_some() {
-                    states(cx, &electron, &mut report).await;
-                    println!("{} passed, {} failed", report.passed, report.failed.len());
-                    std::process::exit(0);
-                }
                 captions(cx, &electron, &mut report).await;
                 menus(cx, &mut report, hub).await;
                 lists(cx, &mut report, hub).await;

@@ -7,8 +7,9 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::UI::HiDpi::GetDpiForWindow;
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetClientRect, GetWindowRect, IsIconic, IsWindowVisible, SWP_NOACTIVATE, SWP_NOMOVE,
-    SWP_NOSIZE, SWP_NOZORDER, SetWindowPos, USER_DEFAULT_SCREEN_DPI,
+    GetClientRect, GetWindowPlacement, GetWindowRect, IsIconic, IsWindowVisible, IsZoomed,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SetWindowPos, USER_DEFAULT_SCREEN_DPI,
+    WINDOWPLACEMENT,
 };
 
 use super::subclass;
@@ -70,10 +71,23 @@ pub fn monitor_bounds(window: &Window) -> Option<Bounds<Pixels>> {
     Some(super::logical(work_area(native.0)?, native.scale() as f32))
 }
 
-/// A window's frame in device px.
+/// What a window's rect has around its client area, in device px.
+#[derive(Clone, Copy)]
 pub struct Frame {
-    pub width: i32,
-    pub height: i32,
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+}
+
+impl Frame {
+    pub fn width(&self) -> i32 {
+        self.left + self.right
+    }
+
+    pub fn height(&self) -> i32 {
+        self.top + self.bottom
+    }
 }
 
 pub fn window_rect(hwnd: HWND) -> Option<RECT> {
@@ -102,12 +116,48 @@ pub fn client_rect(hwnd: HWND) -> Option<RECT> {
 pub fn frame(hwnd: HWND) -> Option<Frame> {
     let (window, client) = (window_rect(hwnd)?, client_rect(hwnd)?);
     Some(Frame {
-        width: (window.right - window.left) - (client.right - client.left),
-        height: (window.bottom - window.top) - (client.bottom - client.top),
+        left: client.left - window.left,
+        top: client.top - window.top,
+        right: window.right - client.right,
+        bottom: window.bottom - client.bottom,
     })
 }
 
-fn work_area(hwnd: HWND) -> Option<RECT> {
+pub fn iconic(hwnd: HWND) -> bool {
+    // SAFETY: no preconditions.
+    unsafe { IsIconic(hwnd).as_bool() }
+}
+
+pub fn zoomed(hwnd: HWND) -> bool {
+    // SAFETY: no preconditions.
+    unsafe { IsZoomed(hwnd).as_bool() }
+}
+
+/// `HWNDMessageHandler::GetRestoredBounds`, less a frameless window's frame.
+fn restored_bounds(hwnd: HWND) -> Option<RECT> {
+    let mut placement = WINDOWPLACEMENT {
+        length: size_of::<WINDOWPLACEMENT>() as u32,
+        ..Default::default()
+    };
+    // SAFETY: `placement` outlives the call; a closed window makes it fail.
+    unsafe { GetWindowPlacement(hwnd, &mut placement) }.ok()?;
+    let monitor = monitor(hwnd)?;
+    let (dx, dy) = (
+        monitor.rcWork.left - monitor.rcMonitor.left,
+        monitor.rcWork.top - monitor.rcMonitor.top,
+    );
+    let frame = subclass::restored_frame(hwnd).filter(|frame| frame.top == 0);
+    let (left, right, bottom) = frame.map_or((0, 0, 0), |f| (f.left, f.right, f.bottom));
+    let rect = placement.rcNormalPosition;
+    Some(RECT {
+        left: rect.left + dx + left,
+        top: rect.top + dy,
+        right: rect.right + dx - right,
+        bottom: rect.bottom + dy - bottom,
+    })
+}
+
+fn monitor(hwnd: HWND) -> Option<MONITORINFO> {
     let mut info = MONITORINFO {
         cbSize: size_of::<MONITORINFO>() as u32,
         ..Default::default()
@@ -117,7 +167,11 @@ fn work_area(hwnd: HWND) -> Option<RECT> {
         let monitor = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
         GetMonitorInfoW(monitor, &mut info).ok().ok()?;
     }
-    Some(info.rcWork)
+    Some(info)
+}
+
+fn work_area(hwnd: HWND) -> Option<RECT> {
+    monitor(hwnd).map(|monitor| monitor.rcWork)
 }
 
 /// Electron's frameless windows have no title bar, and their bounds are the content's.
@@ -142,7 +196,9 @@ impl NativeWindow {
 
     /// `getBounds()` in device px.
     fn bounds(&self) -> Option<RECT> {
-        if frameless(self.0) {
+        if iconic(self.0) {
+            restored_bounds(self.0)
+        } else if frameless(self.0) {
             self.client()
         } else {
             window_rect(self.0)
@@ -154,8 +210,8 @@ impl NativeWindow {
     pub fn content_size_for_frame(&self, width: f64, height: f64) -> (f64, f64) {
         match frame(self.0) {
             Some(frame) if !frameless(self.0) => (
-                width - f64::from(frame.width) / self.scale(),
-                height - f64::from(frame.height) / self.scale(),
+                width - f64::from(frame.width()) / self.scale(),
+                height - f64::from(frame.height()) / self.scale(),
             ),
             _ => (width, height),
         }
@@ -176,7 +232,10 @@ impl NativeWindow {
         };
         let device = |v: f64| (v * self.scale()).round() as i32;
         let flags = SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE;
-        let (width, height) = (device(width) + frame.width, device(height) + frame.height);
+        let (width, height) = (
+            device(width) + frame.width(),
+            device(height) + frame.height(),
+        );
         // SAFETY: a closed window makes the call fail.
         unsafe { SetWindowPos(self.0, None, 0, 0, width, height, flags) }.ok();
     }
@@ -223,7 +282,7 @@ impl NativeWindow {
 
     pub fn is_visible(&self) -> bool {
         // SAFETY: no preconditions.
-        unsafe { IsWindowVisible(self.0).as_bool() && !IsIconic(self.0).as_bool() }
+        unsafe { IsWindowVisible(self.0).as_bool() && !iconic(self.0) }
     }
 
     pub fn show(&self, _focus: bool) {}

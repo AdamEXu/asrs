@@ -91,7 +91,7 @@ impl ShownWindow {
         if client() != Some((width, height)) {
             let frame = frame(self.hwnd).ok_or_else(|| anyhow::anyhow!("the window is closed"))?;
             let flags = SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE;
-            let (w, h) = (width + frame.width, height + frame.height);
+            let (w, h) = (width + frame.width(), height + frame.height());
             // SAFETY: the window is open.
             unsafe { SetWindowPos(self.hwnd, None, 0, 0, w, h, flags)? };
         }

@@ -6,11 +6,11 @@ use std::collections::HashMap;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    MINMAXINFO, WM_GETMINMAXINFO, WM_NCDESTROY, WM_SIZING, WMSZ_BOTTOMLEFT, WMSZ_LEFT, WMSZ_RIGHT,
-    WMSZ_TOP, WMSZ_TOPLEFT, WMSZ_TOPRIGHT,
+    MINMAXINFO, WM_GETMINMAXINFO, WM_NCDESTROY, WM_SIZE, WM_SIZING, WMSZ_BOTTOMLEFT, WMSZ_LEFT,
+    WMSZ_RIGHT, WMSZ_TOP, WMSZ_TOPLEFT, WMSZ_TOPRIGHT,
 };
 
-use super::window::{frame, scale};
+use super::window::{Frame, frame, iconic, scale, zoomed};
 
 const ID: usize = 0x6173_7273;
 
@@ -22,6 +22,9 @@ struct Constraints {
     min: Option<Size>,
     max: Option<Size>,
     aspect_ratio: Option<f64>,
+    /// The frame while the window is neither minimized nor maximized. A minimized window has no
+    /// client area to measure one around, and Win32 asks for track sizes on the way back.
+    frame: Option<Frame>,
 }
 
 thread_local! {
@@ -30,6 +33,7 @@ thread_local! {
 
 fn update(hwnd: HWND, f: impl FnOnce(&mut Constraints)) {
     WINDOWS.with_borrow_mut(|windows| f(windows.entry(hwnd.0 as isize).or_default()));
+    measure(hwnd);
     // SAFETY: windows belong to this thread; installing the same procedure twice updates it.
     let _ = unsafe { SetWindowSubclass(hwnd, Some(procedure), ID, 0) };
 }
@@ -48,17 +52,33 @@ pub fn set_aspect_ratio(hwnd: HWND, aspect_ratio: f64) {
     update(hwnd, |constraints| constraints.aspect_ratio = ratio);
 }
 
+fn measure(hwnd: HWND) {
+    if iconic(hwnd) || zoomed(hwnd) {
+        return;
+    }
+    let frame = frame(hwnd);
+    WINDOWS.with_borrow_mut(|windows| {
+        if let Some(constraints) = windows.get_mut(&(hwnd.0 as isize)) {
+            constraints.frame = frame;
+        }
+    });
+}
+
+pub fn restored_frame(hwnd: HWND) -> Option<Frame> {
+    constraints(hwnd).frame.or_else(|| frame(hwnd))
+}
+
 fn constraints(hwnd: HWND) -> Constraints {
     WINDOWS.with_borrow(|windows| windows.get(&(hwnd.0 as isize)).copied().unwrap_or_default())
 }
 
 /// A content size in DIP as a window size in device px.
 fn track_size(hwnd: HWND, (width, height): Size) -> Option<(i32, i32)> {
-    let frame = frame(hwnd)?;
+    let frame = restored_frame(hwnd)?;
     let device = |v: f64| (v * scale(hwnd)).round() as i32;
     Some((
-        device(width).saturating_add(frame.width),
-        device(height).saturating_add(frame.height),
+        device(width).saturating_add(frame.width()),
+        device(height).saturating_add(frame.height()),
     ))
 }
 
@@ -148,6 +168,10 @@ unsafe extern "system" fn procedure(
                 let rect = &mut *(lparam.0 as *mut RECT);
                 *rect = size_to_aspect_ratio(hwnd, wparam.0 as u32, *rect);
                 LRESULT(1)
+            }
+            WM_SIZE => {
+                measure(hwnd);
+                DefSubclassProc(hwnd, message, wparam, lparam)
             }
             WM_NCDESTROY => {
                 WINDOWS.with_borrow_mut(|windows| windows.remove(&(hwnd.0 as isize)));
