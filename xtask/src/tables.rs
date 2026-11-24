@@ -65,6 +65,12 @@ fn mathjs_signatures(root: &Path, check: bool) -> Result {
 }
 
 fn node_tool(root: &Path, tool: &str, package: &Path) -> Result<String> {
+    if !package.is_dir() {
+        return Err(format!(
+            "{} is missing; run `cargo xtask oracle setup`",
+            package.display()
+        ));
+    }
     let output = std::process::Command::new("node")
         .arg(root.join("oracle/tools").join(tool))
         .arg(package)
