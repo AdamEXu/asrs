@@ -97,6 +97,12 @@ impl Windows {
             .map(|(_, h)| *h)
     }
 
+    /// The open windows, oldest first.
+    pub fn ids(cx: &App) -> Vec<WindowId> {
+        let windows = cx.global::<Windows>();
+        windows.handles.iter().map(|(id, _)| *id).collect()
+    }
+
     pub fn id(cx: &App, window: &Window) -> Option<WindowId> {
         Self::id_of(cx, window.window_handle())
     }

@@ -1,0 +1,315 @@
+{
+  "about": "Focus rings (#355) in the active hub: the table tab's jump and delete buttons, pressed and after keys",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table",
+              "controller": [],
+              "controllerUUID": "table000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 150
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 150
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 154
+    },
+    {
+      "mouse": "move",
+      "x": 345,
+      "y": 225
+    },
+    {
+      "mouse": "move",
+      "x": 598,
+      "y": 297
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 240
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 240
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 244
+    },
+    {
+      "mouse": "move",
+      "x": 545,
+      "y": 270
+    },
+    {
+      "mouse": "move",
+      "x": 998,
+      "y": 297
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 180
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 180
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 184
+    },
+    {
+      "mouse": "move",
+      "x": 255,
+      "y": 240
+    },
+    {
+      "mouse": "move",
+      "x": 418,
+      "y": 297
+    },
+    {
+      "mouse": "move",
+      "x": 420,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 420,
+      "y": 300
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        0.5
+      ]
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 382,
+      "y": 103
+    },
+    {
+      "mouse": "down",
+      "x": 382,
+      "y": 103
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "jump-pressed",
+      "probes": [
+        "button.data-table-jump-button",
+        "button.data-table-key-delete"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "jump-key",
+      "probes": [
+        "button.data-table-jump-button",
+        "button.data-table-key-delete"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 547,
+      "y": 104
+    },
+    {
+      "mouse": "down",
+      "x": 547,
+      "y": 104
+    },
+    {
+      "mouse": "move",
+      "x": 545,
+      "y": 104
+    },
+    {
+      "mouse": "up",
+      "x": 545,
+      "y": 104
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "delete-pressed",
+      "probes": [
+        "button.data-table-jump-button",
+        "button.data-table-key-delete"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "delete-key",
+      "probes": [
+        "button.data-table-jump-button",
+        "button.data-table-key-delete"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 558,
+      "y": 103
+    },
+    {
+      "mouse": "click",
+      "x": 558,
+      "y": 103
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 200
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "delete-clicked",
+      "probes": [
+        "button.data-table-jump-button",
+        "button.data-table-key-delete"
+      ]
+    },
+    {
+      "focus": false
+    },
+    {
+      "wait": 50
+    },
+    {
+      "capture": "inactive",
+      "probes": [
+        "button.data-table-jump-button",
+        "button.data-table-key-delete"
+      ]
+    }
+  ]
+}

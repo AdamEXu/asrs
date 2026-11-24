@@ -516,8 +516,14 @@ fn item_body(
         f64::from(scale),
     ))
     .child(translated_button(
-        IconButton::new(("sl-remove", index), symbol("close.svg"))
-            .on_click(on(dispatch, ListPointer::RemoveClick(index))),
+        IconButton::new(("sl-remove", index), symbol("close.svg")).on_click({
+            let remove = on(dispatch, ListPointer::RemoveClick(index));
+            move |event, window, cx| {
+                // The focused button goes with its item.
+                window.blur(cx);
+                remove(event, window, cx);
+            }
+        }),
         origin_x,
         width - 15.0 - 2.0 * half,
         half,

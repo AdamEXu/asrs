@@ -37,7 +37,28 @@ pub(super) fn popup_menu(
     cx.defer(move |cx| on_close(None, cx));
 }
 
-pub(super) fn install_edit_commands(_: &mut App, _: impl Fn(EditCommand, &mut App) + 'static) {}
+pub(super) fn install_edit_commands(
+    _: &mut App,
+    _: impl Fn(EditCommand, &mut Window, &mut App) + 'static,
+) {
+}
+
+pub(super) fn on_quit_request(
+    _: &mut App,
+    _: impl Fn() -> bool + 'static,
+    _: impl Fn(&mut App) + 'static,
+) {
+}
+
+pub(super) enum FullScreenObserver {}
+
+pub(super) fn observe_full_screen(
+    _: &Window,
+    _: &App,
+    _: impl Fn(bool, &mut App) + 'static,
+) -> Option<FullScreenObserver> {
+    None
+}
 
 /// `RendererPreferences`' defaults, which Electron leaves as they are: its render hosts show
 /// #3367d1 for the active one, this blended with white over white.
@@ -257,7 +278,9 @@ pub(super) mod probe {
     use gpui_kit::Window;
 
     use super::super::PopupMenu;
-    use super::super::probe::{Frame, MouseAction, WheelReading, WheelSample, WindowImage};
+    use super::super::probe::{
+        Frame, MenuRole, MouseAction, WheelReading, WheelSample, WindowChrome, WindowImage,
+    };
 
     pub fn native_menu_roundtrip(_menu: &PopupMenu) -> Option<PopupMenu> {
         None
@@ -281,8 +304,40 @@ pub(super) mod probe {
         false
     }
 
+    pub fn stay_in_background() {}
+
+    pub fn menu_role(_window: &Window, _role: &str) -> Option<MenuRole> {
+        None
+    }
+
+    pub fn perform_menu_role(_window: &Window, _role: &str) -> bool {
+        false
+    }
+
     pub fn perform_key_equivalent(_key: &str, _modifiers: u32) -> bool {
         false
+    }
+
+    pub fn perform_menu_role_without_window(_role: &str) -> Option<()> {
+        None
+    }
+
+    pub fn validate_menu_role_without_window(_role: &str) -> Option<bool> {
+        None
+    }
+
+    pub fn intercept_full_screen() -> bool {
+        false
+    }
+
+    pub fn full_screen_toggles() -> usize {
+        0
+    }
+
+    pub fn post_window_notification(_window: &Window, _name: &str) {}
+
+    pub fn window_chrome(_window: &Window) -> Option<WindowChrome> {
+        None
     }
 
     pub fn will_resize(_window: &Window, _size: (f64, f64)) -> Option<(f64, f64)> {

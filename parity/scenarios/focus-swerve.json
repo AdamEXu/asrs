@@ -1,0 +1,234 @@
+{
+  "about": "Focus rings (#355) in the active hub: the swerve tab's orientation switcher and a number input, which takes none, pressed and after keys",
+  "actions": [
+    {
+      "open": [
+        "app:panels"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Swerve"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 9,
+              "title": "Swerve",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "moduleVelocities",
+                    "logKey": "/Swerve/Modules",
+                    "logType": "SwerveModuleState[]",
+                    "visible": true,
+                    "options": {
+                      "color": "#ff0000",
+                      "arrangement": "0,1,2,3"
+                    }
+                  }
+                ],
+                "maxSpeed": 4.5,
+                "sizeX": 0.7,
+                "sizeY": 0.5,
+                "orientation": 0
+              },
+              "controllerUUID": "swerve00000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.5
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 960,
+      "y": 615
+    },
+    {
+      "mouse": "down",
+      "x": 960,
+      "y": 615
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "orientation-first-pressed",
+      "probes": [
+        ".swerve-settings",
+        ".swerve-settings input"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "orientation-first-key",
+      "probes": [
+        ".swerve-settings",
+        ".swerve-settings input"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1040,
+      "y": 615
+    },
+    {
+      "mouse": "down",
+      "x": 1040,
+      "y": 615
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "orientation-second-pressed",
+      "probes": [
+        ".swerve-settings",
+        ".swerve-settings input"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "orientation-second-key",
+      "probes": [
+        ".swerve-settings",
+        ".swerve-settings input"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 490
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 490
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "input-pressed",
+      "probes": [
+        ".swerve-settings",
+        ".swerve-settings input"
+      ]
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "input-key",
+      "probes": [
+        ".swerve-settings",
+        ".swerve-settings input"
+      ]
+    },
+    {
+      "focus": false
+    },
+    {
+      "wait": 50
+    },
+    {
+      "capture": "inactive",
+      "probes": [
+        ".swerve-settings",
+        ".swerve-settings input"
+      ]
+    }
+  ]
+}

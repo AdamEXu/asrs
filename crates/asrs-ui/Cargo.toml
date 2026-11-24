@@ -144,6 +144,7 @@ features = [
     "NSCharacterSet",
     "NSDictionary",
     "NSGeometry",
+    "NSNotification",
     "NSObjCRuntime",
     "NSObject",
     "NSRunLoop",
@@ -212,4 +213,13 @@ harness = false
 
 [[test]]
 name = "scheduler_locks"
+required-features = ["parity"]
+
+[[test]]
+name = "focus_rings"
+required-features = ["parity"]
+
+[[test]]
+name = "focus_fields"
+harness = false
 required-features = ["parity"]

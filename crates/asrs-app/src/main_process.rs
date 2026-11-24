@@ -1,7 +1,8 @@
 //! `main.ts`'s process around its hub windows: `whenReady`, the launch argument and `open-file`
-//! events, the 5 s asset reload with `set-assets`, the 250 ms state save, the AdvantageKit path
-//! poll, `window-all-closed`, `activate` and the quit cleanup.
+//! events, the 5 s asset reload and the asset download loop with `set-assets`, the 250 ms state
+//! save, the AdvantageKit path poll, `window-all-closed`, `activate` and the quit cleanup.
 
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
@@ -15,7 +16,6 @@ use asrs_model::build_constants;
 use asrs_model::messages::{HubToMain, MainToHub, MainToSatellite, NamedMessage, SatelliteToMain};
 use asrs_model::preferences::{Preferences, Theme};
 use asrs_model::source_list_config::SourceListConfig;
-use asrs_services::asset_downloader;
 use asrs_services::beta::{self, BetaConfig, BetaStartup};
 use asrs_services::constants::{AKIT_PATH_INPUT_PERIOD_MS, layout_default_path};
 use asrs_services::dialog::MessageBox;
@@ -31,6 +31,7 @@ use asrs_ui::gpui::{AnyWindowHandle, App, Entity, Global, WeakEntity};
 use asrs_ui::platform;
 use asrs_ui::theme::{Appearance, ThemeSource};
 
+use crate::asset_download;
 use crate::download_flow;
 use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
@@ -41,9 +42,11 @@ use crate::menus::bridge;
 use crate::menus::click::ClickEnv;
 use crate::menus::dispatch;
 use crate::menus::model::MenuItem;
+use crate::quit;
 use crate::satellite::{Satellite, SatelliteEvent};
 use crate::video;
 use crate::views::documentation::DocumentationRoot;
+use crate::views::frame::HubFrame;
 use crate::views::hub_host::{HubEntityHost, boot_messages, show_satellite_menu};
 use crate::views::info::{self, SourceListHelpPage};
 use crate::views::prompts;
@@ -110,12 +113,33 @@ pub fn process_arch() -> &'static str {
     }
 }
 
-/// `path.join(__dirname, "..", "bundledAssets")`: beside the executable in a packaged build,
-/// the workspace's copy of upstream's folder otherwise.
+/// Where a packaged build keeps the files it ships: `Contents/Resources` of the app bundle on
+/// macOS (code signing allows nothing but code beside the executable), the executable's folder
+/// elsewhere.
+pub fn resources_dir() -> PathBuf {
+    let exe = std::env::current_exe().unwrap_or_default();
+    let dir = exe.parent().unwrap_or(Path::new("."));
+    if cfg!(target_os = "macos") {
+        dir.with_file_name("Resources")
+    } else {
+        dir.to_owned()
+    }
+}
+
+/// The folder upstream's pages load `../www` from: where `www/textures` is shipped in a packaged
+/// build, the upstream checkout otherwise.
+pub fn app_root() -> PathBuf {
+    if PACKAGED {
+        return resources_dir();
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../reference/AdvantageScope")
+}
+
+/// `path.join(__dirname, "..", "bundledAssets")`: shipped in a packaged build, the workspace's
+/// copy of upstream's folder otherwise.
 pub fn bundled_assets_dir() -> PathBuf {
     if PACKAGED {
-        let exe = std::env::current_exe().unwrap_or_default();
-        return exe.parent().unwrap_or(Path::new(".")).join("bundledAssets");
+        return resources_dir().join("bundledAssets");
     }
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let candidates = [
@@ -132,12 +156,11 @@ pub fn bundled_assets_dir() -> PathBuf {
     )
 }
 
-/// `docs/build`, which the hub page loads as `../docs/build`: beside the executable in a packaged
-/// build, what `cargo xtask docs` wrote otherwise.
+/// `docs/build`, which the hub page loads as `../docs/build`: shipped in a packaged build, what
+/// `cargo xtask docs` wrote otherwise.
 pub fn documentation_dir() -> PathBuf {
     if PACKAGED {
-        let exe = std::env::current_exe().unwrap_or_default();
-        return exe.parent().unwrap_or(Path::new(".")).join("docs/build");
+        return resources_dir().join("docs/build");
     }
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/docs/build")
 }
@@ -610,6 +633,9 @@ impl MainProcess {
             .global_mut::<MainProcess>()
             .state
             .hub_message(&RealFs, id as f64, message);
+        if message.name == HubToMain::SetExporting {
+            quit::exports_changed(cx);
+        }
         match handled {
             Err(e) => eprintln!("asrs: {}: {e:?}", message.name.name()),
             Ok(()) if message.name == HubToMain::UpdatePreferences => {
@@ -774,7 +800,7 @@ impl MainProcess {
                 let options = dispatch::message_box_options(&options);
                 dispatch::show_message_box(Some(window), options, cx, |response, cx| {
                     if beta::beta_expired_response(response) {
-                        cx.quit();
+                        quit::quit(cx);
                     }
                 });
             }
@@ -808,7 +834,7 @@ impl MainProcess {
             let _ = handle.update(cx, |_, window, cx| {
                 window.on_window_should_close(cx, |_, cx| {
                     if beta::beta_welcome_closed() {
-                        cx.quit();
+                        cx.defer(quit::quit);
                     }
                     true
                 });
@@ -896,7 +922,7 @@ impl MainProcess {
             &menu,
             Rc::new(dispatch::dispatch),
         );
-        platform::install_edit_commands(cx, dispatch::edit);
+        platform::install_edit_commands(cx, dispatch::run_edit);
     }
 
     /// `loadAssets()`, then `sendAllPreferences()` and `sendAssets()`.
@@ -907,6 +933,15 @@ impl MainProcess {
         }
     }
 
+    /// The download loop's `updateCallback`; false when `loadAssets()` throws.
+    pub(crate) fn assets_updated(cx: &mut App) -> bool {
+        let loaded = Self::load_assets(cx);
+        if loaded {
+            Self::send_assets(cx);
+        }
+        loaded
+    }
+
     /// Runs `f` with what the application menu's click handlers read.
     pub fn with_click_env<R>(cx: &App, f: impl FnOnce(&ClickEnv<'_>) -> R) -> Option<R> {
         let main = cx.try_global::<MainProcess>()?;
@@ -915,6 +950,7 @@ impl MainProcess {
                 .tracker
                 .current_application_state(&Screens::now(cx))
         };
+        let asset_status = asset_download::status(cx);
         Some(f(&ClickEnv {
             platform: Platform::current(),
             arch: process_arch(),
@@ -923,7 +959,7 @@ impl MainProcess {
             fs: &RealFs,
             paths: &main.state.paths,
             windows: Windows::manager(cx),
-            asset_status: asset_downloader::INITIAL_STATUS,
+            asset_status: &asset_status,
             layout_default_path: layout_default_path(SystemClock.now(), &NamedZone::system()),
             application_state: &application_state,
         }))
@@ -1021,12 +1057,44 @@ impl MainProcess {
                 });
             });
         }
+        Self::observe_full_screen(cx, id, &frame);
+        Windows::on_closed(cx, id, quit::exports_changed);
         let weak = hub.downgrade();
         let main = cx.global_mut::<MainProcess>();
         main.hubs.retain(|(_, h)| h.upgrade().is_some());
         main.hubs.push((id, weak));
         Self::beta_init(cx, id);
         Some(id)
+    }
+
+    /// `enter-full-screen` and `leave-full-screen`.
+    fn observe_full_screen(cx: &mut App, id: WindowId, frame: &Entity<HubFrame<HubEntityHost>>) {
+        let Some(handle) = Windows::handle(cx, id) else {
+            return;
+        };
+        let send = move |full_screen: bool, cx: &mut App| {
+            let data = JsValue::Bool(full_screen);
+            Self::send_to_hub(cx, id, MainToHub::SetFullscreen, data);
+        };
+        let observed = handle.update(cx, |_, window, cx| {
+            if let Some(observer) = platform::observe_full_screen(window, cx, send) {
+                return Some(observer);
+            }
+            let last = Cell::new(false);
+            frame.update(cx, |_, cx| {
+                cx.observe_window_bounds(window, move |_, window, cx| {
+                    let full_screen = window.is_fullscreen();
+                    if last.replace(full_screen) != full_screen {
+                        cx.defer(move |cx| send(full_screen, cx));
+                    }
+                })
+                .detach();
+            });
+            None
+        });
+        if let Ok(Some(observer)) = observed {
+            Windows::on_closed(cx, id, move |_| observer.stop());
+        }
     }
 
     /// `openFilesSmart(files, sourceWindow)`.
@@ -1309,6 +1377,7 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
         scenario_seed: None,
     });
     MainProcess::install_menu(cx);
+    quit::init(cx);
     let opened = std::iter::from_fn(|| open_events.try_recv().ok());
     let first_open_path = lifecycle::first_open_path(opened, argv);
 
@@ -1339,10 +1408,12 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
     }
 
     MainProcess::check_for_update(cx, false);
+    if asset_download::enabled() {
+        let folders = cx.global::<MainProcess>().state.paths.asset_folders();
+        asset_download::start(asset_download::Config::new(folders), cx);
+    }
     every(cx, ASSET_RELOAD_PERIOD, |cx| {
-        if MainProcess::load_assets(cx) {
-            MainProcess::send_assets(cx);
-        }
+        MainProcess::assets_updated(cx);
     });
     every(cx, STATE_SAVE_PERIOD, MainProcess::save_state);
     every(
@@ -1357,13 +1428,14 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
     })
     .detach();
     cx.on_window_closed(|cx, _| {
-        if Platform::current() != Platform::Mac && cx.windows().is_empty() {
-            cx.quit();
+        if cx.windows().is_empty() {
+            quit::windows_all_closed(cx);
         }
     })
     .detach();
     cx.on_app_quit(|cx| {
         video::cleanup(cx);
+        asset_download::stop(cx);
         if let Some(main) = cx.try_global::<MainProcess>() {
             lifecycle::quit_cleanup(
                 &RealFs,

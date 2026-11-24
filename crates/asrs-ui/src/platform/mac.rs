@@ -34,12 +34,17 @@ use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 use super::probe::GpuiDelta;
 use super::{
-    EditCommand, MenuPath, PopupEntry, PopupItem, PopupMenu, SWATCH_SIZE, SelectMenu,
-    SelectMenuItemKind, SystemSelection, WheelDelta,
+    MenuPath, PopupEntry, PopupItem, PopupMenu, SWATCH_SIZE, SelectMenu, SelectMenuItemKind,
+    SystemSelection, WheelDelta,
 };
 
+mod actions;
 pub(super) mod dialog;
 pub(super) mod window;
+
+pub(super) use actions::{
+    FullScreenObserver, install_edit_commands, observe_full_screen, on_quit_request,
+};
 
 pub(super) fn add_recent_document(path: &Path) {
     if let Some(mtm) = MainThreadMarker::new()
@@ -791,67 +796,6 @@ pub(super) fn set_application_menu(
     true
 }
 
-type EditHandler = Box<dyn Fn(EditCommand)>;
-
-thread_local! {
-    static EDIT_COMMAND: RefCell<Option<EditHandler>> = const { RefCell::new(None) };
-}
-
-unsafe extern "C-unwind" fn copy_command(_: &AnyObject, _: Sel, _: Option<&AnyObject>) {
-    run_edit_command(EditCommand::Copy);
-}
-
-unsafe extern "C-unwind" fn select_all_command(_: &AnyObject, _: Sel, _: Option<&AnyObject>) {
-    run_edit_command(EditCommand::SelectAll);
-}
-
-fn run_edit_command(command: EditCommand) {
-    EDIT_COMMAND.with_borrow(|handler| {
-        if let Some(handler) = handler {
-            handler(command);
-        }
-    });
-}
-
-/// Gives the application's delegate, which ends the responder chain, `copy:` and `selectAll:`.
-pub(super) fn install_edit_commands(
-    cx: &mut App,
-    on_command: impl Fn(EditCommand, &mut App) + 'static,
-) {
-    let Some(mtm) = MainThreadMarker::new() else {
-        return;
-    };
-    let cx = cx.to_async();
-    let on_command = std::rc::Rc::new(on_command);
-    EDIT_COMMAND.set(Some(Box::new(move |command| {
-        let on_command = on_command.clone();
-        cx.spawn(async move |cx| cx.update(|cx| on_command(command, cx)))
-            .detach();
-    })));
-    let Some(delegate) = NSApplication::sharedApplication(mtm).delegate() else {
-        return;
-    };
-    // SAFETY: `class` takes no arguments and returns a class pointer.
-    let class: &AnyClass = unsafe { msg_send![&*delegate, class] };
-    type Command = unsafe extern "C-unwind" fn(&AnyObject, Sel, Option<&AnyObject>);
-    let commands: [(Sel, Command); 2] = [
-        (sel!(copy:), copy_command),
-        (sel!(selectAll:), select_all_command),
-    ];
-    for (selector, command) in commands {
-        // SAFETY: the implementations' signature is the `v@:@` of an action method, and
-        // `class_addMethod` leaves an existing method untouched.
-        unsafe {
-            ffi::class_addMethod(
-                ptr::from_ref(class).cast_mut(),
-                selector,
-                std::mem::transmute::<Command, Imp>(command),
-                c"v@:@".as_ptr(),
-            );
-        }
-    }
-}
-
 fn srgb(color: &NSColor) -> u32 {
     let Some(color) = color.colorUsingColorSpace(&NSColorSpace::sRGBColorSpace()) else {
         return 0;
@@ -1098,11 +1042,12 @@ pub(super) mod probe {
 
     use gpui_kit::Window;
     use objc2::rc::Retained;
-    use objc2::runtime::Bool;
+    use objc2::runtime::{AnyClass, AnyObject, Bool, NSObject, NSObjectProtocol, Sel};
     use objc2::{MainThreadMarker, msg_send};
     use objc2_app_kit::{
-        NSApplication, NSBitmapImageRep, NSControlStateValueOn, NSEvent, NSImage, NSMenu,
-        NSMenuItem, NSScreen,
+        NSApplication, NSApplicationActivationPolicy, NSBitmapImageRep, NSControlStateValueOn,
+        NSEvent, NSImage, NSMenu, NSMenuItem, NSScreen, NSWindow, NSWindowButton,
+        NSWindowTitleVisibility,
     };
     use objc2_core_foundation::{CFRetained, CGPoint, CGRect, CGSize};
     #[allow(deprecated)]
@@ -1115,7 +1060,9 @@ pub(super) mod probe {
     use objc2_foundation::NSSize;
 
     use super::super::probe::SelectMenuReading;
-    use super::super::probe::{Frame, MouseAction, WheelReading, WheelSample, WindowImage};
+    use super::super::probe::{
+        Frame, MenuRole, MouseAction, WheelReading, WheelSample, WindowChrome, WindowImage,
+    };
     use super::super::{PopupEntry, PopupItem, PopupMenu, SelectMenu};
     use super::{
         PopupTarget, RawWheel, build_menu, build_select_menu, find_vibrancy, metal_layer,
@@ -1282,6 +1229,186 @@ pub(super) mod probe {
         true
     }
 
+    pub fn stay_in_background() {
+        if let Some(mtm) = MainThreadMarker::new() {
+            let app = NSApplication::sharedApplication(mtm);
+            app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
+        }
+    }
+
+    fn role_item(menu: &NSMenu, action: Sel) -> Option<Retained<NSMenuItem>> {
+        menu.update();
+        menu.itemArray().iter().find_map(|item| {
+            if item.action() == Some(action) {
+                return Some(item);
+            }
+            role_item(&*item.submenu()?, action)
+        })
+    }
+
+    fn responds(object: &NSObject, action: Sel) -> bool {
+        object.respondsToSelector(action)
+    }
+
+    /// The order `-[NSApplication targetForAction:]` looks in from a key window, for a window that
+    /// must not become key to be tested.
+    fn responder(window: &NSWindow, action: Sel) -> Option<Retained<NSObject>> {
+        let mtm = MainThreadMarker::new()?;
+        let app = NSApplication::sharedApplication(mtm);
+        let mut next = window.firstResponder();
+        while let Some(responder) = next {
+            if responds(&responder, action) {
+                return Some(Retained::into_super(responder));
+            }
+            // SAFETY: reading the next responder of a live one.
+            next = unsafe { responder.nextResponder() };
+        }
+        let object = |delegate: Retained<AnyObject>| delegate.downcast::<NSObject>().ok();
+        let ends: [Option<Retained<NSObject>>; 3] = [
+            window.delegate().and_then(|d| object(d.into())),
+            Some(Retained::into_super(Retained::into_super(app.clone()))),
+            app.delegate().and_then(|d| object(d.into())),
+        ];
+        ends.into_iter().flatten().find(|end| responds(end, action))
+    }
+
+    fn role_target(
+        window: &Window,
+        role: &str,
+    ) -> Option<(Retained<NSMenuItem>, Sel, Option<Retained<NSObject>>)> {
+        let (_, selector) = super::ROLE_SELECTORS.iter().find(|(r, _)| *r == role)?;
+        let action = Sel::register(selector);
+        let mtm = MainThreadMarker::new()?;
+        let menu = NSApplication::sharedApplication(mtm).mainMenu()?;
+        let item = role_item(&menu, action)?;
+        let target = responder(&*ns_window(window)?, action);
+        Some((item, action, target))
+    }
+
+    pub fn menu_role(window: &Window, role: &str) -> Option<MenuRole> {
+        let (item, action, target) = role_target(window, role)?;
+        let target = target.map(|target| {
+            let class = target.class();
+            let mut implementor = class;
+            let imp = class
+                .instance_method(action)
+                .map(|m| m.implementation() as usize);
+            while let Some(above) = implementor.superclass()
+                && above
+                    .instance_method(action)
+                    .map(|m| m.implementation() as usize)
+                    == imp
+            {
+                implementor = above;
+            }
+            let name = |class: &AnyClass| class.name().to_string_lossy().into_owned();
+            (name(class), name(implementor))
+        });
+        Some(MenuRole {
+            action: action.name().to_string_lossy().into_owned(),
+            enabled: item.isEnabled(),
+            target,
+        })
+    }
+
+    pub fn perform_menu_role(window: &Window, role: &str) -> bool {
+        let Some((item, action, Some(target))) = role_target(window, role) else {
+            return false;
+        };
+        super::perform_on_run_loop(move || {
+            let Some(mtm) = MainThreadMarker::new() else {
+                return;
+            };
+            let app = NSApplication::sharedApplication(mtm);
+            // SAFETY: `target` implements the action, which takes its sender.
+            unsafe { app.sendAction_to_from(action, Some(&target), Some(&item)) };
+        });
+        true
+    }
+
+    /// Where a role ends that no responder of a window takes.
+    pub fn perform_menu_role_without_window(role: &str) -> Option<()> {
+        let mtm = MainThreadMarker::new()?;
+        let (_, selector) = super::ROLE_SELECTORS.iter().find(|(r, _)| *r == role)?;
+        let action = Sel::register(selector);
+        let app = NSApplication::sharedApplication(mtm);
+        let delegate = app.delegate()?;
+        if delegate.respondsToSelector(action) {
+            // SAFETY: the delegate implements the action, which takes its sender.
+            unsafe { app.sendAction_to_from(action, Some(delegate.as_ref()), None) };
+        }
+        Some(())
+    }
+
+    /// Whether AppKit finds a role's action valid where no window takes it, in a menu that asks.
+    pub fn validate_menu_role_without_window(role: &str) -> Option<bool> {
+        let mtm = MainThreadMarker::new()?;
+        let (_, selector) = super::ROLE_SELECTORS.iter().find(|(r, _)| *r == role)?;
+        let menu = NSMenu::new(mtm);
+        // SAFETY: an item without a target or a key equivalent.
+        let item = unsafe {
+            menu.addItemWithTitle_action_keyEquivalent(
+                &objc2_foundation::NSString::from_str(role),
+                Some(Sel::register(selector)),
+                &objc2_foundation::NSString::new(),
+            )
+        };
+        menu.update();
+        Some(item.isEnabled())
+    }
+
+    /// Counts `toggleFullScreen:` calls on GPUI's windows instead of letting AppKit see them.
+    pub fn intercept_full_screen() -> bool {
+        type Action = unsafe extern "C-unwind" fn(&AnyObject, Sel, Option<&AnyObject>);
+        unsafe extern "C-unwind" fn counted(_: &AnyObject, _: Sel, _: Option<&AnyObject>) {
+            FULL_SCREEN_TOGGLES.set(FULL_SCREEN_TOGGLES.get() + 1);
+        }
+        let Some(class) = AnyClass::get(c"GPUIWindow") else {
+            return false;
+        };
+        // SAFETY: an action method, overriding NSWindow's.
+        unsafe {
+            objc2::ffi::class_addMethod(
+                ptr::from_ref(class).cast_mut(),
+                objc2::sel!(toggleFullScreen:),
+                std::mem::transmute::<Action, objc2::runtime::Imp>(counted),
+                c"v@:@".as_ptr(),
+            )
+            .as_bool()
+        }
+    }
+
+    thread_local! {
+        static FULL_SCREEN_TOGGLES: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
+
+    pub fn full_screen_toggles() -> usize {
+        FULL_SCREEN_TOGGLES.get()
+    }
+
+    pub fn post_window_notification(window: &Window, name: &str) {
+        if let Some(window) = ns_window(window) {
+            super::perform_on_run_loop({
+                let name = objc2_foundation::NSString::from_str(name);
+                move || {
+                    let center = objc2_foundation::NSNotificationCenter::defaultCenter();
+                    // SAFETY: a window's notification has the window as its object.
+                    unsafe { center.postNotificationName_object(&name, Some(&window)) };
+                }
+            });
+        }
+    }
+
+    pub fn window_chrome(window: &Window) -> Option<WindowChrome> {
+        let window = ns_window(window)?;
+        let button = window.standardWindowButton(NSWindowButton::CloseButton)?;
+        Some(WindowChrome {
+            toolbar: window.toolbar().is_some(),
+            title: window.titleVisibility() == NSWindowTitleVisibility::Visible,
+            buttons: !button.isHidden(),
+        })
+    }
+
     pub fn will_resize(window: &Window, size: (f64, f64)) -> Option<(f64, f64)> {
         let window = ns_window(window)?;
         let delegate = window.delegate()?;
@@ -1307,7 +1434,7 @@ pub(super) mod probe {
             objc2_foundation::NSPoint::new(0.0, 0.0),
             NSSize::new(100.0, 100.0),
         );
-        let frame = objc2_app_kit::NSWindow::frameRectForContentRect_styleMask(content, style, mtm);
+        let frame = NSWindow::frameRectForContentRect_styleMask(content, style, mtm);
         Some((0.0, frame.size.height - content.size.height))
     }
 
@@ -1340,7 +1467,7 @@ pub(super) mod probe {
                 ),
                 timestamp: 0.0f64,
                 windowNumber: 0isize,
-                context: None::<&objc2::runtime::AnyObject>,
+                context: None::<&AnyObject>,
                 characters: &*characters,
                 charactersIgnoringModifiers: &*characters,
                 isARepeat: false,

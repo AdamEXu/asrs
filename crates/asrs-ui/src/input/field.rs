@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 
-use gpui_kit::base::input::{Input, InputEvent, InputState, MoveDown, MoveUp, Paste};
+use gpui_kit::base::input::{Cut, Delete, Input, InputEvent, InputState, MoveDown, MoveUp, Paste};
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, ClipboardItem, Context, Entity, EntityInputHandler,
     EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, MouseButton,
@@ -10,7 +10,9 @@ use gpui_kit::{
     WeakEntity, Window, canvas, div, px, rgba,
 };
 
+use crate::focus;
 use crate::icon::{IconSource, Placement, paint_icon};
+use crate::input::DeleteSelection;
 use crate::input::model::{FieldModel, FieldValue};
 use crate::input::native::paint_text_field;
 use crate::input::style::{DISABLED_TEXT, FieldStyle, Frame, device_border};
@@ -409,6 +411,24 @@ impl<M: FieldModel> TextField<M> {
         }
     }
 
+    /// The editor's own cut of a caret empties the clipboard.
+    fn cut(&mut self, _: &Cut, _: &mut Window, cx: &mut Context<'_, Self>) {
+        if self.editor.read(cx).selected_range().is_empty() {
+            cx.stop_propagation();
+        }
+    }
+
+    fn delete_selection(
+        &mut self,
+        _: &DeleteSelection,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if !self.editor.read(cx).selected_range().is_empty() {
+            window.dispatch_action(Box::new(Delete), cx);
+        }
+    }
+
     /// `HandleKeydownEventForSpinButton`.
     fn arrow_key(&mut self, up: bool, window: &mut Window, cx: &mut Context<'_, Self>) {
         if self.kind != FieldKind::Number {
@@ -445,7 +465,9 @@ impl<M: FieldModel> Render for TextField<M> {
         let text_style = self.text_style();
         let line = text::layout(cx, &text_style, "0", scale, None).height as f32 / 64.0;
         let g = geometry(&style, self.size.0, self.size.1, line, scale);
-        let focused = self.focus_handle(cx).is_focused(window);
+        let handle = self.focus_handle(cx);
+        let focused = handle.is_focused(window);
+        let has_focus = focus::has_focus(&handle, window, cx);
         let (width, height) = self.size;
         let disabled = self.disabled;
         let color = match style.frame {
@@ -467,7 +489,7 @@ impl<M: FieldModel> Render for TextField<M> {
                 radius,
             } => {
                 let background = match style.focus_background {
-                    Some(bg) if focused => bg,
+                    Some(bg) if has_focus => bg,
                     _ => background,
                 };
                 div()
@@ -534,6 +556,8 @@ impl<M: FieldModel> Render for TextField<M> {
             .id("text-field")
             .key_context(super::CONTEXT)
             .capture_action(cx.listener(Self::paste))
+            .capture_action(cx.listener(Self::cut))
+            .on_action(cx.listener(Self::delete_selection))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(|this, _: &selection::SelectAll, window, cx| {
                 let editor = this.editor.clone();
@@ -568,7 +592,7 @@ impl<M: FieldModel> Render for TextField<M> {
         }
 
         let cancel_visible =
-            (focused || self.hovered) && !self.disabled && !self.value.shown().is_empty();
+            (has_focus || self.hovered) && !self.disabled && !self.value.shown().is_empty();
         if let (Some([cx0, cy0, cw, ch]), true) = (g.cancel, cancel_visible) {
             let (cl, _) = split(cx0, scale);
             let (ct, _) = split(cy0, scale);

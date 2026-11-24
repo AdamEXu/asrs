@@ -270,6 +270,7 @@ pub fn run<V: ScrolledPage>(
             }
         }
         EditCommand::SelectAll => text.state.select_all(page.document()),
+        _ => return,
     }
     cx.notify();
 }

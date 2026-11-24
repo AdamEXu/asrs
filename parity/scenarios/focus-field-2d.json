@@ -1,0 +1,371 @@
+{
+  "about": "Focus rings (#355) in the active hub: the 2D field's orientation and size switchers and its source link, pressed and after keys",
+  "prefs": {
+    "coordinateSystem": "wall-blue"
+  },
+  "userData": {
+    "userAssets/Field2d_Rings/config.json": {
+      "name": "Rings",
+      "sourceUrl": "https://example.com/",
+      "isFTC": false,
+      "coordinateSystem": "center-red",
+      "topLeft": [
+        20,
+        20
+      ],
+      "bottomRight": [
+        700,
+        300
+      ],
+      "widthInches": 648,
+      "heightInches": 324
+    },
+    "userAssets/Field2d_Rings/image.png": {
+      "$file": "assets/parity-pad.png"
+    }
+  },
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 2,
+              "title": "Field",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "heatmap",
+                    "logKey": "/Odometry/Robot3d",
+                    "logType": "Pose3d",
+                    "visible": true,
+                    "options": {
+                      "timeRange": "full"
+                    }
+                  }
+                ],
+                "field": "FRC:Rings",
+                "orientation": 0,
+                "size": "large"
+              },
+              "controllerUUID": "field2d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        3.25
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 887,
+      "y": 575
+    },
+    {
+      "mouse": "down",
+      "x": 887,
+      "y": 575
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "orientation-first-pressed",
+      "probes": [
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "orientation-first-key",
+      "probes": [
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 937,
+      "y": 575
+    },
+    {
+      "mouse": "down",
+      "x": 937,
+      "y": 575
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "orientation-second-pressed",
+      "probes": [
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "orientation-second-key",
+      "probes": [
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1005,
+      "y": 575
+    },
+    {
+      "mouse": "down",
+      "x": 1005,
+      "y": 575
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "size-first-pressed",
+      "probes": [
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "size-first-key",
+      "probes": [
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1071,
+      "y": 575
+    },
+    {
+      "mouse": "down",
+      "x": 1071,
+      "y": 575
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "size-last-pressed",
+      "probes": [
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "size-last-key",
+      "probes": [
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1045,
+      "y": 495
+    },
+    {
+      "mouse": "down",
+      "x": 1045,
+      "y": 495,
+      "button": "right"
+    },
+    {
+      "mouse": "up",
+      "x": 1045,
+      "y": 495,
+      "button": "right"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "source-link-pressed",
+      "probes": [
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "source-link-key",
+      "probes": [
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "focus": false
+    },
+    {
+      "wait": 50
+    },
+    {
+      "capture": "inactive",
+      "probes": [
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    }
+  ]
+}

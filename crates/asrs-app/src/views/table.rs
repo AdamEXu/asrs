@@ -6,6 +6,7 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
 
 use asrs_canvas::text::TextBackend;
@@ -26,8 +27,8 @@ use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Context, Div, Entity, Focusable, InteractiveElement, IntoElement,
-    MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, Styled, Subscription,
-    Window, div, px, rgb,
+    MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, SharedString, Styled,
+    Subscription, Window, div, px, rgb,
 };
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, TextField};
 use asrs_ui::parity::probed;
@@ -806,6 +807,12 @@ impl<H: FrameHost> HubFrame<H> {
                 grid.place([*left, y, *w, header_height]),
             ));
         }
+        // `updateFields` replaces every header cell, which drops the focus of one's button.
+        let mut headers = DefaultHasher::new();
+        for field in &view.headers {
+            (&field.text.to_string_lossy(), field.available).hash(&mut headers);
+        }
+        let headers = headers.finish();
         let mut header = div().absolute().inset_0();
         for (index, field) in view.headers.iter().enumerate() {
             let column = index + 1;
@@ -855,7 +862,8 @@ impl<H: FrameHost> HubFrame<H> {
                     left + w - cell_border - CLOSE_RIGHT - BUTTON,
                     y + BUTTON_TOP,
                 ];
-                let button = IconButton::new(("table-close", index), symbol("close.svg"))
+                let id = format!("table-close-{headers:x}-{index}");
+                let button = IconButton::new(SharedString::from(id), symbol("close.svg"))
                     .on_click(cx.listener(move |frame, _, _, cx| frame.table_close(index, cx)));
                 th = th.child(grid.button(button, at));
                 probes = probes.child(probed(
