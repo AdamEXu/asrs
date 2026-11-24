@@ -59,6 +59,23 @@
       "FontSmoothingOrientation": "1",
       "FontSmoothingGamma": "0"
     },
+    "fontRules": null,
+    "updates": {
+      "build": "26300.9457",
+      "wuauserv": "4",
+      "UsoSvc": "4",
+      "WaaSMedicSvc": "4",
+      "InstallService": "4",
+      "WUServer": "http://127.0.0.1:9",
+      "WUStatusServer": "http://127.0.0.1:9",
+      "DoNotConnectToWindowsUpdateInternetLocations": "1",
+      "ExcludeWUDriversInQualityUpdate": "1",
+      "TargetReleaseVersionInfo": "26H2",
+      "UseWUServer": "1",
+      "NoAutoUpdate": "1",
+      "StoreAutoDownload": "2",
+      "RemoveWindowsStore": "1"
+    },
     "fonts": {
       "C:/Windows/Fonts/segoeui.ttf": "8134dbcd09e7b123c9a7f229d49cffbcb01352cc72ea5e1076b65d0dca9f73cd",
       "C:/Windows/Fonts/segoeuib.ttf": "aeb9e4a6ec5cc59f4d72df8189032d7dbb28f45161cf1552174818b5465dac4e",
