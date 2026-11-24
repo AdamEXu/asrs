@@ -16,8 +16,10 @@ use std::time::{Duration, Instant};
 
 use asrs_app::hub::{FrameClock, Hub, HubConfig, HubEvent};
 use asrs_app::live;
+use asrs_app::main_process::process_platform;
 use asrs_hub::hub::HubView;
 use asrs_hub::sidebar::{NoLayout, SidebarGeometry};
+use asrs_js::ops;
 use asrs_js::string::JsString;
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::log::Log;
@@ -126,7 +128,7 @@ impl Page {
             })
             .detach();
         });
-        Page {
+        let mut page = Page {
             cx,
             window: window.into(),
             hub: Some(hub),
@@ -134,7 +136,16 @@ impl Page {
             main,
             exceptions,
             files: Vec::new(),
-        }
+        };
+        let version = [
+            ("platform", process_platform()),
+            ("platformRelease", ""),
+            ("platformArch", "arm64"),
+            ("appVersion", ""),
+        ];
+        let version = version.map(|(key, value)| (key, JsValue::string(value)));
+        page.send(MainToHub::SetVersion, ops::object(version));
+        page
     }
 
     fn hub(&self) -> Entity<Hub> {
