@@ -12,6 +12,7 @@ use asrs_app::hub::Hub;
 use asrs_app::views::frame::{FrameHost, HubFrame};
 use asrs_app::views::hub_host::HubEntityHost;
 use asrs_hub::frame::FrameElement;
+use asrs_hub::hub::HubModel;
 use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
 use asrs_model::messages::{MainToHub, NamedMessage};
@@ -19,7 +20,7 @@ use asrs_model::selection::Selection;
 use asrs_model::tab_type::TabType;
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
-    Entity, PlatformInput, ScrollDelta, ScrollEvent, WindowHandle, point, px, size,
+    Entity, MouseMoveEvent, PlatformInput, ScrollDelta, ScrollEvent, WindowHandle, point, px, size,
 };
 
 const WIDTH: f32 = 1100.0;
@@ -115,6 +116,48 @@ impl Page<'_> {
         self.headless.context().run_until_parked();
     }
 
+    fn move_to(&mut self, x: f64, y: f64) {
+        let event = PlatformInput::MouseMove(MouseMoveEvent {
+            position: point(px(x as f32), px(y as f32)),
+            ..MouseMoveEvent::default()
+        });
+        self.headless
+            .context()
+            .update_window(self.window.into(), |_, window, cx| {
+                window.dispatch_event(event, cx);
+            })
+            .expect("window");
+        self.headless.context().run_until_parked();
+    }
+
+    fn hover_timeline(&mut self) {
+        let r = self.rect(FrameElement::Timeline);
+        self.move_to(r[0] + r[2] / 2.0, r[1] + r[3] / 2.0);
+    }
+
+    fn model<R>(&mut self, f: impl FnOnce(&mut HubModel) -> R) -> R {
+        let hub = self.hub.clone();
+        self.headless
+            .context()
+            .update(|cx| hub.update(cx, |hub, cx| hub.update(cx, |model, _| f(model))))
+    }
+
+    fn take_hovered_time(&mut self) -> Option<f64> {
+        self.model(|model| {
+            let selection = model.page_mut().selection_mut();
+            let time = selection.get_hovered_time();
+            selection.set_hovered_time(None);
+            time
+        })
+    }
+
+    fn select(&mut self, index: f64) {
+        self.model(|model| {
+            let (tabs, page) = model.tabs_mut();
+            let _ = tabs.set_selected(page, &JsValue::Number(index));
+        });
+    }
+
     fn timeline_range(&mut self) -> [f64; 2] {
         let hub = self.hub.clone();
         self.headless.context().update(|cx| {
@@ -200,6 +243,30 @@ fn tab_bar(headless: &mut HeadlessCapture, scale: f32) -> (f64, f64) {
     (before, after)
 }
 
+/// Moves over the timeline before and after a throw out of `Tabs`' frame loop, which upstream's
+/// timeline is drawn in, and returns the hovered time after each.
+fn dead_loop(headless: &mut HeadlessCapture, scale: f32) -> [Option<f64>; 2] {
+    let mut page = Page::open(headless, scale);
+    page.main(
+        MainToHub::NewTab,
+        JsValue::Number(TabType::Mechanism.number()),
+    );
+    page.frames(4);
+    page.hover_timeline();
+    page.frames(2);
+    let alive = page.take_hovered_time();
+    page.move_to(1.0, 1.0);
+    page.select(0.5);
+    page.frames(2);
+    page.select(2.0);
+    page.frames(2);
+    page.hover_timeline();
+    page.frames(2);
+    let dead = page.take_hovered_time();
+    page.close();
+    [alive, dead]
+}
+
 fn main() {
     if !cfg!(any(target_os = "macos", target_os = "linux")) {
         println!("hub wheel: skipped, no headless renderer on this platform");
@@ -225,6 +292,10 @@ fn main() {
             "{scale}x: the tab bar did not scroll: {before} -> {after}"
         );
         println!("{scale}x tab bar: scrollLeft {before} -> {after}");
+
+        let [alive, dead] = dead_loop(&mut headless, scale);
+        assert!(alive.is_some(), "{scale}x: the timeline hovers");
+        assert_eq!(dead, None, "{scale}x: the timeline outlives its loop");
     }
     println!("hub_wheel: ok");
 }
