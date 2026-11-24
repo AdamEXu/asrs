@@ -1,6 +1,17 @@
+import { Socket } from "node:net";
 import { toTree } from "../cve1";
 import { LiveLoop } from "./loop";
 import { ClientTraffic, Outbox, ServerHost } from "./server";
+
+/** Throws what Node's `net.createConnection` throws on `port`. Nothing is resolved or connected. */
+function checkSocketPort(port: number): void {
+  const socket = new Socket();
+  try {
+    socket.connect({ host: "host.invalid", port, lookup: () => {} });
+  } finally {
+    socket.destroy();
+  }
+}
 
 /** The session trace: one JSON line per event, in the order events happen. */
 export class Trace {
@@ -330,6 +341,7 @@ export class Net implements Outbox {
    * callback.
    */
   createConnection(options: { host: string; port: number }): unknown {
+    checkSocketPort(options.port);
     const net = this;
     const id = this.nextId++;
     const socket = new (class FakeSocket {

@@ -23,11 +23,11 @@ use asrs_tabs::field_2d::{
 use asrs_tabs::form::{self, OptGroup, SelectOption};
 use asrs_ui::canvas_view::FramePresenter;
 use asrs_ui::canvas_view::geometry::{client_size, mouse_client};
-use asrs_ui::focus::{self, FocusRing, LINK_OUTLINE_OFFSET};
+use asrs_ui::focus::{self, Activate, FocusRing, LINK_OUTLINE_OFFSET};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, ClickEvent, Context, Entity, InteractiveElement, IntoElement,
-    KeyboardButton, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent,
-    StatefulInteractiveElement, Styled, Subscription, Window, canvas, div, px, rgb,
+    KeyboardButton, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, Styled,
+    Subscription, Window, canvas, div, px, rgb,
 };
 use asrs_ui::icon::IconSource;
 use asrs_ui::input::style::CONTROL_FONT;
@@ -39,7 +39,7 @@ use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, FONT_FAMIL
 use asrs_ui::tooltip::{titled, untitled};
 
 use super::field_image::{self, FieldImage};
-use super::frame::{FrameHost, HubFrame, overlay_range, wheel_of};
+use super::frame::{FrameHost, HubFrame, SETTINGS_SECTION, overlay_range, wheel_of};
 use super::scrollers::Area;
 use super::select::FormSelect;
 use super::source_list::{centred_offset, place_in};
@@ -63,6 +63,15 @@ const SOURCE_PADDING: f64 = 5.0;
 const ORIENTATION_ICONS: [&str; 2] = ["rotateleft.svg", "rotateright.svg"];
 const ORIENTATION_TITLES: &[&str] = &["Rotate field counter-clockwise", "Rotate field clockwise"];
 const SIZE_TITLES: &[&str] = &["Large robot size", "Medium robot size", "Small robot size"];
+
+/// The settings' rows in document order, as [`focus::section`] has them.
+#[derive(Clone, Copy)]
+enum Block {
+    FieldTitle = 1,
+    Field,
+    SwitcherTitles,
+    Switchers,
+}
 const SIZE_LABELS: [[&str; 3]; 2] = [["30", "27", "24"], ["18", "16", "14"]];
 
 fn lu(v: f64) -> f64 {
@@ -721,19 +730,30 @@ impl<H: FrameHost> HubFrame<H> {
                 .w(px(r[2] as f32))
                 .h(px(r[3] as f32))
         };
-        let mut panel = div().absolute().left_0().top_0().size_full();
+        let place = |part: &'static str, window: &mut Window, cx: &mut App| {
+            focus::place((part, key), window, cx)
+        };
+        let mut panel = div()
+            .absolute()
+            .left_0()
+            .top_0()
+            .size_full()
+            .tab_group()
+            .tab_index(SETTINGS_SECTION);
         let ph = layout.panel[3];
         panel = panel.child(probed(
             "div.field-2d-settings",
-            local(layout.panel).child(
-                div()
-                    .absolute()
-                    .left_0()
-                    .top_0()
-                    .w(px(1.0))
-                    .h(px(ph as f32))
-                    .bg(rgb(if dark { 0x000000 } else { 0xdddddd })),
-            ),
+            local(layout.panel)
+                .track_focus(&place("panel", window, cx))
+                .child(
+                    div()
+                        .absolute()
+                        .left_0()
+                        .top_0()
+                        .w(px(1.0))
+                        .h(px(ph as f32))
+                        .bg(rgb(if dark { 0x000000 } else { 0xdddddd })),
+                ),
         ));
         let titles = [("Field", 0), ("Orientation", 1), ("Size", 2)];
         for (label, i) in titles {
@@ -743,8 +763,14 @@ impl<H: FrameHost> HubFrame<H> {
                 continue;
             };
             let (x, dx) = place_in(r[0], offset, f64::from(scale));
+            let section = if i == 0 {
+                Block::FieldTitle
+            } else {
+                Block::SwitcherTitles
+            };
+            let title = focus::section(local(r), section as isize, &place(label, window, cx));
             panel = panel.child(
-                local(r).overflow_hidden().child(
+                title.overflow_hidden().child(
                     div().absolute().left(px(x)).top_0().child(
                         Text::new(label, title_style())
                             .color(theme.text)
@@ -755,7 +781,13 @@ impl<H: FrameHost> HubFrame<H> {
         }
         panel = panel.child(probed(
             "select.field-select",
-            titled("Select field image", local(layout.select).child(select)),
+            titled(
+                "Select field image",
+                local(layout.select)
+                    .tab_group()
+                    .tab_index(Block::Field as isize)
+                    .child(select),
+            ),
         ));
         if let (Some([lx, ly]), Some(width)) = (layout.source, source_width) {
             let (_, h) = text::measure(cx, &source_style(), "Source", scale);
@@ -774,10 +806,12 @@ impl<H: FrameHost> HubFrame<H> {
             ];
             panel = panel.child(titled("Open field image source URL", local(padded)));
             panel = panel.child(untitled(
-                local(r)
+                local(padded)
+                    .tab_group()
+                    .tab_index(Block::Field as isize)
                     .id("field-source")
                     .track_focus(&focus.handle)
-                    .on_click(move |event, _, cx| {
+                    .on_activate(move |event, _, cx| {
                         // Space clicks a button and scrolls from a link.
                         if matches!(event, ClickEvent::Keyboard(e) if e.button == KeyboardButton::Space)
                         {
@@ -788,12 +822,18 @@ impl<H: FrameHost> HubFrame<H> {
                         });
                     })
                     .child(
-                        Text::new("Source", source_style())
-                            .color(theme.link)
-                            .underline()
-                            .subpixel(
-                                snap_remainder(r[0] as f32, scale),
-                                snap_remainder(r[1] as f32, scale),
+                        div()
+                            .absolute()
+                            .left(px((r[0] - padded[0]) as f32))
+                            .top(px((r[1] - padded[1]) as f32))
+                            .child(
+                                Text::new("Source", source_style())
+                                    .color(theme.link)
+                                    .underline()
+                                    .subpixel(
+                                        snap_remainder(r[0] as f32, scale),
+                                        snap_remainder(r[1] as f32, scale),
+                                    ),
                             ),
                     ),
             ));
@@ -841,19 +881,23 @@ impl<H: FrameHost> HubFrame<H> {
             let (x, y) = (snapped(r[0]), snapped(r[1]));
             let entity = entity.clone();
             panel = panel.child(
-                local([x, y, r[2], r[3]]).child(
-                    SegmentedControl::new((id, key), segments)
-                        .titles(titles)
-                        .subpixel((r[0] - x) as f32)
-                        .selected(selected)
-                        .size(r[2] as f32, r[3] as f32)
-                        .appearance(appearance)
-                        .on_select(move |segment, _, cx| {
-                            let input = input(*segment);
-                            let _ = entity
-                                .update(cx, |frame, cx| frame.field_2d_settings(key, input, cx));
-                        }),
-                ),
+                local([x, y, r[2], r[3]])
+                    .tab_group()
+                    .tab_index(Block::Switchers as isize)
+                    .child(
+                        SegmentedControl::new((id, key), segments)
+                            .titles(titles)
+                            .subpixel((r[0] - x) as f32)
+                            .selected(selected)
+                            .size(r[2] as f32, r[3] as f32)
+                            .appearance(appearance)
+                            .on_select(move |segment, _, cx| {
+                                let input = input(*segment);
+                                let _ = entity.update(cx, |frame, cx| {
+                                    frame.field_2d_settings(key, input, cx)
+                                });
+                            }),
+                    ),
             );
         }
         Some(panel.into_any_element())
@@ -876,6 +920,22 @@ impl<H: FrameHost> HubFrame<H> {
                 SettingsInput::Source => controller.open_source(page),
                 SettingsInput::Orientation(i) => controller.click_orientation(i),
                 SettingsInput::Size(i) => controller.click_size(i),
+            })
+        });
+        cx.notify();
+    }
+
+    /// The pointer left the window.
+    pub(super) fn field_2d_mouse_exit(&mut self, cx: &mut Context<'_, Self>) {
+        let views = &mut self.field_2d;
+        let hovered = std::mem::take(&mut views.hovered);
+        let pointer = views.pointer.take();
+        let (Some(shown), Some([x, y])) = (views.shown.filter(|_| hovered), pointer) else {
+            return;
+        };
+        self.host_mut().input(cx, |hub| {
+            with_renderer(hub, shown.index, |renderer, page| {
+                renderer.mouse(page, "leave", 0.0, false, x, y);
             })
         });
         cx.notify();

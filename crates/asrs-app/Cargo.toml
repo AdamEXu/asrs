@@ -186,6 +186,11 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "hub_tab_order"
+harness = false
+required-features = ["parity"]
+
+[[test]]
 name = "prompt_windows"
 harness = false
 required-features = ["parity"]

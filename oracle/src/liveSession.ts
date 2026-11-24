@@ -154,8 +154,15 @@ async function main() {
       });
       return true;
     });
+    const handleRlog = (name: string, data: unknown) => {
+      try {
+        rlogMain.handle(name, data);
+      } catch (error) {
+        trace.add("uncaught", undefined, String(error));
+      }
+    };
     g.sendMainMessage = (name: string, data?: unknown) => {
-      if (name === "live-rlog-start" || name === "live-rlog-stop") loop.deliver(0, () => rlogMain.handle(name, data));
+      if (name === "live-rlog-start" || name === "live-rlog-stop") loop.deliver(0, () => handleRlog(name, data));
       else trace.add("main", undefined, [name, data ?? null]);
     };
 

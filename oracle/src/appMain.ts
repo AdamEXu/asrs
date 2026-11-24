@@ -9,7 +9,7 @@ import { clipFolder } from "./app/clips";
 import { Desktop } from "./app/desktop";
 import { saveDisplayProfile, type DisplayProfile } from "./app/display";
 import { GENERATED_LOGS } from "./app/logs";
-import { busyReasons, domDump, downloadShows, hubReady, sendMainMessage } from "./app/page";
+import { busyReasons, domDump, downloadShows, focused, hubReady, sendMainMessage } from "./app/page";
 import { patchPageHtml } from "./app/patches";
 import { actionKind, parseScenario, type Action, type GlMode, type Scale, type Theme } from "./app/scenario";
 import { installTap } from "./app/tap";
@@ -696,8 +696,26 @@ async function emulateFocus(contents: Electron.WebContents, enabled: boolean) {
   await contents.debugger.sendCommand("Emulation.setFocusEmulationEnabled", { enabled });
 }
 
+// Presses Tab `count` times and keeps what had the focus after each, or what has it now.
+async function traverse(contents: Electron.WebContents, name: string, count: number, back: boolean) {
+  const win = active();
+  const records = [];
+  for (let i = 0; i < Math.max(count, 1); i++) {
+    if (count > 0) {
+      const modifiers = back ? ["shift" as const] : [];
+      contents.sendInputEvent({ type: "keyDown", keyCode: "Tab", modifiers });
+      contents.sendInputEvent({ type: "keyUp", keyCode: "Tab", modifiers });
+      await nextFrames(3);
+    }
+    records.push(await exec(call(focused), win));
+  }
+  const folder = path.join(out, "files", "focus");
+  fs.mkdirSync(folder, { recursive: true });
+  fs.writeFileSync(path.join(folder, `${name}.json`), records.map((record) => JSON.stringify(record) + "\n").join(""));
+}
+
 let pressedButton: string | null = null;
-const MOUSE_TYPES = { move: ["mouseMove"], down: ["mouseDown"], up: ["mouseUp"], click: ["mouseDown", "mouseUp"] } as const;
+const MOUSE_TYPES = { move: ["mouseMove"], down: ["mouseDown"], up: ["mouseUp"], click: ["mouseDown", "mouseUp"], leave: ["mouseLeave"] } as const;
 
 async function perform(action: Action) {
   const contents = active().webContents;
@@ -768,6 +786,13 @@ async function perform(action: Action) {
     await copy(contents, action.copy);
   } else if ("focus" in action) {
     await emulateFocus(contents, action.focus);
+  } else if ("traverse" in action) {
+    await traverse(contents, action.traverse, action.count ?? 0, action.back ?? false);
+  } else if ("hover" in action) {
+    const folder = path.join(out, "files", "hover");
+    fs.mkdirSync(folder, { recursive: true });
+    const hovered = await exec("window.selection.getHoveredTime()");
+    fs.writeFileSync(path.join(folder, `${action.hover}.json`), JSON.stringify(hovered) + "\n");
   } else if ("capture" in action) {
     if (tooltipLog === undefined) await capture(action.capture, action.probes ?? [], action.masks ?? []);
     else await captureTooltips(action.capture);

@@ -6,7 +6,7 @@ use asrs_js::string::JsString;
 use asrs_model::scroll_sensor::{Wheel, WheelScroll, assign_scroll_offset};
 use asrs_model::selection_impl::KeyTarget;
 use asrs_ui::gpui::{
-    Context, IntoElement, KeyDownEvent, Pixels, Point, ScrollHandle, Window, point, px,
+    Context, FocusHandle, IntoElement, KeyDownEvent, Pixels, Point, ScrollHandle, Window, point, px,
 };
 use asrs_ui::scroll::{self, Extent, Request, Scrollbars};
 
@@ -242,6 +242,23 @@ impl<H: FrameHost> HubFrame<H> {
         }
     }
 
+    /// The scroller that holds the focused element.
+    fn focused_area(
+        &self,
+        focused: &FocusHandle,
+        window: &Window,
+        cx: &Context<'_, Self>,
+    ) -> Option<Area> {
+        if self.places.side_bar.contains(focused, window) {
+            return Some(Area::SideBar);
+        }
+        let list = self.focused_source_list(focused, window).map(Area::List);
+        let settings = || self.canvas_tabs.holding(focused, window);
+        list.or_else(|| settings().map(Area::CanvasSettings))
+            .or_else(|| self.focused_statistics(focused, cx))
+            .or_else(|| self.focused_table(focused).map(Area::Table))
+    }
+
     /// A key that neither the page nor the focused element took.
     pub(super) fn scroll_key(
         &mut self,
@@ -259,9 +276,19 @@ impl<H: FrameHost> HubFrame<H> {
         let Some(step) = scroll::step(&event.keystroke) else {
             return;
         };
-        let Some(area) = self.scrollers.pressed.clone() else {
+        let focused = window.focused(cx).filter(|f| *f != self.body && f.tab_stop);
+        let area = match &focused {
+            Some(focused) => self.focused_area(focused, window, cx),
+            None => self.scrollers.pressed.clone(),
+        };
+        let Some(area) = area else {
             return;
         };
+        // A button takes Space, and a scroller that has the focus does not.
+        let scroller = matches!(area, Area::Statistics(_));
+        if event.keystroke.key == "space" && focused.is_some() && !scroller {
+            return;
+        }
         if let Some([client, max]) = self.area_range(&area, cx) {
             let by = step.delta(client, max, f64::from(window.scale_factor()));
             self.area_smooth(&area, by, cx);

@@ -9,7 +9,7 @@ export type Action =
   | { selection: [string, ...unknown[]] }
   | { wait: number }
   | { idle: true }
-  | { mouse: "move" | "down" | "up" | "click"; x: number; y: number; button?: "left" | "right" | "middle"; clickCount?: number; modifiers?: string[] }
+  | { mouse: "move" | "down" | "up" | "click" | "leave"; x: number; y: number; button?: "left" | "right" | "middle"; clickCount?: number; modifiers?: string[] }
   | {
       wheel: { x: number; y: number; deltaX?: number; deltaY?: number; wheelTicksX?: number; wheelTicksY?: number; precise?: boolean };
     }
@@ -27,6 +27,8 @@ export type Action =
   | { role: "selectAll" }
   | { copy: string }
   | { focus: boolean }
+  | { traverse: string; count?: number; back?: boolean }
+  | { hover: string }
   | { capture: string; probes?: string[]; masks?: string[] };
 
 export type Scenario = {
@@ -43,7 +45,7 @@ export type Scenario = {
   actions: Action[];
 };
 
-const ACTION_KEYS = ["main", "open", "eval", "selection", "wait", "idle", "mouse", "wheel", "pointer", "activate", "key", "dialog", "menu", "appMenu", "prompt", "download", "role", "copy", "focus", "capture"];
+const ACTION_KEYS = ["main", "open", "eval", "selection", "wait", "idle", "mouse", "wheel", "pointer", "activate", "key", "dialog", "menu", "appMenu", "prompt", "download", "role", "copy", "focus", "traverse", "hover", "capture"];
 const TOP_KEYS = ["page", "window", "scales", "themes", "gl", "prefs", "userData", "robot", "scrollbars", "platforms", "actions", "about"];
 
 export function actionKind(action: Action): string {

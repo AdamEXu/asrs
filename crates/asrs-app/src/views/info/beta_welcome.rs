@@ -14,6 +14,7 @@ use asrs_ui::gpui::{
 };
 use asrs_ui::input::{Checkbox, PointerState};
 use asrs_ui::parity::probed;
+use asrs_ui::platform;
 use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS};
 use asrs_ui::tooltip::{titled, untitled};
 
@@ -95,14 +96,15 @@ impl BetaWelcomePage {
         let handle = window.window_handle();
         let this = cx.entity().downgrade();
         cx.intercept_keystrokes(move |event, window, cx| {
-            if window.window_handle() != handle {
+            if window.window_handle() != handle || platform::menu_takes_keys(window) {
                 return;
             }
-            let modifiers = event.keystroke.modifiers;
             let _ = this.update(cx, |view, cx| match event.keystroke.key.as_str() {
-                "tab" if !modifiers.control && !modifiers.alt && !modifiers.platform => {
-                    view.tab(modifiers.shift, window, cx);
-                    cx.stop_propagation();
+                "tab" => {
+                    if let Some(back) = focus::tab_key(&event.keystroke) {
+                        view.tab(back, window, cx);
+                        cx.stop_propagation();
+                    }
                 }
                 key @ ("space" | "enter") => {
                     let Some(control) = view.active(window) else {

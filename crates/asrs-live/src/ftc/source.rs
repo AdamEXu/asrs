@@ -150,8 +150,7 @@ impl FtcSource {
             self.config_state = config::initial_state();
             self.is_initial_state = true;
             self.tunable_keys_types.clear();
-            // A WebSocket constructor failure would leave the old socket in place; the scripted
-            // transport cannot produce one, but keep the same shape.
+            // An address the WebSocket constructor throws on leaves the old socket in place.
             if let Ok(id) = cx.net.ws_open(&self.url, &[]) {
                 self.socket = Some(id);
             }

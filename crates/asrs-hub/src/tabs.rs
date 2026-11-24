@@ -464,6 +464,7 @@ pub struct Tabs<Cx: ?Sized> {
     tabs: Vec<Tab<Cx>>,
     selected: JsValue,
     bar: Vec<Rc<RefCell<TitleElement>>>,
+    bar_builds: u64,
     active_satellites: Vec<JsValue>,
     controls_handle_active: bool,
     last_handle_click: f64,
@@ -485,6 +486,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             tabs: Vec::new(),
             selected: num(0.0),
             bar: Vec::new(),
+            bar_builds: 0,
             active_satellites: Vec::new(),
             controls_handle_active: false,
             last_handle_click: 0.0,
@@ -643,6 +645,12 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         self.bar.iter().map(|e| e.borrow())
     }
 
+    /// How often `updateElements()` took the titles out of the bar, which takes their focus, and
+    /// put them back.
+    pub fn bar_builds(&self) -> u64 {
+        self.bar_builds
+    }
+
     pub fn controls(&self) -> ControlsView {
         self.controls
     }
@@ -714,6 +722,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
 
     fn update_elements(&mut self, cx: &Cx) -> Result {
         self.bar = self.tabs.iter().map(|t| t.element.clone()).collect();
+        self.bar_builds += 1;
         for (i, tab) in self.tabs.iter_mut().enumerate() {
             let selected = ops::strict_equals(&len(i), &self.selected);
             let mut element = tab.element.borrow_mut();

@@ -48,6 +48,7 @@ use gpui::{AnyWindowHandle, App, Entity, Render, Window, WindowOptions};
 
 pub fn init(cx: &mut App) {
     gpui_kit::init(cx);
+    input::init(cx);
     // The kit's root paints it under every window's view, over the hub's vibrancy or acrylic.
     // Views paint their own pages.
     if !cfg!(target_os = "linux") {

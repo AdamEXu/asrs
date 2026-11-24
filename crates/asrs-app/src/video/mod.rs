@@ -15,7 +15,7 @@ use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{Rng, V8MathRandom};
 use asrs_js::value::JsValue;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
-use asrs_ocr::{OcrError, TimerError, TimerReader};
+use asrs_ocr::{TimerError, TimerReader};
 use asrs_services::lifecycle::AppPaths;
 use asrs_services::video::{
     Handle, LogArg, LogLevel, MessageBox, OpenDialog, VideoConfig, VideoEvent, VideoHost,
@@ -88,26 +88,10 @@ pub fn init(paths: &AppPaths, cx: &mut App) {
                     error
                 }
             };
-            // `showErrorBox` blocks, so the next error waits for this one's box to close.
-            let (closed, wait) = async_channel::bounded::<()>(1);
-            cx.update(|cx| show_uncaught(&error, closed, cx));
-            let _ = wait.recv().await;
+            cx.update(|cx| dispatch::show_uncaught(format!("Error: {error}"), cx));
         }
     })
     .detach();
-}
-
-/// Electron's `uncaughtException` handler, for the `Error` tesseract.js throws when a job fails;
-/// the stack under its message has no counterpart here.
-fn show_uncaught(error: &OcrError, closed: async_channel::Sender<()>, cx: &mut App) {
-    let options = MessageBoxOptions {
-        kind: MessageBoxType::Error,
-        title: "Error".to_owned(),
-        message: "A JavaScript error occurred in the main process".to_owned(),
-        detail: format!("Uncaught Exception:\nError: {error}"),
-        ..MessageBoxOptions::default()
-    };
-    dispatch::show_message_box(None, options, cx, move |_, _| drop(closed));
 }
 
 /// `select-video` from a hub window.

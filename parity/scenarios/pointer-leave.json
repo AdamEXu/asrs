@@ -1,0 +1,242 @@
+{
+  "about": "The pointer leaving the window from over the line graph and the timeline (#282): the hovered time before and after. The timeline is at 88 to 120 under macOS's title bar and at 50 to 82 elsewhere",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Graph",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "graph000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "move",
+      "x": 697,
+      "y": 250
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 250
+    },
+    {
+      "wait": 100
+    },
+    {
+      "hover": "graph-over"
+    },
+    {
+      "mouse": "leave",
+      "x": 700,
+      "y": -5
+    },
+    {
+      "wait": 100
+    },
+    {
+      "hover": "graph-left"
+    },
+    {
+      "capture": "graph",
+      "probes": []
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 2,
+              "title": "Field",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "heatmap",
+                    "logKey": "/Odometry/Robot3d",
+                    "logType": "Pose3d",
+                    "visible": true,
+                    "options": {
+                      "timeRange": "full"
+                    }
+                  }
+                ],
+                "field": "FRC:Rings",
+                "orientation": 0,
+                "size": "large"
+              },
+              "controllerUUID": "field000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "move",
+      "x": 697,
+      "y": 100
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 100
+    },
+    {
+      "wait": 100
+    },
+    {
+      "hover": "timeline-low-over"
+    },
+    {
+      "mouse": "leave",
+      "x": 700,
+      "y": -5
+    },
+    {
+      "wait": 100
+    },
+    {
+      "hover": "timeline-low-left"
+    },
+    {
+      "mouse": "move",
+      "x": 697,
+      "y": 66
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 66
+    },
+    {
+      "wait": 100
+    },
+    {
+      "hover": "timeline-high-over"
+    },
+    {
+      "mouse": "leave",
+      "x": 700,
+      "y": -5
+    },
+    {
+      "wait": 100
+    },
+    {
+      "hover": "timeline-high-left"
+    },
+    {
+      "capture": "timeline",
+      "probes": []
+    }
+  ]
+}

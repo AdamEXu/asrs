@@ -16,6 +16,7 @@ use asrs_tabs::console::controller::{ConsoleController, ConsoleDom, ConsoleRende
 use asrs_tabs::console::view::{ConsoleRow, ConsoleView};
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
+use asrs_ui::focus;
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Context, Div, Entity, InteractiveElement, IntoElement,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, Styled,
@@ -633,7 +634,7 @@ impl<H: FrameHost> HubFrame<H> {
             .size_full()
             .child(hand_icon(rect, hand, dark, grid))
             .child(self.console_table(
-                shown, &view, visible, &layout, appearance, grid, selected, cx,
+                shown, &view, visible, &layout, appearance, grid, selected, window, cx,
             ))
             .children(recorded)
             .child(self.area_bars(Area::Console(shown.key), layout.extent(), cx))
@@ -656,8 +657,11 @@ impl<H: FrameHost> HubFrame<H> {
         appearance: Appearance,
         grid: Grid,
         selected: Option<Selected>,
+        window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
+        let place = focus::place(("console-container", shown.key), window, cx);
+        let rows_place = focus::place(("console-rows", shown.key), window, cx);
         let [x, y, width, height] = shown.container;
         let scroll_top = layout.scroll_top();
         let rows = Rows {
@@ -676,6 +680,7 @@ impl<H: FrameHost> HubFrame<H> {
         }
         div()
             .id("console-table-container")
+            .track_focus(&place)
             .capture_any_mouse_down(
                 cx.listener(move |frame, _, _, _| frame.press_area(&Area::Console(shown.key))),
             )
@@ -689,6 +694,10 @@ impl<H: FrameHost> HubFrame<H> {
             }))
             .on_scroll(
                 cx.listener(|frame, event: &ScrollEvent, _, cx| frame.console_wheel(event, cx)),
+            )
+            .child(
+                grid.place([x, y - scroll_top, width, layout.table_height()])
+                    .track_focus(&focus::last(&rows_place)),
             )
             .child(layer)
             .child(probed(
@@ -721,6 +730,7 @@ impl<H: FrameHost> HubFrame<H> {
 
         let key_left = field_cell[0] + KEY_PADDING;
         let key = view.field_text.to_string_lossy();
+        let place = focus::place(("console-key", shown.key), window, cx);
         let mut key_box = grid
             .place([
                 field_cell[0],
@@ -728,6 +738,7 @@ impl<H: FrameHost> HubFrame<H> {
                 (field_cell[2] - KEY_RIGHT).max(0.0),
                 KEY_HEIGHT,
             ])
+            .track_focus(&place)
             .overflow_hidden();
         let inner = Grid {
             origin: [grid.snap(field_cell[0]), grid.snap(y)],
@@ -765,7 +776,7 @@ impl<H: FrameHost> HubFrame<H> {
             key_box
         } else {
             let at = [key_left + key_end + DELETE_MARGIN, y + BUTTON_TOP];
-            let button = IconButton::new("console-delete", symbol("close.svg"))
+            let button = IconButton::new(("console-delete", shown.key), symbol("close.svg"))
                 .title("Remove from view")
                 .blurred(blurred)
                 .on_click(cx.listener(|frame, _, _, cx| frame.console_close(cx)));
@@ -785,10 +796,13 @@ impl<H: FrameHost> HubFrame<H> {
         };
         // `top: 50%; transform: translateY(-50%)`
         let centered = |b: IconButton, id, left| button(b.translate(0.0, -BUTTON / 2.0), id, left);
-        let jump_button = IconButton::new("console-jump", symbol("verticalalignbottom.svg"))
-            .title("Go to timestamp")
-            .on_click(cx.listener(|frame, _, _, cx| frame.console_jump(cx)));
-        let highlight = IconButton::new("console-highlight", symbol("palette.svg"))
+        let jump_button = IconButton::new(
+            ("console-jump", shown.key),
+            symbol("verticalalignbottom.svg"),
+        )
+        .title("Go to timestamp")
+        .on_click(cx.listener(|frame, _, _, cx| frame.console_jump(cx)));
+        let highlight = IconButton::new(("console-highlight", shown.key), symbol("palette.svg"))
             .title("Highlight warning/error messages")
             .tint(if view.highlight_active {
                 HIGHLIGHT_ACTIVE
@@ -829,7 +843,7 @@ impl<H: FrameHost> HubFrame<H> {
             ))
             .child(key_box);
         if view.has_controller {
-            let export = IconButton::new("console-export", symbol("download.svg"))
+            let export = IconButton::new(("console-export", shown.key), symbol("download.svg"))
                 .title("Export console log")
                 .on_click(cx.listener(|frame, _, _, cx| {
                     frame.console_input(cx, |renderer, page| renderer.export_click(page));
@@ -1132,22 +1146,6 @@ impl<H: FrameHost> HubFrame<H> {
         if self.console.hovered.is_some() {
             self.console_hover(None, cx);
             cx.notify();
-        }
-    }
-
-    /// A press anywhere in the window: outside the focused input it takes the focus away.
-    pub(super) fn console_window_mouse_down(
-        &mut self,
-        x: f64,
-        y: f64,
-        window: &mut Window,
-        cx: &mut Context<'_, Self>,
-    ) {
-        let Some(shown) = self.console.shown else {
-            return;
-        };
-        if !inside(shown.jump_rect(), x, y) && !inside(shown.filter_rect(), x, y) {
-            self.console_blur(shown.key, window, cx);
         }
     }
 

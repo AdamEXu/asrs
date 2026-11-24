@@ -471,6 +471,11 @@ pub fn close_popup_menu(window: &Window) {
     imp::close_popup_menu(window);
 }
 
+/// Whether a menu popped up for `window` takes the keys that the window gets.
+pub fn menu_takes_keys(window: &Window) -> bool {
+    imp::menu_takes_keys(window)
+}
+
 /// The label a native menu shows for `label` (Chromium's `FixUpWindowsStyleLabel` on macOS).
 pub fn native_menu_label(label: &str) -> String {
     imp::native_menu_label(label)

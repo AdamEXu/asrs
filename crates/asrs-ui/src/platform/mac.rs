@@ -975,6 +975,10 @@ fn min_y(rect: CGRect) -> f64 {
 
 pub(super) fn popup_window_opened(_: &Window, _: Bounds<Pixels>, _: bool, _: &mut App) {}
 
+pub(super) fn menu_takes_keys(_window: &Window) -> bool {
+    false
+}
+
 pub(super) fn close_popup_menu(window: &Window) {
     let Some(window) = ns_window(window) else {
         return;
