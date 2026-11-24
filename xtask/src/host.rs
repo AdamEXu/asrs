@@ -62,7 +62,8 @@ commands on a host (cargo xtask host <name> ...):
 commands on the machine itself (cargo xtask host local ...):
   describe [--manifest]   write target/parity/host/host.json: OS, Electron, displays, theme,
                           Chromium and native rasterizers, sha256 of the UI font files. With
-                          --manifest also store it as `host` in parity/vectors/canvas/<os>.json
+                          --manifest also store it as `host` in parity/vectors/canvas/<os>.json,
+                          unless a font recorded there is another file on this host
   colour-patch            512 sRGB patches through capturePage at device scale 1 and 2, with
                           and without --force-color-profile=srgb. Gate on Windows and Linux,
                           whose display profile is pinned to sRGB: every patch exact in both
@@ -662,7 +663,7 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
             Os::Windows => "windows",
             Os::Linux => "linux",
         };
-        canvas::set_manifest_field(paths, platform, "host", description)?;
+        canvas::set_manifest_host(paths, platform, description)?;
         eprintln!("host description stored in parity/vectors/canvas/{platform}.json");
         Ok(())
     }
@@ -1184,7 +1185,7 @@ fn describe(paths: &Paths, out: &Path, manifest: bool) -> Result {
     fs::write(out.join("host.json"), &text).map_err(|e| e.to_string())?;
     print!("{text}");
     if manifest {
-        canvas::set_manifest_field(paths, canvas::platform(), "host", description)?;
+        canvas::set_manifest_host(paths, canvas::platform(), description)?;
     }
     Ok(())
 }

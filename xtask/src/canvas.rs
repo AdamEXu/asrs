@@ -426,7 +426,42 @@ pub(crate) fn read_json(path: &Path) -> Result<Json> {
     json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
 }
 
-pub(crate) fn set_manifest_field(paths: &Paths, platform: &str, key: &str, value: Json) -> Result {
+/// The fonts `recorded` has that are missing from `now` or other files in it.
+fn changed_fonts(recorded: &Json, now: &Json) -> Vec<String> {
+    let Some(Json::Object(fonts)) = recorded.get("fonts") else {
+        return Vec::new();
+    };
+    let now = now.get("fonts");
+    fonts
+        .iter()
+        .filter(|(path, hash)| {
+            now.and_then(|n| n.get(&path.to_string_lossy()).cloned())
+                .as_ref()
+                != Some(hash)
+        })
+        .map(|(path, _)| path.to_string_lossy())
+        .collect()
+}
+
+/// Stores the host description, unless the host's fonts are not the ones the vectors were recorded
+/// with: an operating system update must not move the reference. Deleting the description from
+/// the manifest by hand allows it.
+pub(crate) fn set_manifest_host(paths: &Paths, platform: &str, description: Json) -> Result {
+    let name = format!("{platform}.json");
+    let manifest = read_json(&vectors_dir(paths).join(&name)).unwrap_or(Json::Null);
+    if let Some(recorded) = manifest.get("host") {
+        let changed = changed_fonts(recorded, &description);
+        if !changed.is_empty() {
+            return Err(format!(
+                "{name} records other files than this host's:\n  {}",
+                changed.join("\n  ")
+            ));
+        }
+    }
+    set_manifest_field(paths, platform, "host", description)
+}
+
+fn set_manifest_field(paths: &Paths, platform: &str, key: &str, value: Json) -> Result {
     let path = vectors_dir(paths).join(format!("{platform}.json"));
     let mut fields: Vec<(String, Json)> = match read_json(&path) {
         Ok(Json::Object(pairs)) => pairs
@@ -898,5 +933,28 @@ fn stable(paths: &Paths) -> Result {
             differing.len(),
             differing.join("\n  ")
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_recorded_font_cannot_change() {
+        let host = |fonts: &[(&str, &str)]| {
+            let fonts = fonts.iter().map(|(k, v)| (*k, Json::string(v)));
+            Json::object([("fonts", Json::object(fonts))])
+        };
+        let recorded = host(&[("a.ttf", "1"), ("b.ttf", "2")]);
+        let more = host(&[("a.ttf", "1"), ("b.ttf", "2"), ("c.ttf", "3")]);
+        assert!(changed_fonts(&recorded, &more).is_empty());
+        assert_eq!(
+            changed_fonts(&recorded, &host(&[("a.ttf", "1")])),
+            ["b.ttf"]
+        );
+        let other = host(&[("a.ttf", "9"), ("b.ttf", "2")]);
+        assert_eq!(changed_fonts(&recorded, &other), ["a.ttf"]);
+        assert!(changed_fonts(&Json::Null, &other).is_empty());
     }
 }
