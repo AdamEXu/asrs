@@ -23,7 +23,7 @@ const FRAME: Duration = Duration::from_millis(10);
 const SETTLE: u32 = 27;
 /// A held press goes on by a frame's worth more or less: 20 pages a second, at 60 Hz.
 const HELD_PAGES: f64 = 20.0 / 60.0;
-const LEVELS: i32 = 12;
+const LEVELS: u8 = 12;
 
 struct Scroller {
     rect: [f64; 4],
@@ -392,15 +392,17 @@ fn expand(rows: &Json) -> Vec<Vec<[u8; 3]>> {
 /// The first pixel that differs by more than antialiasing does between rasterizers.
 fn differs(want: &[Vec<[u8; 3]>], got: &[Vec<[u8; 3]>]) -> Option<String> {
     assert_eq!(want.len(), got.len(), "rows");
-    for (y, (want_row, got_row)) in want.iter().zip(got).enumerate() {
-        assert_eq!(want_row.len(), got_row.len(), "columns");
-        for (x, (want, got)) in want_row.iter().zip(got_row).enumerate() {
-            let off = (0..3).map(|c| (i32::from(want[c]) - i32::from(got[c])).abs());
-            if off.max() > Some(LEVELS) {
-                return Some(format!(
-                    "({x}, {y}): {want:02x?} recorded, {got:02x?} drawn"
-                ));
-            }
+    let hex = |row: &[[u8; 3]]| {
+        row.iter()
+            .map(|[r, ..]| format!(" {r:02x}"))
+            .collect::<String>()
+    };
+    for (y, (want, got)) in want.iter().zip(got).enumerate() {
+        assert_eq!(want.len(), got.len(), "columns");
+        let off = |(w, g): (&[u8; 3], &[u8; 3])| (0..3).any(|c| w[c].abs_diff(g[c]) > LEVELS);
+        if let Some(x) = want.iter().zip(got).position(off) {
+            let (want, got) = (hex(want), hex(got));
+            return Some(format!("({x}, {y}): recorded{want}, drawn{got}"));
         }
     }
     None
