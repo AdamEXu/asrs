@@ -7,7 +7,11 @@ use asrs_log::log::{
 use asrs_parity::{Response, Utf16String, Value};
 
 use crate::functions;
-use crate::log_dump::{ToValue, numbers, serialized_value};
+
+#[path = "log_dump.rs"]
+mod log_dump;
+
+pub use log_dump::*;
 
 const TYPES: [LoggableType; 8] = [
     LoggableType::Raw,

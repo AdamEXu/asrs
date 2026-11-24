@@ -15,12 +15,11 @@ use asrs_parity::{Response, Utf16String, Value};
 
 use crate::functions::{self, arg};
 use crate::js_json;
-use crate::log_dump::{
-    ToValue, dump, numbers, serialized_value, string_value, strings, structured_type_value,
-};
+pub(crate) use crate::log_field::dump;
 use crate::log_field::{
-    any_set_value, array, boolean, index, js_string, loggable_type, loggable_type_opt, number,
-    set_value, structured_type, type_string,
+    ToValue, any_set_value, array, boolean, index, js_string, loggable_type, loggable_type_opt,
+    number, numbers, serialized_value, set_value, string_value, strings, structured_type,
+    structured_type_value, type_string,
 };
 
 pub(crate) fn bytes(v: &Value) -> Result<Arc<[u8]>, String> {

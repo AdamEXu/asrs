@@ -11,7 +11,7 @@ use asrs_log::log::SerializedLog;
 use asrs_parity::Value;
 
 use crate::historical_session::{End, Session};
-use crate::log_dump::{serialized_value, string_value};
+use crate::log_field::{serialized_value, string_value};
 use crate::log_run;
 
 const USAGE: &str = "usage: asrs-cli decode [--initial] <log file>";

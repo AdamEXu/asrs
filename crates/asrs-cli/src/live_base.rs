@@ -10,8 +10,8 @@ use asrs_log::log::Log;
 use asrs_parity::{Response, Value};
 
 use crate::functions::{self, arg};
-use crate::log_dump::{dump, numbers};
-use crate::log_field::{array, js_string, number};
+use crate::log_field::{array, js_string, number, numbers};
+use crate::log_run::dump;
 
 /// The oracle's `ScriptedSource`: a subclass that only exposes the base.
 struct ScriptedSource {

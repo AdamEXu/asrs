@@ -9,8 +9,7 @@ use asrs_log::log::{LogValue, LoggableType, log_key_utils as keys};
 use asrs_parity::{Response, Value};
 
 use crate::functions::{arg, to_units, type_error};
-use crate::log_dump::string_value;
-use crate::log_field::{self, array, js_string, loggable_type, number};
+use crate::log_field::{self, array, js_string, loggable_type, number, string_value};
 use crate::log_run::bytes;
 
 fn ok(v: impl FnOnce() -> Value) -> Response {
