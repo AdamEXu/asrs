@@ -4,6 +4,8 @@ pub mod coverage;
 pub mod dom;
 pub mod flow;
 pub mod font;
+#[cfg(any(target_os = "linux", windows))]
+mod harfbuzz;
 pub mod inline;
 pub mod layout;
 pub mod line_break;
@@ -12,9 +14,15 @@ pub mod linux;
 pub mod lut;
 #[cfg(target_os = "macos")]
 mod mac;
+#[cfg(any(target_os = "linux", windows))]
+mod matrix;
 pub mod metrics;
-#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[cfg(any(target_os = "linux", windows))]
+mod path_mask;
+#[cfg(any(target_os = "linux", target_os = "macos", windows))]
 mod shaping;
+#[cfg(windows)]
+pub mod win;
 
 use std::sync::Arc;
 
@@ -144,6 +152,11 @@ pub trait TextBackend {
         None
     }
 
+    /// Whether glyphs sit at quarter pixels rather than whole ones.
+    fn subpixel_positioning(&self) -> bool {
+        true
+    }
+
     /// The display scale the app runs at, returning whether it changes what the backend answers.
     /// Chromium turns hinting off for every font, canvas fonts included, on a Linux display scaled
     /// above 1.
@@ -197,6 +210,10 @@ impl<T: TextBackend + ?Sized> TextBackend for Box<T> {
         (**self).raw_lcd_mask(glyph, scale, x_scale, phase)
     }
 
+    fn subpixel_positioning(&self) -> bool {
+        (**self).subpixel_positioning()
+    }
+
     fn set_device_scale(&mut self, scale: f32) -> bool {
         (**self).set_device_scale(scale)
     }
@@ -209,7 +226,10 @@ pub fn platform_backend() -> Option<Box<dyn TextBackend>> {
     #[cfg(target_os = "linux")]
     return linux::Fontations::new()
         .map(|b| Box::new(cache::Cached::new(b)) as Box<dyn TextBackend>);
-    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
+    #[cfg(windows)]
+    return win::DirectWrite::new()
+        .map(|b| Box::new(cache::Cached::new(b)) as Box<dyn TextBackend>);
+    #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
     return None;
 }
 

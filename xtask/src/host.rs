@@ -19,7 +19,9 @@ driven over SSH; neither has GPU acceleration, so Chromium and native code rende
   windows   Windows 11 Pro ARM64 in UTM (`Win11-ARM`), files in /Volumes/T9/vms/win11-arm
             (override with ASRS_WINDOWS_VM). SSH dev@127.0.0.1:2222 with keys/id_ed25519.
             Checkout C:\work\asrs, oracle pack C:\work\asrs-pack.tar.zst. GUI programs run in
-            the logged-in desktop session through a scheduled task.
+            the logged-in desktop session through a scheduled task. Its fonts have changed with
+            an update, so parity/vectors/canvas/windows.json and the vectors it lists come from
+            an x86_64 VM, inside which the `local` and `canvas` commands run (#59).
   linux     Ubuntu 24.04 ARM64 tart VM `asrs-linux` under TART_HOME=/Volumes/T9/tart, Xorg on
             virtio-gpu with an autologin xfce session on :0. SSH admin@$(tart ip asrs-linux) with
             /Volumes/T9/asrs/hosts/asrs-linux/id_ed25519 (override with ASRS_LINUX_KEYS).
@@ -62,7 +64,8 @@ commands on a host (cargo xtask host <name> ...):
 commands on the machine itself (cargo xtask host local ...):
   describe [--manifest]   write target/parity/host/host.json: OS, Electron, displays, theme,
                           Chromium and native rasterizers, sha256 of the UI font files. With
-                          --manifest also store it as `host` in parity/vectors/canvas/<os>.json
+                          --manifest also store it as `host` in parity/vectors/canvas/<os>.json,
+                          unless a font recorded there is another file on this host
   colour-patch            512 sRGB patches through capturePage at device scale 1 and 2, with
                           and without --force-color-profile=srgb. Gate on Windows and Linux,
                           whose display profile is pinned to sRGB: every patch exact in both
@@ -74,7 +77,7 @@ commands on the machine itself (cargo xtask host local ...):
 
 Results land in target/parity/host/ on the machine that ran them.";
 
-const WINDOWS_NODE: &str = r"C:\tools\node-v24.18.0-win-arm64";
+const WINDOWS_PATH: &str = r"C:\tools\node-v24.18.0-win-arm64;C:\tools\clang-20.1.8\bin";
 const LINUX_VM: &str = "asrs-linux";
 const COLOUR_SWITCHES: &[&str] = &["--force-color-profile=srgb", "--lang=en-US"];
 const S1_TIMEOUT: Duration = Duration::from_secs(120);
@@ -271,7 +274,7 @@ impl Host {
         let body = match self.os {
             Os::Linux => format!("cd {} && {command}", self.checkout()),
             Os::Windows => format!(
-                "$ErrorActionPreference = 'Continue'\n$env:Path = '{WINDOWS_NODE};' + $env:Path\nSet-Location {}\n& {{ {command} }} | Out-String -Stream\nexit $LASTEXITCODE",
+                "$ErrorActionPreference = 'Continue'\n$env:Path = '{WINDOWS_PATH};' + $env:Path\nSet-Location {}\n& {{ {command} }} | Out-String -Stream\nexit $LASTEXITCODE",
                 self.checkout()
             ),
         };
@@ -291,7 +294,7 @@ impl Host {
                 let task = gui_task();
                 let gui = gui_dir.replace('/', "\\");
                 let batch = format!(
-                    "@echo off\r\nset PATH={WINDOWS_NODE};%PATH%\r\ncd /d {}\r\n{command} > {gui}\\last.log 2>&1\r\necho %ERRORLEVEL% > {gui}\\exit.txt\r\n",
+                    "@echo off\r\nset PATH={WINDOWS_PATH};%PATH%\r\ncd /d {}\r\n{command} > {gui}\\last.log 2>&1\r\necho %ERRORLEVEL% > {gui}\\exit.txt\r\n",
                     self.checkout().replace('/', "\\")
                 );
                 format!(
@@ -662,7 +665,7 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
             Os::Windows => "windows",
             Os::Linux => "linux",
         };
-        canvas::set_manifest_field(paths, platform, "host", description)?;
+        canvas::set_manifest_host(paths, platform, description)?;
         eprintln!("host description stored in parity/vectors/canvas/{platform}.json");
         Ok(())
     }
@@ -1184,7 +1187,7 @@ fn describe(paths: &Paths, out: &Path, manifest: bool) -> Result {
     fs::write(out.join("host.json"), &text).map_err(|e| e.to_string())?;
     print!("{text}");
     if manifest {
-        canvas::set_manifest_field(paths, canvas::platform(), "host", description)?;
+        canvas::set_manifest_host(paths, canvas::platform(), description)?;
     }
     Ok(())
 }
@@ -1274,32 +1277,37 @@ fn display_profile() -> Json {
             })
         }
         "windows" => {
-            let dpi = command_text(
-                "powershell",
-                &[
-                    "-NoProfile",
-                    "-Command",
-                    "(Get-ItemProperty 'HKCU:/Control Panel/Desktop').LogPixels",
-                ],
-            )
-            .unwrap_or_default();
-            Json::object([
-                ("logPixels", Json::string(&dpi)),
-                (
-                    "iccProfiles",
-                    Json::string(
-                        &command_text(
-                            "powershell",
-                            &[
-                                "-NoProfile",
-                                "-Command",
-                                "(Get-ChildItem C:/Windows/System32/spool/drivers/color -Filter *.ic* | Select-Object -ExpandProperty Name) -join ','",
-                            ],
-                        )
-                        .unwrap_or_default(),
-                    ),
-                ),
-            ])
+            let powershell = |command: &str| {
+                command_text("powershell", &["-NoProfile", "-Command", command]).unwrap_or_default()
+            };
+            let desktop = |name: &str| {
+                powershell(&format!(
+                    "(Get-ItemProperty 'HKCU:/Control Panel/Desktop').{name}"
+                ))
+            };
+            let dwrite =
+                "[string](Get-Item C:/Windows/System32/DWrite.dll).VersionInfo.FileVersionRaw";
+            let profiles = "(Get-ChildItem C:/Windows/System32/spool/drivers/color -Filter *.ic* | Select-Object -ExpandProperty Name) -join ','";
+            let tuner = "(Get-ChildItem HKCU:/Software/Microsoft/Avalon.Graphics -ErrorAction SilentlyContinue | Select-Object -ExpandProperty PSChildName) -join ','";
+            let mut fields = vec![
+                ("logPixels", desktop("LogPixels")),
+                ("iccProfiles", powershell(profiles)),
+                ("dwrite", powershell(dwrite)),
+                ("clearTypeTunerDisplays", powershell(tuner)),
+            ];
+            for name in [
+                "FontSmoothing",
+                "FontSmoothingType",
+                "FontSmoothingOrientation",
+                "FontSmoothingGamma",
+            ] {
+                fields.push((name, desktop(name)));
+            }
+            let fields: Vec<_> = fields
+                .iter()
+                .map(|(name, value)| (*name, Json::string(value)))
+                .collect();
+            Json::object(fields)
         }
         _ => Json::Null,
     }
@@ -1319,13 +1327,30 @@ fn font_hashes() -> Result<Vec<(String, Option<String>)>> {
             "SegUIVar.ttf",
             "seguiemj.ttf",
             "seguisym.ttf",
+            "seguibl.ttf",
             "arial.ttf",
             "arialbd.ttf",
+            "ariali.ttf",
             "cour.ttf",
             "courbd.ttf",
             "consola.ttf",
             "consolab.ttf",
             "times.ttf",
+            "timesbd.ttf",
+            "timesi.ttf",
+            "tahoma.ttf",
+            "tahomabd.ttf",
+            "malgun.ttf",
+            "malgunbd.ttf",
+            "simsunb.ttf",
+            "l_10646.ttf",
+            "cambria.ttc",
+            "msyh.ttc",
+            "msyhbd.ttc",
+            "msyhl.ttc",
+            "YuGothB.ttc",
+            "YuGothL.ttc",
+            "YuGothR.ttc",
         ]
         .iter()
         .map(|f| format!("C:/Windows/Fonts/{f}"))
