@@ -13,8 +13,8 @@ use asrs_hub::live::{LiveNet, LiveRole};
 use asrs_hub::tabs::SatelliteUpdate;
 use asrs_js::time::{Clock, Rng, V8MathRandom};
 use asrs_js::value::JsValue;
+use asrs_live::NetOptions;
 use asrs_live::nt4::TokioTransport;
-use asrs_live::{Dial, NetOptions};
 use asrs_log::log::{Log, SerializedLog};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, NamedMessage};
@@ -118,7 +118,6 @@ pub(super) struct HostState {
     terminated: Vec<WorkerThread>,
     exports: Vec<(u64, Task<()>)>,
     posted: (SyncSender<()>, Receiver<()>),
-    dial: Option<Dial>,
     live_pumps: HashMap<LiveRole, Task<()>>,
     live_timer: live::Alarm,
 }
@@ -130,7 +129,6 @@ impl HostState {
         frame_origin: Instant,
         worker_realm: WorkerRealm,
         temp_dir: String,
-        dial: Option<Dial>,
     ) -> Self {
         HostState {
             window,
@@ -147,7 +145,6 @@ impl HostState {
             terminated: Vec::new(),
             exports: Vec::new(),
             posted: sync_channel(1),
-            dial,
             live_pumps: HashMap::new(),
             live_timer: live::Alarm::default(),
         }
@@ -168,10 +165,6 @@ impl HostState {
 
     pub(super) fn posted(&self) -> SyncSender<()> {
         self.posted.0.clone()
-    }
-
-    pub(super) fn dial(&self) -> Option<Dial> {
-        self.dial.clone()
     }
 
     pub(super) fn wait_for_live(&self, timeout: Duration) -> bool {
@@ -571,7 +564,7 @@ impl HubHost for GpuiHost<'_, '_> {
                 let _ = wake.try_send(());
                 let _ = posted.try_send(());
             }),
-            dial: self.state.dial.clone(),
+            dial: live::dial(self.cx),
         };
         let whole_bodies = role == LiveRole::Source { whole_bodies: true };
         let net = Rc::new(RefCell::new(if whole_bodies {

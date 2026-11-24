@@ -20,7 +20,6 @@ use asrs_hub::hub::{HubHost, HubModel, HubView, LoadingGlow};
 use asrs_hub::tabs::SatelliteUpdate;
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng, SystemClock, V8MathRandom};
-use asrs_live::Dial;
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_ui::gpui::{App, BackgroundExecutor, Context, EventEmitter, Window};
@@ -78,8 +77,6 @@ pub struct HubConfig {
     pub worker_realm: WorkerRealm,
     /// `app.getPath("temp")`, where `historical-start-raw` writes its child files.
     pub temp_dir: String,
-    /// Where the page's live connections really go.
-    pub dial: Option<Dial>,
 }
 
 impl HubConfig {
@@ -95,7 +92,6 @@ impl HubConfig {
                 )
             }),
             temp_dir: std::env::temp_dir().to_string_lossy().into_owned(),
-            dial: None,
         }
     }
 }
@@ -148,7 +144,6 @@ impl Hub {
             cx.background_executor().now(),
             config.worker_realm,
             config.temp_dir,
-            config.dial,
         );
         let model = HubModel::new(
             config.realm,
@@ -209,10 +204,6 @@ impl Hub {
 
     pub(crate) fn live_posted(&self) -> SyncSender<()> {
         self.host.posted()
-    }
-
-    pub(crate) fn dial(&self) -> Option<Dial> {
-        self.host.dial()
     }
 
     /// Blocks until a live connection posts to the page.

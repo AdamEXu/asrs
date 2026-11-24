@@ -95,11 +95,11 @@ impl Page {
         let slot = Rc::new(RefCell::new(None));
         let built = slot.clone();
         let dial = server.dial();
+        cx.update(|cx| live::set_dial(cx, dial));
         let window = cx
             .open_window(size(px(1100.0), px(650.0)), move |window, cx| {
                 let mut config = HubConfig::new(Box::new(View { sidebar: NoLayout }));
                 config.clock = Rc::new(FrameClock::new(cx));
-                config.dial = Some(dial);
                 let hub = cx.new(|cx| Hub::new(Some(window), config, cx));
                 *built.borrow_mut() = Some(hub.clone());
                 cx.new(|_| Shell(hub))
@@ -597,7 +597,7 @@ fn live_discard_bounds_the_log() {
         p.live_discard = 2.0;
     });
     page.start_live("robot");
-    page.drive_until("the connection", |_| server.connections() > 0);
+    page.drive_until("the connection", |_| server.opened() > 0);
     for i in 0..40 {
         server.step(&format!(
             r#"["send",{{"telemetry":[{{"data":{{"n":"{i}"}}}}]}}]"#

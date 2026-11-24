@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 
 use asrs_js::time::Clock;
 use asrs_live::rlog::{MainCall, MainContext, RlogMain, TokioRlogTransport};
-use asrs_live::{LiveRuntime, NetOptions, RuntimeHandle, TimerQueue};
+use asrs_live::{Dial, LiveRuntime, NetOptions, RuntimeHandle, TimerQueue};
 use asrs_model::messages::{MainToHub, NamedMessage};
 use asrs_ui::gpui::{
     App, AppContext, AsyncApp, BackgroundExecutor, Context, Entity, Global, Task, WeakEntity,
@@ -26,6 +26,20 @@ pub(crate) fn runtime(cx: &mut App) -> Result<RuntimeHandle, String> {
         cx.set_global(Runtime(runtime));
     }
     Ok(cx.global::<Runtime>().0.handle().clone())
+}
+
+struct DialOverride(Dial);
+
+impl Global for DialOverride {}
+
+/// Sends the app's live connections where `dial` says, for tests whose servers are behind
+/// ephemeral ports.
+pub fn set_dial(cx: &mut App, dial: Dial) {
+    cx.set_global(DialOverride(dial));
+}
+
+pub(crate) fn dial(cx: &App) -> Option<Dial> {
+    cx.try_global::<DialOverride>().map(|d| d.0.clone())
 }
 
 /// Connections, requests and closing handshakes the app's live runtime still runs.
@@ -168,7 +182,7 @@ impl RlogBridge {
                 let _ = wake.try_send(());
                 let _ = posted.try_send(());
             }),
-            dial: hub.read(cx).dial(),
+            dial: dial(cx),
         };
         let hub = hub.downgrade();
         Ok(cx.new(|cx| {

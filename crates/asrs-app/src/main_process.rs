@@ -36,7 +36,6 @@ use crate::export_flow;
 use crate::hub::{Hub, HubEvent};
 use crate::hub_dialogs;
 use crate::licenses;
-use crate::live;
 use crate::menus::app_menu;
 use crate::menus::bridge;
 use crate::menus::click::ClickEnv;
@@ -990,7 +989,6 @@ impl MainProcess {
             }
         };
         let hub: Entity<Hub> = frame.read(cx).host().hub().clone();
-        live::attach(&hub, cx);
         cx.subscribe(&hub, move |hub, event, cx| match event {
             HubEvent::Main(message) if message.name != HubToMain::CreateSatellite => {
                 Self::hub_message(cx, id, message);
