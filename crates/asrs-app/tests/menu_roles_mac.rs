@@ -4,7 +4,8 @@
 //! through it to windows that are never shown: every edit role must be taken by the view, as
 //! `RenderWidgetHostViewCocoa` takes it, and act on the field or page in it once; Toggle Full
 //! Screen must reach `toggleFullScreen:`, which is intercepted; full screen notifications must
-//! reach the window's observer, and main window ones the focus observer; and quitting must ask when it may not, and quit when it may.
+//! reach the window's observer, and main window ones the focus observer; and quitting must ask
+//! when it may not, and quit when it may.
 //!
 //! The general pasteboard is the user's: the clipboard actions are caught in the page, and
 //! `edit_roles` checks what they do.
