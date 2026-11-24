@@ -43,10 +43,7 @@ pub fn show(message: &NamedMessage<HubToMain>, window: AnyWindowHandle, cx: &mut
         HubToMain::FtcCoordinateSystemWarning => {
             coordinate_warning(CoordinateWarning::Ftc, window, cx);
         }
-        HubToMain::OpenLink => match message.data.as_str() {
-            Some(url) => platform::open_external(cx, &url.to_string_lossy()),
-            None => eprintln!("asrs: open-link: not a string: {:?}", message.data),
-        },
+        HubToMain::OpenLink => open_link(&message.data, cx),
         HubToMain::ExportConsole => {
             let text = match &message.data {
                 JsValue::String(text) => text.clone(),
@@ -79,6 +76,14 @@ pub fn show(message: &NamedMessage<HubToMain>, window: AnyWindowHandle, cx: &mut
         HubToMain::PromptUpdate => cx.defer(MainProcess::prompt_update),
         HubToMain::OpenFeedback => cx.open_url(&feedback_url(RELEASE_PROFILE.repository)),
         _ => {}
+    }
+}
+
+/// The `open-link` of hubs and satellites.
+pub fn open_link(data: &JsValue, cx: &mut App) {
+    match hub_dialogs::link(data) {
+        Some(url) => platform::open_external(cx, &url),
+        None => eprintln!("asrs: open-link: not a web address: {data:?}"),
     }
 }
 

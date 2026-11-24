@@ -34,6 +34,13 @@ fn titled(kind: &'static str, title: &'static str, data: &JsValue) -> Result<Mes
     })
 }
 
+/// The URL `open-link` opens: the page's, if it is `http:` or `https:`. Upstream hands whatever
+/// an asset's `sourceUrl` says to `shell.openExternal` (#402).
+pub fn link(data: &JsValue) -> Option<String> {
+    let url = url::Url::parse(&data.as_str()?.to_string_lossy()).ok()?;
+    matches!(url.scheme(), "http" | "https").then(|| url.into())
+}
+
 /// The `checkboxLabel` of a [`CoordinateWarning`].
 pub const DONT_SHOW_AGAIN: &str = "Don't Show Again";
 

@@ -125,7 +125,7 @@ pub(super) mod source {
     }
 
     /// `BatteryLevelProviderMac`, except that Chromium also wants the battery's raw capacities.
-    /// macOS 27 no longer has those at the top level, so there Chromium 142 never knows.
+    /// macOS 27 no longer has those at the top level, so there Chromium 142 never knows (#402).
     pub fn battery_power() -> Option<bool> {
         let service = service();
         if service == 0 {

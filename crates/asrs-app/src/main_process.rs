@@ -624,11 +624,7 @@ impl MainProcess {
                     Self::send(cx, &hub, MainToHub::CallSelectionSetter, call.clone());
                 }
             }
-            SatelliteToMain::OpenLink => {
-                if let Some(url) = data.as_str() {
-                    platform::open_external(cx, &url.to_string_lossy());
-                }
-            }
+            SatelliteToMain::OpenLink => hub_dialogs::open_link(data, cx),
         }
     }
 

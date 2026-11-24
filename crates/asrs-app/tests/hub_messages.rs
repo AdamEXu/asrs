@@ -91,6 +91,11 @@ fn the_type_conflict_warning_shows_its_box() {
 }
 
 #[test]
+fn the_touch_bar_has_no_timer() {
+    run_in_a_fresh_home("touch_bar");
+}
+
+#[test]
 fn a_touch_drags_a_field() {
     run_in_a_fresh_home("touch_drag");
 }
@@ -682,6 +687,44 @@ fn field_2d() {
     assert_eq!(app.opened_urls(), [SOURCE_URL]);
     let link = ("open-link", JsValue::string(SOURCE_URL));
     assert_eq!(covered(&sent), [link]);
+    for url in [
+        "file:///Applications/Calculator.app",
+        "javascript:alert(1)",
+        "vscode://file/etc/passwd",
+        r"C:\Windows\System32\calc.exe",
+        "example.com",
+        "",
+    ] {
+        let link = NamedMessage::new(HubToMain::OpenLink, JsValue::string(url));
+        app.send_main_message(hub, link);
+        app.settle();
+        assert_eq!(app.opened_urls(), [""; 0], "{url}");
+    }
+    let none = NamedMessage::new(HubToMain::OpenLink, JsValue::Undefined);
+    app.send_main_message(hub, none);
+    app.settle();
+    assert_eq!(app.opened_urls(), [""; 0]);
+}
+
+#[test]
+#[ignore = "run by the_touch_bar_has_no_timer with its own home directory"]
+fn touch_bar() {
+    let Some(mut app) = AppUnderTest::start(|_| {}) else {
+        return;
+    };
+    let hub = app.only_hub();
+    let sent = app.record_messages(hub);
+    let executor = app.cx.update(|cx| cx.background_executor().clone());
+    for _ in 0..4 {
+        executor.advance_clock(std::time::Duration::from_millis(250));
+        app.settle();
+    }
+    let names: Vec<HubToMain> = sent.borrow().iter().map(|m| m.name).collect();
+    assert!(
+        names.contains(&HubToMain::SaveState),
+        "timers run: {names:?}"
+    );
+    assert!(!names.contains(&HubToMain::UpdateTouchBarSlider));
 }
 
 fn field_3d_mode(hub: &HubModel) -> Option<Field3dMode> {
