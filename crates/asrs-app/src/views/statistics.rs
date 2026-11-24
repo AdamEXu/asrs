@@ -23,10 +23,11 @@ use asrs_tabs::statistics::renderer::StatisticsRenderer;
 use asrs_tabs::statistics::values::{StatisticsCell, StatisticsRow};
 use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::canvas_view::{FramePresenter, rasterize};
+use asrs_ui::focus::{self, ScrollAxis};
 use asrs_ui::gpui::{
-    AnyElement, App, AppContext, ClickEvent, Context, Div, Entity, Focusable, InteractiveElement,
-    IntoElement, ParentElement, ScrollEvent, StatefulInteractiveElement, Styled, Subscription,
-    Window, canvas, div, px, rgb,
+    AnyElement, App, AppContext, Bounds, ClickEvent, Context, Div, Entity, FocusHandle, Focusable,
+    InteractiveElement, IntoElement, ParentElement, Pixels, ScrollEvent,
+    StatefulInteractiveElement, Styled, Subscription, Window, canvas, div, px, rgb,
 };
 use asrs_ui::input::style::CONTROL_FONT;
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, Select, SelectEvent, TextField};
@@ -36,7 +37,7 @@ use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, Theme};
 
 use super::cell_text::{CellLine, CellText, css};
-use super::frame::{FrameHost, HubFrame, wheel_of};
+use super::frame::{FrameHost, HubFrame, SETTINGS_SECTION, wheel_of};
 use super::large_table::{Grid, mean};
 use super::number::FormNumber;
 use super::page_text::{
@@ -965,25 +966,35 @@ impl<H: FrameHost> HubFrame<H> {
         cx.notify();
     }
 
-    /// A press anywhere in the window: outside the focused input it takes the focus away.
-    pub(super) fn statistics_window_mouse_down(
+    /// Scrolls the settings to the focused field at `bounds`.
+    pub(super) fn scroll_statistics_settings(
         &mut self,
-        x: f64,
-        y: f64,
-        window: &mut Window,
-        cx: &mut Context<'_, Self>,
+        focused: &FocusHandle,
+        bounds: Bounds<Pixels>,
+        window: &Window,
+        cx: &App,
     ) {
-        let Some(shown) = self.statistics.shown else {
+        let Some((key, layout)) = self
+            .statistics
+            .shown
+            .and_then(|shown| Some((shown.key, shown.settings?)))
+        else {
             return;
         };
-        let scroll = self.statistics_settings_scroll(shown.key);
-        let over_field = shown.settings.is_some_and(|settings| {
-            let mut fields = settings.fields.iter();
-            fields.any(|&[fx, fy, w, h]| inside([fx, fy - scroll, w, h], x, y))
-        });
-        if !over_field {
-            self.statistics_blur(window, cx);
+        let tab = self.statistics.tabs.get_mut(&key);
+        let Some(parts) = tab.and_then(|t| t.controls.as_mut()) else {
+            return;
+        };
+        let mut fields = parts.fields.iter().map(|field| field.focus_handle(cx));
+        if !fields.any(|field| field == *focused) && parts.select.focus_handle(cx) != *focused {
+            return;
         }
+        let [_, y, _, height] = layout.panel;
+        let top = f64::from(f32::from(bounds.origin.y)) - y;
+        let item = [top, f64::from(f32::from(bounds.size.height))];
+        parts.scroll += focus::reveal(ScrollAxis::Vertical, height, item);
+        let scale = f64::from(window.scale_factor());
+        parts.scroll = assign_scroll_offset(parts.scroll, layout.max_scroll, scale);
     }
 
     fn statistics_blur(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
@@ -997,12 +1008,6 @@ impl<H: FrameHost> HubFrame<H> {
                 field.update(cx, |field, cx| field.blur(window, cx));
             }
         }
-    }
-
-    fn statistics_settings_scroll(&self, key: usize) -> f64 {
-        let tab = self.statistics.tabs.get(&key);
-        tab.and_then(|t| t.controls.as_ref())
-            .map_or(0.0, |c| c.scroll)
     }
 
     fn statistics_control<R>(
@@ -1161,8 +1166,8 @@ impl<H: FrameHost> HubFrame<H> {
             ..panel
         };
         let height = layout.panel[3];
-        let mut out = panel
-            .place(layout.panel)
+        let place = focus::place(("stats-settings", key), window, cx);
+        let mut out = focus::section(panel.place(layout.panel), SETTINGS_SECTION, &place)
             .id("stats-settings")
             .overflow_hidden()
             .on_scroll(cx.listener(move |frame, event: &ScrollEvent, _, cx| {
@@ -1177,29 +1182,40 @@ impl<H: FrameHost> HubFrame<H> {
                     .h(px(height as f32))
                     .bg(rgb(if dark { 0x000000 } else { 0xdddddd })),
             );
-        for (label, rect) in TITLES.into_iter().zip(layout.titles) {
+        let block = |i: usize| 2 * i as isize + 1;
+        for (i, (label, rect)) in TITLES.into_iter().zip(layout.titles).enumerate() {
             let r = scrolled(rect);
             let (w, _) = text::measure(cx, &title_style(), label, scale);
             let Some(offset) = centred_offset(r[2], w) else {
                 continue;
             };
             let (x, dx) = place_in(r[0], offset, f64::from(scale));
+            let place = focus::place((label, key), window, cx);
             out = out.child(
-                within.place(r).overflow_hidden().child(
-                    div().absolute().left(px(x)).top_0().child(
-                        Text::new(label, title_style())
-                            .color(theme.text)
-                            .subpixel(dx as f32, 0.0),
+                focus::section(within.place(r), block(i), &place)
+                    .overflow_hidden()
+                    .child(
+                        div().absolute().left(px(x)).top_0().child(
+                            Text::new(label, title_style())
+                                .color(theme.text)
+                                .subpixel(dx as f32, 0.0),
+                        ),
                     ),
-                ),
             );
         }
         out = out.child(probed(
             "select.time-range",
-            within.place(select_rect).child(select),
+            within
+                .place(select_rect)
+                .tab_group()
+                .tab_index(block(0) + 1)
+                .child(select),
         ));
-        for ((field, id), rect) in fields.into_iter().zip(FIELD_PROBES).zip(layout.fields) {
-            out = out.child(probed(id, within.place(scrolled(rect)).child(field)));
+        let fields = fields.into_iter().zip(FIELD_PROBES).zip(layout.fields);
+        for (((field, id), rect), row) in fields.zip([1, 1, 2]) {
+            let input = within.place(scrolled(rect)).tab_group();
+            let input = input.tab_index(block(row) + 1).child(field);
+            out = out.child(probed(id, input));
         }
         Some(probed("div.stats-settings", out).into_any_element())
     }

@@ -7,12 +7,13 @@ use asrs_hub::tabs::TitleElement;
 use asrs_js::math;
 use asrs_model::scroll_sensor::assign_scroll_offset;
 use asrs_model::source_list::Rect;
+use asrs_ui::focus::{self, FocusRing};
 use asrs_ui::gpui::{
-    AnyElement, App, IntoElement, ParentElement, Styled, div, linear_color_stop, linear_gradient,
-    px, rgb, rgba,
+    AnyElement, App, InteractiveElement, IntoElement, KeyDownEvent, ParentElement, Styled, Window,
+    div, linear_color_stop, linear_gradient, px, rgb, rgba,
 };
 use asrs_ui::text::{self, Text, TextStyle};
-use asrs_ui::theme::FONT_FAMILY;
+use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, FONT_FAMILY};
 
 use super::source_list::place_in;
 
@@ -161,13 +162,22 @@ pub fn tab(
     )
 }
 
-/// The titles, clipped to the bar and scrolled by its `scrollLeft`, in bar coordinates.
+/// `titleElement`'s focus: its handle and whether it takes the outline.
+pub fn title_focus(index: usize, window: &mut Window, cx: &mut App) -> FocusRing {
+    FocusRing::of(("tab-title", index), None, window, cx)
+}
+
+/// The titles, clipped to the bar and scrolled by its `scrollLeft`, in bar coordinates. `focus` is
+/// [`title_focus`] of each, whose keys go to `on_key`.
 pub fn titles(
     geometry: &TabBarGeometry,
     elements: &[TitleElement],
-    dark: bool,
-    text_color: u32,
+    focus: &[FocusRing],
+    on_key: impl Fn(usize, &KeyDownEvent, &mut Window, &mut App) + Clone + 'static,
+    appearance: Appearance,
 ) -> AnyElement {
+    let dark = appearance == Appearance::Dark;
+    let text_color = appearance.theme().text;
     let mut row = div()
         .absolute()
         .left(px(0.0))
@@ -176,6 +186,7 @@ pub fn titles(
         .h(px(geometry.bar[3] as f32))
         .overflow_hidden();
     let count = elements.len();
+    let mut ring = None;
     for (i, element) in elements.iter().enumerate() {
         let x = geometry.left_of(i) - geometry.scroll_left;
         let width = geometry.widths.get(i).copied().unwrap_or(0.0);
@@ -183,13 +194,37 @@ pub fn titles(
         let place = |x| place_in(geometry.bar[0], x, geometry.device_pixel_ratio);
         let ((left, dx), (right, _)) = (place(x), place(x + width));
         let (first, last) = (i == 0, i + 1 == count);
-        row = row.child(
-            tab(element, right - left, dx, first, last, dark, text_color)
-                .left(px(left))
-                .top(px(TAB_TOP as f32)),
-        );
+        let mut title = tab(element, right - left, dx, first, last, dark, text_color)
+            .left(px(left))
+            .top(px(TAB_TOP as f32));
+        if let Some(focus) = focus.get(i) {
+            if focus.visible {
+                let inner = px(FOCUS_RING_RADIUS);
+                let outer = px(10.0);
+                let (l, r) = (
+                    if first { outer } else { inner },
+                    if last { outer } else { inner },
+                );
+                title = title.rounded_l(l).rounded_r(r);
+                let outset = px(FOCUS_RING_WIDTH);
+                ring = Some(
+                    focus::outline(appearance)
+                        .left(px(left) - outset)
+                        .top(px(TAB_TOP as f32) - outset)
+                        .w(px(right - left) + outset * 2.0)
+                        .h(px(TAB_HEIGHT as f32) + outset * 2.0)
+                        .rounded_l(l + outset)
+                        .rounded_r(r + outset),
+                );
+            }
+            let on_key = on_key.clone();
+            title = title
+                .track_focus(&focus.handle)
+                .on_key_down(move |event, window, cx| on_key(i, event, window, cx));
+        }
+        row = row.child(title);
     }
-    row.into_any_element()
+    row.children(ring).into_any_element()
 }
 
 /// `div.tab-bar-shadow-left` or `-right` at `rect` (viewer coordinates relative to `origin`)

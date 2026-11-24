@@ -17,9 +17,11 @@ use asrs_tabs::video::{Buttons, VideoController};
 use asrs_tabs::video_renderer::{Shown, VideoImage, VideoRenderer};
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::FramePresenter;
+use asrs_ui::focus;
 use asrs_ui::gpui::{
-    AnyElement, AppContext, Bounds, Context, Corners, Entity, IntoElement, KeyDownEvent,
-    ParentElement, Pixels, Styled, Subscription, Task, Window, canvas, div, point, px, rgb, size,
+    AnyElement, AppContext, Bounds, Context, Corners, Entity, FocusHandle, InteractiveElement,
+    IntoElement, KeyDownEvent, ParentElement, Pixels, Styled, Subscription, Task, Window, canvas,
+    div, point, px, rgb, size,
 };
 use asrs_ui::icon::IconFit;
 use asrs_ui::input::{Slider, SliderEvent, SliderStyle, paint_in_rounded};
@@ -102,6 +104,8 @@ impl Source {
     }
 }
 
+const SLIDER_ORDER: isize = 3;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Control {
     SkipBack,
@@ -148,6 +152,24 @@ impl Control {
             Control::Lock => "lockopenright.svg",
             Control::Unlock => "lock.svg",
         }
+    }
+
+    const ALL: [Control; 8] = [
+        Control::Lock,
+        Control::Unlock,
+        Control::SkipBack,
+        Control::FrameBack,
+        Control::Play,
+        Control::Pause,
+        Control::FrameForward,
+        Control::SkipForward,
+    ];
+
+    /// Its place in the document, where the slider is between the locks and the others.
+    fn order(self) -> isize {
+        let at = Control::ALL.iter().position(|control| *control == self);
+        let at = at.map_or(0, |at| at as isize + 1);
+        if at < SLIDER_ORDER { at } else { at + 1 }
     }
 
     fn hidden(self, buttons: Buttons) -> bool {
@@ -795,6 +817,9 @@ impl<H: FrameHost> HubFrame<H> {
             .child(probed("div.video-source", at(layout.source)))
             .child(at([sx + sw - 1.0, sy, 1.0, sh]).bg(rgb(border)));
 
+        let places: Vec<(Control, FocusHandle)> = Control::ALL
+            .map(|control| (control, focus::place((control.id(), key), window, cx)))
+            .into();
         for (i, source) in Source::ALL.into_iter().enumerate() {
             let rect = layout.sources[i];
             let overlay = match source {
@@ -803,7 +828,7 @@ impl<H: FrameHost> HubFrame<H> {
                     self.source_stroke(key, i - 1, animating[i - 1], rect, scale, now, window, cx)
                 }
             };
-            let mut button = IconButton::new(source.id(), symbol(source.icon()))
+            let mut button = IconButton::new((source.id(), key), symbol(source.icon()))
                 .size(
                     (snap(rect[0] + rect[2]) - snap(rect[0])) as f32,
                     (snap(rect[1] + rect[3]) - snap(rect[1])) as f32,
@@ -842,8 +867,14 @@ impl<H: FrameHost> HubFrame<H> {
             .zip(&layout.transport)
             .map(|(control, rect)| (*control, *rect, "div.video-timeline-controls > button"))
             .chain([(lock, layout.lock, "div.video-timeline-section > button")]);
+        let hidden = places.iter().filter(|(control, _)| control.hidden(buttons));
+        root = root.children(hidden.map(|(control, place)| {
+            let hidden = focus::hidden(place).tab_group();
+            hidden.tab_index(control.order())
+        }));
         for (control, rect, id) in shown {
-            let button = IconButton::new(control.id(), symbol(control.icon()))
+            let place = places.iter().find(|(c, _)| *c == control);
+            let mut button = IconButton::new((control.id(), key), symbol(control.icon()))
                 .size(BUTTON as f32, BUTTON as f32)
                 .subpixel(rect[0] - snap(rect[0]), rect[1] - snap(rect[1]))
                 .translate(0.0, -BUTTON / 2.0)
@@ -852,7 +883,14 @@ impl<H: FrameHost> HubFrame<H> {
                 .on_click(cx.listener(move |frame, _, _, cx| {
                     frame.video_click(key, |video, page, _| control.click(video, page), cx);
                 }));
-            root = root.child(probed(id, at(rect).child(button)));
+            if let Some((_, place)) = place {
+                button = button.track_focus(place);
+            }
+            let button = at(rect)
+                .tab_group()
+                .tab_index(control.order())
+                .child(button);
+            root = root.child(probed(id, button));
         }
 
         slider.update(cx, |slider, _| {
@@ -875,7 +913,10 @@ impl<H: FrameHost> HubFrame<H> {
             .child(probed("div.video-timeline-container", at(layout.timeline)))
             .child(probed(
                 "input.video-timeline-slider",
-                at(layout.slider).child(slider),
+                at(layout.slider)
+                    .tab_group()
+                    .tab_index(SLIDER_ORDER)
+                    .child(slider),
             ))
             .child(marker)
             .child(probed(

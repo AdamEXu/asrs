@@ -122,7 +122,9 @@ impl RenderOnce for SegmentedControl {
         let count = self.segments.len();
         let state = window.use_keyed_state(self.id.clone(), cx, |_, cx| State {
             hovered: None,
-            focus: (0..count).map(|_| cx.focus_handle()).collect(),
+            focus: (0..count)
+                .map(|_| cx.focus_handle().tab_stop(true))
+                .collect(),
         });
         let hover = state.read(cx).hovered;
         let focus = state.read(cx).focus.clone();

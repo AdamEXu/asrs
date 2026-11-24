@@ -488,6 +488,10 @@ impl FrameHost for HubEntityHost {
         });
     }
 
+    fn scroll_side_bar(&mut self, focused: [f64; 2]) {
+        sidebar::scroll_to_focused(&self.sidebar_geometry, focused);
+    }
+
     fn set_menu_buttons(&mut self, rects: Vec<[f64; 4]>) {
         sidebar::set_menu_buttons(&self.sidebar_geometry, rects);
     }

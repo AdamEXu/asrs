@@ -10,15 +10,18 @@ use std::rc::Rc;
 use asrs_hub::frame::client_coordinate;
 use asrs_hub::hub::HubModel;
 use asrs_js::math;
+use asrs_model::scroll_sensor::assign_scroll_offset;
 use asrs_model::source_list::layout::{ListLayout, ListRoot, controller_roots};
 use asrs_model::source_list::{
     ItemView, Length, ListButton, ListInput, ListPointer, Rect, SourceList, SourceListDom,
 };
 use asrs_ui::button::IconButton;
+use asrs_ui::focus::{self, ScrollAxis};
 use asrs_ui::gpui::{
-    AnyElement, App, BoxShadow, ClickEvent, Context, Div, Hsla, InteractiveElement, IntoElement,
-    MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, ScrollHandle,
-    Stateful, StatefulInteractiveElement, Styled, Window, div, point, px, rgb, rgba,
+    AnyElement, App, Bounds, BoxShadow, ClickEvent, Context, Div, FocusHandle, Hsla,
+    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement,
+    Pixels, Point, ScrollHandle, SharedString, Stateful, StatefulInteractiveElement, Styled,
+    Window, div, point, px, rgb, rgba,
 };
 use asrs_ui::icon::{Icon, IconFit, IconSource};
 use asrs_ui::symbols::Symbol;
@@ -110,6 +113,8 @@ pub fn type_name_client_width(
 pub struct ListsLayout {
     lists: HashMap<String, ListLayout>,
     scroll: HashMap<String, ScrollHandle>,
+    /// `div.list`'s place in the focus order.
+    places: HashMap<String, FocusHandle>,
     measurer: Measurer,
     body_width: f64,
     scale: f32,
@@ -120,6 +125,7 @@ impl Default for ListsLayout {
         ListsLayout {
             lists: HashMap::new(),
             scroll: HashMap::new(),
+            places: HashMap::new(),
             measurer: Measurer::default(),
             body_width: 0.0,
             scale: 1.0,
@@ -330,6 +336,43 @@ struct ItemPlace {
     scale: f32,
 }
 
+/// Where Tab goes on from after a press on a list item: its element, its text and its preview.
+struct ItemPlaces {
+    item: FocusHandle,
+    text: FocusHandle,
+    value: FocusHandle,
+}
+
+impl ItemPlaces {
+    fn new(uuid: &str, index: usize, window: &mut Window, cx: &mut App) -> ItemPlaces {
+        let mut place = |part: &str| {
+            let id = SharedString::from(format!("sl-{part}-{uuid}-{index}"));
+            focus::place(id, window, cx)
+        };
+        ItemPlaces {
+            item: place("item"),
+            text: place("text"),
+            value: place("value"),
+        }
+    }
+}
+
+/// An element of a list item, which the drag copy's has no place for.
+trait Placed: InteractiveElement {
+    fn at_place(
+        self,
+        places: Option<&ItemPlaces>,
+        place: impl FnOnce(&ItemPlaces) -> FocusHandle,
+    ) -> Self {
+        match places {
+            Some(places) => self.track_focus(&place(places)),
+            None => self,
+        }
+    }
+}
+
+impl<E: InteractiveElement> Placed for E {}
+
 /// One `div.item` at `index`, `width` wide: the list's, whose buttons `dispatch`, or the drag
 /// copy's. `borders` are its top and bottom border widths.
 fn item_body(
@@ -338,6 +381,7 @@ fn item_body(
     place: ItemPlace,
     appearance: Appearance,
     dispatch: &Option<Dispatch>,
+    places: Option<&ItemPlaces>,
 ) -> Stateful<Div> {
     let ItemPlace {
         width,
@@ -361,6 +405,9 @@ fn item_body(
         .w(px(width as f32))
         .h(px(height as f32))
         .border_color(rgb(border_color));
+    if let Some(places) = places {
+        body = focus::section(body, index as isize + 1, &places.item);
+    }
     if borders.0 > 0.0 {
         body = body.border_t_1();
     }
@@ -416,6 +463,7 @@ fn item_body(
         body = body.child(fade(
             div()
                 .id(("sl-type-name", index))
+                .at_place(places, |places| places.text.clone())
                 .on_click(name_click.clone())
                 .absolute()
                 .left(px((NAME_LEFT + indent) as f32))
@@ -437,6 +485,7 @@ fn item_body(
         let max = (width - 31.0 - child_inset - type_width - 55.0).max(0.0);
         let mut key_box = div()
             .id(("sl-key", index))
+            .at_place(places, |places| places.text.clone())
             .on_click(name_click)
             .absolute()
             .left(px((NAME_LEFT + indent + type_width) as f32))
@@ -490,6 +539,7 @@ fn item_body(
                     .pl(px(2.0))
                     .pr(px(4.0))
                     .overflow_hidden()
+                    .at_place(places, |places| focus::last(&places.value))
                     .child(
                         Text::new(item.preview_text.clone(), value_style())
                             .color(VALUE_COLOR)
@@ -518,9 +568,12 @@ fn item_body(
     .child(translated_button(
         IconButton::new(("sl-remove", index), symbol("close.svg")).on_click({
             let remove = on(dispatch, ListPointer::RemoveClick(index));
+            let item = places.map(|places| places.item.clone());
             move |event, window, cx| {
-                // The focused button goes with its item.
-                window.blur(cx);
+                // The focused button goes with its item, and Tab goes on from there.
+                if let Some(item) = &item {
+                    item.focus(window, cx);
+                }
                 remove(event, window, cx);
             }
         }),
@@ -548,6 +601,7 @@ pub fn drag_item(item: &ItemView, width: f64, appearance: Appearance) -> AnyElem
             },
             appearance,
             &None,
+            None,
         ))
         .into_any_element()
 }
@@ -607,10 +661,30 @@ impl<H: FrameHost> HubFrame<H> {
         }
     }
 
+    /// Scrolls the list that holds the focused element, at `bounds`, to it.
+    pub(super) fn scroll_source_list(
+        &mut self,
+        focused: &FocusHandle,
+        bounds: Bounds<Pixels>,
+        window: &Window,
+    ) {
+        let geometry = self.host().source_list_geometry();
+        let layout = geometry.0.borrow();
+        let holds = |(_, place): &(&String, &FocusHandle)| place.contains(focused, window);
+        let Some((uuid, _)) = layout.places.iter().find(holds) else {
+            return;
+        };
+        if let (Some(list), Some(scroll)) = (layout.lists.get(uuid), layout.scroll.get(uuid)) {
+            let rect = list.list_rect();
+            scroll_to(scroll, [rect.y, rect.height], bounds, window);
+        }
+    }
+
     pub(super) fn source_lists(
         &mut self,
         controls: [f64; 4],
         appearance: Appearance,
+        window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> Vec<AnyElement> {
         let geometry = self.host().source_list_geometry();
@@ -619,7 +693,7 @@ impl<H: FrameHost> HubFrame<H> {
             .map(|(list, root)| (Shown::of(list), root))
             .collect();
         let mut out = Vec::new();
-        for (list, root) in shown {
+        for (at, (list, root)) in shown.into_iter().enumerate() {
             let uuid = list.uuid.clone();
             let (layout, scroll) = {
                 let g = geometry.0.borrow();
@@ -650,7 +724,7 @@ impl<H: FrameHost> HubFrame<H> {
             }
             let scale = f64::from(geometry.0.borrow().scale);
             out.push(self.list_element(
-                &list, &layout, scroll, root, controls, scale, appearance, cx,
+                at, &list, &layout, scroll, root, controls, scale, appearance, window, cx,
             ));
         }
         out
@@ -659,6 +733,7 @@ impl<H: FrameHost> HubFrame<H> {
     #[allow(clippy::too_many_arguments)]
     fn list_element(
         &self,
+        at: usize,
         list: &Shown,
         layout: &ListLayout,
         scroll: ScrollHandle,
@@ -666,6 +741,7 @@ impl<H: FrameHost> HubFrame<H> {
         controls: [f64; 4],
         scale: f64,
         appearance: Appearance,
+        window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
         let theme = appearance.theme();
@@ -675,7 +751,8 @@ impl<H: FrameHost> HubFrame<H> {
         let inner = r.width - 2.0 * root.border_x;
         let left = r.x + root.border_x;
         let snap = |v: f64| math::floor(v * scale + 0.5) / scale;
-        let mut element = div()
+        let place = focus::place(SharedString::from(format!("sl-root-{uuid}")), window, cx);
+        let mut element = focus::section(div(), at as isize + 1, &place)
             .absolute()
             .left(px((r.x + root.border_x - controls[0]) as f32))
             .top(px((r.y - controls[1]) as f32))
@@ -754,8 +831,13 @@ impl<H: FrameHost> HubFrame<H> {
         }
 
         let count = list.items.len();
+        let place = focus::place(SharedString::from(format!("sl-list-{uuid}")), window, cx);
+        let geometry = self.host().source_list_geometry();
+        let places = &mut geometry.0.borrow_mut().places;
+        places.insert(uuid.to_string(), place.clone());
         let mut items = div()
             .id(("sl-list", uuid_hash(&uuid)))
+            .track_focus(&place)
             .absolute()
             .left_0()
             .top(px(TITLE_HEIGHT as f32))
@@ -789,16 +871,15 @@ impl<H: FrameHost> HubFrame<H> {
                 origin_x: left,
                 scale: scale as f32,
             };
-            let row = item_body(item, index, place, appearance, &dispatch).on_mouse_down(
-                MouseButton::Right,
-                {
+            let places = ItemPlaces::new(&uuid, index, window, cx);
+            let row = item_body(item, index, place, appearance, &dispatch, Some(&places))
+                .on_mouse_down(MouseButton::Right, {
                     let uuid = uuid.clone();
                     cx.listener(move |frame, e: &MouseDownEvent, _, cx| {
                         let (x, y) = client_point(e.position);
                         frame.list_input(&uuid, ListPointer::ContextMenu { index, x, y }, cx)
                     })
-                },
-            );
+                });
             items = items.child(row);
         }
         element = element.child(items);
@@ -834,6 +915,25 @@ impl<H: FrameHost> HubFrame<H> {
             );
         }
         element.into_any_element()
+    }
+}
+
+/// Scrolls `scroll`, whose view is `[y, height]`, to the focused element at `bounds`.
+pub(super) fn scroll_to(
+    scroll: &ScrollHandle,
+    [y, height]: [f64; 2],
+    bounds: Bounds<Pixels>,
+    window: &Window,
+) {
+    let top = f64::from(f32::from(bounds.origin.y)) - y;
+    let item = [top, f64::from(f32::from(bounds.size.height))];
+    let by = focus::reveal(ScrollAxis::Vertical, height, item);
+    if by != 0.0 {
+        let offset = scroll.offset();
+        let max = f64::from(f32::from(scroll.max_offset().y));
+        let scale = f64::from(window.scale_factor());
+        let top = assign_scroll_offset(by - f64::from(f32::from(offset.y)), max, scale);
+        scroll.set_offset(point(offset.x, px(-top as f32)));
     }
 }
 

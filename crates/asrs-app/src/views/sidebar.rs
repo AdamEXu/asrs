@@ -5,7 +5,7 @@
 //! active fields follow what is on screen.
 
 use std::cell::RefCell;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::ops::Range;
 use std::rc::Rc;
 
@@ -13,6 +13,7 @@ use asrs_hub::hub::HubModel;
 use asrs_hub::sidebar::{RowRect, RowRef, RowValue, SidebarGeometry, SidebarRow};
 use asrs_js::string::JsString;
 use asrs_ui::button::IconButton;
+use asrs_ui::focus::{self, ScrollAxis};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Context, Entity, InteractiveElement, IntoElement, KeyDownEvent,
     MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, Render, ScrollHandle,
@@ -496,7 +497,9 @@ impl SidebarView {
         let flat = row.index;
         let indent = row.indent;
         let item_width = (width - row.value_width).max(0.0);
+        let place = focus::place(("field-item-place", flat), window, cx);
         let mut container = div()
+            .track_focus(&place)
             .id(("field-item-container", flat))
             .absolute()
             .left_0()
@@ -935,7 +938,37 @@ impl Render for SidebarView {
             );
         }
 
-        for (index, row) in rows.iter().enumerate().take(range.end).skip(range.start) {
+        // Tab also reaches the inputs that are scrolled out of view.
+        let tunable: Vec<usize> = rows
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| {
+                let tuned = |value: &RowValue| {
+                    matches!(
+                        value,
+                        RowValue::Number {
+                            input_hidden: false,
+                            ..
+                        }
+                    )
+                };
+                !row.value_hidden && tuned(&row.value)
+            })
+            .map(|(index, _)| index)
+            .collect();
+        let (before, after) = (
+            tunable.partition_point(|&index| index < range.start),
+            tunable.partition_point(|&index| index < range.end),
+        );
+        let nearest = [
+            (before > 0).then_some(0),
+            before.checked_sub(1),
+            (after < tunable.len()).then_some(after),
+            (after < tunable.len()).then(|| tunable.len() - 1),
+        ];
+        let nearest = nearest.into_iter().flatten().map(|i| tunable[i]);
+        let shown: BTreeSet<usize> = range.chain(nearest).collect();
+        for (index, row) in shown.into_iter().map(|index| (index, &rows[index])) {
             let element = self.row(row, index, width, appearance, window, cx);
             content = content.child(element);
         }
@@ -959,6 +992,17 @@ impl Render for SidebarView {
 /// `div.side-bar`'s box as the frame laid it out, for [`ViewGeometry`].
 pub fn set_side_bar(geometry: &ViewGeometry, rect: [f64; 4]) {
     geometry.0.borrow_mut().side_bar = rect;
+}
+
+/// Scrolls `div.side-bar` to the focused element at this client y and height.
+pub fn scroll_to_focused(geometry: &ViewGeometry, [y, height]: [f64; 2]) {
+    let mut layout = geometry.0.borrow_mut();
+    let [_, top, _, visible] = layout.side_bar;
+    let by = focus::reveal(ScrollAxis::Vertical, visible, [y - top, height]);
+    if by != 0.0 {
+        let to = layout.scroll_top + by;
+        layout.scroll(to);
+    }
 }
 
 pub fn set_menu_buttons(geometry: &ViewGeometry, rects: Vec<[f64; 4]>) {

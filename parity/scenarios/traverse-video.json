@@ -1,0 +1,366 @@
+{
+  "about": "Tab (#375) through the video tab, empty and with a clip: source buttons, lock, slider and playback buttons with Enter",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 7,
+              "title": "Match",
+              "controller": null,
+              "controllerUUID": "video000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 85
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.0
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "empty",
+      "count": 14
+    },
+    {
+      "traverse": "empty-back",
+      "count": 14,
+      "back": true
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000",
+        "imgFolder": {
+          "$clip": "wide"
+        },
+        "fps": 30,
+        "totalFrames": 12,
+        "completedFrames": 12,
+        "autoEndFrame": -1
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "all",
+      "count": 20
+    },
+    {
+      "traverse": "all-back",
+      "count": 20,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "lock",
+      "count": 7
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "locked",
+      "count": 0
+    },
+    {
+      "traverse": "locked-next",
+      "count": 1
+    },
+    {
+      "capture": "locked",
+      "probes": []
+    },
+    {
+      "traverse": "locked-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "unlocked",
+      "count": 0
+    },
+    {
+      "traverse": "slider",
+      "count": 1
+    },
+    {
+      "capture": "slider",
+      "probes": []
+    },
+    {
+      "key": "Right"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "slider-key",
+      "probes": []
+    },
+    {
+      "traverse": "frame",
+      "count": 2
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "frame-entered",
+      "count": 0
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "video",
+      "count": 0
+    },
+    {
+      "traverse": "video-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "video-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 900,
+      "y": 640
+    },
+    {
+      "mouse": "down",
+      "x": 900,
+      "y": 640
+    },
+    {
+      "mouse": "up",
+      "x": 900,
+      "y": 640
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "video-controls",
+      "count": 0
+    },
+    {
+      "traverse": "video-controls-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 900,
+      "y": 640
+    },
+    {
+      "mouse": "down",
+      "x": 900,
+      "y": 640
+    },
+    {
+      "mouse": "up",
+      "x": 900,
+      "y": 640
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "video-controls-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    }
+  ]
+}

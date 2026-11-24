@@ -372,6 +372,11 @@ impl<M: FieldModel> TextField<M> {
         }
     }
 
+    fn select_contents(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.editor
+            .update(cx, |editor, cx| editor.select_all(window, cx));
+    }
+
     fn clear(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.value.edit("");
         self.editor_text.borrow_mut().clear();
@@ -410,9 +415,13 @@ impl<M: FieldModel> TextField<M> {
         }
     }
 
-    /// `HandleKeydownEventForSpinButton`.
+    /// `HandleKeydownEventForSpinButton`, or the caret moving to an end of a single line.
     fn arrow_key(&mut self, up: bool, window: &mut Window, cx: &mut Context<'_, Self>) {
         if self.kind != FieldKind::Number {
+            self.editor.update(cx, |editor, cx| {
+                let end = if up { 0 } else { editor.value().len() };
+                editor.set_selected_range(end..end, cx);
+            });
             return;
         }
         cx.stop_propagation();
@@ -539,8 +548,10 @@ impl<M: FieldModel> Render for TextField<M> {
             .capture_action(cx.listener(Self::paste))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(|this, _: &selection::SelectAll, window, cx| {
-                let editor = this.editor.clone();
-                editor.update(cx, |editor, cx| editor.select_all(window, cx));
+                this.select_contents(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &focus::SelectContents, window, cx| {
+                this.select_contents(window, cx);
             }))
             .capture_action(cx.listener(|this, _: &MoveUp, window, cx| {
                 this.arrow_key(true, window, cx);
@@ -555,6 +566,15 @@ impl<M: FieldModel> Render for TextField<M> {
                 this.hovered = *hovered;
                 cx.notify();
             }))
+            .on_mouse_down_out(cx.listener(|this, _, window, cx| this.blur(window, cx)))
+            .child(
+                canvas(
+                    move |bounds, window, _| window.set_focus_bounds(&handle, bounds),
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .inset_0(),
+            )
             .child(frame.absolute().inset_0())
             .child(editor_box);
         if focused {

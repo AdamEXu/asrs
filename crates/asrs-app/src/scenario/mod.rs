@@ -129,6 +129,12 @@ pub enum Action {
     Copy(String),
     /// Whether the windows count as active.
     Focus(bool),
+    /// Presses Tab this many times and keeps what had the focus after each, or what has it now.
+    Traverse {
+        name: String,
+        count: usize,
+        back: bool,
+    },
     Capture {
         name: String,
         probes: Vec<String>,
@@ -218,7 +224,7 @@ pub fn default_window() -> (f64, f64) {
 const TOP_KEYS: [&str; 10] = [
     "page", "window", "scales", "themes", "gl", "prefs", "userData", "robot", "actions", "about",
 ];
-const ACTION_KEYS: [&str; 18] = [
+const ACTION_KEYS: [&str; 19] = [
     "main",
     "open",
     "eval",
@@ -236,6 +242,7 @@ const ACTION_KEYS: [&str; 18] = [
     "role",
     "copy",
     "focus",
+    "traverse",
     "capture",
 ];
 
@@ -394,6 +401,14 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
         },
         "copy" => Action::Copy(text().ok_or("copy is not a name")?),
         "focus" => Action::Focus(value.as_bool().ok_or("focus is not a boolean")?),
+        "traverse" => Action::Traverse {
+            name: text().ok_or("traverse is not a name")?,
+            count: number(action, "count", Some(0.0))? as usize,
+            back: action
+                .get("back")
+                .and_then(JsValue::as_bool)
+                .unwrap_or(false),
+        },
         "capture" => {
             let name = text().ok_or("capture is not a name")?;
             Action::Capture {

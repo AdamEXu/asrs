@@ -9,9 +9,11 @@ use asrs_tabs::form::{self, NumberInput};
 use asrs_tabs::joysticks::JoysticksController;
 use asrs_tabs::points::{Dimension, PointsController, PointsSelect};
 use asrs_tabs::swerve::{SwerveController, SwerveInput};
+use asrs_ui::focus;
 use asrs_ui::gpui::{
-    AnyElement, App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement,
-    StatefulInteractiveElement, Styled, Subscription, Window, div, px, rgb,
+    AnyElement, App, AppContext, Bounds, Context, Entity, FocusHandle, InteractiveElement,
+    IntoElement, ParentElement, Pixels, ScrollHandle, StatefulInteractiveElement, Styled,
+    Subscription, Window, div, px, rgb,
 };
 use asrs_ui::icon::IconSource;
 use asrs_ui::input::style::CONTROL_FONT;
@@ -23,10 +25,10 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, LineHeight, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY};
 
-use super::super::frame::{FrameHost, HubFrame};
+use super::super::frame::{FrameHost, HubFrame, SETTINGS_SECTION};
 use super::super::number::FormNumber;
 use super::super::select::FormSelect;
-use super::super::source_list::{centred_offset, place_in};
+use super::super::source_list::{centred_offset, place_in, scroll_to};
 use super::{local, lu, tab_index, tab_key, with_controller};
 
 const MAX_WIDTH: f64 = 200.0;
@@ -153,9 +155,20 @@ struct NumberView {
 pub struct SettingsViews {
     numbers: HashMap<(usize, Control), NumberView>,
     selects: HashMap<(usize, Control), SelectView>,
+    /// The panel drawn last: its place in the focus order, its scroll position and its box.
+    panel: Option<(FocusHandle, ScrollHandle, [f64; 4])>,
 }
 
 impl SettingsViews {
+    /// Scrolls the panel that holds the focused element, at `bounds`, to it.
+    pub fn scroll_to(&self, focused: &FocusHandle, bounds: Bounds<Pixels>, window: &Window) {
+        if let Some((place, scroll, [_, y, _, height])) = &self.panel
+            && place.contains(focused, window)
+        {
+            scroll_to(scroll, [*y, *height], bounds, window);
+        }
+    }
+
     pub fn retain(&mut self, live: &HashSet<usize>) {
         self.numbers.retain(|(key, _), _| live.contains(key));
         self.selects.retain(|(key, _), _| live.contains(key));
@@ -453,14 +466,18 @@ impl<H: FrameHost> HubFrame<H> {
             ];
             let offset = centred_offset(layout.content_width, width).unwrap_or(0.0);
             let (x, dx) = place_in(box_rect[0], offset, f64::from(scale));
+            let place = focus::place((*title, key), window, cx);
             content = content.child(
-                local(box_rect, origin).overflow_hidden().child(
-                    div().absolute().left(px(x)).top_0().child(
-                        Text::new(*title, title_style())
-                            .color(theme.text)
-                            .subpixel(dx as f32, 0.0),
+                local(box_rect, origin)
+                    .track_focus(&place)
+                    .overflow_hidden()
+                    .child(
+                        div().absolute().left(px(x)).top_0().child(
+                            Text::new(*title, title_style())
+                                .color(theme.text)
+                                .subpixel(dx as f32, 0.0),
+                        ),
                     ),
-                ),
             );
             let top = layout.inputs[i];
             let numbers: &[(Control, [f64; 2])] = match block {
@@ -474,12 +491,7 @@ impl<H: FrameHost> HubFrame<H> {
             for (control, column) in numbers {
                 let rect = layout.number(*column, top, line);
                 if let Some(field) = self.number_field(key, *control, rect, scale, window, cx) {
-                    let outside = field.clone();
-                    let element = local(rect, origin)
-                        .on_mouse_down_out(move |_, window, cx| {
-                            outside.update(cx, |field, cx| field.blur(window, cx));
-                        })
-                        .child(field);
+                    let element = local(rect, origin).child(field);
                     content = content.child(probed(control.probe(), element));
                 }
             }
@@ -499,7 +511,12 @@ impl<H: FrameHost> HubFrame<H> {
             }
         }
         let [_, _, _, height] = layout.panel;
-        let element = local(layout.panel, controls)
+        let place = focus::place(("settings-panel", key), window, cx);
+        let scroll =
+            window.use_keyed_state(("settings-scroll", key), cx, |_, _| ScrollHandle::new());
+        let scroll = scroll.read(cx).clone();
+        self.canvas_tabs.settings.panel = Some((place.clone(), scroll.clone(), layout.panel));
+        let element = focus::section(local(layout.panel, controls), SETTINGS_SECTION, &place)
             .child(
                 div()
                     .absolute()
@@ -518,6 +535,7 @@ impl<H: FrameHost> HubFrame<H> {
                     .w(px(layout.content_width as f32))
                     .h(px(height as f32))
                     .overflow_y_scroll()
+                    .track_scroll(&scroll)
                     .child(content),
             );
         div()

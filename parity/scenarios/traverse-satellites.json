@@ -1,0 +1,562 @@
+{
+  "about": "Tab (#375) through satellites: the table's jump field and button, and pages with nothing that takes the focus",
+  "prefs": {
+    "coordinateSystem": "wall-blue"
+  },
+  "userData": {
+    "userAssets/Field2d_Rings/config.json": {
+      "name": "Rings",
+      "sourceUrl": "https://example.com/",
+      "isFTC": false,
+      "coordinateSystem": "center-red",
+      "topLeft": [
+        20,
+        20
+      ],
+      "bottomRight": [
+        700,
+        300
+      ],
+      "widthInches": 648,
+      "heightInches": 324
+    },
+    "userAssets/Field2d_Rings/image.png": {
+      "$file": "assets/parity-pad.png"
+    }
+  },
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table",
+              "controller": [
+                "/Drive/LeftVelocity",
+                "/Drive/ModuleSpeeds",
+                "/DriverStation/Enabled",
+                "/Missing/Field/WithALongName",
+                "/Odometry/Robot3d/rotation/q/w",
+                "/Drive/Mode",
+                "/Drive/RightVelocity"
+              ],
+              "controllerUUID": "table000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "focus": true
+    },
+    {
+      "main": "new-satellite"
+    },
+    {
+      "prompt": "satellite",
+      "index": 0
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "table-pressed",
+      "count": 0
+    },
+    {
+      "traverse": "table",
+      "count": 4
+    },
+    {
+      "traverse": "table-back",
+      "count": 4,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "jump",
+      "count": 1
+    },
+    {
+      "capture": "table-jump",
+      "probes": [
+        "input.data-table-jump-input"
+      ]
+    },
+    {
+      "traverse": "button",
+      "count": 1
+    },
+    {
+      "capture": "table-button",
+      "probes": [
+        "button.data-table-jump-button"
+      ]
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 6,
+              "title": "Stats",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2"
+                    }
+                  }
+                ],
+                "timeRange": "full",
+                "rangeMin": -2,
+                "rangeMax": 12.5,
+                "stepSize": 0.5
+              },
+              "controllerUUID": "stats000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "focus": true
+    },
+    {
+      "main": "new-satellite"
+    },
+    {
+      "prompt": "satellite",
+      "index": 1
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "statistics-pressed",
+      "count": 0
+    },
+    {
+      "traverse": "statistics",
+      "count": 4
+    },
+    {
+      "traverse": "statistics-back",
+      "count": 4,
+      "back": true
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 2,
+              "title": "Field",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "heatmap",
+                    "logKey": "/Odometry/Robot3d",
+                    "logType": "Pose3d",
+                    "visible": true,
+                    "options": {
+                      "timeRange": "full"
+                    }
+                  }
+                ],
+                "field": "FRC:Rings",
+                "orientation": 0,
+                "size": "large"
+              },
+              "controllerUUID": "field000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "focus": true
+    },
+    {
+      "main": "new-satellite"
+    },
+    {
+      "prompt": "satellite",
+      "index": 2
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "field-2d-pressed",
+      "count": 0
+    },
+    {
+      "traverse": "field-2d",
+      "count": 4
+    },
+    {
+      "traverse": "field-2d-back",
+      "count": 4,
+      "back": true
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Graph",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "graph000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "focus": true
+    },
+    {
+      "main": "new-satellite"
+    },
+    {
+      "prompt": "satellite",
+      "index": 3
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "graph-pressed",
+      "count": 0
+    },
+    {
+      "traverse": "graph",
+      "count": 4
+    },
+    {
+      "traverse": "graph-back",
+      "count": 4,
+      "back": true
+    },
+    {
+      "prompt": "hub"
+    },
+    {
+      "wait": 100
+    }
+  ]
+}

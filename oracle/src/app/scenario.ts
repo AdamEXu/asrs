@@ -22,6 +22,7 @@ export type Action =
   | { role: "selectAll" }
   | { copy: string }
   | { focus: boolean }
+  | { traverse: string; count?: number; back?: boolean }
   | { capture: string; probes?: string[]; masks?: string[] };
 
 export type Scenario = {
@@ -38,7 +39,7 @@ export type Scenario = {
   actions: Action[];
 };
 
-const ACTION_KEYS = ["main", "open", "eval", "selection", "wait", "idle", "mouse", "wheel", "key", "dialog", "menu", "appMenu", "prompt", "download", "role", "copy", "focus", "capture"];
+const ACTION_KEYS = ["main", "open", "eval", "selection", "wait", "idle", "mouse", "wheel", "key", "dialog", "menu", "appMenu", "prompt", "download", "role", "copy", "focus", "traverse", "capture"];
 const TOP_KEYS = ["page", "window", "scales", "themes", "gl", "prefs", "userData", "robot", "actions", "about"];
 
 export function actionKind(action: Action): string {

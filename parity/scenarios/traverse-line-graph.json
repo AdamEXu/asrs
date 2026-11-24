@@ -1,0 +1,494 @@
+{
+  "about": "Tab (#375) through the line graph's source lists: order, presses, hiding and removing a source with Enter",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Graph",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "graph000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "all",
+      "count": 24
+    },
+    {
+      "traverse": "all-back",
+      "count": 24,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "axis",
+      "count": 4
+    },
+    {
+      "capture": "axis",
+      "probes": [
+        ".controls-content"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 465
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 465
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 465
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "left-title",
+      "count": 0
+    },
+    {
+      "traverse": "left-title-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 465
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 465
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 465
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "left-title-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 497
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 497
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 497
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "left-key",
+      "count": 0
+    },
+    {
+      "traverse": "left-key-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 497
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 497
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 497
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "left-key-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 600
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 600
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 600
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "left-empty",
+      "count": 0
+    },
+    {
+      "traverse": "left-empty-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 600
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 600
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 600
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "left-empty-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 600
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 600
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 600
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "discrete-empty",
+      "count": 0
+    },
+    {
+      "traverse": "discrete-empty-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 600
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 600
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 600
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "discrete-empty-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 497
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 497
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 497
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "hide",
+      "count": 1
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "hidden",
+      "count": 0
+    },
+    {
+      "capture": "hidden",
+      "probes": [
+        ".controls-content"
+      ]
+    },
+    {
+      "traverse": "remove",
+      "count": 1
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "removed",
+      "count": 0
+    },
+    {
+      "traverse": "removed-next",
+      "count": 1
+    },
+    {
+      "traverse": "removed-previous",
+      "count": 2,
+      "back": true
+    }
+  ]
+}

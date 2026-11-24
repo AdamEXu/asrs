@@ -929,6 +929,30 @@ impl Variant<'_> {
         Ok(())
     }
 
+    fn traverse(&mut self, name: &str, count: usize, back: bool) -> Result<(), String> {
+        let mut records = String::new();
+        for _ in 0..count.max(1) {
+            if count > 0 {
+                let shift = back.then(|| "shift".to_owned());
+                self.key("Tab", shift.as_slice())?;
+                self.tick()?;
+                self.tick()?;
+                self.tick()?;
+            }
+            let window = self.active();
+            let focused = self
+                .headless
+                .context()
+                .update_window(window, |_, window, cx| capture::focused(window, cx))
+                .map_err(|e| e.to_string())?;
+            records += &focused;
+            records.push('\n');
+        }
+        let folder = self.dir.join("files/focus");
+        std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+        std::fs::write(folder.join(format!("{name}.json")), records).map_err(|e| e.to_string())
+    }
+
     fn edit(&mut self, command: EditCommand) -> Result<(), String> {
         let window = self.active();
         self.headless
@@ -1046,6 +1070,7 @@ impl Variant<'_> {
                 std::fs::write(folder.join(format!("{name}.txt")), copied)
                     .map_err(|e| e.to_string())?;
             }
+            Action::Traverse { name, count, back } => self.traverse(name, *count, *back)?,
             Action::Focus(active) => {
                 let active = ForcedActive(*active);
                 self.headless.context().update(|cx| cx.set_global(active));
