@@ -1,5 +1,5 @@
 {
-  "about": "wheel-calibration for Windows, from its real wheel: whole notches, then 40 units of a notch's 120, the same native events on both sides. Chromium reads 100 px from a notch and GPUI the system's three lines (X02). The page gets the wheel without the pointer's moves, as it does from sendInputEvent. Only the Windows Electron driver runs it",
+  "about": "wheel-calibration for Windows, from its real wheel: whole notches, then 40 units of a notch's 120, the same native events on both sides. Chromium reads 100 px from a notch and GPUI the system's three lines (X02). The page gets the wheel without the pointer's moves, as it does from sendInputEvent. Only the Windows Electron driver runs it. Chromium caps a tick's scroll at the overlay's size, 32 px here, which 33.3 px of 40 units reach too; windows_desktop compares the deltas themselves",
   "platforms": [
     "win32"
   ],
