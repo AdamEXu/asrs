@@ -9,6 +9,7 @@ mod hub_dialogs;
 pub mod licenses;
 pub mod main_process;
 pub mod menus;
+pub mod quit;
 pub mod satellite;
 pub mod scenario;
 pub mod self_test;

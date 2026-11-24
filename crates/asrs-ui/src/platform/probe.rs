@@ -159,6 +159,62 @@ pub fn perform_application_menu_item(path: &[usize]) -> bool {
     imp::probe::perform_application_menu_item(path)
 }
 
+/// Takes the app out of the Dock, so that a check on hidden windows disturbs nobody.
+pub fn stay_in_background() {
+    imp::probe::stay_in_background();
+}
+
+/// The main menu item of a role AppKit performs through the responder chain, and where the chain
+/// from a window's first responder sends it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct MenuRole {
+    pub action: String,
+    /// After AppKit has had its chance to validate the menu.
+    pub enabled: bool,
+    /// The class of the object the action goes to, and the class that implements it.
+    pub target: Option<(String, String)>,
+}
+
+pub fn menu_role(window: &Window, role: &str) -> Option<MenuRole> {
+    imp::probe::menu_role(window, role)
+}
+
+/// Sends the role's main menu item to the responder [`menu_role`] names, from the run loop as
+/// AppKit does. Returns whether there is one.
+pub fn perform_menu_role(window: &Window, role: &str) -> bool {
+    imp::probe::perform_menu_role(window, role)
+}
+
+/// Sends a role's action to the app's delegate, where it ends without a window to take it.
+pub fn perform_menu_role_without_window(role: &str) -> Option<()> {
+    imp::probe::perform_menu_role_without_window(role)
+}
+
+/// Has `toggleFullScreen:` only count, so that a check does not switch spaces.
+pub fn intercept_full_screen() -> bool {
+    imp::probe::intercept_full_screen()
+}
+
+pub fn full_screen_toggles() -> usize {
+    imp::probe::full_screen_toggles()
+}
+
+/// Posts a notification of AppKit's about `window`, from the run loop.
+pub fn post_window_notification(window: &Window, name: &str) {
+    imp::probe::post_window_notification(window, name);
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowChrome {
+    pub toolbar: bool,
+    pub title: bool,
+    pub buttons: bool,
+}
+
+pub fn window_chrome(window: &Window) -> Option<WindowChrome> {
+    imp::probe::window_chrome(window)
+}
+
 /// Offers the main menu a key-down event with the given characters and `NSEventModifierFlags`.
 /// Returns whether an entry took it.
 pub fn perform_key_equivalent(key: &str, modifiers: u32) -> bool {

@@ -120,6 +120,15 @@ name = "app_menu_mac"
 harness = false
 
 [[test]]
+name = "menu_roles_mac"
+harness = false
+required-features = ["parity"]
+
+[[test]]
+name = "edit_roles"
+required-features = ["parity"]
+
+[[test]]
 name = "source_list_view"
 harness = false
 required-features = ["parity"]
