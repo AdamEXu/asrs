@@ -36,7 +36,7 @@ use asrs_ui::parity::probed;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, FONT_FAMILY};
-use asrs_ui::tooltip::titled;
+use asrs_ui::tooltip::{titled, untitled};
 
 use super::field_image::{self, FieldImage};
 use super::frame::{FrameHost, HubFrame, wheel_of};
@@ -762,8 +762,14 @@ impl<H: FrameHost> HubFrame<H> {
             // On the select's baseline.
             let top = ly + f64::from(select_baseline(scale, cx) - ascent / scale);
             let r = [lx + SOURCE_PADDING, top - (h - content) / 2.0, width, h];
-            panel = panel.child(titled(
-                "Open field image source URL",
+            let padded = [
+                r[0] - SOURCE_PADDING,
+                top - SOURCE_PADDING,
+                r[2] + 2.0 * SOURCE_PADDING,
+                content + 2.0 * SOURCE_PADDING,
+            ];
+            panel = panel.child(titled("Open field image source URL", local(padded)));
+            panel = panel.child(untitled(
                 local(r)
                     .id("field-source")
                     .track_focus(&focus.handle)

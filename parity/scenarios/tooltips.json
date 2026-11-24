@@ -1,5 +1,5 @@
 {
- "about": "The title tooltips no other scenario reaches: the sidebar's metadata of every kind and its type warning, source list items that are shown, hidden, missing or cut, table headers that are cut or missing, the update and feedback buttons, and a satellite's table, which has no close buttons",
+ "about": "The title tooltips no other scenario reaches: the sidebar's metadata of every kind and its type warning, source list items that are shown, hidden, missing or cut, table headers that are cut or missing, the update and feedback buttons, the controls of an empty Video and a 3D Field tab, and a satellite's table, which has no close buttons",
  "scales": [
   1
  ],
@@ -273,6 +273,133 @@
   },
   {
    "capture": "table"
+  },
+  {
+   "main": "restore-state",
+   "data": {
+    "sidebar": {
+     "width": 300,
+     "expanded": [
+      "/Meta"
+     ]
+    },
+    "tabs": {
+     "selected": 1,
+     "tabs": [
+      {
+       "type": 0,
+       "title": "",
+       "controller": null,
+       "controllerUUID": "documentation0000000000000000000",
+       "renderer": "",
+       "controlsHeight": 0
+      },
+      {
+       "type": 7,
+       "title": "Video",
+       "controller": null,
+       "controllerUUID": "video000000000000000000000000000",
+       "renderer": null,
+       "controlsHeight": 85
+      }
+     ]
+    }
+   }
+  },
+  {
+   "idle": true
+  },
+  {
+   "wait": 200
+  },
+  {
+   "capture": "video"
+  },
+  {
+   "main": "restore-state",
+   "data": {
+    "sidebar": {
+     "width": 300,
+     "expanded": [
+      "/Meta"
+     ]
+    },
+    "tabs": {
+     "selected": 1,
+     "tabs": [
+      {
+       "type": 0,
+       "title": "",
+       "controller": null,
+       "controllerUUID": "documentation0000000000000000000",
+       "renderer": "",
+       "controlsHeight": 0
+      },
+      {
+       "type": 3,
+       "title": "3D Field",
+       "controller": {
+        "sources": [],
+        "game": "FRC:Evergreen"
+       },
+       "controllerUUID": "field3d0000000000000000000000000",
+       "renderer": null,
+       "controlsHeight": 200
+      }
+     ]
+    }
+   }
+  },
+  {
+   "wait": 3000
+  },
+  {
+   "idle": true
+  },
+  {
+   "wait": 500
+  },
+  {
+   "capture": "field-3d"
+  },
+  {
+   "main": "restore-state",
+   "data": {
+    "sidebar": {
+     "width": 300,
+     "expanded": [
+      "/Meta"
+     ]
+    },
+    "tabs": {
+     "selected": 1,
+     "tabs": [
+      {
+       "type": 0,
+       "title": "",
+       "controller": null,
+       "controllerUUID": "documentation0000000000000000000",
+       "renderer": "",
+       "controlsHeight": 0
+      },
+      {
+       "type": 4,
+       "title": "Table",
+       "controller": [
+        "/Meta/Number",
+        "/Meta/AFieldWhoseNameIsMuchLongerThanTheColumnOrTheSourceListItemHasRoomFor",
+        "/Missing/Field"
+       ],
+       "controllerUUID": "table200000000000000000000000000",
+       "renderer": null,
+       "controlsHeight": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "idle": true
   },
   {
    "main": "new-satellite",

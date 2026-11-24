@@ -35,6 +35,17 @@ fn upstream(class: &str) -> String {
     rest.split_once('"').expect("its title").0.to_owned()
 }
 
+/// The `title` of `div.title-bar-menu`'s button `label`.
+fn title_bar_menu(label: &str) -> String {
+    let file = vectors::workspace_root().join("reference/AdvantageScope/www/hub.html");
+    let html = std::fs::read_to_string(file).expect("hub.html");
+    let (before, _) = html
+        .split_once(&format!("\">{label}</button>"))
+        .expect("the button");
+    let (_, title) = before.rsplit_once("<button title=\"").expect("its title");
+    title.to_owned()
+}
+
 impl Page<'_> {
     fn titles(&mut self) -> Vec<(String, Bounds<Pixels>)> {
         let window = self.window.into();
@@ -100,6 +111,13 @@ impl Page<'_> {
 
 fn states(headless: &mut HeadlessCapture) {
     let mut page = Page::open(headless, 1.0);
+    for menu in ["App", "File", "View", "Tabs", "Window", "Help"] {
+        let shown = page
+            .titles()
+            .iter()
+            .any(|(t, _)| *t == title_bar_menu(menu));
+        assert_eq!(shown, !cfg!(target_os = "macos"), "{menu}");
+    }
     page.shows(
         &["play", "close", "popup", "add-tab"],
         &["pause", "lock", "unlock"],
