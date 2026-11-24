@@ -751,9 +751,29 @@ app.whenReady().then(() => {
   );
 });
 
+// Upstream's alpha expires on 2027-01-09, after which every hub opens a dialog. Only that date
+// moves, not main's clock: the clock is in what runs record, like the save dialogs' file names.
+function requireMain() {
+  const RealDate = Date;
+  let moved = 0;
+  globalThis.Date = new Proxy(RealDate, {
+    construct(target, args, newTarget) {
+      const expiration = String(args) === "2027,0,9";
+      if (expiration) moved++;
+      return Reflect.construct(target, expiration ? [8.64e15] : args, newTarget);
+    }
+  });
+  try {
+    createRequire(import.meta.url)(path.join(__UPSTREAM_DIR__, "bundles", "main.js"));
+  } finally {
+    globalThis.Date = RealDate;
+  }
+  if (moved !== 1) fail(`upstream's main built its expiration date ${moved} times, expected once`);
+}
+
 scriptDialogs();
 if (scenario.page === "app") {
-  createRequire(import.meta.url)(path.join(__UPSTREAM_DIR__, "bundles", "main.js"));
+  requireMain();
 } else {
   app.on("window-all-closed", () => {});
 }

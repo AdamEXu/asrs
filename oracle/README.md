@@ -1323,7 +1323,9 @@ size, ignore the real pointer, and never open DevTools; `fetch` and `net.fetch` 
 process and non-loopback HTTP and WebSocket requests from pages are refused (the refused URLs
 are in `run.json`); every `dialog` call is answered from the scenario's `dialog` actions, and an
 unscripted one fails the run; `prefs.json` is the scenario's `prefs` plus its theme, and
-`beta-2027.json` marks the beta welcome and survey done.
+`beta-2027.json` marks the beta welcome and survey done. Upstream's alpha expiration
+(`betaConfig.ts`, 2027-01-09) is moved to the end of time while `main.js` loads, so hubs do not
+open the expired dialog; the main process's clock is the real one.
 
 A session preload installs a tap in each page's main world before page scripts run. It records
 every canvas context, and for 3D scenarios reads each WebGL drawing buffer with `gl.readPixels`
