@@ -60,8 +60,9 @@ pub fn is_visible(window: &Window) -> Option<bool> {
     super::window::native(window).map(|native| native.is_visible())
 }
 
-pub fn framed_title_bar() -> Option<f64> {
-    Some(f64::from(super::window::titled_frame().1))
+pub fn framed_window() -> Option<(f64, f64)> {
+    let (width, height) = super::window::titled_frame();
+    Some((f64::from(width), f64::from(height)))
 }
 
 pub fn size_hints(_window: &Window, number: u32) -> Option<SizeHints> {

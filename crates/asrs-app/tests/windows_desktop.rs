@@ -91,8 +91,9 @@ app.whenReady().then(() => {
     } else if (request.op === "wheels") {
       out("wheels " + JSON.stringify(await win.webContents.executeJavaScript("window.__wheel")));
     } else if (request.op === "focus") {
+      win.setAlwaysOnTop(true);
       win.focus();
-      await wait(400);
+      await wait(600);
       out("focused");
     } else if (request.op === "close") {
       win.destroy();
@@ -845,6 +846,7 @@ app.whenReady().then(() => {
             }
             shots.push(list);
         }
+        electron.request(cx, r#"{"op":"close"}"#, "closed").await;
         for ((name, mine), (_, other)) in shots[0].iter().zip(&shots[1]) {
             let compared = pixel::compare(mine, other, [0, 0, 0]);
             let (width, height) = (mine.width as usize, mine.height as usize);
@@ -904,7 +906,6 @@ app.whenReady().then(() => {
         sleep(cx, 1500).await;
         let closed = cx.update(|cx| Windows::handle(cx, id).is_none());
         report.check("the close button closes", closed, "");
-        electron.request(cx, r#"{"op":"close"}"#, "closed").await;
         let _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -987,10 +988,23 @@ app.whenReady().then(() => {
                 .zip(scenario.data.chunks(4))
                 .filter(|(a, b)| a != b)
                 .count();
+            let pair = |i: usize| {
+                (
+                    own.data[i..i + 4].to_vec(),
+                    scenario.data[i..i + 4].to_vec(),
+                )
+            };
+            let first = (0..own.data.len().min(scenario.data.len()))
+                .step_by(4)
+                .find(|i| own.data[*i..i + 4] != scenario.data[*i..i + 4])
+                .map(|i| (i / 4, pair(i)));
             report.check(
                 &format!("the hub's own window at {scale}x equals the scenario's capture"),
                 same_size && differing == 0,
-                format!("{}x{}, {differing} px differ", own.width, own.height),
+                format!(
+                    "{}x{}, {differing} px differ, first {first:?}",
+                    own.width, own.height
+                ),
             );
         }
         let _ = std::fs::remove_dir_all(&out);

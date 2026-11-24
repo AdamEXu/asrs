@@ -1227,7 +1227,7 @@ impl Variant<'_> {
                 self.headless.context().update(|cx| {
                     let id = Windows::adopt_hub(cx, window.into(), screen.window);
                     cx.set_global(ScriptedFrame {
-                        title_bar: platform::probe::framed_title_bar().unwrap_or(0.0),
+                        size: platform::probe::framed_window().unwrap_or((0.0, 0.0)),
                     });
                     cx.global_mut::<MainProcess>()
                         .adopt_hub(id, hub.downgrade());

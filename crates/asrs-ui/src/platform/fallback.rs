@@ -289,7 +289,7 @@ pub(super) mod probe {
         None
     }
 
-    pub fn framed_title_bar() -> Option<f64> {
+    pub fn framed_window() -> Option<(f64, f64)> {
         None
     }
 

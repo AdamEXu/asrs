@@ -11,22 +11,25 @@ type Size = (f64, f64);
 /// `INT_MAX`, which Electron puts in for a maximum size dimension that is not given.
 const UNBOUNDED: f64 = i32::MAX as f64;
 
-/// How much taller a framed window's bounds are than its content, where that is not the
-/// platform's own to say.
-fn scripted_frame(options: &WindowOptions, cx: &App) -> f64 {
+/// How much larger a framed window's bounds are than its content, where that is not the platform's
+/// own to say.
+fn scripted_frame(options: &WindowOptions, cx: &App) -> Size {
     #[cfg(feature = "parity")]
     if options.kind == WindowKind::Satellite
         && let Some(frame) = cx.try_global::<super::ScriptedFrame>()
     {
-        return frame.title_bar;
+        return frame.size;
     }
     let _ = (options, cx);
-    0.0
+    (0.0, 0.0)
 }
 
 fn gpui_options(options: &WindowOptions, show: bool, cx: &App) -> asrs_ui::gpui::WindowOptions {
-    let height = options.height - scripted_frame(options, cx);
-    let content = size(px(options.width as f32), px(height as f32));
+    let frame = scripted_frame(options, cx);
+    let content = size(
+        px((options.width - frame.0) as f32),
+        px((options.height - frame.1) as f32),
+    );
     let bounds = match origin(options, cx) {
         Some((x, y)) => Bounds::new(point(px(x as f32), px(y as f32)), content),
         None => Bounds::centered(None, content, cx),
@@ -115,7 +118,7 @@ fn bounds(window: &Window) -> Rect {
 
 fn track<V: Render>(
     id: WindowId,
-    frame: f64,
+    frame: Size,
     window: &mut Window,
     entity: &Entity<V>,
     cx: &mut App,
@@ -123,7 +126,8 @@ fn track<V: Render>(
     let bounds = move |window: &Window| {
         let content = bounds(window);
         Rect {
-            height: content.height + frame,
+            width: content.width + frame.0,
+            height: content.height + frame.1,
             ..content
         }
     };

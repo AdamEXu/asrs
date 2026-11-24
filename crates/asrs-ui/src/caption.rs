@@ -198,8 +198,17 @@ fn listen(pointer: Entity<Pointer>, boxes: [Bounds<Pixels>; 3], window: &mut Win
                 cx.notify();
             });
         }
+        if moved.read(cx).pressed.is_none() {
+            return;
+        }
         // A pressed button has the pointer, as under Chromium, and the page sees nothing of it.
-        if moved.read(cx).pressed.is_some() {
+        // Outside the buttons the event says whether it was released where no window saw it.
+        if over.is_none() && event.pressed_button.is_none() {
+            moved.update(cx, |pointer, cx| {
+                pointer.pressed = None;
+                cx.notify();
+            });
+        } else {
             cx.stop_propagation();
         }
     });
@@ -230,7 +239,7 @@ pub fn caption_buttons(dark: bool, window: &mut Window, cx: &mut App) -> AnyElem
     let pointer = window.use_keyed_state("caption-buttons", cx, |_, _| Pointer::default());
     let hovered = window.is_window_hovered();
     pointer.update(cx, |pointer, _| {
-        if pointer.in_window && !hovered {
+        if pointer.in_window && !hovered && pointer.pressed.is_none() {
             pointer.over = None;
         }
         pointer.in_window = hovered;

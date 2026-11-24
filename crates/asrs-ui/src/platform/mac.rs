@@ -1297,7 +1297,7 @@ pub(super) mod probe {
         Some((frame.width, frame.height))
     }
 
-    pub fn framed_title_bar() -> Option<f64> {
+    pub fn framed_window() -> Option<(f64, f64)> {
         let mtm = MainThreadMarker::new()?;
         let style = objc2_app_kit::NSWindowStyleMask::Titled
             | objc2_app_kit::NSWindowStyleMask::Closable
@@ -1308,7 +1308,7 @@ pub(super) mod probe {
             NSSize::new(100.0, 100.0),
         );
         let frame = objc2_app_kit::NSWindow::frameRectForContentRect_styleMask(content, style, mtm);
-        Some(frame.size.height - content.size.height)
+        Some((0.0, frame.size.height - content.size.height))
     }
 
     pub fn numpad_enter_for(key_code: u16) -> Option<bool> {

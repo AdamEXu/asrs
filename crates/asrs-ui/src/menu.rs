@@ -1083,7 +1083,7 @@ fn current_os() -> OperatingSystem {
     }
 }
 
-/// The keystroke GPUI reports on Linux for `keystroke` typed on a US layout: a shifted symbol is
+/// The keystroke GPUI reports off macOS for `keystroke` typed on a US layout: a shifted symbol is
 /// that symbol without the shift.
 fn shifted_symbol(mut keystroke: Keystroke) -> Keystroke {
     const PLAIN: &str = "`1234567890-=[]\\;',./";
