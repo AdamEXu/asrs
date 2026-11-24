@@ -15,8 +15,8 @@ fn texture2d_compare(layer: u32, uv: vec2<f32>, compare: f32) -> f32 {
 fn get_shadow(layer: u32, shadow_map_size: vec2<f32>, shadow_intensity: f32, shadow_bias: f32, shadow_radius: f32, coord: vec4<f32>) -> f32 {
     var shadow = 1.0;
     var shadow_coord = coord;
-    // Metal compiles these two lines to fma(z, 1 / w, bias), which matches upstream on all but
-    // isolated pixels (#243). An exact divide or an unfused add, through opaque(), adds acne.
+    // Metal compiles these two lines to fma(z, 1 / w, bias), as it does upstream's. An exact
+    // divide or an unfused add, through opaque(), adds acne.
     shadow_coord = vec4<f32>(shadow_coord.xyz / shadow_coord.w, shadow_coord.w);
     shadow_coord.z += shadow_bias;
     let in_frustum = shadow_coord.x >= 0.0 && shadow_coord.x <= 1.0 && shadow_coord.y >= 0.0 && shadow_coord.y <= 1.0;

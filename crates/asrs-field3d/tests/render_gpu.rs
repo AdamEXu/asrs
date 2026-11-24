@@ -4,10 +4,11 @@ use std::time::Duration;
 
 use asrs_field3d::render::{
     FatLine, FrameOptions, Geometry, Line, LineBasicMaterial, LineMaterial, LineSegmentsGeometry,
-    Mesh, NodeKind, PhongMaterial, RenderThread, Renderer, Scene, build_frame,
+    Mesh, NodeKind, PhongMaterial, RenderThread, Renderer, Scene, build_frame, edge_mask,
 };
 use asrs_field3d::three::{
-    ArrayData, BufferAttribute, BufferGeometry, Color, PerspectiveCamera, Vector3, primitives,
+    ArrayData, BufferAttribute, BufferGeometry, Color, Euler, EulerOrder, PerspectiveCamera,
+    Vector3, primitives,
 };
 
 const W: u32 = 64;
@@ -60,6 +61,7 @@ fn readback_is_top_row_first_with_the_background_clear() {
         height: H,
         samples: 4,
         viewport: [f64::from(W), f64::from(H)],
+        gl_viewport: [W, H],
         shadow_map: false,
     };
     let frame = build_frame(&mut scene, &mut camera, options);
@@ -86,6 +88,7 @@ fn render_thread_delivers_the_latest_frame_and_wakes() {
         height: H,
         samples: 1,
         viewport: [f64::from(W), f64::from(H)],
+        gl_viewport: [W, H],
         shadow_map: false,
     };
     let (mut scene, mut camera) = scene_with_box_at(-1.2);
@@ -115,6 +118,7 @@ fn an_instanced_mesh_with_no_instances_draws_nothing() {
         height: H,
         samples: 4,
         viewport: [f64::from(W), f64::from(H)],
+        gl_viewport: [W, H],
         shadow_map: false,
     };
     let frame = build_frame(&mut scene, &mut camera, options);
@@ -215,4 +219,108 @@ fn an_indexed_line_strip_draws() {
     renderer.render(&frame, &mut bgra);
     let lit = (0..H).filter(|&y| pixel(&bgra, W / 2, y)[0] == 255).count();
     assert_eq!(lit, 1);
+}
+
+fn floor_with_line(z: Option<f32>) -> (Scene, PerspectiveCamera) {
+    let (mut scene, mut camera) = scene_with_box_at(100.0);
+    let root = scene.root;
+    let material = PhongMaterial {
+        color: Color::hex(0.0),
+        emissive: Color::hex(16711680.0),
+        ..PhongMaterial::new()
+    };
+    let floor = Geometry::new(primitives::plane_geometry(40.0, 40.0, 1.0, 1.0));
+    let floor = scene.add_mesh(root, Mesh::new(floor, Arc::new(material)));
+    scene.graph.object_mut(floor).set_rotation(Euler::new(
+        -std::f64::consts::FRAC_PI_2,
+        0.0,
+        0.0,
+        EulerOrder::Xyz,
+    ));
+    if let Some(z) = z {
+        let mut geometry = BufferGeometry::default();
+        geometry.set_attribute(
+            "position",
+            BufferAttribute::new(
+                ArrayData::Float32(vec![-9.0, 0.0, z, 9.0, 0.0, z]),
+                3,
+                false,
+            ),
+        );
+        scene.add(
+            root,
+            NodeKind::Line(Line {
+                geometry: Geometry::new(geometry),
+                material: Arc::new(LineBasicMaterial::new(Color::hex(16777215.0))),
+                segments: true,
+            }),
+        );
+    }
+    camera.object.position = Vector3::new(0.0, 3.0, 6.0);
+    camera.look_at(Vector3::new(0.0, 0.0, 0.0));
+    (scene, camera)
+}
+
+#[test]
+fn every_pixel_a_line_lights_on_a_coplanar_floor_is_an_edge_pixel() {
+    let Some(mut renderer) = renderer() else {
+        return;
+    };
+    let mut only_mixed = 0;
+    for samples in [1, 4] {
+        let options = FrameOptions {
+            samples,
+            ..FrameOptions::new(f64::from(W), f64::from(H), 1.0, true)
+        };
+        let mut render = |z| {
+            let (mut scene, mut camera) = floor_with_line(z);
+            let frame = build_frame(&mut scene, &mut camera, options);
+            let mut bgra = Vec::new();
+            renderer.render(&frame, &mut bgra);
+            (bgra, renderer.render_aux(&frame))
+        };
+        let (bare, _) = render(None);
+        for step in 0..32 {
+            let (bgra, mut aux) = render(Some(step as f32 / 64.0));
+            let edges = edge_mask(&aux);
+            let lit: Vec<usize> = (0..(W * H) as usize)
+                .filter(|&i| bgra[i * 4..i * 4 + 4] != bare[i * 4..i * 4 + 4])
+                .collect();
+            for &i in &lit {
+                assert!(edges[i], "{samples} samples, step {step}, pixel {i}");
+            }
+            assert!(samples > 1 || !aux.mixed.contains(&true));
+            aux.mixed.fill(false);
+            let single = edge_mask(&aux);
+            only_mixed += lit.iter().filter(|&&i| !single[i]).count();
+        }
+    }
+    assert!(only_mixed > 0);
+}
+
+#[test]
+fn a_viewport_wider_than_the_buffer_clips_its_last_column() {
+    let Some(mut renderer) = renderer() else {
+        return;
+    };
+    let (mut scene, mut camera) = scene_with_box_at(1.2);
+    let options = FrameOptions::new(f64::from(W), f64::from(H), 1.0, false);
+    let mut render = |gl_viewport| {
+        let frame = build_frame(
+            &mut scene,
+            &mut camera,
+            FrameOptions {
+                gl_viewport,
+                ..options
+            },
+        );
+        let mut bgra = Vec::new();
+        renderer.render(&frame, &mut bgra);
+        bgra
+    };
+    let exact = render([W, H]);
+    let wide = render([2 * W, H]);
+    assert_eq!(pixel(&exact, W / 2, H / 4), [0, 0, 0xff, 0xff]);
+    assert_eq!(pixel(&wide, W / 2, H / 4), [0x22, 0x22, 0x22, 0xff]);
+    assert_eq!(pixel(&wide, W - 1, H / 4), [0, 0, 0xff, 0xff]);
 }

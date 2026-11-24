@@ -21,12 +21,8 @@ commands:
   run [<scene>...]    render with the port (example field3d_scenes) into port/ and apply gate 4:
                       SSIM >= 0.995, interior pixels (over 2 px from an edge of the port's id and
                       depth buffers) within 2 levels and at most 0.05 % differing, at most 1 %
-                      of all pixels differing; in every scene no blob of over 4 px (edge zone
-                      included) more than 32 levels off. Cinematic scenes (\"shadows\": true)
-                      are judged by a temporary exception (#243): the standard rule with the
-                      interior clauses replaced by at most 0.2 % differing and no blob of over
-                      2 px more than 2 levels off, plus mean CIEDE2000 <= 1.5; the standard
-                      rule is reported too. Shadow maps must be equal texel for texel, and line
+                      of all pixels differing, no blob of over 4 px (edge zone included) more
+                      than 32 levels off. Shadow maps must be equal texel for texel, and line
                       widths at the scene's widthProbes within 0.05 px
   bench [<args>...]   frame-time benchmark of the render thread (example field3d_bench)";
 
@@ -246,18 +242,8 @@ fn run_port(paths: &Paths, wanted: &[String]) -> Result {
     let mut rows = Vec::new();
     let mut failed = Vec::new();
     eprintln!(
-        "{:<26} {:>8} {:>9} {:>6} {:>10} {:>6} {:>7} {:>5} {:>5} | {:>8} {:>9} | result",
-        "capture",
-        "ssim",
-        "differ %",
-        "imax",
-        "idiffer %",
-        "max",
-        "dE00",
-        "blob",
-        "iblob",
-        "standard",
-        "cinematic"
+        "{:<26} {:>8} {:>9} {:>6} {:>10} {:>6} {:>7} {:>5} | result",
+        "capture", "ssim", "differ %", "imax", "idiffer %", "max", "dE00", "blob"
     );
     for name in scene_names(paths, wanted)? {
         let cinematic = is_cinematic(paths, &name)?;
@@ -317,10 +303,9 @@ fn run_port(paths: &Paths, wanted: &[String]) -> Result {
                 let ours = pixel::read_png(&port.join(format!("{capture}.png")))?;
                 let g = pixel3d::gate4(&reference, &ours, &edges)
                     .map_err(|e| format!("{capture}: {e}"))?;
-                let mut pass = if cinematic { g.cinematic_pass } else { g.pass };
-                let verdict = |p: bool| if p { "pass" } else { "fail" };
+                let mut pass = g.pass;
                 eprintln!(
-                    "{capture:<26} {:>8.5} {:>9.3} {:>6} {:>10.4} {:>6} {:>7.4} {:>5} {:>5} | {:>8} {:>9} | {}",
+                    "{capture:<26} {:>8.5} {:>9.3} {:>6} {:>10.4} {:>6} {:>7.4} {:>5} | {}",
                     g.ssim,
                     g.differing_pct,
                     g.interior_max_delta,
@@ -328,18 +313,7 @@ fn run_port(paths: &Paths, wanted: &[String]) -> Result {
                     g.max_delta,
                     g.mean_delta_e,
                     g.outlier_blob,
-                    g.interior_blob,
-                    verdict(g.pass),
-                    verdict(g.cinematic_pass),
-                    if pass {
-                        if cinematic {
-                            "pass (cinematic exception, #243)"
-                        } else {
-                            "pass"
-                        }
-                    } else {
-                        "FAIL"
-                    }
+                    if pass { "pass" } else { "FAIL" }
                 );
                 let background = if theme == "dark" {
                     [34.0; 3]
@@ -406,10 +380,7 @@ fn run_port(paths: &Paths, wanted: &[String]) -> Result {
                     ("maxDelta", Json::Number(f64::from(g.max_delta))),
                     ("meanDeltaE00", Json::Number(g.mean_delta_e)),
                     ("outlierBlob", Json::Number(g.outlier_blob as f64)),
-                    ("interiorBlob", Json::Number(g.interior_blob as f64)),
                     ("cinematic", Json::Bool(cinematic)),
-                    ("standardRulePass", Json::Bool(g.pass)),
-                    ("cinematicRulePass", Json::Bool(g.cinematic_pass)),
                     ("pass", Json::Bool(pass)),
                 ]));
             }

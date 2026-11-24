@@ -652,17 +652,12 @@ fn gl(reference: &Capture, port: &Capture, out: &mut Outcome) {
         };
         match pixel3d::gate4(&dump.image, &ours.image, edges) {
             Ok(g) => {
-                let pass = if dump.mode == RenderMode::Cinematic {
-                    g.cinematic_pass
-                } else {
-                    g.pass
-                };
                 out.push(
                     "4 3D",
                     what,
-                    pass,
+                    g.pass,
                     format!(
-                        "{:?}: SSIM {:.5}, {:.3} % differ, interior max {} and {:.4} % of {} px, outlier blob {}, interior blob {}, mean dE00 {:.3}",
+                        "{:?}: SSIM {:.5}, {:.3} % differ, interior max {} and {:.4} % of {} px, outlier blob {}, mean dE00 {:.3}",
                         dump.mode,
                         g.ssim,
                         g.differing_pct,
@@ -670,7 +665,6 @@ fn gl(reference: &Capture, port: &Capture, out: &mut Outcome) {
                         g.interior_differing_pct,
                         g.interior_pixels,
                         g.outlier_blob,
-                        g.interior_blob,
                         g.mean_delta_e
                     ),
                 );

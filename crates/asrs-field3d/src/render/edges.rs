@@ -7,7 +7,7 @@ const DEPTH_SECOND_DIFFERENCE: f32 = 2e-5;
 
 /// Geometry edges for the 3D pixel gate (section 2.5, gate 4): pixels whose 8-neighbourhood
 /// holds another object id (opaque or transparent layer) or a depth discontinuity within one
-/// object. The gate then treats everything within 2 px of these as edge zone.
+/// object, and pixels whose samples hold more than one id. The gate then treats everything within 2 px of these as edge zone.
 pub fn edge_mask(aux: &AuxBuffers) -> Vec<bool> {
     let (w, h) = (aux.width as usize, aux.height as usize);
     let mut edges = vec![false; w * h];
@@ -15,7 +15,7 @@ pub fn edge_mask(aux: &AuxBuffers) -> Vec<bool> {
     for y in 0..h {
         for x in 0..w {
             let i = at(x, y);
-            let mut edge = false;
+            let mut edge = aux.mixed[i];
             for dy in -1i32..=1 {
                 for dx in -1i32..=1 {
                     let (nx, ny) = (x as i32 + dx, y as i32 + dy);

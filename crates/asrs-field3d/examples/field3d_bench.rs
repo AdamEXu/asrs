@@ -196,6 +196,7 @@ fn main() -> Result<(), String> {
         height,
         samples,
         viewport: [f64::from(width), f64::from(height)],
+        gl_viewport: [width, height],
         shadow_map: cinematic,
     };
     let frame = build_frame(&mut scene, &mut camera, options);

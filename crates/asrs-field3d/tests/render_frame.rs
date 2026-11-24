@@ -12,6 +12,7 @@ const OPTIONS: FrameOptions = FrameOptions {
     height: 100,
     samples: 4,
     viewport: [200.0, 100.0],
+    gl_viewport: [200, 100],
     shadow_map: false,
 };
 
@@ -390,4 +391,24 @@ fn material_arrays_draw_one_group_per_visible_material() {
             (glass.id, Some(groups[2].start), Side::Front),
         ]
     );
+}
+
+#[test]
+fn the_gl_viewport_rounds_where_the_drawing_buffer_floors_until_a_shadow_pass_floors_it() {
+    let options = FrameOptions::new(1101.0, 649.0, 0.75, true);
+    assert_eq!((options.width, options.height), (825, 486));
+    assert_eq!(options.gl_viewport, [826, 487]);
+    let mut scene = Scene::new();
+    let frame = build_frame(&mut scene, &mut camera(), options);
+    assert_eq!(frame.options.gl_viewport, [826, 487]);
+
+    spot(&mut scene, true);
+    let frame = build_frame(&mut scene, &mut camera(), options);
+    assert_eq!(frame.options.gl_viewport, [826, 487]);
+    let options = FrameOptions {
+        shadow_map: true,
+        ..options
+    };
+    let frame = build_frame(&mut scene, &mut camera(), options);
+    assert_eq!(frame.options.gl_viewport, [825, 486]);
 }
