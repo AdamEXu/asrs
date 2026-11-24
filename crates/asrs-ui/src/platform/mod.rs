@@ -19,6 +19,7 @@ pub mod dialog;
 #[cfg(not(target_os = "linux"))]
 pub mod parent;
 pub mod probe;
+mod startup_error;
 
 use std::path::Path;
 
@@ -166,6 +167,11 @@ pub fn add_recent_document(cx: &mut App, path: &Path) {
     }
     let _ = cx;
     imp::add_recent_document(path);
+}
+
+/// Shows an error in a native box and waits for it to close. Only before the app runs.
+pub fn show_startup_error(title: &str, detail: &str) {
+    startup_error::show(title, detail);
 }
 
 /// Installs the process-wide hooks (the raw wheel monitor on macOS). Idempotent.

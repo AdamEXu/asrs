@@ -522,7 +522,7 @@ fn release_artifacts(features: &[&str]) -> Result<Vec<PathBuf>> {
     Ok(files)
 }
 
-fn scan(files: &[PathBuf]) -> Result<Vec<String>> {
+pub fn scan(files: &[PathBuf]) -> Result<Vec<String>> {
     let mut found = Vec::new();
     for path in files {
         let bytes = fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
