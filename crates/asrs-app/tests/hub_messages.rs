@@ -443,6 +443,8 @@ fn the_vectors() {
     assert_eq!(config.string("op").as_deref(), Some("config"));
     assert_eq!(start.string("op").as_deref(), Some("start"));
     std::fs::write(app.prefs_path(), bytes(&value(start, "prefs"))).expect("prefs");
+    app.cx.update(MainProcess::send_all_preferences);
+    app.settle();
     let mut tally = [0; 6];
     for record in records {
         let op = record.string("op").expect("op");
