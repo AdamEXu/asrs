@@ -1,6 +1,6 @@
 //! [`RlogTransport`] over real TCP sockets on the live tokio runtime. Each socket is a task
 //! that applies Node's rules itself (held writes while connecting, `Error` then `Close` on a
-//! refused connection or a socket error, one `Close`, the idle `setTimeout`) and posts events to
+//! refused connection or a socket error, one `Close`) and posts events to
 //! the foreground side, which drains them in send order. `destroy` takes effect at once, as
 //! `socket.destroyed` does: the task is gone and nothing but the `Close` is dispatched for that
 //! socket afterwards.
@@ -14,17 +14,12 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::task::JoinHandle;
-use tokio::time::Instant;
 
 use crate::channel::{EventReceiver, EventSender, event_channel_notifying};
 use crate::net_options::{Backlog, NetOptions, Waiting};
+use crate::thrown::Thrown;
 
-use super::transport::{RlogNetEvent, RlogTransport, TcpId};
-
-enum Command {
-    Write(Vec<u8>),
-    SetTimeout(Duration),
-}
+use super::transport::{RlogNetEvent, RlogTransport, TcpId, socket_port};
 
 enum State {
     Connecting,
@@ -34,7 +29,7 @@ enum State {
 
 struct Socket {
     state: State,
-    commands: UnboundedSender<Command>,
+    writes: UnboundedSender<Vec<u8>>,
     task: JoinHandle<()>,
 }
 
@@ -100,10 +95,6 @@ impl TokioRlogTransport {
                 .sockets
                 .get(&id.0)
                 .is_some_and(|s| matches!(s.state, State::Open)),
-            RlogNetEvent::Timeout(id) => self
-                .sockets
-                .get(&id.0)
-                .is_some_and(|s| !matches!(s.state, State::Closed)),
             RlogNetEvent::Error(id) => match self.sockets.get_mut(&id.0) {
                 Some(s) if !matches!(s.state, State::Closed) => {
                     s.state = State::Closed;
@@ -176,14 +167,15 @@ async fn connect_auto_select_family(host: &str, port: u16) -> io::Result<TcpStre
 }
 
 impl RlogTransport for TokioRlogTransport {
-    fn tcp_connect(&mut self, host: &str, port: f64) -> TcpId {
+    fn tcp_connect(&mut self, host: &str, port: f64) -> Result<TcpId, Thrown> {
+        let port = socket_port(port)?;
         let id = TcpId(self.next_id);
         self.next_id += 1;
-        let (commands, rx) = unbounded_channel();
+        let (writes, rx) = unbounded_channel();
         let events = self.events_tx.clone();
         // Node connects to `localhost` when `host` is empty.
         let host = if host.is_empty() { "localhost" } else { host };
-        let (host, port) = self.options.dial(host, port as u16);
+        let (host, port) = self.options.dial(host, port);
         let task = self
             .options
             .handle
@@ -192,18 +184,18 @@ impl RlogTransport for TokioRlogTransport {
             id.0,
             Socket {
                 state: State::Connecting,
-                commands,
+                writes,
                 task,
             },
         );
-        id
+        Ok(id)
     }
 
     fn tcp_write(&mut self, id: TcpId, data: &[u8]) {
         if let Some(s) = self.sockets.get(&id.0)
             && !matches!(s.state, State::Closed)
         {
-            let _ = s.commands.send(Command::Write(data.to_vec()));
+            let _ = s.writes.send(data.to_vec());
         }
     }
 
@@ -216,47 +208,13 @@ impl RlogTransport for TokioRlogTransport {
             let _ = self.events_tx.send(RlogNetEvent::Close(id).into());
         }
     }
-
-    fn tcp_set_timeout(&mut self, id: TcpId, ms: f64) {
-        if let Some(s) = self.sockets.get(&id.0)
-            && !matches!(s.state, State::Closed)
-        {
-            let _ = s
-                .commands
-                .send(Command::SetTimeout(Duration::from_secs_f64(ms / 1000.0)));
-        }
-    }
-}
-
-struct Idle {
-    ms: Option<Duration>,
-    deadline: Option<Instant>,
-    /// The `once` listener registered by `setTimeout`: consumed by the first fire after
-    /// each `SetTimeout` command.
-    pending_report: bool,
-}
-
-impl Idle {
-    fn arm(&mut self) {
-        if self.ms.is_some() {
-            self.deadline = self.ms.map(|ms| Instant::now() + ms);
-        }
-    }
-
-    async fn fire(&mut self) {
-        match self.deadline {
-            Some(at) => tokio::time::sleep_until(at).await,
-            None => std::future::pending().await,
-        }
-        self.deadline = None;
-    }
 }
 
 async fn run_socket(
     id: TcpId,
     host: String,
     port: u16,
-    mut commands: UnboundedReceiver<Command>,
+    mut writes: UnboundedReceiver<Vec<u8>>,
     events: EventSender<Event>,
 ) {
     let close = |events: &EventSender<Event>| {
@@ -265,11 +223,6 @@ async fn run_socket(
     let fail = |events: &EventSender<Event>| {
         let _ = events.send(RlogNetEvent::Error(id).into());
         close(events);
-    };
-    let mut idle = Idle {
-        ms: None,
-        deadline: None,
-        pending_report: false,
     };
     let mut held: Vec<Vec<u8>> = Vec::new();
     let connect = connect_auto_select_family(&host, port);
@@ -280,31 +233,18 @@ async fn run_socket(
                 Ok(stream) => break stream,
                 Err(_) => return fail(&events),
             },
-            command = commands.recv() => match command {
-                Some(Command::Write(data)) => held.push(data),
-                Some(Command::SetTimeout(ms)) => {
-                    idle.ms = Some(ms);
-                    idle.pending_report = true;
-                    idle.deadline = Some(Instant::now() + ms);
-                }
+            data = writes.recv() => match data {
+                Some(data) => held.push(data),
                 None => return close(&events),
             },
-            _ = idle.fire() => {
-                if idle.pending_report {
-                    idle.pending_report = false;
-                    let _ = events.send(RlogNetEvent::Timeout(id).into());
-                }
-            }
         }
     };
     let _ = stream.set_nodelay(true);
     let _ = events.send(RlogNetEvent::Connect(id).into());
-    idle.arm();
     for data in held {
         if stream.write_all(&data).await.is_err() {
             return fail(&events);
         }
-        idle.arm();
     }
     let backlog = Backlog::new();
     let mut buf = vec![0u8; 65536];
@@ -314,7 +254,6 @@ async fn run_socket(
                 Ok(0) => return close(&events),
                 Err(_) => return fail(&events),
                 Ok(n) => {
-                    idle.arm();
                     let waiting = backlog.reserve(n).await;
                     let _ = events.send(Event {
                         event: RlogNetEvent::Data(id, buf[..n].to_vec()),
@@ -322,26 +261,14 @@ async fn run_socket(
                     });
                 }
             },
-            command = commands.recv() => match command {
-                Some(Command::Write(data)) => {
+            data = writes.recv() => match data {
+                Some(data) => {
                     if stream.write_all(&data).await.is_err() {
                         return fail(&events);
                     }
-                    idle.arm();
-                }
-                Some(Command::SetTimeout(ms)) => {
-                    idle.ms = Some(ms);
-                    idle.pending_report = true;
-                    idle.deadline = Some(Instant::now() + ms);
                 }
                 None => return close(&events),
             },
-            _ = idle.fire() => {
-                if idle.pending_report {
-                    idle.pending_report = false;
-                    let _ = events.send(RlogNetEvent::Timeout(id).into());
-                }
-            }
         }
     }
 }
