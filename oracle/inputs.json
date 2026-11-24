@@ -602,6 +602,12 @@
     "src/genThree.ts",
     "src/shims.ts"
   ],
+  "genTimeZoneRules": [
+    "src/environment.ts",
+    "src/genTimeZoneRules.ts",
+    "src/shims.ts",
+    "src/timeZoneNames.json"
+  ],
   "genTimer": [
     "src/cve1.ts",
     "src/environment.ts",

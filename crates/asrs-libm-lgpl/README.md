@@ -38,24 +38,43 @@ exports.
 ## Replacing or relinking it
 
 From a source checkout of asrs, edit `crates/asrs-libm-lgpl/src`. Development builds
-(`cargo build`, `cargo test`) recompile the library from it automatically. For a release
-directory made by `cargo xtask bundle`, rebuild just the library into it:
+(`cargo build`, `cargo test`) recompile the library from it automatically. For a package, rebuild
+just the library into the directory holding the asrs executable:
 
 ```sh
-cargo xtask libm --release --out target/bundle/host   # or the directory holding asrs
+cargo xtask libm --release --out <directory holding asrs>
 ```
 
-From a release, the bundle contains this crate's source in `asrs-libm-lgpl/` with a
-standalone `Cargo.toml`:
+Every package contains this crate's source in `asrs-libm-lgpl/` with a standalone `Cargo.toml`:
+
+| Package | Executable and library | Source |
+|---|---|---|
+| macOS | `asrs.app/Contents/MacOS/` | `asrs.app/Contents/Resources/asrs-libm-lgpl/` |
+| Windows | the install folder | `asrs-libm-lgpl\` in it |
+| Linux tarball | the unpacked folder | `asrs-libm-lgpl/` in it |
+| AppImage | `usr/lib/asrs/` after `--appimage-extract` | `usr/lib/asrs/asrs-libm-lgpl/` |
 
 ```sh
-cd asrs-libm-lgpl
+cp -R <source> asrs-libm-lgpl && cd asrs-libm-lgpl
 cargo build --release
-cp target/release/libasrs_libm_lgpl.dylib <directory containing asrs>
-# Linux: libasrs_libm_lgpl.so; Windows: asrs_libm_lgpl.dll next to asrs.exe
+cp target/release/libasrs_libm_lgpl.dylib <directory holding asrs>
+# Linux: libasrs_libm_lgpl.so; Windows: asrs_libm_lgpl.dll
 ```
 
-Instead of copying, `ASRS_LIBM_LGPL=/path/to/library asrs` runs asrs with the
-library at that path. `cargo xtask libm plant` builds a copy with one table entry changed
-and checks that asrs's math tests catch it, which shows the tests run whichever library is
-loaded.
+Instead of copying, `ASRS_LIBM_LGPL=/path/to/library asrs` runs asrs with the library at that
+path. An AppImage cannot be changed in place, so use the variable or the extracted folder.
+
+On macOS the app is signed so that it loads a library of any signature. Cargo signs the library it
+builds ad hoc; another linker's output needs `codesign --force --sign - <library>`. Replacing the
+library in the bundle breaks the bundle's own seal, which macOS checks when it first opens a
+downloaded app. Sign the bundle again after replacing it (with the entitlements, or asrs is
+killed when it reads a match timer):
+
+```sh
+codesign --display --xml --entitlements asrs.plist asrs.app
+codesign --force --sign - --options runtime --entitlements asrs.plist asrs.app
+```
+
+`cargo xtask smoke` follows these steps for each package. `cargo xtask libm plant` builds a copy
+with one table entry changed and checks that asrs's math tests catch it, which shows the tests run
+whichever library is loaded.

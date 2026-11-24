@@ -25,6 +25,7 @@ mod parity;
 mod pixel;
 mod public;
 mod sessions;
+mod smoke;
 mod tables;
 mod text;
 mod ui;
@@ -45,7 +46,8 @@ commands:
   assets    copy upstream assets into assets/
   docs      build upstream's embedded documentation into target/docs/build (see `cargo xtask docs help`)
   licenses  third-party license bundle for releases into target/licenses (needs cargo-about)
-  bundle    release directory: app, LGPL sin/cos library, license bundle (see `cargo xtask bundle help`)
+  bundle    release packages: app, LGPL sin/cos library, license bundle (see `cargo xtask bundle help`)
+  smoke     check the release packages: install, start, OCR, library swap (see `cargo xtask smoke help`)
   libm      build or plant-test the LGPL sin/cos library asrs loads at runtime (see `cargo xtask libm help`)
   oracle    parity oracle: setup, gen, fn, smoke (see `cargo xtask oracle`)
   corpus    test corpora: gen, list, fuzz, fetch (see `cargo xtask corpus`)
@@ -72,6 +74,7 @@ fn main() -> ExitCode {
         Some("docs") => docs::run(&args[1..]),
         Some("licenses") => licenses::run(),
         Some("bundle") => bundle::run(&args[1..]),
+        Some("smoke") => smoke::run(&args[1..]),
         Some("libm") => libm::run(&args[1..]),
         Some("oracle") => oracle::run(&args[1..]),
         Some("corpus") => corpus::run(&args[1..]),
