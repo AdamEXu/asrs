@@ -113,6 +113,11 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "spin_buttons"
+harness = false
+required-features = ["parity"]
+
+[[test]]
 name = "tooltips"
 harness = false
 required-features = ["parity"]

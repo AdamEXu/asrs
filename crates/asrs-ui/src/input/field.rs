@@ -389,6 +389,12 @@ impl<M: FieldModel> TextField<M> {
         });
     }
 
+    /// The selected text of its editor.
+    pub fn selected_text(&self, cx: &App) -> String {
+        let editor = self.editor.read(cx);
+        editor.value()[editor.selected_range()].to_owned()
+    }
+
     pub fn focus(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.editor
             .update(cx, |editor, cx| editor.focus(window, cx));

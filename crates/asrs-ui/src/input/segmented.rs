@@ -12,7 +12,7 @@ use crate::input::style::{
 };
 use crate::text::{Align, FontSpec, LineHeight, Text, TextStyle};
 use crate::theme::{Appearance, chains};
-use crate::tooltip::titled;
+use crate::tooltip::{titled, untitled};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Segment {
@@ -188,7 +188,7 @@ impl RenderOnce for SegmentedControl {
                     font_style.line_height = LineHeight::Number(1.0);
                     let text_top = by + (badge - 11.0 * scale) / 2.0;
                     let snapped = text_top.round();
-                    div()
+                    let badge = div()
                         .absolute()
                         .left(px(bx.round() / scale))
                         .top(px(by.round() / scale))
@@ -211,7 +211,8 @@ impl RenderOnce for SegmentedControl {
                                         .w(px(SPLIT_BADGE)),
                                 ),
                         )
-                        .into_any_element()
+                        .into_any_element();
+                    untitled(badge).into_any_element()
                 }
                 Segment::Icon(source) => {
                     let lu = |v: f32| (f64::from(v) * 64.0) as i64 as f64 / 64.0;
@@ -239,7 +240,7 @@ impl RenderOnce for SegmentedControl {
                     } else {
                         ""
                     };
-                    canvas(
+                    let icon = canvas(
                         |_, _, _| {},
                         move |bounds, _, window, cx| {
                             let dpr = f64::from(window.scale_factor());
@@ -257,8 +258,20 @@ impl RenderOnce for SegmentedControl {
                         },
                     )
                     .absolute()
-                    .inset_0()
-                    .into_any_element()
+                    .inset_0();
+                    let [x, y] = [(cw - iw as f32) / 2.0, (ch - ih as f32) / 2.0];
+                    let image = div()
+                        .absolute()
+                        .left(px(x / scale))
+                        .top(px(y / scale))
+                        .w(px(iw as f32 / scale))
+                        .h(px(ih as f32 / scale));
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .child(icon)
+                        .child(untitled(image))
+                        .into_any_element()
                 }
             };
             let hovered = state.clone();

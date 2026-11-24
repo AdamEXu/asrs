@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fs;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -34,8 +34,8 @@ display.icc beside the captures; `normalize` converts those to sRGB.
                   macOS, swiftshader elsewhere)
   tooltips [<scenario>...]
                   (macOS) the tooltips upstream gives AppKit at each capture of the scenarios
-                  that have a reference in parity/tooltips, or of the named ones, into
-                  parity/tooltips/<scenario>.json, with the generated logs in
+                  that have a reference in parity/tooltips, or of the named ones, where they
+                  differ from the captures before, into parity/tooltips/<scenario>.json, with the generated logs in
                   parity/tooltips/inputs
   compare <dir> <dir>
                   two run labels or directories: window captures equal outside the recorded
@@ -426,6 +426,7 @@ fn tooltips(paths: &Paths, names: &[String]) -> Result {
         };
         launch(paths, &scenario, &variant, &out)?;
         let mut captures = Vec::new();
+        let mut seen = HashSet::new();
         let dir = out.join("captures");
         for action in read_json(&scenario.file)?
             .get("actions")
@@ -441,6 +442,9 @@ fn tooltips(paths: &Paths, names: &[String]) -> Result {
                 continue;
             }
             let text = fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+            if !seen.insert(text.clone()) {
+                continue;
+            }
             captures.push(format!(
                 "{}:{}",
                 Json::string(&name).to_compact(),

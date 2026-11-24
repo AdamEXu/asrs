@@ -28,7 +28,6 @@ impl Variant<'_> {
             modifiers: Default::default(),
         }))?;
         self.draw()?;
-        self.draw()?;
         self.given()
     }
 

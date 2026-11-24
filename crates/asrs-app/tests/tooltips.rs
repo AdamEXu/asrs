@@ -176,6 +176,7 @@ fn main() {
             "--theme",
             "light",
             "--tooltips",
+            file.to_str().unwrap(),
         ]
         .map(str::to_owned)
         .to_vec();

@@ -138,54 +138,6 @@
     ]
    },
    {
-    "name": "limits",
-    "markup": "<input type=\"number\" style=\"width:200px\" value=\"1\" min=\"0\" max=\"2\">",
-    "ops": [
-     [
-      "move",
-      "up"
-     ],
-     [
-      "move",
-      "up"
-     ],
-     [
-      "press"
-     ],
-     [
-      "release"
-     ],
-     [
-      "press"
-     ],
-     [
-      "release"
-     ],
-     [
-      "move",
-      "down"
-     ],
-     [
-      "press"
-     ],
-     [
-      "release"
-     ],
-     [
-      "press"
-     ],
-     [
-      "release"
-     ],
-     [
-      "press"
-     ],
-     [
-      "release"
-     ]
-    ]
-   },
-   {
     "name": "hold-up",
     "markup": "<input type=\"number\" style=\"width:200px\" value=\"0\">",
     "ops": [

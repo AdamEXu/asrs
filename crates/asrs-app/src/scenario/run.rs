@@ -56,7 +56,7 @@ use crate::windows::{self, ScriptedFrame, WindowId, WindowKind, Windows};
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 [--scale 1|2]... [--theme light|dark]... [--inputs <dir>] [--probes <probes.json>] \
 [--bundled-assets <dir>] [--licenses <file>] [--work-area [<scale>:]<x>,<y>]... [--robot <port>] \
-[--tooltips]
+[--tooltips <reference>]
 
 --inputs holds the logs `app:<name>` opens (<name>.wpilog, as the Electron driver writes them
 under inputs/); --probes defaults to probes.json beside the scenario directory;
@@ -65,8 +65,8 @@ automatic folders of each variant's userData/; --licenses is the licenses.json t
 lists; --work-area is the primary display's work area origin on the Electron driver's host, which
 places its window 16 px inside it (default 0,0), at one scale or at every scale;
 --robot is where the scenario's robot listens on 127.0.0.1;
---tooltips writes the tooltips at each capture (<name>.tooltips.json), as the Electron driver does,
-in place of the capture.";
+--tooltips writes the tooltips (<name>.tooltips.json) at each capture the reference has, as the
+Electron driver does, and captures nothing else.";
 
 /// A tick of the page: one animation frame and this much executor time, which the page's `Date`
 /// and its scroll sensors' frame clock both run on.
@@ -158,7 +158,7 @@ struct Options {
     licenses: Option<PathBuf>,
     work_areas: Vec<(Option<u32>, (f64, f64))>,
     robot: Option<u16>,
-    tooltips: bool,
+    tooltips: Option<PathBuf>,
 }
 
 fn options(args: &[String]) -> Result<Options, String> {
@@ -166,7 +166,7 @@ fn options(args: &[String]) -> Result<Options, String> {
     let (mut bundled_assets, mut licenses) = (None, None);
     let mut work_areas = Vec::new();
     let mut robot = None;
-    let mut tooltips = false;
+    let mut tooltips = None;
     let (mut scales, mut themes) = (Vec::new(), Vec::new());
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -181,7 +181,7 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--bundled-assets" => bundled_assets = Some(PathBuf::from(value()?)),
             "--licenses" => licenses = Some(PathBuf::from(value()?)),
             "--robot" => robot = Some(value()?.parse().map_err(|_| "--robot is a port")?),
-            "--tooltips" => tooltips = true,
+            "--tooltips" => tooltips = Some(PathBuf::from(value()?)),
             "--work-area" => {
                 let text = value()?;
                 let (scale, at) = match text.split_once(':') {
@@ -273,6 +273,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
         None if scenario.robot => return Err(format!("{name} needs --robot")),
         None => {}
     }
+    let tooltips = match &options.tooltips {
+        Some(file) => Some(capture_names(file)?),
+        None => None,
+    };
     for &scale in &scenario.scales {
         if !options.scales.is_empty() && !options.scales.contains(&scale) {
             continue;
@@ -306,7 +310,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 exceptions: Rc::default(),
                 pressed: None,
                 pointer: (0.0, 0.0),
-                tooltips: options.tooltips,
+                tooltips: tooltips.as_deref(),
             };
             variant
                 .run()
@@ -314,6 +318,18 @@ pub fn run(args: &[String]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// The captures of a tooltip reference.
+fn capture_names(file: &Path) -> Result<Vec<String>, String> {
+    let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let reference =
+        asrs_js::json::parse_str(&text).map_err(|e| format!("{}: {e:?}", file.display()))?;
+    let captures = reference.as_object().ok_or("the reference is no object")?;
+    Ok(captures
+        .iter()
+        .map(|(name, _)| name.to_string_lossy())
+        .collect())
 }
 
 /// The `save-state` messages the hub has sent main.
@@ -346,8 +362,8 @@ struct Variant<'a> {
     /// The button a `mouse down` left pressed, which moves carry until `mouse up`.
     pressed: Option<MouseButton>,
     pointer: (f64, f64),
-    /// Whether captures record the tooltips.
-    tooltips: bool,
+    /// The captures that record the tooltips, where none is taken.
+    tooltips: Option<&'a [String]>,
 }
 
 /// `{...scenario.prefs, theme}`, the `prefs.json` the Electron driver seeds.
@@ -1073,8 +1089,10 @@ impl Variant<'_> {
                 probes,
                 masks,
             } => {
-                if self.tooltips {
-                    self.capture_tooltips(name)?;
+                if let Some(names) = self.tooltips {
+                    if names.contains(name) {
+                        self.capture_tooltips(name)?;
+                    }
                 } else {
                     self.capture(name, probes, masks)?;
                 }
