@@ -2,12 +2,13 @@
 //! `www/renderers.css`), drawn from R11's `ConsoleView` over the boxes of [`ConsoleLayout`],
 //! which answers the renderer's and the controller's layout reads.
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::rc::Rc;
 
-use asrs_canvas::text::FontSpec;
+use asrs_canvas::text::{FontSpec, TextBackend};
 use asrs_hub::hub::{HubModel, HubPage};
 use asrs_js::string::{JsError, JsString};
 use asrs_model::tab_type::TabType;
@@ -22,18 +23,22 @@ use asrs_ui::gpui::{
 };
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, PlainText, TextField};
 use asrs_ui::parity::probed;
+use asrs_ui::selection::{Document, Hit, Place};
 use asrs_ui::text::{self, TextStyle, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 
 use super::console_layout::{
     CELL_PADDING, Cell, CellNode, ConsoleLayout, HEADER_HEIGHT, LINE_HEIGHT, TIME_WIDTH, cell_font,
-    cell_style,
+    cell_style, value_text,
 };
 use super::frame::{FrameHost, HubFrame, wheel_of};
 use super::large_table::{
     BUTTON, Grid, HandFade, HeaderPalette, hand_icon, header_cell, line_through, plain, symbol,
 };
 use super::number::FormNumber;
+use super::page_text::{
+    Owner, PageText, PlacedBlock, Selected, beside_table, device, unselectable,
+};
 
 const JUMP_INPUT: [f64; 4] = [4.0, 4.5, 64.0, 21.0];
 const JUMP_BUTTON_LEFT: f64 = 70.0;
@@ -213,6 +218,85 @@ fn report(result: Option<Result<(), JsError>>) {
     }
 }
 
+/// The rows' value cells in document order.
+struct ConsoleText<'a>(&'a [ConsoleRow]);
+
+impl Document for ConsoleText<'_> {
+    fn len(&self) -> usize {
+        self.0.len()
+    }
+
+    fn text(&self, block: usize) -> Cow<'_, str> {
+        Cow::Owned(value_text(&self.0[block]))
+    }
+
+    fn place(&self, block: usize) -> Place {
+        Place {
+            cell: true,
+            tab: true,
+            newline_after: true,
+            closed: true,
+            after_other: true,
+            // The newline and the tab around the timestamp.
+            gap: 2 + self.0[block].timestamp.len(),
+            ..Place::default()
+        }
+    }
+}
+
+struct ConsolePage<'a> {
+    doc: ConsoleText<'a>,
+    layout: &'a ConsoleLayout,
+    container: [f64; 4],
+    scale: f64,
+}
+
+impl PageText for ConsolePage<'_> {
+    fn document(&self) -> &dyn Document {
+        &self.doc
+    }
+
+    fn scroller(&self) -> [f64; 4] {
+        self.container
+    }
+
+    fn hit(&self, at @ [x, y]: [f64; 2], backend: &mut dyn TextBackend) -> Hit {
+        let [left, top, width, _] = self.container;
+        if y < top + HEADER_HEIGHT {
+            return unselectable(&self.doc, 0);
+        }
+        let below = y - top - HEADER_HEIGHT + self.layout.scroll_top();
+        let outside =
+            x < left || x >= left + width || below >= self.layout.table_height() - HEADER_HEIGHT;
+        let Some(index) = self.layout.row_at(below).filter(|_| !outside) else {
+            return beside_table(&self.doc, x, [left, width]);
+        };
+        if x < left + TIME_WIDTH {
+            return unselectable(&self.doc, index);
+        }
+        let row = &self.doc.0[index];
+        let text = value_text(row);
+        let (value, _) = self.layout.cells(index, row);
+        let block = value.block(&text, self.layout.text_box(), self.scale);
+        let origin = [
+            left + TIME_WIDTH + CELL_PADDING,
+            top + HEADER_HEIGHT + self.layout.row(index).0 - self.layout.scroll_top(),
+        ];
+        let placed = PlacedBlock {
+            index,
+            block: &block,
+            text: &text,
+            origin: origin.map(|v| device(v, self.scale)),
+            scale: self.scale,
+        };
+        let link = placed.node_at(at).and_then(|node| value.link_around(node));
+        Hit {
+            link,
+            ..placed.hit(at, backend)
+        }
+    }
+}
+
 /// What the rows are drawn with.
 struct Rows<'a> {
     layout: &'a ConsoleLayout,
@@ -222,9 +306,36 @@ struct Rows<'a> {
     container: [f64; 4],
     scroll_top: f64,
     text_box: (f64, f64),
+    selected: Option<(Selected, &'a RefCell<Box<dyn TextBackend>>)>,
 }
 
 impl Rows<'_> {
+    /// The selection's boxes in row `index`'s value cell, by line and piece.
+    fn selection(
+        &self,
+        index: usize,
+        row: &ConsoleRow,
+        cell: &Cell,
+        [left, top]: [f64; 2],
+    ) -> Vec<(usize, Option<usize>, [f64; 4])> {
+        let Some((selected, backend)) = &self.selected else {
+            return Vec::new();
+        };
+        if !(selected.range.start.block..=selected.range.end.block).contains(&index) {
+            return Vec::new();
+        }
+        let text = value_text(row);
+        let block = cell.block(&text, self.text_box, self.grid.scale);
+        let placed = PlacedBlock {
+            index,
+            block: &block,
+            text: &text,
+            origin: [left + CELL_PADDING, top].map(|v| device(v, self.grid.scale)),
+            scale: self.grid.scale,
+        };
+        placed.pieces(&selected.range, &mut **backend.borrow_mut())
+    }
+
     fn row_top(&self, index: usize) -> f64 {
         self.container[1] + HEADER_HEIGHT + self.layout.row(index).0 - self.scroll_top
     }
@@ -248,7 +359,12 @@ impl Rows<'_> {
             let under =
                 background.map_or(page, |c| over(c >> 8, f64::from(c & 0xff) / 255.0, page));
             let cell = if first { &time } else { &value };
-            layer = self.text(cell, first, [left, top, w], under, layer);
+            let selection = if first {
+                Vec::new()
+            } else {
+                self.selection(index, row, &value, [left, top])
+            };
+            layer = self.text(cell, first, [left, top, w], under, &selection, layer);
         }
         layer
     }
@@ -286,10 +402,40 @@ impl Rows<'_> {
         })
     }
 
-    fn text(&self, cell: &Cell, first: bool, at: [f64; 3], under: u32, layer: Div) -> Div {
+    fn text(
+        &self,
+        cell: &Cell,
+        first: bool,
+        at: [f64; 3],
+        under: u32,
+        selection: &[(usize, Option<usize>, [f64; 4])],
+        layer: Div,
+    ) -> Div {
         let theme = self.appearance.theme();
+        let selected = self
+            .selected
+            .as_ref()
+            .map_or(0, |(s, _)| s.colors.background);
         let mut layer = layer;
-        for (item, text, tabs, rect) in self.pieces(cell, first, at) {
+        for (_, _, rect) in selection.iter().filter(|(_, piece, _)| piece.is_none()) {
+            layer = layer.child(self.grid.place(*rect).bg(rgba(selected)));
+        }
+        let mut behind = selection.iter().filter(|(_, piece, _)| piece.is_some());
+        let mut behind_next = behind.next();
+        let counts: Vec<(usize, usize)> = cell
+            .lines
+            .iter()
+            .enumerate()
+            .flat_map(|(i, line)| (0..line.pieces.len()).map(move |p| (i, p)))
+            .collect();
+        for (at, (item, text, tabs, rect)) in counts.into_iter().zip(self.pieces(cell, first, at)) {
+            let mut selected_rect = None;
+            if let Some((line, Some(piece), rect)) = behind_next
+                && (*line, *piece) == at
+            {
+                selected_rect = Some(*rect);
+                behind_next = behind.next();
+            }
             let CellNode::Text {
                 style,
                 link,
@@ -315,6 +461,10 @@ impl Rows<'_> {
             if let Some(color) = background {
                 layer = layer.child(self.grid.place(rect).bg(rgb(blend(color))));
             }
+            if let Some(rect) = selected_rect {
+                let color = blend(selected >> 8) << 8 | selected & 0xff;
+                layer = layer.child(self.grid.place(rect).bg(rgba(color)));
+            }
             // Underlines take the colour of the box that has the decoration, outside the highlight.
             let decoration = if *link {
                 theme.link
@@ -333,7 +483,7 @@ impl Rows<'_> {
                     plain(text, cell_style(font), color).form_control(),
                     [x, line_top],
                 );
-                if style.faint && background.is_none() {
+                if style.faint && background.is_none() && selected_rect.is_none() {
                     piece = piece.opacity(FAINT as f32);
                 } else if style.faint {
                     piece = self.grid.text(
@@ -342,6 +492,15 @@ impl Rows<'_> {
                     );
                 }
                 layer = layer.child(piece);
+            }
+            if let (Some(rect), Some((selected, _)), false) = (selected_rect, &self.selected, tabs)
+            {
+                let font = cell_font(first || style.bold, style.italic);
+                let line_top = y - self.text_box.0;
+                layer = layer.children(selected.recoloured(self.grid, rect, |color| {
+                    let text = plain(text, cell_style(font), blend(color)).form_control();
+                    vec![self.grid.text(text, [x, line_top])]
+                }));
             }
             if style.underline || *link {
                 let font = cell_font(first || style.bold, style.italic);
@@ -414,6 +573,7 @@ impl<H: FrameHost> HubFrame<H> {
             self.console_hidden(left, window, cx);
         }
         self.console.tabs.retain(|key, _| live.contains(key));
+        self.text_retain(|owner| !matches!(owner, Owner::Console(key) if !live.contains(key)));
         self.console.shown = shown.as_ref().map(|(s, ..)| *s);
         let (shown, dom, layout) = shown?;
         let layout = layout?;
@@ -430,6 +590,16 @@ impl<H: FrameHost> HubFrame<H> {
         let top = layout.scroll_top() - HEADER_HEIGHT;
         let visible = layout.rows_between(top, top + rect[3]);
         let recorded = record_rows(view, &layout, shown, scale);
+        let owner = Owner::Console(shown.key);
+        let mut text = std::mem::take(&mut self.text);
+        let selected = {
+            let (_, renderer) = displayed(self.host().hub(cx))?;
+            let doc = ConsoleText(&renderer.view().rows);
+            text.selected(&owner, &doc, window, cx)
+        };
+        self.text = text;
+        let (_, renderer) = displayed(self.host().hub(cx))?;
+        let view = renderer.view();
         // Only the rows in view: a log can have many thousands.
         let view = ConsoleView {
             rows: view.rows[visible.clone()].to_vec(),
@@ -458,7 +628,9 @@ impl<H: FrameHost> HubFrame<H> {
             .top_0()
             .size_full()
             .child(hand_icon(rect, hand, dark, grid))
-            .child(self.console_table(shown, &view, visible, &layout, appearance, grid, cx))
+            .child(self.console_table(
+                shown, &view, visible, &layout, appearance, grid, selected, cx,
+            ))
             .children(recorded)
             .child(self.console_header(shown, &view, appearance, blurred, grid, window, cx));
         let drag_hidden = displayed(self.host().hub(cx))
@@ -478,6 +650,7 @@ impl<H: FrameHost> HubFrame<H> {
         layout: &ConsoleLayout,
         appearance: Appearance,
         grid: Grid,
+        selected: Option<Selected>,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
         let [x, y, width, height] = shown.container;
@@ -489,6 +662,7 @@ impl<H: FrameHost> HubFrame<H> {
             container: shown.container,
             scroll_top,
             text_box: layout.text_box(),
+            selected: selected.map(|s| (s, self.text.backend_cell())),
         };
         layout.keep_cells(&visible);
         let mut layer = div().absolute().inset_0();
@@ -697,6 +871,7 @@ fn record_rows(
                 container: shown.container,
                 scroll_top: layout.scroll_top(),
                 text_box: layout.text_box(),
+                selected: None,
             };
             let (x, width) = (shown.container[0], shown.container[2]);
             for (index, row) in rows.iter().enumerate() {
@@ -735,6 +910,33 @@ fn record_rows(
 }
 
 impl<H: FrameHost> HubFrame<H> {
+    /// The displayed console's text that can be selected.
+    pub(super) fn console_text<'a>(
+        &'a self,
+        cx: &'a App,
+    ) -> Option<(Owner, Box<dyn PageText + 'a>)> {
+        let (_, renderer) = displayed(self.host().hub(cx))?;
+        let shown = self.console.shown?;
+        let layout = renderer.geometry_ref::<ConsoleLayout>()?;
+        let page = ConsolePage {
+            doc: ConsoleText(&renderer.view().rows),
+            layout,
+            container: shown.container,
+            scale: layout.scale(),
+        };
+        Some((Owner::Console(shown.key), Box::new(page)))
+    }
+
+    /// `AutoscrollController`'s scrolling of the container.
+    pub(super) fn console_scroll_by(&mut self, [_, by]: [f64; 2]) {
+        let Some(shown) = self.console.shown else {
+            return;
+        };
+        if let Some(tab) = self.console.tabs.get(&shown.key) {
+            tab.layout.set_scroll_top(tab.layout.scroll_top() + by);
+        }
+    }
+
     fn console_fields(
         &mut self,
         shown: Shown,

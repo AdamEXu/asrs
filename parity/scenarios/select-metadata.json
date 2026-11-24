@@ -1,0 +1,599 @@
+{
+  "about": "Selecting and copying values in the Metadata tab (#292): drags across cells, into the keys and the header, which cannot be selected, and through wrapped values; double and triple clicks, Select All, and a merge, which rebuilds the table. Copies are compared as clipboard text",
+  "actions": [
+    {
+      "open": [
+        "app:metadata"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 12,
+              "title": "Meta",
+              "controller": null,
+              "controllerUUID": "metadata000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "mouse": "move",
+      "x": 480,
+      "y": 140
+    },
+    {
+      "mouse": "down",
+      "x": 480,
+      "y": 140
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 820,
+      "y": 230
+    },
+    {
+      "mouse": "up",
+      "x": 820,
+      "y": 230
+    },
+    {
+      "copy": "cells"
+    },
+    {
+      "capture": "cells"
+    },
+    {
+      "role": "selectAll"
+    },
+    {
+      "copy": "all"
+    },
+    {
+      "focus": true
+    },
+    {
+      "capture": "all-active"
+    },
+    {
+      "focus": false
+    },
+    {
+      "capture": "all"
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 200,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 200,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 201
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 201,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 201,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 480,
+      "y": 140
+    },
+    {
+      "mouse": "down",
+      "x": 480,
+      "y": 140,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 480,
+      "y": 140,
+      "clickCount": 1
+    },
+    {
+      "mouse": "down",
+      "x": 480,
+      "y": 140,
+      "clickCount": 2
+    },
+    {
+      "mouse": "up",
+      "x": 480,
+      "y": 140,
+      "clickCount": 2
+    },
+    {
+      "mouse": "down",
+      "x": 480,
+      "y": 140,
+      "clickCount": 3
+    },
+    {
+      "mouse": "up",
+      "x": 480,
+      "y": 140,
+      "clickCount": 3
+    },
+    {
+      "copy": "paragraph"
+    },
+    {
+      "capture": "paragraph"
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 200,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 200,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 201
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 201,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 201,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 850,
+      "y": 140
+    },
+    {
+      "mouse": "down",
+      "x": 850,
+      "y": 140,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 850,
+      "y": 140,
+      "clickCount": 1
+    },
+    {
+      "mouse": "down",
+      "x": 850,
+      "y": 140,
+      "clickCount": 2
+    },
+    {
+      "mouse": "up",
+      "x": 850,
+      "y": 140,
+      "clickCount": 2
+    },
+    {
+      "mouse": "down",
+      "x": 850,
+      "y": 140,
+      "clickCount": 3
+    },
+    {
+      "mouse": "up",
+      "x": 850,
+      "y": 140,
+      "clickCount": 3
+    },
+    {
+      "copy": "last-paragraph"
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 200,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 200,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 201
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 201,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 201,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 480,
+      "y": 140
+    },
+    {
+      "mouse": "down",
+      "x": 480,
+      "y": 140,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 480,
+      "y": 140,
+      "clickCount": 1
+    },
+    {
+      "mouse": "down",
+      "x": 480,
+      "y": 140,
+      "clickCount": 2
+    },
+    {
+      "mouse": "up",
+      "x": 480,
+      "y": 140,
+      "clickCount": 2
+    },
+    {
+      "copy": "word"
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 200,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 200,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 201
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 201,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 201,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 480,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 480,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 180
+    },
+    {
+      "mouse": "move",
+      "x": 350,
+      "y": 140
+    },
+    {
+      "mouse": "up",
+      "x": 350,
+      "y": 140
+    },
+    {
+      "copy": "to-key"
+    },
+    {
+      "capture": "to-key"
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 200,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 200,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 201
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 201,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 201,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 480,
+      "y": 230
+    },
+    {
+      "mouse": "down",
+      "x": 480,
+      "y": 230
+    },
+    {
+      "mouse": "move",
+      "x": 480,
+      "y": 140
+    },
+    {
+      "mouse": "move",
+      "x": 480,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 480,
+      "y": 60
+    },
+    {
+      "copy": "header"
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 200,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 200,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 201
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 201,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 201,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 170
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 170
+    },
+    {
+      "mouse": "move",
+      "x": 560,
+      "y": 500
+    },
+    {
+      "mouse": "move",
+      "x": 560,
+      "y": 645
+    },
+    {
+      "mouse": "up",
+      "x": 560,
+      "y": 645
+    },
+    {
+      "copy": "bottom"
+    },
+    {
+      "capture": "bottom"
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 200,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 200,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 201
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 201,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 201,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 480,
+      "y": 140
+    },
+    {
+      "mouse": "down",
+      "x": 480,
+      "y": 140
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 820,
+      "y": 230
+    },
+    {
+      "mouse": "up",
+      "x": 820,
+      "y": 230
+    },
+    {
+      "open": [
+        "app:metadata"
+      ],
+      "merge": true
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 21
+    },
+    {
+      "idle": true
+    },
+    {
+      "copy": "rebuilt"
+    },
+    {
+      "capture": "rebuilt"
+    }
+  ]
+}

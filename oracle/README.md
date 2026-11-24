@@ -1234,6 +1234,24 @@ slider's left edge and `["key", name]` through the DevTools protocol, `["set", p
 `["focus"]` and `["blur"]` as script. After the markup and after each op it writes `{"step", "op",
 "value", "focused", "events"}`. The specs list the main process under `inputs`.
 
+### Text selection vectors
+
+`selection/gestures` (`src/genTextSelection.ts`, with `src/genTextSelectionMain.ts` as its Electron
+main process) records what trusted pointer input selects in pages with upstream's stylesheets, one
+vector per platform because Blink's editing behaviour differs per platform. The fixture's pages are
+shaped like the Table, Console and Metadata tabs and the licenses and Help windows; `data-b`
+elements are the blocks of selectable text, `data-u` ones cannot be selected, and `data-t` names
+the positions before and after a selectable table. `blocks` says how each block stands in its
+document, for `crates/asrs-ui/tests/text_selection.rs`, which replays every operation on the port's
+model. A seeded generator picks presses, moves, releases, Shift presses, double and triple clicks,
+context menus and Select All at points of the text; each record has the selection's anchor and
+focus and what a copy leaves on the clipboard. A drag never starts on the selection: that drags
+its text out of the window.
+
+Copies go through the real clipboard. On macOS, where that would be the user's, `oracle/tools/pasteboard.m`
+is loaded into Electron and gives the process a pasteboard of its own; `cargo xtask app run` does
+the same for scenarios with a `copy` action. Linux needs the render host's X display.
+
 ### Video renderer vectors
 
 `video/renderer` (`src/genVideoRenderer.ts`, with `src/genVideoRendererMain.ts` as its Electron
@@ -1367,6 +1385,11 @@ the state the satellite saved; `null` waits until it has closed; `hub` goes back
 satellites open),
 `{"download": "listed" | text | number}` (waits until the download window shows its list and no
 alert, an alert or progress text that starts so, or that much of its progress bar),
+`{"role": "selectAll"}` (the Edit menu's Select All in the window, as `webContents.selectAll()`),
+`{"copy": name}` (the Edit menu's Copy, as `webContents.copy()`, and what that leaves on an emptied
+clipboard, written to `files/clipboard/<name>.txt`),
+`{"focus": boolean}` (whether the window's page counts as active and focused, through
+`Emulation.setFocusEmulationEnabled`; false until then),
 `{"wait": ms}`, `{"idle": true}` and
 `{"capture": name, "probes": [selectors], "masks": [selectors]}`.
 

@@ -1,4 +1,5 @@
 pub mod cache;
+pub mod caret;
 pub mod coverage;
 pub mod dom;
 pub mod flow;
@@ -99,6 +100,12 @@ pub trait TextBackend {
     }
 
     fn metrics(&mut self, font: &FontSpec) -> FontMetrics;
+
+    /// Blink's `Font::SpaceWidth` in device px: the space glyph's own advance, which shaping may
+    /// track.
+    fn space_width(&mut self, font: &FontSpec, zoom: f32) -> f32 {
+        self.shape(font, " ", zoom).width * zoom
+    }
 
     /// The metrics at zoom `zoom` of the fallback font `glyph` comes from, or `None` for a glyph
     /// of a primary font.
