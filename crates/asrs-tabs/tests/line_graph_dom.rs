@@ -81,7 +81,7 @@ use asrs_model::source_list::{
     SourceListDom, TypePrompt,
 };
 use asrs_model::source_list_config::{
-    SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
+    SourceListConfig, SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
 };
 use asrs_model::tab_controller::TabController;
 use asrs_parity::Value;
@@ -507,7 +507,8 @@ fn encode(v: &JsValue) -> String {
 
 /// Kinds no replay compares whole for these vectors (#397), with the suite that compares the same
 /// code on its own.
-const COVERED: [(&str, &str); 5] = [
+const COVERED: [(&str, &str); 6] = [
+    ("capture", "asrs-hub's dom_tabs"),
     (OTHER_LISTS, "asrs-model's source_list_vectors"),
     (
         "state",
@@ -727,6 +728,8 @@ struct Harness {
     controllers: Vec<LineGraphController>,
     previews: Vec<VecDeque<Preview>>,
     list_uuids: HashMap<usize, String>,
+    /// `create` records seen before their controller's, by list uuid.
+    creates: HashMap<String, JsValue>,
     bound: HashMap<String, (usize, ListId)>,
     pending_prompt: Option<JsValue>,
     pending_errors: VecDeque<String>,
@@ -778,6 +781,7 @@ impl Harness {
             controllers: Vec::new(),
             previews: Vec::new(),
             list_uuids: HashMap::new(),
+            creates: HashMap::new(),
             bound: HashMap::new(),
             pending_prompt: None,
             pending_errors: VecDeque::new(),
@@ -1390,6 +1394,9 @@ impl Harness {
                     ),
                     command: None,
                 });
+                for uuid in js(record, "uuids")?.as_array().ok_or("uuids")? {
+                    self.compare_create(&text(uuid)?)?;
+                }
                 Ok(())
             }
             "command" => self.command(record),
@@ -1509,6 +1516,30 @@ impl Harness {
                 Ok(())
             }
         }
+    }
+
+    /// A `create` record against the list of the controller that owns it, once both are known.
+    fn compare_create(&mut self, uuid: &str) -> Result<(), String> {
+        let Some((ctrl, list)) = self.bound.get(uuid).copied() else {
+            return Ok(());
+        };
+        let Some(create) = self.creates.remove(uuid) else {
+            return Ok(());
+        };
+        let list = self.controllers[ctrl].list(list);
+        let config =
+            SourceListConfig::from_js(member(&create, "config")?).ok_or("create config")?;
+        // The recorder first sees a list before or after its constructor titles it; the dumps
+        // compare the title.
+        let expected = (&config, member(&create, "editButton")?);
+        let edit_button = list.has_edit_button().to_js();
+        let actual = (list.config(), &edit_button);
+        if expected != actual {
+            return Err(format!(
+                "create\n upstream {expected:?}\n port     {actual:?}"
+            ));
+        }
+        Ok(())
     }
 
     /// The command the last frame of a tab drew; its `index`, `title` and `uuid` are `Tabs`'s.
@@ -1686,7 +1717,8 @@ impl Harness {
             // Upstream throws some strings, and `name` and `message` of a string are undefined.
             let reported = match kind.as_str() {
                 "unhandledRejection" if !thrown.contains("Error: ") => "undefined: undefined",
-                _ => &thrown,
+                "unhandledRejection" | "requestAnimationFrame" => &thrown,
+                other => return Err(format!("exception in {other} is not modeled")),
             };
             return same_error(&kind, Some(error), Some(reported.to_owned()));
         }
@@ -1732,8 +1764,9 @@ impl Harness {
                     .and_then(|o| o.get("uuid"))
                     .ok_or("create uuid")?,
             )?;
-            self.list_uuids.insert(sl, uuid);
-            return Ok(());
+            self.list_uuids.insert(sl, uuid.clone());
+            self.creates.insert(uuid.clone(), create);
+            return self.compare_create(&uuid);
         }
         let Some(uuid) = self.list_uuids.get(&sl) else {
             return Err(format!("source list {sl} was never created"));
@@ -1757,7 +1790,17 @@ impl Harness {
         if record.field("dump").is_some() {
             self.stats.dumps += 1;
             let mut expected = js(record, "dump")?;
-            expected.as_object_mut().and_then(|o| o.remove("config"));
+            let config = expected
+                .as_object_mut()
+                .and_then(|o| o.remove("config"))
+                .and_then(|config| SourceListConfig::from_js(&config))
+                .ok_or("dump config")?;
+            let port = self.controllers[ctrl].list(list).config();
+            if &config != port {
+                return Err(format!(
+                    "{list:?} config\n upstream {config:?}\n port     {port:?}"
+                ));
+            }
             let expected = encode(&expected);
             let actual = encode(&list_dump(
                 self.controllers[ctrl].list(list),

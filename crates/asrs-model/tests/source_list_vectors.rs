@@ -445,7 +445,8 @@ fn encode(v: &JsValue) -> String {
 
 /// Kinds no replay compares for these vectors (#397), with the suites that compare the same code
 /// on their own.
-const COVERED: [(&str, &str); 3] = [
+const COVERED: [(&str, &str); 4] = [
+    ("capture", "asrs-hub's dom_tabs"),
     ("main:show", "asrs-hub's dom_tabs"),
     ("main:frc-coordinate-system-warning", "asrs-hub's dom_tabs"),
     (HUB_GEOMETRY, "asrs-hub's tabs_dom and sidebar_dom, in part"),
