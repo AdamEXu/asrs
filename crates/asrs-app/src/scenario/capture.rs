@@ -122,6 +122,7 @@ pub fn kind(action: &Action) -> &'static str {
         Action::Idle => "idle",
         Action::Mouse { .. } => "mouse",
         Action::Wheel(_) => "wheel",
+        Action::NativeWheel { .. } => "pointer",
         Action::Key { .. } => "key",
         Action::Dialog(_) => "dialog",
         Action::Menu { .. } => "menu",

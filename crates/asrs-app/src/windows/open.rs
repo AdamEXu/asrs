@@ -31,17 +31,22 @@ fn gpui_options(options: &WindowOptions, show: bool, cx: &App) -> asrs_ui::gpui:
         Some((x, y)) => Bounds::new(point(px(x as f32), px(y as f32)), content),
         None => Bounds::centered(None, content, cx),
     };
-    let fancy = options.kind == WindowKind::Hub && cfg!(target_os = "macos");
+    let hub = options.kind == WindowKind::Hub;
+    let vibrant = hub && cfg!(target_os = "macos");
     asrs_ui::gpui::WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         titlebar: Some(TitlebarOptions {
             title: None,
-            appears_transparent: fancy,
+            appears_transparent: hub && !cfg!(target_os = "linux"),
             traffic_light_position: None,
         }),
-        app_owns_titlebar_drag: fancy,
-        window_background: if fancy {
+        app_owns_titlebar_drag: vibrant,
+        window_background: if vibrant {
             WindowBackgroundAppearance::Transparent
+        } else if hub && platform::has_acrylic() {
+            // Transparent pixels and a DWM backdrop, whose type `install_sidebar_vibrancy` sets.
+            // `Transparent` would lay an accent policy over it.
+            WindowBackgroundAppearance::MicaBackdrop
         } else {
             WindowBackgroundAppearance::Opaque
         },
@@ -74,17 +79,18 @@ fn origin(options: &WindowOptions, cx: &App) -> Option<(f64, f64)> {
 /// primary screen, rounded on macOS (`NativeWindowMac` uses the full frame and never calls
 /// `[NSWindow center]`) and in whole numbers on Linux.
 fn default_origin(options: &WindowOptions, cx: &App) -> Option<(f64, f64)> {
-    let whole = if cfg!(target_os = "macos") {
-        f64::round
+    let display = cx.primary_display()?;
+    let (whole, area): (fn(f64) -> f64, _) = if cfg!(target_os = "macos") {
+        (f64::round, display.bounds())
     } else if cfg!(target_os = "linux") {
-        f64::floor
+        (f64::floor, display.bounds())
     } else {
-        return None;
+        (f64::floor, display.visible_bounds())
     };
-    let screen = cx.primary_display()?.bounds().size;
+    let f = |p: asrs_ui::gpui::Pixels| f64::from(f32::from(p));
     Some((
-        whole((f64::from(f32::from(screen.width)) - options.width) / 2.0),
-        whole((f64::from(f32::from(screen.height)) - options.height) / 2.0),
+        f(area.origin.x) + whole((f(area.size.width) - options.width) / 2.0),
+        f(area.origin.y) + whole((f(area.size.height) - options.height) / 2.0),
     ))
 }
 

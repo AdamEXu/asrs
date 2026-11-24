@@ -460,6 +460,18 @@ fn scroll_delta(wheel: &Wheel) -> Result<ScrollDelta, String> {
     )))
 }
 
+/// The lines GPUI makes of `WM_MOUSEHWHEEL` and `WM_MOUSEWHEEL` at the system's default of three
+/// a notch, in the order the driver sends them.
+fn native_wheel_lines(units_x: f64, units_y: f64) -> Vec<asrs_ui::gpui::Point<f32>> {
+    let lines = |units: f64| units as f32 / 120.0 * 3.0;
+    let events = [
+        (units_x, point(-lines(units_x), 0.0)),
+        (units_y, point(0.0, lines(units_y))),
+    ];
+    let sent = events.into_iter().filter(|(units, _)| *units != 0.0);
+    sent.map(|(_, lines)| lines).collect()
+}
+
 fn click_app_menu(labels: &[String], cx: &mut App) -> Result<(), String> {
     fn find(items: &[MenuItem], labels: &[String], found: &mut Vec<Command>) {
         for item in items {
@@ -992,6 +1004,24 @@ impl Variant<'_> {
                     touch_phase: TouchPhase::Moved,
                     ..Default::default()
                 }))?;
+            }
+            Action::NativeWheel {
+                x,
+                y,
+                units_x,
+                units_y,
+            } => {
+                self.mouse(MouseKind::Move, *x, *y, Button::Left, 1, &[])?;
+                for delta in native_wheel_lines(*units_x, *units_y) {
+                    self.dispatch(PlatformInput::Scroll(ScrollEvent {
+                        position: point(px(*x as f32), px(*y as f32)),
+                        delta: ScrollDelta::Lines(delta),
+                        modifiers: Modifiers::default(),
+                        touch_phase: TouchPhase::Moved,
+                        ..Default::default()
+                    }))?;
+                }
+                self.tick()?;
             }
             Action::Key { key, modifiers } => self.key(key, modifiers)?,
             Action::Dialog(reply) => {

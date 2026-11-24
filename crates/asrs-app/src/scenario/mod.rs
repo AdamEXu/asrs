@@ -97,6 +97,13 @@ pub enum Action {
         modifiers: Vec<String>,
     },
     Wheel(Wheel),
+    /// The real wheel under the real pointer on Windows, in units of 120 a notch.
+    NativeWheel {
+        x: f64,
+        y: f64,
+        units_x: f64,
+        units_y: f64,
+    },
     Key {
         key: String,
         modifiers: Vec<String>,
@@ -227,6 +234,8 @@ const ACTION_KEYS: [&str; 18] = [
     "idle",
     "mouse",
     "wheel",
+    "pointer",
+    "activate",
     "key",
     "dialog",
     "menu",
@@ -312,13 +321,19 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
             ms: value.as_f64().ok_or("wait is not a number")?,
         },
         "idle" => Action::Idle,
-        "mouse" => Action::Mouse {
+        "pointer" if text().as_deref() == Some("wheel") => Action::NativeWheel {
+            x: number(action, "x", None)?,
+            y: number(action, "y", None)?,
+            units_x: number(action, "unitsX", Some(0.0))?,
+            units_y: number(action, "unitsY", Some(0.0))?,
+        },
+        "mouse" | "pointer" => Action::Mouse {
             kind: match text().as_deref() {
                 Some("move") => MouseKind::Move,
                 Some("down") => MouseKind::Down,
                 Some("up") => MouseKind::Up,
                 Some("click") => MouseKind::Click,
-                other => return Err(format!("unknown mouse action {other:?}")),
+                other => return Err(format!("unknown {kind} action {other:?}")),
             },
             x: number(action, "x", None)?,
             y: number(action, "y", None)?,
@@ -393,7 +408,11 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
             other => return Err(format!("unknown role {other:?}")),
         },
         "copy" => Action::Copy(text().ok_or("copy is not a name")?),
-        "focus" => Action::Focus(value.as_bool().ok_or("focus is not a boolean")?),
+        "focus" | "activate" => Action::Focus(
+            value
+                .as_bool()
+                .ok_or_else(|| format!("{kind} is not a boolean"))?,
+        ),
         "capture" => {
             let name = text().ok_or("capture is not a name")?;
             Action::Capture {
