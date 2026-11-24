@@ -826,12 +826,15 @@ fn an_rlog_port_node_refuses_leaves_the_page_searching() {
             ..Script::default()
         });
     });
-    page.preferences(|p| {
-        p.live_mode = LiveMode::Rlog;
-    });
-    for port in ["70000", "1.5"] {
-        page.preferences(|p| p.rlog_port = port.parse().unwrap());
+    let rlog_port = |page: &mut Page, port| {
+        page.preferences(|p| {
+            p.live_mode = LiveMode::Rlog;
+            p.rlog_port = port;
+        });
         page.start_live("robot");
+    };
+    for port in [70000.0, 1.5] {
+        rlog_port(&mut page, port);
         page.advance(5000);
         let shown = page
             .cx
@@ -846,8 +849,7 @@ fn an_rlog_port_node_refuses_leaves_the_page_searching() {
     assert_eq!(server.connections(), 0);
     assert_eq!(page.runtime_tasks(), 0);
 
-    page.preferences(|p| p.rlog_port = 5800.0);
-    page.start_live("robot");
+    rlog_port(&mut page, 5800.0);
     page.drive_until("the connection", |_| server.connections() > 0);
 }
 
