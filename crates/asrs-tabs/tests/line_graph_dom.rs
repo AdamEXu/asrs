@@ -1929,13 +1929,7 @@ fn run_case(id: &str) -> Result<Stats, String> {
             Err(e)
         }
         Ok(stats) => {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tally.finish())).map_err(
-                |p| {
-                    p.downcast::<String>()
-                        .map(|s| *s)
-                        .unwrap_or_else(|_| "tally failed".to_owned())
-                },
-            )?;
+            tally.finish();
             Ok(stats)
         }
     }

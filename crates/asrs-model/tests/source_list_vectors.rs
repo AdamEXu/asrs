@@ -443,29 +443,35 @@ fn encode(v: &JsValue) -> String {
     js_json::from_js(v).encode()
 }
 
-/// Kinds this replay does not model, with the suite that compares them: the window's `show`
-/// and the field controllers' coordinate warnings, none of which a bare source list sends.
+/// Kinds no replay compares for these vectors (#397), with the suites that compare the same code
+/// on their own.
 const COVERED: [(&str, &str); 3] = [
     ("main:show", "asrs-hub's dom_tabs"),
     ("main:frc-coordinate-system-warning", "asrs-hub's dom_tabs"),
-    ("main:ftc-coordinate-system-warning", "asrs-hub's dom_tabs"),
+    (HUB_GEOMETRY, "asrs-hub's tabs_dom and sidebar_dom, in part"),
 ];
+
+const LIST_GEOMETRY: &str = "list geometry";
+const HUB_GEOMETRY: &str = "hub geometry";
+
+fn on_a_list(record: &Record) -> bool {
+    record
+        .string("el")
+        .is_some_and(|el| el.contains(".source-list"))
+}
 
 fn kind_of(record: &Record) -> String {
     if let Some(name) = record.string("main") {
         return format!("main:{name}");
     }
-    match &record.json {
+    let key = match &record.json {
         Json::Object(pairs) if !pairs.is_empty() => pairs[0].0.to_string_lossy(),
-        _ => format!("line {}", record.line),
-    }
-}
-
-/// Counts a record the harness consumed as compared, unless its kind is [`COVERED`].
-fn mark(tally: &mut Tally, record: &Record) {
-    let kind = kind_of(record);
-    if !COVERED.iter().any(|(k, _)| *k == kind) {
-        tally.compared(&kind);
+        _ => panic!("line {}: the record has no first key", record.line),
+    };
+    match key.as_str() {
+        "read" | "write" if on_a_list(record) => LIST_GEOMETRY.to_owned(),
+        "read" | "write" => HUB_GEOMETRY.to_owned(),
+        _ => key,
     }
 }
 
@@ -571,7 +577,7 @@ impl Harness {
     fn new(records: &[Record]) -> Result<Harness, String> {
         let mut ours = Vec::new();
         for record in records {
-            if GeometryRecord::parse(record)?.is_some_and(|g| g.el.contains(".source-list")) {
+            if GeometryRecord::parse(record)?.is_some() && on_a_list(record) {
                 ours.push(record.clone());
             }
         }
@@ -1030,9 +1036,7 @@ impl Harness {
         }
         if let Some(name) = record.string("main") {
             return match name.as_str() {
-                "show" | "frc-coordinate-system-warning" | "ftc-coordinate-system-warning" => {
-                    Ok(())
-                }
+                "show" | "frc-coordinate-system-warning" => Ok(()),
                 other => Err(format!("the main message {other} is not modeled here")),
             };
         }
@@ -1270,7 +1274,10 @@ fn run_case(id: &str) -> Result<Stats, String> {
                 break;
             }
             Ok(()) => {
-                mark(&mut tally, record);
+                let kind = kind_of(record);
+                if kind != LIST_GEOMETRY && !COVERED.iter().any(|(k, _)| *k == kind) {
+                    tally.compared(&kind);
+                }
                 if let Some(e) = harness.dom.error.take() {
                     result = Err(format!("{id} line {}: {e}", record.line));
                     break;
@@ -1284,13 +1291,8 @@ fn run_case(id: &str) -> Result<Stats, String> {
             Err(e)
         }
         Ok(stats) => {
-            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tally.finish())).map_err(
-                |p| {
-                    p.downcast::<String>()
-                        .map(|s| *s)
-                        .unwrap_or_else(|_| "tally failed".to_owned())
-                },
-            )?;
+            (0..stats.reads).for_each(|_| tally.compared(LIST_GEOMETRY));
+            tally.finish();
             Ok(stats)
         }
     }

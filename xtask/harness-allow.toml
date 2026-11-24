@@ -457,7 +457,7 @@ reason = "compared with the port's error, which is never empty, so an absent one
 file = "crates/asrs-model/tests/source_list_vectors.rs"
 function = "record"
 rule = "skipped-kind"
-reason = "the mains the tally declares covered_elsewhere: dom_tabs replays them"
+reason = "the mains the tally declares not compared here (#397): dom_tabs compares them on its own vectors"
 
 [[allow]]
 file = "crates/asrs-model/tests/unit_dialog_vectors.rs"
@@ -698,14 +698,13 @@ reason = "compared with the port's error, which is never empty, so an absent one
 file = "crates/asrs-tabs/tests/line_graph_dom.rs"
 function = "record_in"
 rule = "silent-return"
-count = 2
-reason = "exceptions are an upstream browser artifact the port cannot raise; the covered kinds are declared covered_elsewhere in the tally"
+reason = "a selection capture is input here, and the tally declares it not compared (#397)"
 
 [[allow]]
 file = "crates/asrs-tabs/tests/line_graph_dom.rs"
 function = "record_in"
 rule = "skipped-kind"
-reason = "the mains the tally declares covered_elsewhere: dom_tabs replays them"
+reason = "the mains the tally declares not compared here (#397): dom_tabs compares them on its own vectors"
 
 [[allow]]
 file = "crates/asrs-tabs/tests/mechanism_points_dom.rs"

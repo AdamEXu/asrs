@@ -696,10 +696,9 @@ fn take_painted(renderer: &mut dyn TabRenderer<Host>) -> Option<(&'static str, C
         ("swerve-canvas", r.dom().borrow_mut().painted.take())
     } else if let Some(r) = renderer.downcast_mut::<JoysticksRenderer>() {
         ("joysticks-canvas", r.dom().borrow_mut().painted.take())
-    } else if let Some(r) = renderer.downcast_mut::<Field2dRenderer>() {
-        ("field-2d-canvas", r.dom().borrow_mut().painted.take())
     } else {
-        return None;
+        let r = renderer.downcast_mut::<Field2dRenderer>()?;
+        ("field-2d-canvas", r.dom().borrow_mut().painted.take())
     };
     painted.map(|canvas| (class, canvas))
 }
@@ -1503,14 +1502,13 @@ fn key_target_of(target: &str) -> Result<KeyTarget, String> {
     let element = target.rsplit(' ').next().expect("rsplit yields a part");
     let mut parts = element.split(['.', '#', '[', ':']);
     let tag = parts.next().expect("split yields a part");
-    match tag {
-        "input" => return Ok(KeyTarget::Input),
-        "textarea" => return Ok(KeyTarget::TextArea),
-        "window" | "document" | "body" | "div" | "select" | "button" => {
-            return Ok(KeyTarget::Other);
-        }
-        "" => {}
-        _ => return Err(err(format!("keydown on a {tag} is not modeled"))),
+    if !tag.is_empty() {
+        return match tag {
+            "input" => Ok(KeyTarget::Input),
+            "textarea" => Ok(KeyTarget::TextArea),
+            "window" | "document" | "body" | "div" | "select" | "button" => Ok(KeyTarget::Other),
+            _ => Err(err(format!("keydown on a {tag} is not modeled"))),
+        };
     }
     for class in parts {
         if INPUT_CLASSES.contains(&class) {
