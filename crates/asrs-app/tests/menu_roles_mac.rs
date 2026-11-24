@@ -184,6 +184,8 @@ async fn edit_roles(check: &Check, cx: &mut AsyncApp) {
     for role in EDIT_ROLES {
         probe::perform_menu_role_without_window(role).expect("a delegate");
     }
+    let copy = probe::validate_menu_role_without_window("copy");
+    assert_eq!(copy, Some(true), "the delegate's validation returns");
     for key in ["x", "c", "v", "a"] {
         assert!(probe::perform_key_equivalent(key, COMMAND), "{key}");
     }

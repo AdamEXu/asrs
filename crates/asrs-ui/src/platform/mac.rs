@@ -1340,6 +1340,23 @@ pub(super) mod probe {
         Some(())
     }
 
+    /// Whether AppKit finds a role's action valid where no window takes it, in a menu that asks.
+    pub fn validate_menu_role_without_window(role: &str) -> Option<bool> {
+        let mtm = MainThreadMarker::new()?;
+        let (_, selector) = super::ROLE_SELECTORS.iter().find(|(r, _)| *r == role)?;
+        let menu = NSMenu::new(mtm);
+        // SAFETY: an item without a target or a key equivalent.
+        let item = unsafe {
+            menu.addItemWithTitle_action_keyEquivalent(
+                &objc2_foundation::NSString::from_str(role),
+                Some(Sel::register(selector)),
+                &objc2_foundation::NSString::new(),
+            )
+        };
+        menu.update();
+        Some(item.isEnabled())
+    }
+
     /// Counts `toggleFullScreen:` calls on GPUI's windows instead of letting AppKit see them.
     pub fn intercept_full_screen() -> bool {
         type Action = unsafe extern "C-unwind" fn(&AnyObject, Sel, Option<&AnyObject>);

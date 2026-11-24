@@ -14,7 +14,7 @@ use crate::windows::{self, WindowId, Windows};
 struct Quit {
     /// No open hub is exporting, so that quitting has nothing to ask.
     unasked: Rc<Cell<bool>>,
-    asking: bool,
+    asking: Option<WindowId>,
     /// `is_quitting_`.
     quitting: bool,
 }
@@ -48,10 +48,12 @@ pub fn quit(cx: &mut App) {
     let Some(quit) = cx.try_global::<Quit>() else {
         return cx.quit();
     };
-    if quit.asking {
+    let asking = quit.asking;
+    let unasked = quit.unasked.get();
+    // A prompt does not answer once its window has gone.
+    if asking.is_some_and(|window| Windows::handle(cx, window).is_some()) {
         return;
     }
-    let unasked = quit.unasked.get();
     cx.global_mut::<Quit>().quitting = true;
     if unasked {
         return cx.quit();
@@ -75,10 +77,10 @@ fn close_all(mut windows: Vec<WindowId>, cx: &mut App) {
             windows::close(cx, window);
             continue;
         }
-        cx.global_mut::<Quit>().asking = true;
+        cx.global_mut::<Quit>().asking = Some(window);
         export_flow::ask_to_close(window, cx, move |close, cx| {
             let quit = cx.global_mut::<Quit>();
-            quit.asking = false;
+            quit.asking = None;
             if close {
                 windows::close(cx, window);
             } else {

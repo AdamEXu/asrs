@@ -318,6 +318,10 @@ pub(super) mod probe {
         None
     }
 
+    pub fn validate_menu_role_without_window(_role: &str) -> Option<bool> {
+        None
+    }
+
     pub fn intercept_full_screen() -> bool {
         false
     }

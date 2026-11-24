@@ -696,7 +696,20 @@ fn quitting_closes_every_window_and_asks_exporting_hubs(app: &mut AppUnderTest) 
     assert_eq!(app.hubs(), [order[0]], "{idle} closes unasked");
     assert!(!app.cx.update(|cx| quit::is_quitting(cx)));
 
-    assert_eq!(quit(app, &[Reply::Button(1)]), handles[..1]);
+    app.click(Command::NewWindow, &[]);
+    let mut left = app.hubs();
+    left.sort_unstable();
+    let newest = left[1];
+    app.send_main(newest, HubToMain::SetExporting, JsValue::Bool(true));
+    if cfg!(target_os = "macos") {
+        left.reverse();
+    }
+    let handles = [left[0], left[1]].map(|hub| app.handle(hub));
+    assert_eq!(quit(app, &[Reply::Unanswered]), handles[..1]);
+    assert_eq!(quit(app, &[]), [], "asking");
+    app.run(&[], |app| app.cx.update(|cx| windows::close(cx, left[0])));
+    assert_eq!(app.hubs(), [left[1]]);
+    assert_eq!(quit(app, &[Reply::Button(1)]), handles[1..]);
     assert!(app.hubs().is_empty());
     assert!(app.cx.update(|cx| quit::is_quitting(cx)));
 }

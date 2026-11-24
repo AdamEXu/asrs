@@ -1093,7 +1093,7 @@ impl MainProcess {
             None
         });
         if let Ok(Some(observer)) = observed {
-            Windows::on_closed(cx, id, move |_| drop(observer));
+            Windows::on_closed(cx, id, move |_| observer.stop());
         }
     }
 

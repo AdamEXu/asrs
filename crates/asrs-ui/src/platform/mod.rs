@@ -462,6 +462,10 @@ pub fn on_quit_request(
 
 pub struct FullScreenObserver(#[allow(dead_code)] imp::FullScreenObserver);
 
+impl FullScreenObserver {
+    pub fn stop(self) {}
+}
+
 /// `enter-full-screen` and `leave-full-screen` of a hub window, until the observer is dropped,
 /// where the system says when its transitions end.
 pub fn observe_full_screen(

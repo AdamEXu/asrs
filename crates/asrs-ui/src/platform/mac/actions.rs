@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use gpui_kit::{App, AsyncApp, Window};
 use objc2::rc::Retained;
-use objc2::runtime::{AnyClass, AnyObject, Imp, NSObject, Sel};
+use objc2::runtime::{AnyClass, AnyObject, Bool, Imp, NSObject, Sel};
 use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, ffi, msg_send, sel};
 use objc2_app_kit::{
     NSApplication, NSApplicationTerminateReply, NSWindow, NSWindowButton,
@@ -112,10 +112,14 @@ unsafe extern "C-unwind" fn edit_action(view: &AnyObject, action: Sel, _: Option
 
 unsafe extern "C-unwind" fn no_action(_: &AnyObject, _: Sel, _: Option<&AnyObject>) {}
 
+unsafe extern "C-unwind" fn always_valid(_: &AnyObject, _: Sel, _: Option<&AnyObject>) -> Bool {
+    Bool::YES
+}
+
 /// GPUI's app delegate takes the editing actions for menus GPUI built. From any other menu its
-/// `handle_menu_item` locks the platform twice and never returns, so where no responder before it
-/// takes an action, as in an alert or without windows, it must not either.
-fn disable_delegate_action(selector: Sel) {
+/// `handle_menu_item` and `validate_menu_item` lock the platform twice and never return, so where
+/// no responder before it takes an action, as in an alert or without windows, it must not either.
+fn disable_delegate_actions() {
     let Some(mtm) = MainThreadMarker::new() else {
         return;
     };
@@ -124,9 +128,41 @@ fn disable_delegate_action(selector: Sel) {
     };
     // SAFETY: `class` takes no arguments and returns a class pointer.
     let class: &AnyClass = unsafe { msg_send![&*delegate, class] };
-    if let Some(method) = class.instance_method(selector) {
+    for (selector, _) in edit_actions() {
         // SAFETY: both are action methods.
-        unsafe { method.set_implementation(std::mem::transmute::<Action, Imp>(no_action)) };
+        unsafe {
+            replace_own_method(
+                class,
+                selector,
+                std::mem::transmute::<Action, Imp>(no_action),
+            );
+        }
+    }
+    type Validate = unsafe extern "C-unwind" fn(&AnyObject, Sel, Option<&AnyObject>) -> Bool;
+    // SAFETY: both have NSMenuItemValidation's signature.
+    unsafe {
+        replace_own_method(
+            class,
+            sel!(validateMenuItem:),
+            std::mem::transmute::<Validate, Imp>(always_valid),
+        );
+    }
+}
+
+/// Leaves an inherited method alone, which other classes share.
+///
+/// # Safety
+///
+/// `implementation` has the signature of the method.
+unsafe fn replace_own_method(class: &AnyClass, selector: Sel, implementation: Imp) {
+    let inherited = class
+        .superclass()
+        .and_then(|above| above.instance_method(selector));
+    if let Some(method) = class.instance_method(selector)
+        && !inherited.is_some_and(|inherited| ptr::eq(inherited, method))
+    {
+        // SAFETY: as the caller promises.
+        unsafe { method.set_implementation(implementation) };
     }
 }
 
@@ -137,8 +173,8 @@ pub(in super::super) fn install_edit_commands(
     EDIT.set(Some((cx.to_async(), Rc::new(on_command))));
     for (selector, _) in edit_actions() {
         add_action(c"GPUIView", selector, edit_action);
-        disable_delegate_action(selector);
     }
+    disable_delegate_actions();
     for class in [c"GPUIWindow", c"GPUIPanel"] {
         add_action(class, sel!(toggleFullScreenMode:), toggle_full_screen_mode);
         add_action(

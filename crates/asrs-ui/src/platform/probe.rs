@@ -190,6 +190,10 @@ pub fn perform_menu_role_without_window(role: &str) -> Option<()> {
     imp::probe::perform_menu_role_without_window(role)
 }
 
+pub fn validate_menu_role_without_window(role: &str) -> Option<bool> {
+    imp::probe::validate_menu_role_without_window(role)
+}
+
 /// Has `toggleFullScreen:` only count, so that a check does not switch spaces.
 pub fn intercept_full_screen() -> bool {
     imp::probe::intercept_full_screen()
