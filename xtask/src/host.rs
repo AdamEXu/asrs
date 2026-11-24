@@ -19,8 +19,8 @@ records which rasterizers are in use).
 
   windows      Windows 11 x86_64 (QEMU), the Windows reference: ~/vms/win11-x64 on omarchy
                (ASRS_WINDOWS_VM; README.md there). ASRS_WINDOWS_VIA is the ssh destination of the
-               machine it runs on, empty when that is this one. The VM's own vm.sh does the rest: it
-               knows the port and the key. `start` takes the VM's lock directory `in-use`
+               machine it runs on, empty when that is this one. The VM's own vm.sh starts it and reaches
+               it. `start` takes the VM's lock directory `in-use`
                for this ASRS_HOST_DIR and `stop` gives it back; a lock of anyone else's is
                refused. Start it cold (`restart`) for captures: once Windows' shell has been used
                for a while its Snap Layouts flyout can cover a hovered caption button.
@@ -130,6 +130,7 @@ struct VmScript {
     dir_variable: &'static str,
     via: &'static str,
     via_variable: Option<&'static str>,
+    port: u16,
     locked: bool,
     path: &'static str,
 }
@@ -155,6 +156,7 @@ const HOSTS: [Host; 3] = [
             dir_variable: "ASRS_WINDOWS_VM",
             via: "omarchy",
             via_variable: Some("ASRS_WINDOWS_VIA"),
+            port: 2223,
             locked: true,
             path: r"C:\tools\node-v24.18.0-win-x64",
         }),
@@ -170,6 +172,7 @@ const HOSTS: [Host; 3] = [
             dir_variable: "ASRS_WINDOWS_ARM_VM",
             via: "",
             via_variable: None,
+            port: 2222,
             locked: false,
             path: r"C:\tools\node-v24.18.0-win-arm64;C:\tools\clang-20.1.8\bin",
         }),
@@ -234,6 +237,37 @@ impl VmScript {
             .map(sh_quote)
             .collect::<Vec<_>>()
             .join(" ")
+    }
+
+    fn guest_scp(&self, from: &str, to: &str) -> String {
+        let keys = format!("{}/keys", self.dir());
+        format!(
+            "scp -q -i {} -P {} -o IdentitiesOnly=yes -o BatchMode=yes -o LogLevel=ERROR -o UserKnownHostsFile={} {from} {to}",
+            sh_quote(&format!("{keys}/id_ed25519")),
+            self.port,
+            sh_quote(&format!("{keys}/known_hosts")),
+        )
+    }
+
+    // Not through the guest's own standard input: its login shell, PowerShell, reads that too.
+    fn upload(&self, remote: &str) -> Command {
+        let copy = self.guest_scp("\"$file\"", &sh_quote(&format!("dev@127.0.0.1:{remote}")));
+        self.shell(
+            &format!(
+                "file=$(mktemp) && cat >\"$file\" && {copy}; status=$?; unlink \"$file\"; exit $status"
+            ),
+            false,
+        )
+    }
+
+    fn download(&self, remote: &str) -> Command {
+        let copy = self.guest_scp(&sh_quote(&format!("dev@127.0.0.1:{remote}")), "\"$file\"");
+        self.shell(
+            &format!(
+                "file=$(mktemp) && {copy} && cat \"$file\"; status=$?; unlink \"$file\"; exit $status"
+            ),
+            false,
+        )
     }
 
     fn lock(&self) -> Result {
@@ -403,25 +437,22 @@ impl Host {
     }
 
     fn upload(&self, file: &Path, remote: &str) -> Result {
-        let body = match self.os {
-            Os::Linux => format!("cat > {remote}"),
-            Os::Windows => format!(
-                "$out = [IO.File]::Create('{remote}')\n[Console]::OpenStandardInput().CopyTo($out)\n$out.Close()"
-            ),
+        let mut command = match &self.vm {
+            Vm::Script(vm) => vm.upload(remote),
+            Vm::Tart => self.ssh(&self.remote_script(&format!("cat > {remote}")))?,
         };
-        let mut ssh = self.ssh(&self.remote_script(&body))?;
-        ssh.stdin(File::open(file).map_err(|e| format!("{}: {e}", file.display()))?);
-        exec(&mut ssh)
+        command.stdin(File::open(file).map_err(|e| format!("{}: {e}", file.display()))?);
+        exec(&mut command)
     }
 
     fn download(&self, remote: &str, file: &Path) -> Result {
-        let body = match self.os {
-            Os::Linux => format!("cat {remote}"),
-            Os::Windows => format!(
-                "$in = [IO.File]::OpenRead('{remote}')\n$in.CopyTo([Console]::OpenStandardOutput())\n$in.Close()"
-            ),
-        };
-        self.script_to(&body, file)
+        match &self.vm {
+            Vm::Script(vm) => {
+                let out = File::create(file).map_err(|e| format!("{}: {e}", file.display()))?;
+                exec(vm.download(remote).stdin(Stdio::null()).stdout(out))
+            }
+            Vm::Tart => self.script_to(&format!("cat {remote}"), file),
+        }
     }
 
     fn script_to(&self, body: &str, file: &Path) -> Result {
