@@ -157,7 +157,10 @@ app.dock?.hide();
 app
   .whenReady()
   .then(async () => {
-    const win = new BrowserWindow({ width: 1000, height: 700, show: false, webPreferences: { offscreen: true, backgroundThrottling: false, spellcheck: false } });
+    // Copying from an offscreen page crashes Electron on Linux.
+    const offscreen = process.platform === "darwin";
+    const win = new BrowserWindow({ width: 1000, height: 700, useContentSize: true, show: false, webPreferences: { offscreen, backgroundThrottling: false, spellcheck: false } });
+    if (!offscreen) win.showInactive();
     win.webContents.on("render-process-gone", (_event, details) => fail(`renderer gone: ${details.reason}`));
     win.webContents.debugger.attach("1.3");
     const send = (method: string, params: object) => win.webContents.debugger.sendCommand(method, params);
@@ -177,7 +180,7 @@ app
       }
       return clipboard.readText();
     };
-    win.webContents.setFrameRate(240);
+    if (offscreen) win.webContents.setFrameRate(240);
     const lines: string[] = [];
     for (const page of request.fixture.pages) {
       fs.writeFileSync(request.page, `<!doctype html><html><head><meta charset="utf-8"><style>${page.css}</style></head><body${page.body ?? ""}>${page.html}</body></html>`);

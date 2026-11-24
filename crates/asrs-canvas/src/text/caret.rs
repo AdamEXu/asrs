@@ -53,7 +53,7 @@ pub fn word_at(text: &str, at: usize) -> Range<usize> {
     }
     let mut word = word.unwrap_or(start..text.len());
     let from = word.start;
-    for (stop, _) in text[word.clone()].match_indices('.') {
+    for (stop, _) in text[word.clone()].match_indices(['.', ':']) {
         let stop = from + stop;
         if between_digits(text, stop) {
             continue;
@@ -67,7 +67,8 @@ pub fn word_at(text: &str, at: usize) -> Range<usize> {
     word
 }
 
-/// Chromium's word rules, unlike the standard ones, end a word at any other full stop.
+/// Chromium's word rules, unlike the standard ones, end a word at a colon and at any other full
+/// stop.
 fn between_digits(text: &str, stop: usize) -> bool {
     let before = text[..stop].chars().next_back();
     let after = text[stop + 1..].chars().next();
@@ -89,6 +90,7 @@ mod tests {
         assert_eq!(words(9), "1.5");
         assert_eq!(words(13), "don't");
         assert_eq!(words(text.len() - 1), "naïve");
+        assert_eq!(word_at("a:b", 0), 0..1);
         assert_eq!(word_at("www.x.org", 4), 4..5);
         assert_eq!(word_at("www.x.org", 5), 5..6);
         assert_eq!(word_at("www.x.org", 0), 0..3);

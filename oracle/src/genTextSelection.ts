@@ -20,6 +20,11 @@ try {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
+  if (process.platform === "linux") {
+    // The clipboard is the X server's.
+    env.DISPLAY ??= ":0";
+    env.XAUTHORITY ??= path.join(os.homedir(), ".Xauthority");
+  }
   if (process.platform === "darwin") {
     const library = path.join(scratch, "pasteboard.dylib");
     const source = path.resolve(path.dirname(file), "../../../oracle/tools/pasteboard.m");
