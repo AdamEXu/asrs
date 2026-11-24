@@ -412,6 +412,8 @@ function tooltipTexts(): string[] {
 }
 
 async function captureTooltips(name: string) {
+  // The moves would be part of a drag.
+  if (pressedButton !== null) return;
   const win = active();
   await waitIdle();
   const move = async (x: number, y: number) => {
@@ -442,7 +444,7 @@ async function captureTooltips(name: string) {
     await sleep(TOOLTIP_FRAME_MS * 5);
     left = tooltipTexts();
   }
-  if (pressedButton === null) await move(pointer[0], pointer[1]);
+  await move(pointer[0], pointer[1]);
   fs.writeFileSync(path.join(capturesDir, `${name}.tooltips.json`), JSON.stringify({ titles, left, gridStep: GRID_STEP, texts: map.texts, grid: map.grid }) + "\n");
   console.error(`  ${scenario.name}: ${name} (${titles.length} titles)`);
 }

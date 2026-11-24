@@ -134,6 +134,7 @@ features = [
     "NSObject",
     "NSRunLoop",
     "NSString",
+    "NSUserDefaults",
     "NSURL",
     "NSValue",
 ]

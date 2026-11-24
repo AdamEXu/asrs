@@ -452,7 +452,7 @@ fn item_body(
                     .subpixel(text_dx(NAME_LEFT + indent + type_width), 0.0),
             )
             .child(untitled(
-                div().absolute().inset_x_0().top(px(6.0)).h(px(18.0)),
+                div().absolute().left_0().right_0().top(px(6.0)).h(px(18.0)),
             ));
         if !r.available {
             key_box = key_box.child(

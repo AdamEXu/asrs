@@ -4,16 +4,19 @@ use std::rc::Rc;
 
 use gpui_kit::base::input::{Input, InputEvent, InputState, MoveDown, MoveUp, Paste};
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext, ClipboardItem, Context, Entity, EntityInputHandler,
-    EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, MouseButton,
-    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription,
+    AnyWindowHandle, App, AppContext, Bounds, ClipboardItem, Context, DispatchPhase, Entity,
+    EntityInputHandler, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement,
+    IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
+    Point, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task,
     WeakEntity, Window, canvas, div, px, rgba,
 };
 
 use crate::icon::{IconSource, Placement, paint_icon};
 use crate::input::model::{FieldModel, FieldValue};
-use crate::input::native::paint_text_field;
+use crate::input::native::{PointerState, paint_text_field};
+use crate::input::spin::{self, paint_spin_button};
 use crate::input::style::{DISABLED_TEXT, FieldStyle, Frame, device_border};
+use crate::platform;
 use crate::selection;
 use crate::symbols::Symbol;
 use crate::text::{self, LineHeight, Overflow, Text, TextStyle, WhiteSpace};
@@ -46,6 +49,8 @@ pub struct FieldGeometry {
     pub editor: [f32; 4],
     /// The cancel button of a search field, which takes its flex space even while hidden.
     pub cancel: Option<[f32; 4]>,
+    /// The spin button of a number field, which takes its flex space even while hidden.
+    pub spin: Option<[f32; 4]>,
 }
 
 fn lu(v: f32) -> i64 {
@@ -62,6 +67,7 @@ fn px_of(v: i64) -> f32 {
 /// is shorter.
 pub fn geometry(
     style: &FieldStyle,
+    kind: FieldKind,
     width: f32,
     height: f32,
     line: f32,
@@ -77,6 +83,9 @@ pub fn geometry(
     let y = border + pt;
     let cw = w - 2 * border - pl - pr;
     let ch = h - 2 * border - pt - pb;
+    let spins = kind == FieldKind::Number && style.spin_button;
+    let spin_w = if spins { lu(spin::WIDTH * scale) } else { 0 };
+    let spin = spins.then(|| [x + cw - spin_w, y, spin_w, ch].map(px_of));
     let (editor_w, cancel) = if style.cancel_button {
         let em = lu(style.font.size * scale);
         let (start, end) = (lu(scale), lu(3.0 * scale));
@@ -87,13 +96,14 @@ pub fn geometry(
             Some([x + editor_w + start, top, em, em].map(px_of)),
         )
     } else {
-        (cw.max(0), None)
+        ((cw - spin_w).max(0), None)
     };
     let line = lu(line);
     FieldGeometry {
         border: px_of(border),
         editor: [x, y + (ch - line) / 2, editor_w, line].map(px_of),
         cancel,
+        spin,
     }
 }
 
@@ -180,6 +190,24 @@ fn insert<M: FieldModel>(
     editor.replace_text_in_range(Some(start..end), &kept, window, cx);
 }
 
+/// `SpinButtonElement`'s state.
+#[derive(Default)]
+struct Spin {
+    /// Which half the pointer was last over.
+    up: bool,
+    hovered: bool,
+    pressed: bool,
+    repeat: Option<Task<()>>,
+}
+
+impl Spin {
+    /// `ReleaseCapture`: whether it was pressed.
+    fn release(&mut self) -> bool {
+        self.repeat = None;
+        std::mem::take(&mut self.pressed)
+    }
+}
+
 /// An `<input type="text|number|search">`. The editor (gpui-base's, for IME) is always
 /// present and takes clicks; its glyphs show only while it has focus. Unfocused, the shown
 /// text or the placeholder is painted with [`Text`], as Chromium paints it.
@@ -195,6 +223,8 @@ pub struct TextField<M: FieldModel> {
     editor_text: Rc<RefCell<String>>,
     committed: String,
     hovered: bool,
+    pressed: bool,
+    spin: Spin,
     _subscription: Subscription,
 }
 
@@ -239,6 +269,8 @@ impl<M: FieldModel> TextField<M> {
             editor_text,
             committed: shown,
             hovered: false,
+            pressed: false,
+            spin: Spin::default(),
             _subscription: subscription,
         }
     }
@@ -268,6 +300,7 @@ impl<M: FieldModel> TextField<M> {
                 cx.emit(FieldEvent::Focus);
             }
             InputEvent::Blur => {
+                self.spin.release();
                 self.commit(cx);
                 cx.emit(FieldEvent::Blur);
             }
@@ -365,6 +398,7 @@ impl<M: FieldModel> TextField<M> {
     pub fn blur(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         if self.focus_handle(cx).is_focused(window) {
             window.blur(cx);
+            self.spin.release();
             self.commit(cx);
             cx.emit(FieldEvent::Blur);
             cx.notify();
@@ -428,6 +462,127 @@ impl<M: FieldModel> TextField<M> {
         cx.notify();
     }
 
+    /// `SpinButtonStepUp` and `SpinButtonStepDown`.
+    fn spin_step(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        if self.disabled || !self.value.arrow_key(self.spin.up) {
+            return;
+        }
+        let shown = self.value.shown().to_owned();
+        self.editor_text.borrow_mut().clone_from(&shown);
+        self.editor
+            .update(cx, |editor, cx| editor.set_value(shown, window, cx));
+        cx.emit(FieldEvent::Input);
+        cx.notify();
+    }
+
+    fn spin_press(&mut self, up: bool, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.select(window, cx);
+        self.spin.up = up;
+        self.spin.pressed = true;
+        let (initial, period) = platform::scroll_button_delays();
+        self.spin.repeat = Some(cx.spawn_in(window, async move |field, cx| {
+            let mut delay = initial;
+            loop {
+                cx.background_executor().timer(delay).await;
+                delay = period;
+                let stepped = field.update_in(cx, |field, window, cx| field.spin_step(window, cx));
+                if stepped.is_err() {
+                    return;
+                }
+            }
+        }));
+        self.spin_step(window, cx);
+        cx.notify();
+    }
+
+    fn spin_release(&mut self, cx: &mut Context<'_, Self>) {
+        if self.spin.release() {
+            self.commit(cx);
+            cx.notify();
+        }
+    }
+
+    /// The spin button in the box `[x, y, width, height]` (device px), which the pointer keeps
+    /// turning after a press on it wherever it goes.
+    fn spin_button(
+        &self,
+        [x, y, w, h]: [f32; 4],
+        scale: f32,
+        cx: &mut Context<'_, Self>,
+    ) -> impl IntoElement {
+        let (left, _) = split(x, scale);
+        let (top, _) = split(y, scale);
+        let (right, _) = split(x + w, scale);
+        let (bottom, _) = split(y + h, scale);
+        let half = px(h / scale / 2.0);
+        let (up, pressed) = (self.spin.up, self.spin.pressed);
+        let pointer = match (pressed, self.spin.hovered) {
+            (true, _) => PointerState::Pressed,
+            (false, true) => PointerState::Hovered,
+            (false, false) => PointerState::Normal,
+        };
+        let bounds = Rc::new(std::cell::Cell::new(None::<Bounds<Pixels>>));
+        let placed = bounds.clone();
+        let above = move |position: Point<Pixels>| {
+            bounds.get().is_some_and(|b| position.y - b.top() < half)
+        };
+        let (on_move, on_press) = (above.clone(), above.clone());
+        let field = cx.weak_entity();
+        div()
+            .id("spin-button")
+            .absolute()
+            .left(px(left))
+            .top(px(top))
+            .w(px(right - left))
+            .h(px(bottom - top))
+            .cursor_default()
+            .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
+                this.spin.hovered = *hovered;
+                cx.notify();
+            }))
+            .on_mouse_move(cx.listener(move |this, event: &MouseMoveEvent, _, cx| {
+                this.spin.up = on_move(event.position);
+                cx.notify();
+            }))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+                    window.prevent_default();
+                    cx.stop_propagation();
+                    this.pressed = true;
+                    this.spin_press(on_press(event.position), window, cx);
+                }),
+            )
+            .child(
+                canvas(
+                    move |bounds, _, _| placed.set(Some(bounds)),
+                    move |bounds, _, window, cx| {
+                        paint_spin_button(bounds, up, pointer, window, cx);
+                        if !pressed {
+                            return;
+                        }
+                        let moved = field.clone();
+                        window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
+                            if phase == DispatchPhase::Capture {
+                                let up = above(event.position);
+                                let _ = moved.update(cx, |this, cx| {
+                                    this.spin.up = up;
+                                    cx.notify();
+                                });
+                            }
+                        });
+                        window.on_mouse_event(move |event: &MouseUpEvent, phase, _, cx| {
+                            if phase == DispatchPhase::Capture && event.button == MouseButton::Left
+                            {
+                                let _ = field.update(cx, |this, cx| this.spin_release(cx));
+                            }
+                        });
+                    },
+                )
+                .size_full(),
+            )
+    }
+
     fn text_style(&self) -> TextStyle {
         let mut style = TextStyle::new(self.style.font);
         style.align = self.style.align;
@@ -444,7 +599,7 @@ impl<M: FieldModel> Render for TextField<M> {
         let style = self.style;
         let text_style = self.text_style();
         let line = text::layout(cx, &text_style, "0", scale, None).height as f32 / 64.0;
-        let g = geometry(&style, self.size.0, self.size.1, line, scale);
+        let g = geometry(&style, self.kind, self.size.0, self.size.1, line, scale);
         let focused = self.focus_handle(cx).is_focused(window);
         let (width, height) = self.size;
         let disabled = self.disabled;
@@ -453,11 +608,18 @@ impl<M: FieldModel> Render for TextField<M> {
             _ => style.color,
         };
 
+        let pointer = match (self.pressed, self.hovered) {
+            (true, _) => PointerState::Pressed,
+            (false, true) => PointerState::Hovered,
+            (false, false) => PointerState::Normal,
+        };
         let frame = match style.frame {
             Frame::Native => div().child(
                 canvas(
                     |_, _, _| {},
-                    move |bounds, _, window, cx| paint_text_field(bounds, disabled, window, cx),
+                    move |bounds, _, window, cx| {
+                        paint_text_field(bounds, disabled, pointer, window, cx);
+                    },
                 )
                 .size_full(),
             ),
@@ -550,10 +712,42 @@ impl<M: FieldModel> Render for TextField<M> {
             .h(px(height))
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
                 this.hovered = *hovered;
+                this.spin.hovered &= *hovered;
                 cx.notify();
+            }))
+            .capture_any_mouse_down(cx.listener(|this, event: &MouseDownEvent, _, cx| {
+                if event.button == MouseButton::Left {
+                    this.pressed = true;
+                    cx.notify();
+                }
             }))
             .child(frame.absolute().inset_0())
             .child(editor_box);
+        if self.pressed {
+            let field = cx.weak_entity();
+            root = root.child(
+                canvas(
+                    |_, _, _| {},
+                    move |_, _, window, _| {
+                        window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| {
+                            if phase == DispatchPhase::Capture {
+                                let _ = field.update(cx, |this, cx| {
+                                    this.pressed = false;
+                                    cx.notify();
+                                });
+                            }
+                        });
+                    },
+                )
+                .absolute(),
+            );
+        }
+        if let Some(spin) = g.spin
+            && (focused || self.hovered || self.spin.pressed)
+            && !disabled
+        {
+            root = root.child(self.spin_button(spin, scale, cx));
+        }
         if focused {
             root = root.child(
                 canvas(

@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::Duration;
 
 use gpui_kit::{App, Bounds, Pixels, ScrollEvent, Window};
 
@@ -10,6 +11,10 @@ pub(super) fn add_recent_document(_path: &Path) {}
 
 pub(super) fn numpad_enter() -> bool {
     false
+}
+
+pub(super) fn scroll_button_delays() -> (Duration, Duration) {
+    (Duration::from_millis(250), Duration::from_millis(50))
 }
 
 pub(super) fn set_tooltip(_window: &Window, _text: &str) {}

@@ -588,6 +588,7 @@ const ENTRY_INPUTS: &str = "inputs.json";
 const BORROWED_INPUTS: &[(&str, &str)] = &[
     ("hubSession", "dom"),
     ("selectKeys", "selectKeysMain"),
+    ("spinButtons", "spinButtonsMain"),
     ("genMenusHost", "genMenus"),
     ("genMenusHost", "genMenusMain"),
 ];

@@ -49,6 +49,9 @@ impl Variant<'_> {
     }
 
     pub(super) fn capture_tooltips(&mut self, name: &str) -> Result<(), String> {
+        if self.pressed.is_some() {
+            return Ok(());
+        }
         if self.scenario.page == Page::App {
             self.wait_idle()?;
         }
@@ -130,10 +133,8 @@ impl Variant<'_> {
             self.dispatch(PlatformInput::MouseExited(MouseExitEvent::default()))?;
             left = Some(strings(&self.given()?));
         }
-        if self.pressed.is_none() {
-            let (x, y) = self.pointer;
-            self.hover(x, y)?;
-        }
+        let (x, y) = self.pointer;
+        self.hover(x, y)?;
         let mut fields = vec![("titles", JsValue::Array(records))];
         fields.extend(left.map(|left| ("left", left)));
         fields.push(("gridStep", JsValue::Number(GRID_STEP)));

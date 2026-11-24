@@ -22,6 +22,7 @@ pub mod probe;
 mod startup_error;
 
 use std::path::Path;
+use std::time::Duration;
 
 use gpui_kit::{App, Bounds, Pixels, Point, ScrollDelta, ScrollEvent, Window};
 
@@ -385,6 +386,12 @@ pub(crate) fn popup_window_opened(
 #[cfg(target_os = "linux")]
 pub(crate) fn dismiss_popup(window: &Window) -> bool {
     imp::dismiss_popup(window)
+}
+
+/// `ScrollbarTheme`'s `InitialAutoscrollTimerDelay` and `AutoscrollTimerDelay`, which also pace a
+/// held spin button.
+pub(crate) fn scroll_button_delays() -> (Duration, Duration) {
+    imp::scroll_button_delays()
 }
 
 /// Whether the window is the one keys go to.

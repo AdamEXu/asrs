@@ -437,6 +437,9 @@ fn tooltips(paths: &Paths, names: &[String]) -> Result {
             };
             let name = name.to_string();
             let file = dir.join(format!("{name}.tooltips.json"));
+            if !file.exists() {
+                continue;
+            }
             let text = fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
             captures.push(format!(
                 "{}:{}",
