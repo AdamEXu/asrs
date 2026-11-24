@@ -80,8 +80,6 @@ struct WorkerSlot {
 
 enum ExportMessage {
     Reply(ExportReply),
-    /// The worker never posts its result; the request stays open like upstream's spinner.
-    NeverReturns,
     Unmodeled(&'static str),
     /// The worker posted progress since the last of these; the cell holds its latest value.
     Progressed,
@@ -337,7 +335,6 @@ impl Hub {
                 self.task(cx, |model, host| model.export_reply(id, reply, host));
                 self.host.exports.retain(|(i, _)| *i != id);
             }
-            ExportMessage::NeverReturns => {}
             ExportMessage::Unmodeled(what) => {
                 cx.emit(HubEvent::Exception {
                     task: "worker",
@@ -388,19 +385,17 @@ fn run_export(
         export_options(options),
     ) {
         (Ok(log), Some(options)) => export(&log, &options, progress),
-        // The worker's `onmessage` wraps `Log.fromSerialized` in the try/catch that ends
-        // in `reject()`, so a JS-level throw fails the export; a log whose replay never
-        // finishes leaves the request open.
         (Err(LogError::Proto(_) | LogError::StackOverflow), _) => Err(ExportError::Rejected),
-        (Err(LogError::NeverCompletes), _) => return ExportMessage::NeverReturns,
-        (Err(LogError::Unmodeled(what)), _) => return ExportMessage::Unmodeled(what),
+        (Err(LogError::NeverCompletes), _) => Err(ExportError::Unported(
+            "a log the export worker never finishes reading",
+        )),
+        (Err(LogError::Unmodeled(what)), _) => Err(ExportError::Unported(what)),
         (_, None) => Err(ExportError::Unported("export options of another shape")),
     };
     ExportMessage::Reply(ExportReply::Payload(match output {
         Ok(Output::Text(text)) => JsValue::String(text),
         Ok(Output::Bytes(bytes)) => JsValue::Bytes(bytes),
         Err(ExportError::Rejected) => return ExportMessage::Reply(ExportReply::Failed),
-        Err(ExportError::NeverCompletes) => return ExportMessage::NeverReturns,
         Err(ExportError::Unported(what)) => return ExportMessage::Unmodeled(what),
     }))
 }

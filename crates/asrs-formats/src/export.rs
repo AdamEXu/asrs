@@ -61,8 +61,6 @@ impl Output {
 pub enum ExportError {
     /// The worker posted `reject()`: an exception or a missing AdvantageKit timestamp.
     Rejected,
-    /// The worker never posts its result: upstream's loop does not finish.
-    NeverCompletes,
     /// A branch or input the port does not model yet.
     Unported(&'static str),
 }

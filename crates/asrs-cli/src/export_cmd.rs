@@ -155,10 +155,6 @@ fn run_case(log: &Log, case: &Case, fixed_limit: f64, dir: &Path) -> Json {
             Err(export::ExportError::Rejected) => {
                 record.push(("outcome", Json::string("failed")));
             }
-            // Only the sampled MCAP bound produces this, and the oracle pre-skips it.
-            Err(export::ExportError::NeverCompletes) => {
-                record.push(("outcome", Json::string("skipped")));
-            }
             Err(export::ExportError::Unported(_)) => {
                 record.push(("outcome", Json::string("unmodeled")));
             }
@@ -227,10 +223,6 @@ fn export_single(args: &[String]) -> ExitCode {
         Err(export::ExportError::Rejected) => {
             eprintln!("export failed");
             ExitCode::from(EXPORT_FAILED)
-        }
-        Err(export::ExportError::NeverCompletes) => {
-            eprintln!("export never completes");
-            ExitCode::from(NEVER_COMPLETES)
         }
         Err(export::ExportError::Unported(what)) => {
             eprintln!("export unmodeled: {what}");

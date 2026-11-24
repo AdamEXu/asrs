@@ -149,7 +149,7 @@ impl RlogSource {
             JsValue::Bytes(ref bytes) => bytes.clone(),
             _ => Vec::new(),
         };
-        let decode_ok = {
+        let decoded = {
             let log = self.base.log().expect("checked");
             self.decoder.as_mut().expect("checked").decode(
                 cx.realm,
@@ -157,8 +157,12 @@ impl RlogSource {
                 &raw,
                 cx.clock,
                 None,
-            )?
+            )
         };
+        if decoded == Err(Abort::NeverReturns) {
+            self.reconnect(cx);
+        }
+        let decode_ok = decoded?;
         if !decode_ok {
             self.reconnect(cx);
             return Ok(());
