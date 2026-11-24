@@ -293,7 +293,8 @@ fn binary(
 }
 
 fn on_js(args: &[Value], f: impl Fn(&[JsValue]) -> Outcome) -> Response {
-    match args.iter().map(to_js).collect::<Result<Vec<_>, _>>() {
+    let operands = (0..args.len().max(3)).map(|i| to_js(&arg(args, i)));
+    match operands.collect::<Result<Vec<_>, _>>() {
         Ok(values) => respond(f(&values)),
         Err(e) => Response::Error(e),
     }
@@ -489,5 +490,20 @@ pub(crate) fn js_typeof(v: &Value) -> &'static str {
         Value::Symbol(_) => "symbol",
         Value::Function(_) => "function",
         _ => "object",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn omitted_operands_are_undefined() {
+        let read = on_js(&[], |v| Ok(from_js(&ops::get_key(&v[0], &key(&v[1]))?)));
+        assert!(matches!(read, Response::Throw(_)));
+        let keyed = on_js(&[Value::Bool(true)], |v| {
+            Ok(Value::Bool(v[1] == JsValue::Undefined))
+        });
+        assert!(matches!(keyed, Response::Ok(Value::Bool(true))));
     }
 }
