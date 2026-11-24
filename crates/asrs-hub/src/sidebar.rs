@@ -1320,7 +1320,6 @@ impl Sidebar {
         }
     }
 
-    /// The 250 ms tuning-publish interval.
     /// The callback of the interval upstream's constructor sets, every [`TUNING_INTERVAL_MS`].
     pub fn publish_tuning(&mut self, env: &mut SidebarEnv<'_>) {
         if !self.is_tuning_mode {

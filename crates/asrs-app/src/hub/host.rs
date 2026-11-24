@@ -39,10 +39,12 @@ fn interval_period(period_ms: f64) -> Duration {
 
 /// Blink's `TimerBase::RunInternal`: a repeating timer's next fire time is set before its
 /// callback runs and stays on the original period grid, skipping beats it missed, so the
-/// callback's own duration and late wakeups never make it drift.
-pub(super) fn next_fire(scheduled: Instant, now: Instant, period: Duration) -> Instant {
-    let late = now.saturating_duration_since(scheduled).as_nanos() % period.as_nanos();
-    now + period - Duration::from_nanos(late as u64)
+/// callback's own duration and late wakeups never make it drift. A beat less than a 20th of the
+/// period away counts as missed.
+fn next_fire(scheduled: Instant, now: Instant, period: Duration) -> Instant {
+    let late = (now + period / 20).saturating_duration_since(scheduled);
+    let beats = late.as_nanos().div_ceil(period.as_nanos()).max(1);
+    scheduled + Duration::from_nanos((beats * period.as_nanos()) as u64)
 }
 
 /// `setInterval(fire, period_ms)` in the page of `cx`'s entity, until the task is dropped.
@@ -637,6 +639,8 @@ mod tests {
         let ms = |n| t0 + Duration::from_millis(n);
         assert_eq!(next_fire(ms(250), ms(250), period), ms(500));
         assert_eq!(next_fire(ms(250), ms(280), period), ms(500));
+        assert_eq!(next_fire(ms(250), ms(485), period), ms(500));
+        assert_eq!(next_fire(ms(250), ms(490), period), ms(750));
         assert_eq!(next_fire(ms(250), ms(790), period), ms(1000));
         assert_eq!(interval_period(1000.0 / 60.0), Duration::from_millis(16));
     }

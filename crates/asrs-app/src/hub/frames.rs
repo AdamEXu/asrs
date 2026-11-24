@@ -9,7 +9,6 @@ use std::time::{Duration, Instant};
 use asrs_ui::gpui::{AnyWindowHandle, Context, Subscription, Task, WeakEntity, Window};
 
 use super::Hub;
-use super::host::next_fire;
 
 /// The rate of a display that does not report one, and of a page without a window.
 pub(super) const FRAME_PERIOD: Duration = Duration::from_micros(16_667);
@@ -112,7 +111,7 @@ impl Frames {
         let executor = cx.background_executor();
         let now = executor.now();
         if self.due <= now {
-            self.due = next_fire(self.due, now, self.period);
+            self.due = next_frame(self.due, now, self.period);
         }
         let timer = executor.timer(self.due - now);
         self.timer = Some(cx.spawn(async move |this, cx| {
@@ -126,6 +125,12 @@ impl Frames {
         self.due = self.last + self.period;
         self.arm(cx);
     }
+}
+
+/// The first frame after `now` of those every `period` from `due`.
+fn next_frame(due: Instant, now: Instant, period: Duration) -> Instant {
+    let late = now.saturating_duration_since(due).as_nanos() % period.as_nanos();
+    now + period - Duration::from_nanos(late as u64)
 }
 
 fn watch(cx: &Context<'_, Hub>) -> Task<()> {
