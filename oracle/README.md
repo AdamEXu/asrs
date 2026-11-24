@@ -1311,7 +1311,13 @@ lifecycle needs:
   workers and `exportWorker.js` both run this way.
 - Main's `historical-start`: the file named in the fixture (relative to it, and listed in
   `inputs` under a spec) is read, and `historical-data` arrives as a zero-delay page timeout.
-- Live sources and the NT4 publisher are not connected; fixtures only reach their refusals.
+- Live sources and the NT4 publisher, when the fixture has `live`: a live session (see "Live
+  sessions") without client steps, whose mock server answers the page's WebSockets and requests
+  and main's RLOG socket (`src/live/rlogMain.ts`) on the page's clock. `src/live/pageLoop.ts`
+  runs the server, the deliveries and the timers the page sets from then on under Blink's rules,
+  one task per firing of one page timer, so every task has the page's microtask drain after it.
+  The network's trace lines are written among the session's records. Unhandled rejections are
+  not, as in `liveSession`.
 
 Besides the `dom` records, a session writes `{"worker", "script"}`, `{"post", "type", "files" |
 "key"}` and `{"terminate"}` for worker traffic, `{"console": "warn", "text"}` for the
@@ -1324,7 +1330,8 @@ through `asrs_hub::hub::HubModel` with the same scheduling and compares every re
 
 A `lifecycle-*` fixture may also watch the loading glow: its first capture installs a
 `MutationObserver` on the document element's style, and `window.__glow.splice(0)` reads every
-value the glow took since the last read, one per page task.
+value the glow took since the last read, one per page task. `window.__titles` is the same for
+the title.
 
 ## Log routing and the export flow
 

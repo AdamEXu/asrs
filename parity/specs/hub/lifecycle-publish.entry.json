@@ -1,0 +1,657 @@
+{
+ "entry": "hubSession",
+ "inputs": [
+  "logs/match.csv",
+  "logs/nt.csv"
+ ],
+ "fixture": {
+  "seed": 107,
+  "live": {
+   "protocol": "nt4",
+   "seed": 1,
+   "epochMs": 1767225600000,
+   "latencyMs": 3,
+   "endMs": 600000,
+   "client": {
+    "source": "nt4",
+    "address": "10.63.28.2",
+    "mode": "default"
+   },
+   "server": {
+    "version": "4.1",
+    "offsetUs": 7000000
+   },
+   "steps": [
+    {
+     "t": 0,
+     "server": [
+      "down",
+      "refuse"
+     ]
+    },
+    {
+     "t": 1500,
+     "server": [
+      "up"
+     ]
+    },
+    {
+     "t": 3600,
+     "server": [
+      "down",
+      "refuse"
+     ]
+    },
+    {
+     "t": 3600,
+     "server": [
+      "drop"
+     ]
+    },
+    {
+     "t": 4600,
+     "server": [
+      "up"
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "(() => { const t = document.getElementsByTagName('title')[0]; window.__titles = []; let last = t.textContent; new MutationObserver(() => { if (t.textContent !== last) { last = t.textContent; window.__titles.push(last); } }).observe(t, { childList: true, characterData: true, subtree: true }); return last; })()"
+     }
+    ],
+    "label": "watch"
+   },
+   {
+    "main": "set-preferences",
+    "data": {
+     "theme": "system",
+     "robotAddress": "10.63.28.2",
+     "remotePath": "/U/logs",
+     "liveMode": "nt4",
+     "liveSubscribeMode": "low-bandwidth",
+     "liveDiscard": 1200,
+     "publishFilter": "/Data, /Other/Keep",
+     "rlogPort": 5800,
+     "coordinateSystem": "automatic",
+     "field3dModeAc": "standard",
+     "field3dModeBattery": "",
+     "field3dAntialiasing": true,
+     "tbaApiKey": "",
+     "userAssetsFolder": null,
+     "skipHootNonProWarning": false,
+     "skipFRCCoordinateSystemWarning": false,
+     "skipFTCCoordinateSystemWarning": false,
+     "ctreLicenseAccepted": false,
+     "systemcoreStaticAddress": "",
+     "hasScrolledLineGraph": false,
+     "hasScrolledTimeline": false,
+     "prefersFTC": false,
+     "timestamps": "start-zero"
+    }
+   },
+   {
+    "main": "start-publish",
+    "data": true
+   },
+   {
+    "main": "open-files",
+    "data": {
+     "files": [
+      "logs/match.csv"
+     ],
+     "merge": false
+    }
+   },
+   {
+    "advance": 300
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "no nt"
+   },
+   {
+    "main": "start-publish",
+    "data": true
+   },
+   {
+    "main": "open-files",
+    "data": {
+     "files": [
+      "logs/nt.csv"
+     ],
+     "merge": false
+    }
+   },
+   {
+    "advance": 300
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "opened"
+   },
+   {
+    "main": "start-publish",
+    "data": true
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "searching"
+   },
+   {
+    "advance": 1200
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "refused"
+   },
+   {
+    "advance": 900
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "publishing"
+   },
+   {
+    "main": "restore-state",
+    "data": {
+     "sidebar": {
+      "width": 300,
+      "expanded": []
+     },
+     "tabs": {
+      "selected": 1,
+      "tabs": [
+       {
+        "type": 0,
+        "title": "",
+        "controller": null,
+        "controllerUUID": "aaaa",
+        "renderer": "",
+        "controlsHeight": 0
+       },
+       {
+        "type": 4,
+        "title": "Values",
+        "controller": [
+         "NT:/Data/x"
+        ],
+        "controllerUUID": "bbbb",
+        "renderer": null,
+        "controlsHeight": 0
+       }
+      ]
+     }
+    }
+   },
+   {
+    "advance": 300
+   },
+   {
+    "main": "call-selection-setter",
+    "data": {
+     "uuid": "bbbb",
+     "name": "setSelectedTime",
+     "args": [
+      2
+     ]
+    }
+   },
+   {
+    "advance": 300
+   },
+   {
+    "main": "call-selection-setter",
+    "data": {
+     "uuid": "bbbb",
+     "name": "setHoveredTime",
+     "args": [
+      1.25
+     ]
+    }
+   },
+   {
+    "advance": 200
+   },
+   {
+    "main": "call-selection-setter",
+    "data": {
+     "uuid": "bbbb",
+     "name": "goIdle",
+     "args": []
+    }
+   },
+   {
+    "advance": 200
+   },
+   {
+    "main": "set-preferences",
+    "data": {
+     "theme": "system",
+     "robotAddress": "10.63.28.2",
+     "remotePath": "/U/logs",
+     "liveMode": "nt4",
+     "liveSubscribeMode": "low-bandwidth",
+     "liveDiscard": 1200,
+     "publishFilter": "/Data/x",
+     "rlogPort": 5800,
+     "coordinateSystem": "automatic",
+     "field3dModeAc": "standard",
+     "field3dModeBattery": "",
+     "field3dAntialiasing": true,
+     "tbaApiKey": "",
+     "userAssetsFolder": null,
+     "skipHootNonProWarning": false,
+     "skipFRCCoordinateSystemWarning": false,
+     "skipFTCCoordinateSystemWarning": false,
+     "ctreLicenseAccepted": false,
+     "systemcoreStaticAddress": "",
+     "hasScrolledLineGraph": false,
+     "hasScrolledTimeline": false,
+     "prefersFTC": false,
+     "timestamps": "start-zero"
+    }
+   },
+   {
+    "advance": 300
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "filtered"
+   },
+   {
+    "advance": 700
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "dropped"
+   },
+   {
+    "advance": 1200
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "republishing"
+   },
+   {
+    "main": "stop-publish"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "stopped"
+   },
+   {
+    "main": "stop-publish"
+   },
+   {
+    "advance": 100
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "stopped twice"
+   },
+   {
+    "main": "set-preferences",
+    "data": {
+     "theme": "system",
+     "robotAddress": "10.99.99.2",
+     "remotePath": "/U/logs",
+     "liveMode": "nt4",
+     "liveSubscribeMode": "low-bandwidth",
+     "liveDiscard": 1200,
+     "publishFilter": "",
+     "rlogPort": 5800,
+     "coordinateSystem": "automatic",
+     "field3dModeAc": "standard",
+     "field3dModeBattery": "",
+     "field3dAntialiasing": true,
+     "tbaApiKey": "",
+     "userAssetsFolder": null,
+     "skipHootNonProWarning": false,
+     "skipFRCCoordinateSystemWarning": false,
+     "skipFTCCoordinateSystemWarning": false,
+     "ctreLicenseAccepted": false,
+     "systemcoreStaticAddress": "",
+     "hasScrolledLineGraph": false,
+     "hasScrolledTimeline": false,
+     "prefersFTC": false,
+     "timestamps": "start-zero"
+    }
+   },
+   {
+    "main": "start-publish",
+    "data": false
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "robot"
+   },
+   {
+    "advance": 800
+   },
+   {
+    "main": "start-publish",
+    "data": true
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "replaced"
+   },
+   {
+    "advance": 500
+   },
+   {
+    "main": "open-files",
+    "data": {
+     "files": [
+      "logs/match.csv"
+     ],
+     "merge": false
+    }
+   },
+   {
+    "advance": 400
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "other log"
+   },
+   {
+    "main": "start-live",
+    "data": "robot"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "live"
+   },
+   {
+    "advance": 500
+   },
+   {
+    "main": "start-publish",
+    "data": true
+   },
+   {
+    "main": "stop-publish"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "not from live"
+   }
+  ]
+ }
+}

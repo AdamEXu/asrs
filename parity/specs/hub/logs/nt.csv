@@ -1,0 +1,11 @@
+Timestamp,Key,Value
+0,NT:/Data/x,2.5
+1,NT:/Data/x,-1
+0.5,NT:/Data/flag,true
+1.5,NT:/Data/flag,false
+0,NT:/Data/name,"first"
+2,NT:/Data/name,"second"
+0,NT:/Data/arr,[1; 2.5]
+0,NT:/Other/Keep/v,7
+0,NT:/Other/Drop/v,8
+0,/NotNT/v,10

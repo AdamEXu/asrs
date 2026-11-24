@@ -2,7 +2,9 @@
 //! is its browser: timers and intervals are foreground tasks on executor timers, animation
 //! frames are the window's next frames, each decode worker is an OS thread whose messages a
 //! foreground task pumps into the model, the export worker is a one-shot thread, and main's
-//! `historical-start` runs `asrs_services::historical_start` on the background executor.
+//! `historical-start` runs `asrs_services::historical_start` on the background executor. Live
+//! sources and the publisher run on the foreground over sockets of the app's one
+//! [`asrs_live::LiveRuntime`]; main's RLOG socket is [`crate::live::RlogBridge`].
 //!
 //! Views read the model through [`Hub::model`] and observe the entity: it notifies after every
 //! task the page runs and emits a [`HubEvent`] for each change a view or main reacts to.
@@ -10,7 +12,7 @@
 mod host;
 
 use std::rc::Rc;
-use std::sync::mpsc::RecvTimeoutError;
+use std::sync::mpsc::{RecvTimeoutError, SyncSender};
 use std::time::{Duration, Instant};
 
 use asrs_formats::historical::Status;
@@ -200,6 +202,15 @@ impl Hub {
         self.host.decode_threads()
     }
 
+    pub(crate) fn live_posted(&self) -> SyncSender<()> {
+        self.host.posted()
+    }
+
+    /// Blocks until a live connection posts to the page.
+    pub fn wait_for_live(&self, timeout: Duration) -> bool {
+        self.host.wait_for_live(timeout)
+    }
+
     /// Blocks until a decode or export thread posts to the page. False, at once, when none of
     /// them has anything left to post.
     pub fn wait_for_threads(&self, timeout: Duration) -> Result<bool, RecvTimeoutError> {
@@ -228,6 +239,7 @@ impl Hub {
             self.loading = self.model.loading().clone();
             cx.emit(HubEvent::Loading);
         }
+        self.arm_live_timer(cx);
         cx.notify();
     }
 }
