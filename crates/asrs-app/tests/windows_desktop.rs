@@ -987,6 +987,35 @@ app.whenReady().then(() => {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    fn open_list(
+        cx: &mut AsyncApp,
+        handle: AnyWindowHandle,
+        chosen: &Rc<RefCell<Vec<Option<usize>>>>,
+    ) {
+        let items = (0..30).map(|i| SelectMenuItem {
+            label: format!("Option {i}"),
+            kind: SelectMenuItemKind::Option,
+            enabled: true,
+            tool_tip: String::new(),
+        });
+        let menu = SelectMenu {
+            items: items.collect(),
+            font_size: 13.0,
+            selected: Some(10),
+            right_aligned: false,
+        };
+        let sink = chosen.clone();
+        cx.update(|cx| {
+            handle.update(cx, |_, window, cx| {
+                let at = [100.0, 120.0, 200.0, 22.0];
+                platform::select_popup(window, cx, menu, at, move |row, _| {
+                    sink.borrow_mut().push(row);
+                });
+            })
+        })
+        .expect("window");
+    }
+
     /// The drawn select list: below its control, with keys, and closed by a press outside.
     async fn lists(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
         let handle = handle_of(cx, hub);
@@ -1006,28 +1035,7 @@ app.whenReady().then(() => {
             ),
             ("a press outside chooses nothing", &[][..], None),
         ] {
-            let items = (0..30).map(|i| SelectMenuItem {
-                label: format!("Option {i}"),
-                kind: SelectMenuItemKind::Option,
-                enabled: true,
-                tool_tip: String::new(),
-            });
-            let menu = SelectMenu {
-                items: items.collect(),
-                font_size: 13.0,
-                selected: Some(10),
-                right_aligned: false,
-            };
-            let sink = chosen.clone();
-            cx.update(|cx| {
-                handle.update(cx, |_, window, cx| {
-                    let at = [100.0, 120.0, 200.0, 22.0];
-                    platform::select_popup(window, cx, menu, at, move |row, _| {
-                        sink.borrow_mut().push(row);
-                    });
-                })
-            })
-            .expect("window");
+            open_list(cx, handle, &chosen);
             sleep(cx, 1500).await;
             let windows = cx.update(|cx| cx.windows());
             let list = windows.into_iter().find(|w| *w != handle);
@@ -1059,6 +1067,32 @@ app.whenReady().then(() => {
                 format!("{got:?}, {left} windows left of {others}"),
             );
         }
+        let rect = Rect {
+            x: 2200.0,
+            y: 200.0,
+            width: 400.0,
+            height: 300.0,
+        };
+        let opened = cx
+            .update(|cx| windows::open_satellite(cx, "l", SatellitePlacement::Saved(rect), blank));
+        let other = opened.expect("open window").0;
+        let satellite = handle_of(cx, other);
+        sleep(cx, 1200).await;
+        with_window(cx, handle, |w| w.activate_window());
+        sleep(cx, 800).await;
+        open_list(cx, handle, &chosen);
+        sleep(cx, 1500).await;
+        click(cx, (rect.x + 200.0, rect.y + 150.0)).await;
+        sleep(cx, 1000).await;
+        let got = chosen.take();
+        let active = [satellite, handle].map(|h| with_window(cx, h, |w| w.is_window_active()));
+        report.check(
+            "select list, a press in another window leaves the focus there",
+            got == [None] && active == [true, false],
+            format!("{got:?}, satellite and hub active {active:?}"),
+        );
+        cx.update(|cx| windows::close(cx, other));
+        sleep(cx, 400).await;
     }
 
     struct NoScreen;
