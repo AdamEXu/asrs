@@ -54,8 +54,7 @@ use asrs_parity::vectors::{self, Record};
 use asrs_tabs::form::css::{Property, Style};
 
 const FRAME_PERIOD: f64 = 16.0;
-const OVERLAY_CLIENT_WIDTH: f64 = 636.0;
-const OVERLAY_CLIENT_HEIGHT: f64 = 50.0;
+const OVERLAY_HEIGHT: f64 = 50.0;
 const DEFAULT_IGNORED: [&str; 3] = ["save-state", "save-type-memory", "update-touch-bar-slider"];
 
 fn js(s: &str) -> JsString {
@@ -160,6 +159,15 @@ fn rect_of([x, y, width, height]: [f64; 4]) -> Rect {
         width,
         height,
     }
+}
+
+fn overlay_width(records: &[Record]) -> Result<f64, String> {
+    let parsed = records.iter().filter_map(|r| GeometryRecord::parse(r).ok());
+    parsed
+        .flatten()
+        .find(|g| g.name == "offsetWidth" && g.el.contains("div.tab-bar-scroll"))
+        .and_then(|g| g.value.as_f64())
+        .ok_or_else(|| "no recorded overlay width".to_owned())
 }
 
 /// Whether a geometry record is one `Tabs` makes: everything on the tab bar and its titles,
@@ -983,7 +991,7 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Replayed, String> {
         event_x: 0.0,
     };
     runner.tabs.tab_bar_sensor_mut().set_layout(
-        [OVERLAY_CLIENT_WIDTH, OVERLAY_CLIENT_HEIGHT],
+        [overlay_width(records)?, OVERLAY_HEIGHT],
         device_pixel_ratio,
     );
     runner.main("set-active-satellites", JsValue::Array(Vec::new()))?;

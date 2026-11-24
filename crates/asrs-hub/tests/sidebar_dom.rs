@@ -22,7 +22,7 @@ use std::rc::Rc;
 use asrs_hub::drag::{Drag, DragPayload};
 use asrs_hub::sidebar::{
     EventOutcome, INDENT_SIZE_PX, RowRect, RowRef, RowValue, Sidebar, SidebarEnv, SidebarGeometry,
-    Tuner, TunerWindow,
+    TUNING_INTERVAL_MS, Tuner, TunerWindow,
 };
 use asrs_js::number;
 use asrs_js::string::JsString;
@@ -895,6 +895,7 @@ struct Runner<'a> {
     geometry: Recorded,
     emitted: Vec<Emit>,
     now: f64,
+    tuning_due: f64,
     last_frame: f64,
     frame_period: f64,
     show_pending: bool,
@@ -946,11 +947,17 @@ impl Runner<'_> {
     fn advance(&mut self, ms: f64) {
         let end = self.now + ms;
         loop {
-            let timer_due = self.sidebar.next_timer_due();
+            let timeout = self.sidebar.next_timeout().unwrap_or(f64::INFINITY);
+            let timer_due = timeout.min(self.tuning_due);
             let frame_at = self.last_frame + self.frame_period;
-            if timer_due.is_some_and(|due| due <= end && due <= frame_at) {
-                self.now = self.now.max(timer_due.unwrap_or(end));
-                self.sidebar.fire_timers(self.now, &mut senv!(self));
+            if timer_due <= end && timer_due <= frame_at {
+                self.now = self.now.max(timer_due);
+                if timeout <= self.tuning_due {
+                    self.sidebar.fire_timeouts(self.now);
+                } else {
+                    self.sidebar.publish_tuning(&mut senv!(self));
+                    self.tuning_due += TUNING_INTERVAL_MS;
+                }
             } else if frame_at <= end {
                 self.now = frame_at;
                 self.last_frame = frame_at;
@@ -1257,7 +1264,7 @@ fn replay(
     let tuner_events: Rc<RefCell<Vec<Emit>>> = Rc::new(RefCell::new(Vec::new()));
     let live_cell: Rc<RefCell<Option<f64>>> = Rc::new(RefCell::new(None));
     let filenames: Vec<JsString> = Vec::new();
-    let mut sidebar = Sidebar::new(start, move || filenames.clone());
+    let mut sidebar = Sidebar::new(move || filenames.clone());
     let loading_fields: HashSet<JsString> = HashSet::new();
     let scripted = ScriptedClock(now_cell.clone());
 
@@ -1280,6 +1287,7 @@ fn replay(
         },
         emitted: Vec::new(),
         now: start,
+        tuning_due: start + TUNING_INTERVAL_MS,
         last_frame: start,
         frame_period,
         show_pending: true,

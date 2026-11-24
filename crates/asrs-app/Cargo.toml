@@ -137,6 +137,10 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "hidden_hub"
+required-features = ["parity"]
+
+[[test]]
 name = "live_sources"
 required-features = ["parity"]
 

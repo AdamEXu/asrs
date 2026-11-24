@@ -1010,6 +1010,19 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
         Box::new(View { sidebar: NoLayout }),
         &mut host,
     );
+    let intervals = host.timers.iter().filter_map(|t| match &t.task {
+        Task::Interval(interval, period) => Some((interval.clone(), *period)),
+        _ => None,
+    });
+    assert_eq!(
+        intervals.take(3).collect::<Vec<_>>(),
+        [
+            (HubInterval::SidebarTuning, 250.0),
+            (HubInterval::SaveState, 250.0),
+            (HubInterval::SaveTypeMemory, 1000.0),
+        ],
+        "the order of hub.ts's constructors"
+    );
     let mut runner = Runner {
         host,
         hub,

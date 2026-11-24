@@ -57,6 +57,7 @@ fn gpui_options(options: &WindowOptions, show: bool, cx: &App) -> asrs_ui::gpui:
         is_resizable: options.resizable.unwrap_or(true),
         focus: true,
         show,
+        inactive_frame_interval: None,
         app_id: cfg!(target_os = "linux").then(|| crate::IDENTITY.name.to_owned()),
         ..Default::default()
     }
