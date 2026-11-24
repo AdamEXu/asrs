@@ -23,6 +23,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Instant;
 
+use asrs_js::math::min2;
 use asrs_js::number::to_int32;
 use asrs_js::time::Clock;
 
@@ -121,7 +122,7 @@ impl TimerQueue {
     /// `requestIdleCallback(callback, { timeout })`. A page that draws frames runs one that asks
     /// for itself again once per frame (Electron 39).
     pub fn request_idle_callback(&mut self, timeout: f64) -> TimerId {
-        let delay = self.idle_period.map_or(timeout, |p| p.min(timeout));
+        let delay = self.idle_period.map_or(timeout, |p| min2(p, timeout));
         self.post_delayed_task(delay)
     }
 
