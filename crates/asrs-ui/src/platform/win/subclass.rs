@@ -6,14 +6,15 @@ use std::collections::HashMap;
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    MINMAXINFO, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER, SetWindowPos, WM_GETMINMAXINFO,
-    WM_NCDESTROY, WM_SIZING, WMSZ_BOTTOMLEFT, WMSZ_BOTTOMRIGHT, WMSZ_LEFT, WMSZ_RIGHT, WMSZ_TOP,
-    WMSZ_TOPLEFT, WMSZ_TOPRIGHT,
+    MINMAXINFO, PostMessageW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOZORDER, SetWindowPos, WM_APP,
+    WM_GETMINMAXINFO, WM_NCDESTROY, WM_SIZING, WMSZ_BOTTOMLEFT, WMSZ_BOTTOMRIGHT, WMSZ_LEFT,
+    WMSZ_RIGHT, WMSZ_TOP, WMSZ_TOPLEFT, WMSZ_TOPRIGHT,
 };
 
 use super::window::{frame, scale, window_rect};
 
 const ID: usize = 0x6173_7273;
+const WM_SIZE_TO_RATIO: u32 = WM_APP + 0x61;
 
 type Size = (f64, f64);
 
@@ -42,11 +43,19 @@ pub fn set_limits(hwnd: HWND, min: Option<Size>, max: Option<Size>) {
     });
 }
 
-/// `HWNDMessageHandler::SetAspectRatio`, which also sizes the window to the ratio.
+/// `HWNDMessageHandler::SetAspectRatio`, which also sizes the window to the ratio. Callers hold
+/// the app, which GPUI borrows for `WM_SIZE`, so the window is sized on a later message.
 pub fn set_aspect_ratio(hwnd: HWND, aspect_ratio: f64) {
     let ratio = (aspect_ratio > 0.0).then_some(aspect_ratio);
     update(hwnd, |constraints| constraints.aspect_ratio = ratio);
-    if let Some(rect) = window_rect(hwnd).filter(|_| ratio.is_some()) {
+    if ratio.is_some() {
+        // SAFETY: a closed window makes the call fail.
+        unsafe { PostMessageW(Some(hwnd), WM_SIZE_TO_RATIO, WPARAM(0), LPARAM(0)) }.ok();
+    }
+}
+
+fn size_window_to_ratio(hwnd: HWND) {
+    if let Some(rect) = window_rect(hwnd) {
         let sized = size_to_aspect_ratio(hwnd, WMSZ_BOTTOMRIGHT, rect);
         let flags = SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE;
         let (width, height) = (sized.right - sized.left, sized.bottom - sized.top);
@@ -155,6 +164,10 @@ unsafe extern "system" fn procedure(
                 let rect = &mut *(lparam.0 as *mut RECT);
                 *rect = size_to_aspect_ratio(hwnd, wparam.0 as u32, *rect);
                 LRESULT(1)
+            }
+            WM_SIZE_TO_RATIO => {
+                size_window_to_ratio(hwnd);
+                LRESULT(0)
             }
             WM_NCDESTROY => {
                 WINDOWS.with_borrow_mut(|windows| windows.remove(&(hwnd.0 as isize)));

@@ -26,7 +26,8 @@ mod desktop {
     use asrs_app::windows::{self, Rect, SatellitePlacement, WindowId, WindowKind, Windows};
     use asrs_model::messages::{MainToHub, NamedMessage};
     use asrs_parity::json::{self, Json};
-    use asrs_parity::{pixel, vectors};
+    use asrs_parity::pixel::{self, Rgb, Rgba};
+    use asrs_parity::vectors;
     use asrs_services::fs::RealFs;
     use asrs_services::lifecycle::{AppPaths, MainState};
     use asrs_services::path::PathStyle;
@@ -62,7 +63,7 @@ app.whenReady().then(() => {
       if (!request.hub) win.setMenu(null);
       win.setMenuBarVisibility(false);
       win.once("ready-to-show", () => win.show());
-      await win.loadURL("data:text/html,<body style='margin:0;height:5000px'>");
+      await win.loadURL("data:text/html,<body style='margin:0;background:white" + (request.hub ? "" : ";height:5000px") + "'>");
       await wait(900);
       out("open " + JSON.stringify([id(win), ...win.getContentSize(), ...Object.values(win.getBounds())]));
     } else if (request.op === "aspect") {
@@ -86,6 +87,10 @@ app.whenReady().then(() => {
       out("wheel ready");
     } else if (request.op === "wheels") {
       out("wheels " + JSON.stringify(await win.webContents.executeJavaScript("window.__wheel")));
+    } else if (request.op === "focus") {
+      win.focus();
+      await wait(400);
+      out("focused");
     } else if (request.op === "close") {
       win.destroy();
       await wait(300);
@@ -709,6 +714,171 @@ app.whenReady().then(() => {
         }
     }
 
+    /// The window's premultiplied pixels as a capture has them.
+    fn straight(width: u32, height: u32, pixels: &[u8]) -> Rgba {
+        let mut data = pixels.to_vec();
+        for pixel in data.chunks_exact_mut(4) {
+            let alpha = u32::from(pixel[3]);
+            if alpha != 0 && alpha != 255 {
+                for c in &mut pixel[..3] {
+                    *c = ((u32::from(*c) * 255 + alpha / 2) / alpha).min(255) as u8;
+                }
+            }
+        }
+        Rgba {
+            width,
+            height,
+            data,
+        }
+    }
+
+    const STRIP: (i32, i32) = (140, 38);
+
+    /// The screen's pixels over the caption buttons of a window's content, less the row and
+    /// column of DWM's border.
+    fn strip(number: u32) -> Rgb {
+        let [_, client] = probe::rects(number).expect("rects");
+        let (width, height) = (STRIP.0 - 1, STRIP.1 - 1);
+        let x = client[2] - STRIP.0;
+        let image = probe::screen_image(x, client[1] + 1, width, height).expect("screen");
+        let image = Rgba {
+            width: image.width,
+            height: image.height,
+            data: image.rgba,
+        };
+        pixel::composite(&image, [0, 0, 0])
+    }
+
+    /// The hub's caption buttons on screen, under the real pointer, beside Electron's.
+    async fn captions(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
+        let rect =
+            r#"{"op":"open","hub":true,"options":{"x":200,"y":150,"width":1100,"height":650}}"#;
+        let theirs = electron.numbers(cx, rect, "open ").await[0] as u32;
+        let dir = std::env::temp_dir().join(format!("asrs-captions-{}", std::process::id()));
+        cx.update(|cx| cx.set_global(ThemeSource::Light));
+        let opened = cx.update(|cx| {
+            windows::open_hub(cx, None, |window, cx| {
+                let boot = fresh_boot(&dir);
+                HubEntityHost::open_with(window, false, boot, None, cx)
+            })
+        });
+        let id = opened.expect("hub").0;
+        let handle = handle_of(cx, id);
+        let ours = with_window(cx, handle, |w| probe::window_number(w)).expect("window id");
+        sleep(cx, 4000).await;
+        let mut shots: Vec<Vec<(String, Rgb)>> = Vec::new();
+        for (window, mine) in [(ours, true), (theirs, false)] {
+            if mine {
+                with_window(cx, handle, |w| w.activate_window());
+            } else {
+                electron.request(cx, r#"{"op":"focus"}"#, "focused").await;
+            }
+            sleep(cx, 1000).await;
+            let mut list = Vec::new();
+            for maximized in [false, true] {
+                if maximized {
+                    let [_, client] = probe::rects(window).expect("rects");
+                    click(cx, (f64::from(client[2] - 70), f64::from(client[1] + 32))).await;
+                    sleep(cx, 1500).await;
+                }
+                let [_, client] = probe::rects(window).expect("rects");
+                let at = |dx: i32, y: i32| (f64::from(client[2] - dx), f64::from(client[1] + y));
+                let away = at(400, 300);
+                for (name, dx) in [
+                    ("rest", 0),
+                    ("minimize", 115),
+                    ("maximize", 70),
+                    ("close", 24),
+                ] {
+                    if dx == 0 {
+                        probe::post_mouse(MouseAction::Drag, away.0, away.1);
+                        sleep(cx, 900).await;
+                        list.push((format!("{name}, maximized {maximized}"), strip(window)));
+                        continue;
+                    }
+                    let (x, y) = at(dx, 32);
+                    probe::post_mouse(MouseAction::Drag, x, y);
+                    sleep(cx, 900).await;
+                    list.push((
+                        format!("{name} hovered, maximized {maximized}"),
+                        strip(window),
+                    ));
+                    probe::post_mouse(MouseAction::Down, x, y);
+                    sleep(cx, 700).await;
+                    list.push((
+                        format!("{name} pressed, maximized {maximized}"),
+                        strip(window),
+                    ));
+                    probe::post_mouse(MouseAction::Drag, away.0, away.1);
+                    sleep(cx, 700).await;
+                    let dragged = format!("{name} dragged off, maximized {maximized}");
+                    list.push((dragged, strip(window)));
+                    probe::post_mouse(MouseAction::Up, away.0, away.1);
+                    sleep(cx, 400).await;
+                }
+            }
+            shots.push(list);
+        }
+        for ((name, mine), (_, other)) in shots[0].iter().zip(&shots[1]) {
+            let compared = pixel::compare(mine, other, [0, 0, 0]);
+            let (width, height) = (mine.width as usize, mine.height as usize);
+            let (ok, detail) = match compared {
+                Ok(compared) => {
+                    let differing = compared.mask.iter().filter(|d| **d).count();
+                    let blob = pixel::max_blob(&compared.mask, width, height);
+                    let rate = 100.0 * differing as f64 / compared.mask.len() as f64;
+                    let detail = format!("{differing} px differ ({rate:.3} %), blob {blob}");
+                    (rate <= 0.2 && blob <= 64, detail)
+                }
+                Err(e) => (false, e),
+            };
+            report.check(&format!("caption buttons, {name}"), ok, detail);
+        }
+        let [_, client] = probe::rects(ours).expect("rects");
+        let at = |dx: i32| (f64::from(client[2] - dx), f64::from(client[1] + 32));
+        with_window(cx, handle, |w| w.activate_window());
+        sleep(cx, 800).await;
+        let maximized = with_window(cx, handle, |w| w.is_maximized());
+        report.check("the maximize button maximizes", maximized, "");
+        click(cx, at(70)).await;
+        sleep(cx, 1500).await;
+        let restored = !with_window(cx, handle, |w| w.is_maximized());
+        report.check("the maximize button restores", restored, "");
+        let [_, client] = probe::rects(ours).expect("rects");
+        let at = |dx: i32| (f64::from(client[2] - dx), f64::from(client[1] + 32));
+        let dragged = at(500);
+        for (action, (x, y)) in [
+            (MouseAction::Drag, dragged),
+            (MouseAction::Down, dragged),
+            (MouseAction::Drag, (dragged.0 + 20.0, dragged.1 + 20.0)),
+            (MouseAction::Drag, (dragged.0 + 60.0, dragged.1 + 40.0)),
+            (MouseAction::Up, (dragged.0 + 60.0, dragged.1 + 40.0)),
+        ] {
+            probe::post_mouse(action, x, y);
+            sleep(cx, 400).await;
+        }
+        let [_, moved] = probe::rects(ours).expect("rects");
+        report.check(
+            "the title bar drags the window",
+            [moved[0] - client[0], moved[1] - client[1]] == [60, 40],
+            format!("{client:?} to {moved:?}"),
+        );
+        let at = |dx: i32| (f64::from(moved[2] - dx), f64::from(moved[1] + 32));
+        click(cx, at(115)).await;
+        sleep(cx, 1500).await;
+        let hidden = !cx.update(|cx| Windows::is_visible(cx, id));
+        report.check("the minimize button minimizes", hidden, "");
+        with_window(cx, handle, |w| w.activate_window());
+        sleep(cx, 1500).await;
+        let [_, client] = probe::rects(ours).expect("rects");
+        click(cx, (f64::from(client[2] - 24), f64::from(client[1] + 32))).await;
+        sleep(cx, 1500).await;
+        let closed = cx.update(|cx| Windows::handle(cx, id).is_none());
+        report.check("the close button closes", closed, "");
+        electron.request(cx, r#"{"op":"close"}"#, "closed").await;
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     struct NoScreen;
 
     impl WindowSystem for NoScreen {
@@ -779,11 +949,12 @@ app.whenReady().then(() => {
             with_window(cx, handle, |w| w.resize(size(px(1100.0), px(650.0))));
             sleep(cx, 6000).await;
             let own = with_window(cx, handle, |w| w.render_to_image()).expect("render_to_image");
+            let own = straight(own.width(), own.height(), own.as_raw());
             let file = out.join(format!("{scale}x-light/captures/launch.png"));
             let scenario = pixel::read_png(&file).expect("the scenario's capture");
-            let same_size = (own.width(), own.height()) == (scenario.width, scenario.height);
+            let same_size = (own.width, own.height) == (scenario.width, scenario.height);
             let differing = own
-                .as_raw()
+                .data
                 .chunks(4)
                 .zip(scenario.data.chunks(4))
                 .filter(|(a, b)| a != b)
@@ -791,7 +962,7 @@ app.whenReady().then(() => {
             report.check(
                 &format!("the hub's own window at {scale}x equals the scenario's capture"),
                 same_size && differing == 0,
-                format!("{}x{}, {differing} px differ", own.width(), own.height()),
+                format!("{}x{}, {differing} px differ", own.width, own.height),
             );
         }
         let _ = std::fs::remove_dir_all(&out);
@@ -828,6 +999,7 @@ app.whenReady().then(() => {
                     .expect("hub")
                     .0;
                 sleep(cx, 1500).await;
+                captions(cx, &electron, &mut report).await;
                 menus(cx, &mut report, hub).await;
                 accelerators(cx, &mut report, hub).await;
                 wheel(cx, &electron, &mut report).await;
