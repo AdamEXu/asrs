@@ -6,6 +6,7 @@ import { Socket } from "node:net";
 import * as os from "node:os";
 import * as path from "node:path";
 import { clipFolder } from "./app/clips";
+import { Desktop } from "./app/desktop";
 import { saveDisplayProfile, type DisplayProfile } from "./app/display";
 import { GENERATED_LOGS } from "./app/logs";
 import { busyReasons, domDump, downloadShows, focused, hubReady, sendMainMessage } from "./app/page";
@@ -43,6 +44,10 @@ const STATE_SAVE_TIMEOUT_MS = 5000;
 const MENU_TIMEOUT_MS = 10_000;
 const PROMPT_SETTLE_MS = 300;
 const COPY_SETTLE_MS = 200;
+const POINTER_SETTLE_MS = 700;
+// The strip of the hub's title bar its page keeps clear for Electron's caption buttons (`right:
+// 140px` of div.title-bar-text, the overlay's height).
+const CAPTION = { width: 140, height: 38 };
 const TOOLTIP_SETTLE_MS = 300;
 const TOOLTIP_FRAME_MS = 20;
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]", "::1"]);
@@ -216,6 +221,8 @@ let target: BrowserWindow | null = null;
 // The prompt window a "prompt" action waited for: input and captures go to it until it closes.
 let prompt: BrowserWindow | null = null;
 let scriptedInput = false;
+// The real input the page gets: what else the pointer does on its way is dropped.
+let realInput: "none" | "all" | "wheel" = "none";
 
 function active(): BrowserWindow {
   if (prompt !== null && prompt.isDestroyed()) prompt = null;
@@ -320,8 +327,9 @@ app.on("browser-window-created", (_event, win) => {
   win.setIgnoreMouseEvents(true);
   // macOS still hands the page a move from the physical cursor when the window appears under
   // it, so every mouse event the scenario did not send is dropped.
-  win.webContents.on("before-mouse-event", (event) => {
-    if (!scriptedInput) event.preventDefault();
+  win.webContents.on("before-mouse-event", (event, mouse) => {
+    if (scriptedInput || realInput === "all" || (realInput === "wheel" && mouse.type === "mouseWheel")) return;
+    event.preventDefault();
   });
   win.webContents.on("did-start-navigation", (event: any) => {
     if (target === null && event.isMainFrame && /\/www\/hub\.html$/.test(new URL(event.url).pathname)) {
@@ -375,6 +383,15 @@ function bgraToRgba(bitmap: Buffer): Buffer {
   return rgba;
 }
 
+// toBitmap gives premultiplied colours, which the acrylic sidebar's half transparent ones show.
+function straighten(rgba: Buffer) {
+  for (let i = 0; i < rgba.length; i += 4) {
+    const alpha = rgba[i + 3];
+    if (alpha === 0 || alpha === 255) continue;
+    for (let c = i; c < i + 3; c++) rgba[c] = Math.min(255, Math.floor((rgba[c] * 255 + (alpha >> 1)) / alpha));
+  }
+}
+
 type Rect = number[];
 
 function maskedEqual(a: Buffer, b: Buffer, width: number, masks: Rect[]): boolean {
@@ -395,6 +412,54 @@ function maskedEqual(a: Buffer, b: Buffer, width: number, masks: Rect[]): boolea
     if (a[o] !== b[o] || a[o + 1] !== b[o + 1] || a[o + 2] !== b[o + 2] || a[o + 3] !== b[o + 3]) return false;
   }
   return true;
+}
+
+const desktop = process.platform === "win32" && scenario.page === "app" ? new Desktop() : null;
+
+function contentOrigin(win: BrowserWindow) {
+  return screen.dipToScreenRect(win, win.getContentBounds());
+}
+
+// Electron draws the caption buttons over the page, where capturePage does not see them.
+async function drawCaptionButtons(rgba: Buffer, width: number) {
+  if (desktop === null) return;
+  target!.moveTop();
+  const origin = contentOrigin(target!);
+  const [w, h] = [CAPTION.width * scale, CAPTION.height * scale];
+  const strip = bgraToRgba(await desktop.grab(origin.x + width - w, origin.y, w, h));
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const from = (y * w + x) * 4;
+      const to = (y * width + width - w + x) * 4;
+      strip.copy(rgba, to, from, from + 3);
+      rgba[to + 3] = 255;
+    }
+  }
+}
+
+async function movePointer(action: Extract<Action, { pointer: string }>) {
+  if (desktop === null) throw new Error("the real pointer is only driven on Windows");
+  const origin = contentOrigin(target!);
+  target!.setIgnoreMouseEvents(false);
+  target!.moveTop();
+  const kind = action.pointer;
+  // The timeline zooms about a hovered time, which moves with every step of Chromium's animation.
+  realInput = kind === "wheel" ? "wheel" : "all";
+  try {
+    await desktop.pointer(origin.x + Math.round(action.x * scale), origin.y + Math.round(action.y * scale), kind === "down" || kind === "up" ? kind : undefined);
+    if (kind === "wheel") await desktop.wheel(action.unitsX ?? 0, action.unitsY ?? 0);
+    await sleep(POINTER_SETTLE_MS);
+  } finally {
+    realInput = "none";
+  }
+}
+
+async function activate(active: boolean) {
+  if (desktop === null) throw new Error("windows are only activated on Windows");
+  if (active) target!.focus();
+  else target!.blur();
+  await until(`the hub to be ${active ? "active" : "inactive"}`, READY_TIMEOUT_MS, async () => target!.isFocused() === active);
+  await sleep(POINTER_SETTLE_MS);
 }
 
 let displayProfile: DisplayProfile | null = null;
@@ -473,6 +538,8 @@ async function capture(name: string, probes: string[], maskSelectors: string[]) 
     const image = await win.webContents.capturePage();
     const nextSize = image.getSize(scale);
     const next = bgraToRgba(image.toBitmap({ scaleFactor: scale }));
+    if (process.platform === "win32") straighten(next);
+    if (win === target) await drawCaptionButtons(next, nextSize.width);
     const nextGlReads = await onPage<number>("window.__asrsParity.glReads()");
     const masks = nextDom.masks.map((m: { rect: Rect }) => m.rect);
     const same =
@@ -687,6 +754,10 @@ async function perform(action: Action) {
       hasPreciseScrollingDeltas: w.precise ?? false,
       canScroll: true
     } as any);
+  } else if ("pointer" in action) {
+    await movePointer(action);
+  } else if ("activate" in action) {
+    await activate(action.activate);
   } else if ("key" in action) {
     const modifiers = hostModifiers(action.modifiers) as any;
     const send = (type: "keyDown" | "char" | "keyUp", keyCode = action.key) => {
@@ -791,6 +862,7 @@ let finished = false;
 function finish(elapsedMs: number | null, error: unknown) {
   if (finished) return;
   finished = true;
+  desktop?.close();
   if (error !== null) errors.push(String((error as Error).stack ?? error));
   const files = fs.existsSync(userData) ? collectFiles() : [];
   const record = {

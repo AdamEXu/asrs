@@ -229,6 +229,12 @@ fn electron_builds_the_linux_menu() {
     assert!(compared > 100, "{compared} items");
 }
 
+#[test]
+fn electron_builds_the_win32_menu() {
+    let compared = replay_electron("menus/electron-win32/windows-x86_64", Platform::Windows);
+    assert!(compared > 100, "{compared} items");
+}
+
 fn replay_electron(vector: &str, platform: Platform) -> usize {
     let records = vectors::load(vector).unwrap_or_else(|e| panic!("{e}"));
     let mut compared = 0;

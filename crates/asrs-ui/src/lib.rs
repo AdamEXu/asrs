@@ -10,9 +10,9 @@ pub mod gpui {
         MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, PlatformInput, Point,
         Render, RenderImage, Result, Rgba, ScrollDelta, ScrollEvent, ScrollHandle, SharedString,
         Stateful, StatefulInteractiveElement, Styled, Subscription, Task, TitlebarOptions,
-        TouchPhase, WeakEntity, Window, WindowBackgroundAppearance, WindowBounds, WindowHandle,
-        WindowKind, WindowOptions, anchored, application, canvas, deferred, div, fill,
-        linear_color_stop, linear_gradient, point, px, rgb, rgba, size,
+        TouchPhase, WeakEntity, Window, WindowBackgroundAppearance, WindowBounds,
+        WindowControlArea, WindowHandle, WindowKind, WindowOptions, anchored, application, canvas,
+        deferred, div, fill, linear_color_stop, linear_gradient, point, px, rgb, rgba, size,
     };
     #[cfg(feature = "parity")]
     pub use gpui_kit::{HeadlessAppContext, NoopTextSystem, TestAppContext, WindowVisibility};
@@ -20,6 +20,7 @@ pub mod gpui {
 
 pub mod button;
 pub mod canvas_view;
+pub mod caption;
 #[cfg(feature = "parity")]
 pub mod capture;
 pub mod filter;
@@ -44,6 +45,12 @@ use gpui::{AnyWindowHandle, App, Entity, Render, Window, WindowOptions};
 pub fn init(cx: &mut App) {
     gpui_kit::init(cx);
     input::init(cx);
+    // The kit's root paints it under every window's view, over the hub's vibrancy or acrylic.
+    // Views paint their own pages.
+    if !cfg!(target_os = "linux") {
+        let theme = gpui_kit::component::Theme::global_mut(cx);
+        theme.tokens.background = gpui_kit::transparent_black().into();
+    }
     platform::init(cx);
 }
 

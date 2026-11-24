@@ -566,9 +566,9 @@ fn compare_focus(label: &str, reference: &Path, port: &Path) -> Result<Option<Ca
         let read = |side: &Path| -> Result<Vec<Json>> {
             let path = folder(side).join(&name);
             let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-            let lines = text.lines().map(|line| {
-                asrs_parity::json::parse(line).map_err(|e| format!("{}: {e}", path.display()))
-            });
+            let lines = text
+                .lines()
+                .map(|line| json::parse(line).map_err(|e| format!("{}: {e}", path.display())));
             lines.collect()
         };
         let (theirs, ours) = (read(reference)?, read(port)?);
@@ -969,7 +969,12 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
     if let Some(missing) = options.scenarios.iter().find(|n| !names.contains(n)) {
         return Err(format!("no scenario {missing} in {}", scenarios.display()));
     }
-    if !options.scenarios.is_empty() {
+    if options.scenarios.is_empty() {
+        names.retain(|n| {
+            let scenario = read_json(&scenarios.join(format!("{n}.json")));
+            scenario.is_ok_and(|s| app::runs_here(&s))
+        });
+    } else {
         names.retain(|n| options.scenarios.contains(n));
     }
     let root = parity_dir().join("port").join(&options.label);

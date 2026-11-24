@@ -13,6 +13,11 @@ export type Action =
   | {
       wheel: { x: number; y: number; deltaX?: number; deltaY?: number; wheelTicksX?: number; wheelTicksY?: number; precise?: boolean };
     }
+  /** The real pointer, which reaches what Electron draws outside the page, and its wheel, in
+   *  units of 120 a notch (Windows only). */
+  | { pointer: "move" | "down" | "up" | "wheel"; x: number; y: number; unitsX?: number; unitsY?: number }
+  /** Whether the hub is the desktop's active window (Windows only). */
+  | { activate: boolean }
   | { key: string; modifiers?: string[] }
   | { dialog: number | string | null }
   | { menu: string[] }
@@ -39,8 +44,8 @@ export type Scenario = {
   actions: Action[];
 };
 
-const ACTION_KEYS = ["main", "open", "eval", "selection", "wait", "idle", "mouse", "wheel", "key", "dialog", "menu", "appMenu", "prompt", "download", "role", "copy", "focus", "traverse", "capture"];
-const TOP_KEYS = ["page", "window", "scales", "themes", "gl", "prefs", "userData", "robot", "actions", "about"];
+const ACTION_KEYS = ["main", "open", "eval", "selection", "wait", "idle", "mouse", "wheel", "pointer", "activate", "key", "dialog", "menu", "appMenu", "prompt", "download", "role", "copy", "focus", "traverse", "capture"];
+const TOP_KEYS = ["page", "window", "scales", "themes", "gl", "prefs", "userData", "robot", "platforms", "actions", "about"];
 
 export function actionKind(action: Action): string {
   return ACTION_KEYS.find((k) => k in action)!;
@@ -64,6 +69,8 @@ export function parseScenario(name: string, text: string): Scenario {
   if (!Array.isArray(themes) || themes.length === 0 || themes.some((t: unknown) => t !== "light" && t !== "dark")) {
     fail(name, 'themes must be a subset of ["light", "dark"]');
   }
+  const platforms = raw.platforms ?? [process.platform];
+  if (!Array.isArray(platforms) || !platforms.includes(process.platform)) fail(name, `only runs on ${JSON.stringify(platforms)}`);
   const actions = raw.actions ?? [];
   if (!Array.isArray(actions)) fail(name, "actions must be an array");
   const captures = new Set<string>();

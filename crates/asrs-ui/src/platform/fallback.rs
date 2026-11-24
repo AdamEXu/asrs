@@ -192,6 +192,10 @@ pub(super) mod window {
             match *self {}
         }
 
+        pub fn center(&self, _parent: Option<&NativeWindow>) {
+            match *self {}
+        }
+
         pub fn set_content_size_limits(&self, _min: Option<(f64, f64)>, _max: Option<(f64, f64)>) {
             match *self {}
         }
@@ -387,7 +391,7 @@ pub(super) mod probe {
         None
     }
 
-    pub fn framed_title_bar() -> Option<f64> {
+    pub fn framed_window() -> Option<(f64, f64)> {
         None
     }
 

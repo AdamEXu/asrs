@@ -1,7 +1,8 @@
 #![allow(clippy::disallowed_methods)]
 
 //! The wheel-calibration scenario on the port, headless, against upstream's timeline ranges: on
-//! Linux `wheel-calibration-linux`, with the fractions of a tick a high-resolution wheel sends.
+//! Linux `wheel-calibration-linux`, with the fractions of a tick a high-resolution wheel sends, on
+//! Windows `wheel-calibration-windows`, whose events are the real wheel's, 120 units a notch.
 //! `parity/scenarios/inputs/drive.wpilog` is the log the Electron driver generates for
 //! `app:drive` with upstream's `WPILOGEncoder` (oracle/src/app/logs.ts), copied from its
 //! `inputs/`.
@@ -69,6 +70,32 @@ const LINUX: Calibration = Calibration {
     ],
 };
 
+/// From `cargo xtask app run wheel-calibration-windows` on the Windows x86_64 VM.
+const WINDOWS: Calibration = Calibration {
+    scenario: "wheel-calibration-windows",
+    captures: &["before", "notched", "one-40", "units-40"],
+    upstream: [
+        (
+            1,
+            &[
+                [0.0, 10.0],
+                [0.15738966007338107, 9.842610339926617],
+                [0.30982501912715854, 9.69017498087284],
+                [0.4574620283120101, 9.542537971687988],
+            ],
+        ),
+        (
+            2,
+            &[
+                [0.0, 10.0],
+                [0.15738966007338195, 9.842610339926615],
+                [0.3098250191271603, 9.690174980872838],
+                [0.4574620283120172, 9.542537971687981],
+            ],
+        ),
+    ],
+};
+
 fn timeline_range(path: &Path) -> [f64; 2] {
     let record = json::parse(&std::fs::read_to_string(path).unwrap()).unwrap();
     let range = record
@@ -83,6 +110,11 @@ fn main() {
         MAC
     } else if cfg!(target_os = "linux") {
         LINUX
+    } else if cfg!(windows) {
+        if asrs_parity::ci::skip_in_ci("wheel scenario", "a desktop") {
+            return;
+        }
+        WINDOWS
     } else {
         println!("wheel scenario: skipped, no recorded ranges for this platform");
         return;

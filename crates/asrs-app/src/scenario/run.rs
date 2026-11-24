@@ -503,6 +503,18 @@ fn scroll_delta(wheel: &Wheel) -> Result<ScrollDelta, String> {
     )))
 }
 
+/// The lines GPUI makes of `WM_MOUSEHWHEEL` and `WM_MOUSEWHEEL` at the system's default of three
+/// a notch, in the order the driver sends them.
+fn native_wheel_lines(units_x: f64, units_y: f64) -> Vec<asrs_ui::gpui::Point<f32>> {
+    let lines = |units: f64| units as f32 / 120.0 * 3.0;
+    let events = [
+        (units_x, point(-lines(units_x), 0.0)),
+        (units_y, point(0.0, lines(units_y))),
+    ];
+    let sent = events.into_iter().filter(|(units, _)| *units != 0.0);
+    sent.map(|(_, lines)| lines).collect()
+}
+
 fn click_app_menu(labels: &[String], cx: &mut App) -> Result<(), String> {
     fn find(items: &[MenuItem], labels: &[String], found: &mut Vec<Command>) {
         for item in items {
@@ -1061,6 +1073,23 @@ impl Variant<'_> {
                     ..Default::default()
                 }))?;
             }
+            Action::NativeWheel {
+                x,
+                y,
+                units_x,
+                units_y,
+            } => {
+                for delta in native_wheel_lines(*units_x, *units_y) {
+                    self.dispatch(PlatformInput::Scroll(ScrollEvent {
+                        position: point(px(*x as f32), px(*y as f32)),
+                        delta: ScrollDelta::Lines(delta),
+                        modifiers: Modifiers::default(),
+                        touch_phase: TouchPhase::Moved,
+                        ..Default::default()
+                    }))?;
+                }
+                self.tick()?;
+            }
             Action::Key { key, modifiers } => self.key(key, modifiers)?,
             Action::Dialog(reply) => {
                 let reply = match reply {
@@ -1235,9 +1264,10 @@ impl Variant<'_> {
         let scale = self.scale as f32;
         match self.scenario.page {
             Page::App => {
-                // `windows::open` makes the hub window transparent on macOS, for the vibrancy.
+                // `windows::open` makes the hub window transparent for the vibrancy on macOS and
+                // the acrylic on Windows.
                 self.headless
-                    .set_transparent_windows(cfg!(target_os = "macos"));
+                    .set_transparent_windows(cfg!(target_os = "macos") || platform::has_acrylic());
                 let (assets, preferences) = self.start_main()?;
                 if let Some(root) = self.bundled_assets.and_then(Path::parent) {
                     let root = std::path::absolute(root).map_err(|e| e.to_string())?;
@@ -1274,7 +1304,7 @@ impl Variant<'_> {
                 self.headless.context().update(|cx| {
                     let id = Windows::adopt_hub(cx, window.into(), screen.window);
                     cx.set_global(ScriptedFrame {
-                        title_bar: platform::probe::framed_title_bar().unwrap_or(0.0),
+                        size: platform::probe::framed_window().unwrap_or((0.0, 0.0)),
                     });
                     cx.global_mut::<MainProcess>()
                         .adopt_hub(id, hub.downgrade());

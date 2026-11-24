@@ -168,17 +168,16 @@ pub struct HubEntityHost {
 
 /// `os.release()`.
 fn os_release() -> String {
-    if cfg!(unix) {
-        std::process::Command::new("uname")
-            .arg("-r")
-            .output()
-            .ok()
-            .and_then(|o| String::from_utf8(o.stdout).ok())
-            .map(|s| s.trim_end_matches('\n').to_owned())
-            .unwrap_or_default()
-    } else {
-        String::new()
-    }
+    #[cfg(windows)]
+    return asrs_ui::platform::os_release();
+    #[cfg(not(windows))]
+    std::process::Command::new("uname")
+        .arg("-r")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim_end_matches('\n').to_owned())
+        .unwrap_or_default()
 }
 
 /// `process.platform`.

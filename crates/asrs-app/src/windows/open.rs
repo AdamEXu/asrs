@@ -11,37 +11,45 @@ type Size = (f64, f64);
 /// `INT_MAX`, which Electron puts in for a maximum size dimension that is not given.
 const UNBOUNDED: f64 = i32::MAX as f64;
 
-/// How much taller a framed window's bounds are than its content, where that is not the
-/// platform's own to say.
-fn scripted_frame(options: &WindowOptions, cx: &App) -> f64 {
+/// How much larger a framed window's bounds are than its content, where that is not the platform's
+/// own to say.
+fn scripted_frame(options: &WindowOptions, cx: &App) -> Size {
     #[cfg(feature = "parity")]
     if options.kind == WindowKind::Satellite
         && let Some(frame) = cx.try_global::<super::ScriptedFrame>()
     {
-        return frame.title_bar;
+        return frame.size;
     }
     let _ = (options, cx);
-    0.0
+    (0.0, 0.0)
 }
 
 fn gpui_options(options: &WindowOptions, show: bool, cx: &App) -> asrs_ui::gpui::WindowOptions {
-    let height = options.height - scripted_frame(options, cx);
-    let content = size(px(options.width as f32), px(height as f32));
+    let frame = scripted_frame(options, cx);
+    let content = size(
+        px((options.width - frame.0) as f32),
+        px((options.height - frame.1) as f32),
+    );
     let bounds = match origin(options, cx) {
         Some((x, y)) => Bounds::new(point(px(x as f32), px(y as f32)), content),
         None => Bounds::centered(None, content, cx),
     };
-    let fancy = options.kind == WindowKind::Hub && cfg!(target_os = "macos");
+    let hub = options.kind == WindowKind::Hub;
+    let vibrant = hub && cfg!(target_os = "macos");
     asrs_ui::gpui::WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         titlebar: Some(TitlebarOptions {
             title: None,
-            appears_transparent: fancy,
+            appears_transparent: hub && !cfg!(target_os = "linux"),
             traffic_light_position: None,
         }),
-        app_owns_titlebar_drag: fancy,
-        window_background: if fancy {
+        app_owns_titlebar_drag: vibrant,
+        window_background: if vibrant {
             WindowBackgroundAppearance::Transparent
+        } else if hub && platform::has_acrylic() {
+            // Transparent pixels and a DWM backdrop, whose type `install_sidebar_vibrancy` sets.
+            // `Transparent` would lay an accent policy over it.
+            WindowBackgroundAppearance::MicaBackdrop
         } else {
             WindowBackgroundAppearance::Opaque
         },
@@ -111,7 +119,7 @@ fn bounds(window: &Window) -> Rect {
 
 fn track<V: Render>(
     id: WindowId,
-    frame: f64,
+    frame: Size,
     window: &mut Window,
     entity: &Entity<V>,
     cx: &mut App,
@@ -119,7 +127,8 @@ fn track<V: Render>(
     let bounds = move |window: &Window| {
         let content = bounds(window);
         Rect {
-            height: content.height + frame,
+            width: content.width + frame.0,
+            height: content.height + frame.1,
             ..content
         }
     };
@@ -189,8 +198,9 @@ fn finish(
     native.set_content_size(width, height);
     let (min, max) = content_limits(native, options);
     native.set_content_size_limits(min, max);
-    if let Some((x, y)) = origin {
-        native.set_content_origin(x, y);
+    match origin {
+        Some((x, y)) => native.set_content_origin(x, y),
+        None => native.center(parent),
     }
     if options.fullscreenable == Some(false) {
         native.set_fullscreenable(false);

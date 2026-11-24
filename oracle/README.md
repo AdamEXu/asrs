@@ -1222,8 +1222,9 @@ be an `<input>`, for which `ArrowUp` and `ArrowDown` are keys too. Its fixture i
 is a page of its own that does not block, so its steps also press the keys that open it and the
 keys the open popup takes. Its vector is generated and content-checked on Linux x86_64 only.
 
-`menus/electron-linux` (`src/genMenusHost.ts`) is `genMenus electron` on the platform it runs on,
-for Electron's role defaults there, and is likewise generated on Linux x86_64 only.
+`menus/electron-linux` and `menus/electron-win32` (`src/genMenusHost.ts`) are `genMenus electron` on
+the platform they run on, for Electron's role defaults there, and are generated on Linux x86_64 and
+Windows x86_64 only.
 
 
 ## Spin button vectors
