@@ -102,7 +102,7 @@
   "platform": "win32",
   "arch": "x64",
   "osRelease": "10.0.26300",
-  "generator": "cb67ef40c8c4ed04",
+  "generator": "7d1da2c3260ca575",
   "lut": {
     "file": "lut-windows.bin",
     "content": "126da49e80e8c6fd"
