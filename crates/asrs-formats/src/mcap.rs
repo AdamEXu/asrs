@@ -9,17 +9,27 @@
 //! are not ported. The writable is a growing buffer whose position is its length, as
 //! upstream's `TempBuffer` is.
 //!
-//! Every method is synchronous: upstream's awaits only yield around `TempBuffer.write`, which
-//! completes synchronously, so a caller that awaits each call (or never fills a chunk) sees
-//! exactly this order of writes.
+//! Upstream's methods are async but `TempBuffer.write` completes synchronously, so an await only
+//! yields to the microtask queue. A caller that awaits each call sees the writes in order.
+//! [`McapWriter::add_message_unawaited`] leaves the rest of `finalizeChunk` queued, so that
+//! later calls see the chunk and the record buffer before they are reset, as upstream's do;
+//! [`McapWriter::register_channel`] and [`McapWriter::end`] are awaited and run the queue.
 
 use indexmap::IndexMap;
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 
 use asrs_js::string::{JsString, text_encode};
 
 const MAGIC: [u8; 8] = [137, 77, 67, 65, 80, 48, 13, 10];
-const CHUNK_SIZE: usize = 1024 * 1024;
+const CHUNK_SIZE: u64 = 1024 * 1024;
+
+/// The longest `ArrayBuffer` Electron 39 allocates (`new ArrayBuffer` throws `RangeError` above
+/// it), and so the longest file `TempBuffer` can hold. Recorded in `export/mcap-reentry`.
+pub const ARRAY_BUFFER_MAX: u64 = 2_145_386_496;
+
+/// `BufferBuilder` grows by half, so its record buffer cannot pass this. Upstream spends over
+/// 1 TB of CRC work to get here, and what it does afterwards is not modelled: the export fails.
+const RECORD_BUFFER_MAX: u64 = ARRAY_BUFFER_MAX / 3 * 2;
 
 const HEADER: u8 = 0x01;
 const FOOTER: u8 = 0x02;
@@ -97,38 +107,53 @@ pub struct Message {
     pub data: Vec<u8>,
 }
 
-/// The `Error`s `addMessage` throws.
+/// The `Error`s the writer throws.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum McapError {
     MissingChannel,
     MissingSchema,
+    /// `RangeError: Array buffer allocation failed`.
+    Allocation,
 }
 
 /// `BufferBuilder` with `McapRecordBuilder`'s record writers on top.
 #[derive(Default)]
 struct RecordBuilder {
     buf: Vec<u8>,
+    len: u64,
+    /// Tracks `len` without keeping the bytes.
+    measuring: bool,
 }
 
 impl RecordBuilder {
+    fn bytes(&mut self, bytes: &[u8]) {
+        self.len += bytes.len() as u64;
+        if !self.measuring {
+            self.buf.extend_from_slice(bytes);
+        }
+    }
+    fn reset(&mut self) {
+        self.buf.clear();
+        self.len = 0;
+    }
     fn u8(&mut self, value: u8) {
-        self.buf.push(value);
+        self.bytes(&[value]);
     }
     fn u16(&mut self, value: u16) {
-        self.buf.extend_from_slice(&value.to_le_bytes());
+        self.bytes(&value.to_le_bytes());
     }
     fn u32(&mut self, value: u32) {
-        self.buf.extend_from_slice(&value.to_le_bytes());
+        self.bytes(&value.to_le_bytes());
     }
     fn u64(&mut self, value: u64) {
-        self.buf.extend_from_slice(&value.to_le_bytes());
+        self.bytes(&value.to_le_bytes());
     }
     fn time(&mut self, value: Time) {
         self.u64(big_uint64(value));
     }
     fn bytes_prefixed(&mut self, bytes: &[u8]) {
         self.u32(bytes.len() as u32);
-        self.buf.extend_from_slice(bytes);
+        self.bytes(bytes);
     }
     fn string(&mut self, value: &JsString) {
         self.bytes_prefixed(&text_encode(value));
@@ -138,23 +163,29 @@ impl RecordBuilder {
     /// record's full byte length as the `write*` methods do.
     fn record(&mut self, opcode: u8, body: impl FnOnce(&mut Self)) -> u64 {
         self.u8(opcode);
-        let start = self.buf.len();
+        let start = self.len;
         self.u64(0);
         body(self);
-        let end = self.buf.len();
-        self.buf[start..start + 8].copy_from_slice(&((end - start - 8) as u64).to_le_bytes());
-        (end - start + 1) as u64
+        let length = self.len - start;
+        self.patch(start, &(length - 8).to_le_bytes());
+        length + 1
+    }
+
+    fn patch(&mut self, at: u64, bytes: &[u8]) {
+        if !self.measuring {
+            self.buf[at as usize..][..bytes.len()].copy_from_slice(bytes);
+        }
     }
 
     fn string_map(&mut self, pairs: &[(JsString, JsString)]) {
-        let start = self.buf.len();
+        let start = self.len;
         self.u32(0);
         for (key, value) in pairs {
             self.string(key);
             self.string(value);
         }
-        let length = (self.buf.len() - start - 4) as u32;
-        self.buf[start..start + 4].copy_from_slice(&length.to_le_bytes());
+        let length = (self.len - start - 4) as u32;
+        self.patch(start, &length.to_le_bytes());
     }
 
     fn write_schema(&mut self, schema: &Schema) -> u64 {
@@ -182,7 +213,7 @@ impl RecordBuilder {
             b.u32(message.sequence);
             b.time(message.log_time);
             b.time(message.publish_time);
-            b.buf.extend_from_slice(&message.data);
+            b.bytes(&message.data);
         });
     }
 }
@@ -209,7 +240,7 @@ impl ChunkBuilder {
         if self.total_message_count == 0 || message.log_time > self.message_end_time {
             self.message_end_time = message.log_time;
         }
-        let offset = self.records.buf.len() as u64;
+        let offset = self.records.len;
         self.message_indices
             .entry(message.channel_id)
             .or_default()
@@ -223,7 +254,7 @@ impl ChunkBuilder {
         self.message_end_time = Time::default();
         self.total_message_count = 0;
         self.message_indices.clear();
-        self.records.buf.clear();
+        self.records.reset();
     }
 }
 
@@ -249,10 +280,28 @@ struct Statistics {
     channel_message_counts: IndexMap<u32, u64>,
 }
 
+/// What is left of a `finalizeChunk` call, queued behind the `await` it is stopped at.
+enum Continuation {
+    ChunkWritten(FinalizingChunk),
+    IndexWritten,
+}
+
+struct FinalizingChunk {
+    message_start_time: Time,
+    message_end_time: Time,
+    chunk_start_offset: u64,
+    chunk_length: u64,
+    uncompressed_size: u64,
+}
+
 pub struct McapWriter {
     next_channel_id: u32,
     next_schema_id: u32,
     out: Vec<u8>,
+    written: u64,
+    queued: VecDeque<Continuation>,
+    reentered: bool,
+    exhausted: bool,
     record_writer: RecordBuilder,
     schemas: Vec<Schema>,
     channels: Vec<Channel>,
@@ -270,6 +319,10 @@ impl Default for McapWriter {
             next_channel_id: 0,
             next_schema_id: 1,
             out: Vec::new(),
+            written: 0,
+            queued: VecDeque::new(),
+            reentered: false,
+            exhausted: false,
             record_writer: RecordBuilder::default(),
             schemas: Vec::new(),
             channels: Vec::new(),
@@ -288,30 +341,68 @@ impl McapWriter {
         Self::default()
     }
 
+    /// A writer that keeps every length but no bytes, to see whether an export fits.
+    pub fn measuring() -> Self {
+        let mut writer = Self::default();
+        writer.record_writer.measuring = true;
+        writer.chunk_builder.records.measuring = true;
+        writer
+    }
+
+    /// Whether a `finalizeChunk` started while another had not reset the chunk yet.
+    pub fn reentered(&self) -> bool {
+        self.reentered
+    }
+
+    /// Whether a chunk is written but not reset, so that [`Self::end`] writes it again.
+    pub fn chunk_parked(&self) -> bool {
+        self.queued
+            .iter()
+            .any(|queued| matches!(queued, Continuation::ChunkWritten(_)))
+    }
+
     fn position(&self) -> u64 {
-        self.out.len() as u64
+        self.written
     }
 
-    /// `crc = crc32Update(crc, recordWriter.buffer); writable.write(...); recordWriter.reset()`.
-    fn flush(&mut self, crc: &mut u32) {
+    /// `crc = crc32Update(crc, recordWriter.buffer); writable.write(recordWriter.buffer)`.
+    fn write(&mut self, crc: &mut u32) -> Result<(), McapError> {
         *crc = crc32_update(*crc, &self.record_writer.buf);
+        if self.written + self.record_writer.len > ARRAY_BUFFER_MAX {
+            return Err(McapError::Allocation);
+        }
         self.out.extend_from_slice(&self.record_writer.buf);
-        self.record_writer.buf.clear();
+        self.written += self.record_writer.len;
+        Ok(())
     }
 
-    fn flush_data(&mut self) {
+    /// [`Self::write`], then `recordWriter.reset()` once the awaited write is done.
+    fn flush(&mut self, crc: &mut u32) -> Result<(), McapError> {
+        self.write(crc)?;
+        self.record_writer.reset();
+        Ok(())
+    }
+
+    fn write_data(&mut self) -> Result<(), McapError> {
         let mut crc = self.data_section_crc;
-        self.flush(&mut crc);
+        let written = self.write(&mut crc);
         self.data_section_crc = crc;
+        written
+    }
+
+    fn flush_data(&mut self) -> Result<(), McapError> {
+        self.write_data()?;
+        self.record_writer.reset();
+        Ok(())
     }
 
     pub fn start(&mut self, profile: &JsString, library: &JsString) {
-        self.record_writer.buf.extend_from_slice(&MAGIC);
+        self.record_writer.bytes(&MAGIC);
         self.record_writer.record(HEADER, |b| {
             b.string(profile);
             b.string(library);
         });
-        self.flush_data();
+        self.flush_data().expect("the header fits");
     }
 
     pub fn register_schema(&mut self, name: JsString, encoding: JsString, data: Vec<u8>) -> u32 {
@@ -327,6 +418,7 @@ impl McapWriter {
         id
     }
 
+    /// Awaited, so the continuations already queued run before the caller goes on.
     pub fn register_channel(
         &mut self,
         schema_id: Option<u32>,
@@ -344,10 +436,20 @@ impl McapWriter {
             metadata,
         });
         self.statistics.channel_count += 1;
+        for _ in 0..self.queued.len() {
+            self.run_continuation();
+        }
         id
     }
 
     pub fn add_message(&mut self, message: Message) -> Result<(), McapError> {
+        let added = self.add_message_unawaited(message);
+        self.drain();
+        added
+    }
+
+    /// `addMessage` up to its first `await` that waits.
+    pub fn add_message_unawaited(&mut self, message: Message) -> Result<(), McapError> {
         let stats = &mut self.statistics;
         if stats.message_count == 0 {
             stats.message_start_time = message.log_time;
@@ -389,22 +491,29 @@ impl McapWriter {
         }
 
         self.chunk_builder.add_message(&message);
-        if self.chunk_builder.records.buf.len() > CHUNK_SIZE {
-            self.finalize_chunk();
+        if self.chunk_builder.records.len > CHUNK_SIZE {
+            self.finalize_chunk()?;
         }
         Ok(())
     }
 
-    fn finalize_chunk(&mut self) {
+    /// `finalizeChunk` up to its first `await`. A write that throws ends it there: the records
+    /// stay in the buffer, and the chunk is not reset.
+    fn finalize_chunk(&mut self) -> Result<(), McapError> {
         if self.chunk_builder.total_message_count == 0 {
-            return;
+            return Ok(());
         }
+        self.reentered |= self.chunk_parked();
         self.statistics.chunk_count += 1;
+        if self.record_writer.len + self.chunk_builder.records.len > RECORD_BUFFER_MAX {
+            self.exhausted = true;
+            return Err(McapError::Allocation);
+        }
 
         let chunk = &self.chunk_builder;
-        let records = &chunk.records.buf;
-        let uncompressed_size = records.len() as u64;
-        let uncompressed_crc = crc32_final(crc32_update(crc32_init(), records));
+        let records = &chunk.records;
+        let uncompressed_size = records.len;
+        let uncompressed_crc = crc32_final(crc32_update(crc32_init(), &records.buf));
         let (message_start_time, message_end_time) =
             (chunk.message_start_time, chunk.message_end_time);
 
@@ -416,10 +525,40 @@ impl McapWriter {
             b.u32(uncompressed_crc);
             b.string(&JsString::new());
             b.u64(uncompressed_size);
-            b.buf.extend_from_slice(records);
+            if b.measuring {
+                b.len += uncompressed_size;
+            } else {
+                b.bytes(&records.buf);
+            }
         });
-        self.flush_data();
+        self.write_data()?;
+        self.queued
+            .push_back(Continuation::ChunkWritten(FinalizingChunk {
+                message_start_time,
+                message_end_time,
+                chunk_start_offset,
+                chunk_length,
+                uncompressed_size,
+            }));
+        Ok(())
+    }
 
+    fn drain(&mut self) {
+        while !self.queued.is_empty() {
+            self.run_continuation();
+        }
+    }
+
+    fn run_continuation(&mut self) {
+        match self.queued.pop_front() {
+            Some(Continuation::ChunkWritten(chunk)) => self.write_message_indexes(chunk),
+            Some(Continuation::IndexWritten) => self.record_writer.reset(),
+            None => {}
+        }
+    }
+
+    fn write_message_indexes(&mut self, chunk: FinalizingChunk) {
+        self.record_writer.reset();
         let message_index_start = self.position();
         let mut message_index_length = 0u64;
         let mut message_index_offsets = Vec::new();
@@ -436,27 +575,33 @@ impl McapWriter {
         }
 
         self.chunk_indices.push(ChunkIndex {
-            message_start_time,
-            message_end_time,
-            chunk_start_offset,
-            chunk_length,
+            message_start_time: chunk.message_start_time,
+            message_end_time: chunk.message_end_time,
+            chunk_start_offset: chunk.chunk_start_offset,
+            chunk_length: chunk.chunk_length,
             message_index_offsets,
             message_index_length,
-            compressed_size: uncompressed_size,
-            uncompressed_size,
+            compressed_size: chunk.uncompressed_size,
+            uncompressed_size: chunk.uncompressed_size,
         });
         self.chunk_builder.reset();
-        self.flush_data();
+        if self.write_data().is_ok() {
+            self.queued.push_back(Continuation::IndexWritten);
+        }
     }
 
-    pub fn end(mut self) -> Vec<u8> {
-        self.finalize_chunk();
-        self.flush_data();
+    pub fn end(mut self) -> Result<Vec<u8>, McapError> {
+        self.finalize_chunk()?;
+        if self.exhausted {
+            return Err(McapError::Allocation);
+        }
+        self.drain();
+        self.flush_data()?;
 
         let data_section_crc = crc32_final(self.data_section_crc);
         self.record_writer
             .record(DATA_END, |b| b.u32(data_section_crc));
-        self.flush(&mut 0);
+        self.flush(&mut 0)?;
 
         let mut summary_offsets: Vec<(u8, u64, u64)> = Vec::new();
         let summary_start = self.position();
@@ -469,7 +614,7 @@ impl McapWriter {
         }
         summary_offsets.push((SCHEMA, schema_start, schema_length));
 
-        self.flush(&mut summary_crc);
+        self.flush(&mut summary_crc)?;
         let channel_start = self.position();
         let mut channel_length = 0;
         for channel in &self.channels {
@@ -477,7 +622,7 @@ impl McapWriter {
         }
         summary_offsets.push((CHANNEL, channel_start, channel_length));
 
-        self.flush(&mut summary_crc);
+        self.flush(&mut summary_crc)?;
         let statistics_start = self.position();
         let stats = &self.statistics;
         let statistics_length = self.record_writer.record(STATISTICS, |b| {
@@ -497,13 +642,13 @@ impl McapWriter {
         });
         summary_offsets.push((STATISTICS, statistics_start, statistics_length));
 
-        self.flush(&mut summary_crc);
-        self.flush(&mut summary_crc);
+        self.flush(&mut summary_crc)?;
+        self.flush(&mut summary_crc)?;
         summary_offsets.push((METADATA_INDEX, self.position(), 0));
-        self.flush(&mut summary_crc);
+        self.flush(&mut summary_crc)?;
         summary_offsets.push((ATTACHMENT_INDEX, self.position(), 0));
 
-        self.flush(&mut summary_crc);
+        self.flush(&mut summary_crc)?;
         let chunk_index_start = self.position();
         let mut chunk_index_length = 0;
         for index in &self.chunk_indices {
@@ -525,7 +670,7 @@ impl McapWriter {
         }
         summary_offsets.push((CHUNK_INDEX, chunk_index_start, chunk_index_length));
 
-        self.flush(&mut summary_crc);
+        self.flush(&mut summary_crc)?;
         let summary_offset_start = self.position();
         let summary_length = summary_offset_start - summary_start;
 
@@ -553,11 +698,11 @@ impl McapWriter {
         summary_crc = crc32_final(crc32_update(summary_crc, &footer_prefix));
 
         let b = &mut self.record_writer;
-        b.buf.extend_from_slice(&footer_prefix);
+        b.bytes(&footer_prefix);
         b.u32(summary_crc);
-        b.buf.extend_from_slice(&MAGIC);
-        self.flush(&mut 0);
-        self.out
+        b.bytes(&MAGIC);
+        self.flush(&mut 0)?;
+        Ok(self.out)
     }
 }
 

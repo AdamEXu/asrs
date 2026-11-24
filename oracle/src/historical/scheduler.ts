@@ -62,7 +62,14 @@ export class Scheduler implements WorkerRouter {
         await this.waitFor(slot);
         continue;
       }
-      slot.worker.deliver(slot.inbox.shift());
+      try {
+        slot.worker.deliver(slot.inbox.shift());
+      } catch (error) {
+        // A browser reports a throw out of the source's `onmessage` and goes on with the next
+        // task. `Log.fromSerialized` adding a proto descriptor again is the one throw known
+        // here; anything else stops the run.
+        if (!(error instanceof Error && error.message.startsWith("duplicate name '"))) throw error;
+      }
     }
   }
 
