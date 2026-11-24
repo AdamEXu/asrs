@@ -111,6 +111,10 @@ pub fn message_box(
                 response,
                 checkbox_checked: options.checkbox_checked,
             },
+            Reply::Checked(response) => MessageBoxResult {
+                response,
+                checkbox_checked: true,
+            },
             other => panic!("{other:?} for {options:?}"),
         },
         on_done,
@@ -187,6 +191,8 @@ mod script {
         pub shown: Vec<(Option<AnyWindowHandle>, Shown)>,
         /// What [`add_recent_document`](super::super::add_recent_document) got.
         pub recent_documents: Vec<PathBuf>,
+        /// What [`open_external`](super::super::open_external) got.
+        pub opened_urls: Vec<String>,
     }
 
     impl Global for Script {}
@@ -194,6 +200,8 @@ mod script {
     #[derive(Clone, Debug, PartialEq)]
     pub enum Reply {
         Button(usize),
+        /// A button with the checkbox checked.
+        Checked(usize),
         /// The dialog stays open.
         Unanswered,
         Open(Vec<PathBuf>),

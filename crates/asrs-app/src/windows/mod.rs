@@ -183,6 +183,33 @@ fn close_modals(cx: &mut App, parent: WindowId) {
     }
 }
 
+/// `window.on("focus", ..)` (true) and `window.on("blur", ..)` (false).
+pub fn on_focus_change<V: Render>(
+    cx: &mut App,
+    id: WindowId,
+    root: &Entity<V>,
+    listener: impl Fn(bool, &mut App) + Clone + 'static,
+) {
+    let Some(handle) = Windows::handle(cx, id) else {
+        return;
+    };
+    let observed = handle.update(cx, |_, window, cx| {
+        let native = asrs_ui::platform::observe_focus(window, cx, listener.clone());
+        if native.is_none() {
+            root.update(cx, |_, cx| {
+                cx.observe_window_activation(window, move |_, window, cx| {
+                    listener(window.is_window_active(), cx);
+                })
+                .detach();
+            });
+        }
+        native
+    });
+    if let Ok(Some(observer)) = observed {
+        Windows::on_closed(cx, id, move |_| observer.stop());
+    }
+}
+
 /// `window.destroy()`. A modal prompt is detached from its parent first, and a parent's prompts
 /// close with it.
 pub fn close(cx: &mut App, id: WindowId) {

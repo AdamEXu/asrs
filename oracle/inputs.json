@@ -309,6 +309,7 @@
     "src/fakes/mainFs.ts",
     "src/files/assetLoader.ts",
     "src/files/historicalStart.ts",
+    "src/files/hubMessages.ts",
     "src/files/routing.ts",
     "src/genFiles.ts"
   ],
