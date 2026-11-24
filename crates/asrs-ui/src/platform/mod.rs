@@ -404,6 +404,14 @@ pub(crate) fn set_tooltip(window: &Window, text: &str) {
     imp::set_tooltip(window, text);
 }
 
+/// Has a popup take neither the pointer nor the activation on Windows; on Linux it takes the
+/// pointer, as Chromium's does, and cannot be activated.
+pub(crate) fn ignore_input(window: &Window) {
+    #[cfg(windows)]
+    imp::ignore_input(window);
+    let _ = window;
+}
+
 /// Where a popup at `at` in the window goes: the window's content origin on screen, `None` where
 /// the compositor places popups itself, and the display the popup stays on.
 pub(crate) fn popup_space(

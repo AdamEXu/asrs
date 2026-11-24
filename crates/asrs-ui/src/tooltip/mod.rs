@@ -97,8 +97,8 @@ struct WindowTooltips {
     given: Vec<String>,
 }
 
-/// Holds the observers of a window's activation and keys.
-struct Activation(#[allow(dead_code)] Subscription);
+/// Holds the observers of a window's activation, its keys and its end.
+struct Activation(#[allow(dead_code)] [Subscription; 2]);
 
 /// A tooltip [`Host::Aura`] shows.
 #[derive(Clone, Debug, PartialEq)]
@@ -321,10 +321,6 @@ fn register(entry: Entry, window: &mut Window, cx: &mut App) {
 
 fn listen(window: &mut Window, cx: &mut App) {
     if state(window, cx, |state| state.activation.is_none()) {
-        let open: Vec<_> = cx.windows().iter().map(|w| w.window_id()).collect();
-        let this = window.window_handle().window_id();
-        let tooltips = &mut cx.default_global::<Tooltips>().0;
-        tooltips.retain(|id, _| *id == this || open.contains(id));
         let activation = cx.new(|cx| {
             cx.observe_window_activation(window, |_, window, cx| {
                 if !window.is_window_active() {
@@ -333,11 +329,20 @@ fn listen(window: &mut Window, cx: &mut App) {
             })
             .detach();
             let this = window.window_handle();
-            Activation(cx.intercept_keystrokes(move |_, window, cx| {
+            let keys = cx.intercept_keystrokes(move |_, window, cx| {
                 if window.window_handle() == this {
                     control(window, cx, aura::Controller::reset);
                 }
-            }))
+            });
+            let end = cx.on_window_closed(move |cx, closed| {
+                if closed == this.window_id() {
+                    let closed = cx.default_global::<Tooltips>().0.remove(&closed);
+                    if let Some(popup) = closed.and_then(|state| state.popup) {
+                        popup.close(cx);
+                    }
+                }
+            });
+            Activation([keys, end])
         });
         state(window, cx, |state| state.activation = Some(activation));
     }
@@ -351,11 +356,7 @@ fn listen(window: &mut Window, cx: &mut App) {
     });
     window.on_mouse_event(|_: &MouseExitEvent, phase, window, cx| {
         if phase == DispatchPhase::Capture {
-            state(window, cx, |state| state.inside = false);
-            match host(cx) {
-                Host::Native => set_text("", window, cx),
-                Host::Aura => control(window, cx, aura::Controller::mouse_exited),
-            }
+            left(window, cx);
         }
     });
     window.on_mouse_event(|_: &MouseDownEvent, phase, window, cx| {
@@ -375,8 +376,26 @@ fn listen(window: &mut Window, cx: &mut App) {
     });
 }
 
+/// `HandleMouseLeaveEvent`.
+fn left(window: &mut Window, cx: &mut App) {
+    state(window, cx, |state| state.inside = false);
+    control(window, cx, aura::Controller::mouse_exited);
+    let mut texts = Vec::new();
+    state(window, cx, |state| {
+        state.page.left(|text| texts.push(text.to_owned()));
+    });
+    for text in texts {
+        set_text(&text, window, cx);
+    }
+}
+
 fn update(window: &mut Window, cx: &mut App) {
     if !state(window, cx, |state| state.inside) {
+        return;
+    }
+    // GPUI sends no `MouseExitEvent` on Windows: it only draws the window again.
+    if cfg!(windows) && !window.is_window_hovered() {
+        left(window, cx);
         return;
     }
     let position = window.mouse_position();

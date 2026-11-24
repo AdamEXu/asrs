@@ -92,6 +92,10 @@ impl Page<'_> {
             .expect("window")
     }
 
+    fn windows(&mut self) -> usize {
+        self.headless.context().update(|cx| cx.windows().len())
+    }
+
     fn pass(&mut self, time: Duration) {
         let cx = self.headless.context();
         cx.advance_clock(time);
@@ -224,9 +228,15 @@ fn aura(headless: &mut HeadlessCapture) {
     page.headless.context().run_until_parked();
     assert_eq!(page.shown(), None, "a key hides it");
 
-    page.show(&play);
+    let at = page.show(&play);
     page.dispatch(PlatformInput::MouseExited(MouseExitEvent::default()));
     assert_eq!(page.shown(), None, "leaving the window hides it");
+    page.hover(at);
+    page.pass(SHOW_DELAY - MS);
+    assert_eq!(page.shown(), None, "coming back waits again");
+    page.pass(MS);
+    assert_eq!(page.shown().map(|s| s.text), Some(play));
+    assert_eq!(page.windows(), 2, "the tooltip has a window of its own");
     page.close();
 }
 
@@ -245,5 +255,7 @@ fn main() {
     states(&mut headless);
     toggles(&mut headless);
     aura(&mut headless);
+    let open = headless.context().update(|cx| cx.windows().len());
+    assert_eq!(open, 0, "a tooltip goes with the window it is for");
     println!("tooltip hosts: playback states, toggles and TooltipAura ok");
 }

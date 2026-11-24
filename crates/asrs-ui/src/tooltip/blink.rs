@@ -21,23 +21,29 @@ impl Page {
         title: Option<&str>,
         mut update: impl FnMut(&str),
     ) {
-        let mut update = |text: &str, requested: &mut bool| {
-            if !text.is_empty() || *requested {
-                *requested = !text.is_empty();
-                update(text);
-            }
-        };
         if self.point == Some(point) && self.title.as_deref() == title {
             return;
         }
         let titled = self.title.as_deref().is_some_and(|title| !title.is_empty());
         if node != self.node && titled && self.title.as_deref() == title {
-            update("", &mut self.requested);
+            self.give("", &mut update);
         }
         self.point = Some(point);
         self.title = title.map(str::to_owned);
         self.node = node;
-        update(title.unwrap_or_default(), &mut self.requested);
+        self.give(title.unwrap_or_default(), &mut update);
+    }
+
+    /// The pointer left the page (`ClearToolTip`).
+    pub(super) fn left(&mut self, mut update: impl FnMut(&str)) {
+        self.give("", &mut update);
+    }
+
+    fn give(&mut self, text: &str, update: &mut impl FnMut(&str)) {
+        if !text.is_empty() || self.requested {
+            self.requested = !text.is_empty();
+            update(text);
+        }
     }
 }
 
@@ -64,6 +70,21 @@ mod tests {
         assert_eq!(texts(&mut page, 4.0, Some(4.0), Some("b")), ["b"]);
         assert_eq!(texts(&mut page, 5.0, None, None), [""]);
         assert!(texts(&mut page, 6.0, None, None).is_empty());
+    }
+
+    #[test]
+    fn leaving_clears_a_title_once() {
+        let mut page = Page::default();
+        let left = |page: &mut Page| {
+            let mut out = Vec::new();
+            page.left(|text| out.push(text.to_owned()));
+            out
+        };
+        assert!(left(&mut page).is_empty());
+        assert_eq!(texts(&mut page, 1.0, Some(0.0), Some("a")), ["a"]);
+        assert_eq!(left(&mut page), [""]);
+        assert!(left(&mut page).is_empty());
+        assert_eq!(texts(&mut page, 2.0, Some(0.0), Some("a")), ["a"]);
     }
 
     #[test]

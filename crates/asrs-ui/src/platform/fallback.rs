@@ -19,6 +19,42 @@ pub(super) fn scroll_button_delays() -> (Duration, Duration) {
 
 pub(super) fn set_tooltip(_window: &Window, _text: &str) {}
 
+/// `WS_EX_TRANSPARENT` and `WS_EX_NOACTIVATE`, which a `Widget` that accepts no events and cannot be
+/// activated gets.
+#[cfg(windows)]
+pub(super) fn ignore_input(window: &Window) {
+    use std::ffi::c_void;
+
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    const GWL_EXSTYLE: i32 = -20;
+    const WS_EX_TRANSPARENT: isize = 0x20;
+    const WS_EX_NOACTIVATE: isize = 0x0800_0000;
+
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn GetWindowLongPtrW(window: *mut c_void, index: i32) -> isize;
+        fn SetWindowLongPtrW(window: *mut c_void, index: i32, value: isize) -> isize;
+    }
+
+    let Ok(handle) = HasWindowHandle::window_handle(window) else {
+        return;
+    };
+    let RawWindowHandle::Win32(handle) = handle.as_raw() else {
+        return;
+    };
+    let hwnd = handle.hwnd.get() as *mut c_void;
+    // SAFETY: the window is open, and both calls only read and write its styles.
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        SetWindowLongPtrW(
+            hwnd,
+            GWL_EXSTYLE,
+            style | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
+        );
+    }
+}
+
 pub(super) fn is_key_window(_window: &Window) -> bool {
     true
 }

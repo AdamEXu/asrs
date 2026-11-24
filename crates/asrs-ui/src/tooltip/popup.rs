@@ -157,6 +157,7 @@ impl Popup {
             ..WindowOptions::default()
         };
         let (handle, _) = crate::open_window(options, cx, move |window, cx| {
+            platform::ignore_input(window);
             if origin.is_some() {
                 platform::popup_window_opened(window, bounds, false, cx);
             }
