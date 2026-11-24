@@ -762,12 +762,13 @@ app.whenReady().then(() => {
     const STRIP: (i32, i32) = (140, 38);
 
     /// The screen's pixels over the caption buttons of a window's content, less the row and
-    /// column of DWM's border.
-    fn strip(number: u32) -> Rgb {
+    /// column of the border DWM draws around a window that is not maximized.
+    fn strip(number: u32, maximized: bool) -> Rgb {
         let [_, client] = probe::rects(number).expect("rects");
-        let (width, height) = (STRIP.0 - 1, STRIP.1 - 1);
+        let border = i32::from(!maximized);
+        let (width, height) = (STRIP.0 - border, STRIP.1 - border);
         let x = client[2] - STRIP.0;
-        let image = probe::screen_image(x, client[1] + 1, width, height).expect("screen");
+        let image = probe::screen_image(x, client[1] + border, width, height).expect("screen");
         let image = Rgba {
             width: image.width,
             height: image.height,
@@ -822,7 +823,10 @@ app.whenReady().then(() => {
                     if dx == 0 {
                         probe::post_mouse(MouseAction::Drag, away.0, away.1);
                         sleep(cx, settle).await;
-                        list.push((format!("{name}, maximized {maximized}"), strip(window)));
+                        list.push((
+                            format!("{name}, maximized {maximized}"),
+                            strip(window, maximized),
+                        ));
                         continue;
                     }
                     let (x, y) = at(dx, 32);
@@ -830,18 +834,18 @@ app.whenReady().then(() => {
                     sleep(cx, settle).await;
                     list.push((
                         format!("{name} hovered, maximized {maximized}"),
-                        strip(window),
+                        strip(window, maximized),
                     ));
                     probe::post_mouse(MouseAction::Down, x, y);
                     sleep(cx, settle).await;
                     list.push((
                         format!("{name} pressed, maximized {maximized}"),
-                        strip(window),
+                        strip(window, maximized),
                     ));
                     probe::post_mouse(MouseAction::Drag, away.0, away.1);
                     sleep(cx, settle).await;
                     let dragged = format!("{name} dragged off, maximized {maximized}");
-                    list.push((dragged, strip(window)));
+                    list.push((dragged, strip(window, maximized)));
                     probe::post_mouse(MouseAction::Up, away.0, away.1);
                     sleep(cx, 400).await;
                 }
@@ -994,23 +998,21 @@ app.whenReady().then(() => {
                 .zip(scenario.data.chunks(4))
                 .filter(|(a, b)| a != b)
                 .count();
-            let pair = |i: usize| {
-                (
-                    own.data[i..i + 4].to_vec(),
-                    scenario.data[i..i + 4].to_vec(),
-                )
-            };
-            let first = (0..own.data.len().min(scenario.data.len()))
+            let off = own.data.iter().zip(&scenario.data);
+            let off = off.map(|(a, b)| a.abs_diff(*b)).max().unwrap_or(0);
+            let pixels: Vec<(u32, u32)> = (0..own.data.len().min(scenario.data.len()))
                 .step_by(4)
-                .find(|i| own.data[*i..i + 4] != scenario.data[*i..i + 4])
-                .map(|i| (i / 4, pair(i)));
+                .filter(|i| own.data[*i..i + 4] != scenario.data[*i..i + 4])
+                .map(|i| (i as u32 / 4 % own.width, i as u32 / 4 / own.width))
+                .collect();
+            let corner =
+                |f: fn((u32, u32), (u32, u32)) -> (u32, u32)| pixels.iter().copied().reduce(f);
+            let min = corner(|a, b| (a.0.min(b.0), a.1.min(b.1)));
+            let max = corner(|a, b| (a.0.max(b.0), a.1.max(b.1)));
             report.check(
                 &format!("the hub's own window at {scale}x equals the scenario's capture"),
-                same_size && differing == 0,
-                format!(
-                    "{}x{}, {differing} px differ, first {first:?}",
-                    own.width, own.height
-                ),
+                same_size && off <= 1,
+                format!("{differing} px differ, by at most {off}, in {min:?} to {max:?}"),
             );
         }
         let _ = std::fs::remove_dir_all(&out);

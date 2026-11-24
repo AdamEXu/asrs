@@ -11,9 +11,12 @@ use gpui_kit::{
 
 use crate::input::skia;
 
-/// From the window's top right corner, inside the border DWM draws there.
+/// What the border DWM draws takes of the top and right of a window that is not maximized, and of
+/// the first button's left.
 const BORDER: f32 = 1.0;
-const HEIGHT: f32 = 37.0;
+const WIDTH: f32 = 46.0;
+/// `titleBarOverlay`'s height.
+const HEIGHT: f32 = 38.0;
 const SYMBOL: f32 = 10.0;
 /// The gap a button's background leaves on its left.
 const SPACING: f32 = 1.0;
@@ -30,11 +33,7 @@ enum Button {
     Close,
 }
 
-const BUTTONS: [(Button, f32); 3] = [
-    (Button::Minimize, 45.0),
-    (Button::Maximize, 46.0),
-    (Button::Close, 46.0),
-];
+const BUTTONS: [Button; 3] = [Button::Minimize, Button::Maximize, Button::Close];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum State {
@@ -103,7 +102,22 @@ fn symbol(button: Button, maximized: bool, side: u32, scale: f32, color: u32) ->
         (Button::Maximize, false) => skia::svg(side, side, 1.0, &box_at(0.0, 0.0, n)),
         (Button::Maximize, true) => {
             let gap = (2.0 * scale).floor();
-            skia::svg(side, side, 1.0, &box_at(0.0, gap, n - gap))
+            let radius = (1.5 * scale).floor();
+            let mut back = skia::svg(side, side, 1.0, &back_box(n, gap, stroke, radius, &paint))?;
+            let front = skia::rect(
+                f64::from(-stroke),
+                f64::from(gap - stroke),
+                f64::from(n - gap + 2.0 * stroke),
+                f64::from(n),
+                f64::from(2.0 * radius + if radius < 2.0 { 0.5 } else { 0.0 }),
+                &skia::paint_attrs("fill", 0x000000ff),
+            );
+            erase(&mut back, &skia::svg(side, side, 1.0, &front)?);
+            skia::over(
+                &mut back,
+                &skia::svg(side, side, 1.0, &box_at(0.0, gap, n - gap))?,
+            );
+            Some(back)
         }
         (Button::Minimize, _) => {
             let top = (n / 2.0 - stroke / 2.0 + 0.5).floor();
@@ -131,14 +145,46 @@ fn symbol(button: Button, maximized: bool, side: u32, scale: f32, color: u32) ->
     }
 }
 
+/// The restore icon's box behind, whose top right corner is twice as round.
+fn back_box(n: f32, gap: f32, stroke: f32, r: f32, paint: &str) -> String {
+    let inset = stroke / 2.0;
+    let (left, top, right, bottom) = (gap + inset, inset, n - inset, n - gap - inset);
+    let big = 2.0 * r;
+    format!(
+        "<path d=\"M{} {top} H{} A{big} {big} 0 0 1 {right} {} V{} A{r} {r} 0 0 1 {} {bottom} H{} \
+         A{r} {r} 0 0 1 {left} {} V{} A{r} {r} 0 0 1 {} {top} Z\" fill=\"none\" {paint} \
+         stroke-width=\"{stroke}\"/>",
+        left + r,
+        right - big,
+        top + big,
+        bottom - r,
+        right - r,
+        left + r,
+        bottom - r,
+        top + r,
+        left + r,
+    )
+}
+
+/// Destination-out.
+fn erase(dst: &mut Pixmap, src: &Pixmap) {
+    let (dst, _) = dst.data_mut().as_chunks_mut::<4>();
+    let (src, _) = src.data().as_chunks::<4>();
+    for (d, s) in dst.iter_mut().zip(src) {
+        let keep = 255 - u32::from(s[3]);
+        for c in d {
+            *c = ((u32::from(*c) * keep + 127) / 255) as u8;
+        }
+    }
+}
+
 /// The buttons' boxes in a window `width` wide.
-fn boxes(width: Pixels) -> [Bounds<Pixels>; 3] {
-    let total: f32 = BUTTONS.iter().map(|(_, w)| w).sum();
-    let mut x = width - px(BORDER + total);
-    BUTTONS.map(|(_, w)| {
-        let bounds = Bounds::new(point(x, px(BORDER)), size(px(w), px(HEIGHT)));
-        x += px(w);
-        bounds
+fn boxes(width: Pixels, maximized: bool) -> [Bounds<Pixels>; 3] {
+    let border = if maximized { px(0.0) } else { px(BORDER) };
+    std::array::from_fn(|i| {
+        let right = width - border - px(WIDTH * (2 - i) as f32);
+        let left = right - px(WIDTH) + if i == 0 { border } else { px(0.0) };
+        Bounds::from_corners(point(left, border), point(right, px(HEIGHT)))
     })
 }
 
@@ -154,7 +200,7 @@ fn paint(
     window: &mut Window,
     cx: &mut App,
 ) {
-    let (button, _) = BUTTONS[index];
+    let button = BUTTONS[index];
     let scale = window.scale_factor();
     if let Some(color) = background(button, state, dark) {
         let shown = Bounds::from_corners(
@@ -245,7 +291,7 @@ pub fn caption_buttons(dark: bool, window: &mut Window, cx: &mut App) -> AnyElem
         pointer.in_window = hovered;
     });
     let states: [State; 3] = std::array::from_fn(|i| pointer.read(cx).state(i));
-    let boxes = boxes(window.viewport_size().width);
+    let boxes = boxes(window.viewport_size().width, window.is_maximized());
     let areas = [
         WindowControlArea::Min,
         WindowControlArea::Max,
