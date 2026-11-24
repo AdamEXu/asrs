@@ -3,6 +3,7 @@ pub mod drag;
 pub mod factory;
 pub mod frame;
 pub mod hub;
+pub mod live;
 pub mod satellite;
 pub mod sidebar;
 pub mod tab_icons;

@@ -1,0 +1,765 @@
+{
+ "entry": "hubSession",
+ "inputs": [
+  "logs/match.csv"
+ ],
+ "fixture": {
+  "seed": 101,
+  "live": {
+   "protocol": "nt4",
+   "seed": 1,
+   "epochMs": 1767225600000,
+   "latencyMs": 1,
+   "endMs": 600000,
+   "client": {
+    "source": "nt4",
+    "address": "10.63.28.2",
+    "mode": "default"
+   },
+   "server": {
+    "version": "4.1",
+    "offsetUs": 1000000,
+    "topics": [
+     {
+      "name": "/SmartDashboard/speed",
+      "type": "double",
+      "value": 1.5
+     },
+     {
+      "name": "/SmartDashboard/kP",
+      "type": "double",
+      "value": 0.25
+     },
+     {
+      "name": "/SmartDashboard/count",
+      "type": "int",
+      "value": 3
+     },
+     {
+      "name": "/SmartDashboard/enable",
+      "type": "boolean",
+      "value": false
+     },
+     {
+      "name": "/SmartDashboard/name",
+      "type": "string",
+      "value": "robot"
+     },
+     {
+      "name": "/SmartDashboard/locked",
+      "type": "double",
+      "properties": {
+       "mutable": false
+      },
+      "value": 2
+     },
+     {
+      "name": "/Other/hidden",
+      "type": "double",
+      "value": 9
+     },
+     {
+      "name": "/AdvantageKit/Timestamp",
+      "type": "int",
+      "value": 0
+     },
+     {
+      "name": "/AdvantageKit/Drive/x",
+      "type": "double",
+      "value": 1
+     }
+    ]
+   },
+   "steps": [
+    {
+     "t": 0,
+     "server": [
+      "down",
+      "refuse"
+     ]
+    },
+    {
+     "t": 1300,
+     "server": [
+      "up"
+     ]
+    },
+    {
+     "t": 2500,
+     "server": [
+      "set",
+      "/SmartDashboard/speed",
+      2.5
+     ]
+    },
+    {
+     "t": 2600,
+     "server": [
+      "set",
+      "/SmartDashboard/count",
+      4
+     ]
+    },
+    {
+     "t": 4200,
+     "server": [
+      "down",
+      "refuse"
+     ]
+    },
+    {
+     "t": 4200,
+     "server": [
+      "drop"
+     ]
+    },
+    {
+     "t": 5200,
+     "server": [
+      "up"
+     ]
+    },
+    {
+     "t": 6500,
+     "server": [
+      "set",
+      "/SmartDashboard/speed",
+      -1
+     ]
+    },
+    {
+     "t": 7500,
+     "server": [
+      "mute",
+      true
+     ]
+    },
+    {
+     "t": 9500,
+     "server": [
+      "mute",
+      false
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "(() => { const t = document.getElementsByTagName('title')[0]; window.__titles = []; let last = t.textContent; new MutationObserver(() => { if (t.textContent !== last) { last = t.textContent; window.__titles.push(last); } }).observe(t, { childList: true, characterData: true, subtree: true }); return last; })()"
+     }
+    ],
+    "label": "watch"
+   },
+   {
+    "main": "set-preferences",
+    "data": {
+     "theme": "system",
+     "robotAddress": "10.63.28.2",
+     "remotePath": "/U/logs",
+     "liveMode": "nt4",
+     "liveSubscribeMode": "low-bandwidth",
+     "liveDiscard": 1200,
+     "publishFilter": "",
+     "rlogPort": 5800,
+     "coordinateSystem": "automatic",
+     "field3dModeAc": "standard",
+     "field3dModeBattery": "",
+     "field3dAntialiasing": true,
+     "tbaApiKey": "",
+     "userAssetsFolder": null,
+     "skipHootNonProWarning": false,
+     "skipFRCCoordinateSystemWarning": false,
+     "skipFTCCoordinateSystemWarning": false,
+     "ctreLicenseAccepted": false,
+     "systemcoreStaticAddress": "",
+     "hasScrolledLineGraph": false,
+     "hasScrolledTimeline": false,
+     "prefersFTC": false,
+     "timestamps": "start-zero"
+    }
+   },
+   {
+    "main": "start-live",
+    "data": "robot"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "searching"
+   },
+   {
+    "advance": 1000
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "still searching"
+   },
+   {
+    "main": "restore-state",
+    "data": {
+     "sidebar": {
+      "width": 300,
+      "expanded": []
+     },
+     "tabs": {
+      "selected": 1,
+      "tabs": [
+       {
+        "type": 0,
+        "title": "",
+        "controller": null,
+        "controllerUUID": "aaaa",
+        "renderer": "",
+        "controlsHeight": 0
+       },
+       {
+        "type": 4,
+        "title": "Values",
+        "controller": [
+         "NT:/SmartDashboard/speed",
+         "NT:/SmartDashboard/kP",
+         "NT:/SmartDashboard/count",
+         "NT:/SmartDashboard/enable",
+         "NT:/SmartDashboard/locked"
+        ],
+        "controllerUUID": "bbbb",
+        "renderer": null,
+        "controlsHeight": 0
+       }
+      ]
+     }
+    }
+   },
+   {
+    "advance": 1200
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "active"
+   },
+   {
+    "main": "new-tab",
+    "data": 12
+   },
+   {
+    "advance": 800
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "values"
+   },
+   {
+    "eval": "window.tuner.publish(\"NT:/SmartDashboard/kP\", 4.5)"
+   },
+   {
+    "eval": "window.tuner.publish(\"NT:/SmartDashboard/count\", 7.75)"
+   },
+   {
+    "eval": "window.tuner.publish(\"NT:/SmartDashboard/enable\", true)"
+   },
+   {
+    "eval": "window.tuner.publish(\"NT:/SmartDashboard/locked\", 1)"
+   },
+   {
+    "eval": "window.tuner.publish(\"NT:/SmartDashboard/missing\", 1)"
+   },
+   {
+    "advance": 200
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "tuned"
+   },
+   {
+    "eval": "window.tuner.unpublish(\"NT:/SmartDashboard/kP\")"
+   },
+   {
+    "eval": "window.tuner.unpublish(\"NT:/SmartDashboard/kP\")"
+   },
+   {
+    "advance": 100
+   },
+   {
+    "main": "start-publish",
+    "data": true
+   },
+   {
+    "advance": 700
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "dropped"
+   },
+   {
+    "advance": 1000
+   },
+   {
+    "advance": 1000
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "reconnected"
+   },
+   {
+    "eval": "window.tuner.publish(\"NT:/SmartDashboard/kP\", 6)"
+   },
+   {
+    "advance": 1500
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "retuned"
+   },
+   {
+    "advance": 1500
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "timed out"
+   },
+   {
+    "advance": 2500
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "recovered"
+   },
+   {
+    "main": "call-selection-setter",
+    "data": {
+     "uuid": "bbbb",
+     "name": "unlock",
+     "args": []
+    }
+   },
+   {
+    "advance": 100
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "unlocked"
+   },
+   {
+    "main": "start-live",
+    "data": "sim"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "sim"
+   },
+   {
+    "advance": 1200
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "sim active"
+   },
+   {
+    "main": "start-live",
+    "data": "ds"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "ds"
+   },
+   {
+    "advance": 900
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "ds refused"
+   },
+   {
+    "main": "open-files",
+    "data": {
+     "files": [
+      "logs/match.csv"
+     ],
+     "merge": false
+    }
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "opened"
+   },
+   {
+    "advance": 700
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "log"
+   },
+   {
+    "main": "start-live",
+    "data": "robot"
+   },
+   {
+    "advance": 900
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "again"
+   },
+   {
+    "main": "open-files",
+    "data": {
+     "files": [
+      "logs/match.csv"
+     ],
+     "merge": false
+    }
+   },
+   {
+    "advance": 6000
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "log again"
+   }
+  ]
+ }
+}

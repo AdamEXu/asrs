@@ -756,6 +756,15 @@
     "src/environment.ts",
     "src/historical/timers.ts",
     "src/hubSession.ts",
+    "src/live/loop.ts",
+    "src/live/msgpack.ts",
+    "src/live/net.ts",
+    "src/live/nt4Server.ts",
+    "src/live/pageLoop.ts",
+    "src/live/random.ts",
+    "src/live/rlogMain.ts",
+    "src/live/server.ts",
+    "src/live/simpleServers.ts",
     "src/shims.ts"
   ],
   "lazyHelpers/field3dFieldsRun": [

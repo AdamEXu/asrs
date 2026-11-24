@@ -6,6 +6,7 @@
 //! tabs and sidebar report, and `window.sendMainMessage`.
 
 use std::cell::{RefCell, RefMut};
+use std::collections::HashSet;
 use std::rc::Rc;
 
 use asrs_formats::custom_schemas::{self, SchemaError};
@@ -71,6 +72,8 @@ pub struct Nt4Window {
     pub send_main_message: SendMainMessage,
 }
 
+const IDLE_TIMEOUT_MS: f64 = 100.0;
+
 /// `NT4Source`.
 pub struct Nt4Source {
     inner: Inner,
@@ -101,7 +104,7 @@ impl Nt4Source {
                 no_fields_timeout: None,
             },
             client: None,
-            idle_timer: Some(timers.post_delayed_task(100.0)),
+            idle_timer: Some(timers.request_idle_callback(IDLE_TIMEOUT_MS)),
             logging_subscription: None,
             low_bandwidth_topic_subscription: None,
             low_bandwidth_data_subscriptions: JsObject::new(),
@@ -192,7 +195,7 @@ impl Nt4Source {
         if self.idle_timer == Some(id) {
             self.idle_timer = None;
             if self.periodic(window, cx).is_ok() {
-                self.idle_timer = Some(cx.timers.post_delayed_task(100.0));
+                self.idle_timer = Some(cx.timers.request_idle_callback(IDLE_TIMEOUT_MS));
             }
             return true;
         }
@@ -222,6 +225,11 @@ impl Nt4Source {
         self.inner
             .base
             .handle_timer(id, window.preferences.as_ref())
+    }
+
+    /// Whether handling timer `id` reads [`Nt4Window`]'s active fields.
+    pub fn reads_fields(&self, id: TimerId) -> bool {
+        self.idle_timer == Some(id) && self.client.is_some()
     }
 
     fn client_mut(&self) -> RefMut<'_, Nt4Client> {
@@ -318,8 +326,9 @@ impl Nt4Source {
     /// The `activeFields` set of the low-bandwidth path.
     fn active_fields(&self, window: &Nt4Window) -> Vec<JsString> {
         let mut active: Vec<JsString> = Vec::new();
+        let mut seen: HashSet<JsString> = HashSet::new();
         let mut add = |field: JsString| {
-            if !active.contains(&field) {
+            if seen.insert(field.clone()) {
                 active.push(field);
             }
         };
@@ -373,15 +382,12 @@ impl Nt4Source {
             }
         }
 
-        let copy = active.clone();
-        for field0 in &copy {
-            for field1 in &copy {
-                if field0 != field1 && field0.starts_with(field1, None) {
-                    active.retain(|field| field != field0);
-                }
-            }
-        }
-        active
+        let covered = |field: &JsString| {
+            active
+                .iter()
+                .any(|other| other != field && field.starts_with(other, None))
+        };
+        active.iter().filter(|f| !covered(f)).cloned().collect()
     }
 }
 
@@ -818,7 +824,7 @@ impl Nt4Tuner {
     /// return.
     pub fn publish(
         &self,
-        window_log: &LiveLog,
+        window_log: &RefCell<Log>,
         key: &JsString,
         value: TunedValue,
         cx: &mut Nt4Context<'_>,

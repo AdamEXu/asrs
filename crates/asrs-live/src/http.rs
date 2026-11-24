@@ -2,15 +2,15 @@
 //! request settles with, and plain HTTP/1.1 GETs over real sockets for the tokio transports.
 //! Requests never follow redirects.
 
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::BTreeMap;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::runtime::Handle;
 use tokio::task::JoinHandle;
 use tokio_tungstenite::tungstenite::http::Uri;
 
-use crate::channel::{EventReceiver, EventSender, event_channel};
+use crate::channel::EventSender;
+use crate::net_options::NetOptions;
 
 const MAX_HEAD: usize = 65536;
 
@@ -53,15 +53,15 @@ pub trait FetchTransport {
 
 /// The in-flight GET tasks of a tokio transport, which owns the id space and the event queue.
 pub(crate) struct FetchTasks {
-    handle: Handle,
+    options: NetOptions,
     read_body: bool,
     tasks: BTreeMap<u32, JoinHandle<()>>,
 }
 
 impl FetchTasks {
-    pub(crate) fn new(handle: Handle, read_body: bool) -> Self {
+    pub(crate) fn new(options: NetOptions, read_body: bool) -> Self {
         Self {
-            handle,
+            options,
             read_body,
             tasks: BTreeMap::new(),
         }
@@ -77,8 +77,9 @@ impl FetchTasks {
         let events = events.clone();
         let url = url.to_owned();
         let read_body = self.read_body;
-        let task = self.handle.spawn(async move {
-            let event = match get(&url, read_body).await {
+        let options = self.options.clone();
+        let task = self.options.handle.spawn(async move {
+            let event = match get(&url, read_body, &options).await {
                 Some(response) => FetchEvent::Response(id, response),
                 None => FetchEvent::Failed(id),
             };
@@ -104,66 +105,6 @@ impl Drop for FetchTasks {
         for task in self.tasks.values() {
             task.abort();
         }
-    }
-}
-
-/// A [`FetchTransport`] on the live tokio runtime that reads whole bodies. `next_event`
-/// admits settled requests one at a time on the foreground thread; an aborted request's task
-/// is cancelled so it never settles.
-pub struct TokioFetchTransport {
-    events_tx: EventSender<FetchEvent>,
-    events_rx: EventReceiver<FetchEvent>,
-    pending: VecDeque<FetchEvent>,
-    next_id: u32,
-    tasks: FetchTasks,
-}
-
-impl TokioFetchTransport {
-    pub fn new(handle: Handle) -> Self {
-        let (events_tx, events_rx) = event_channel();
-        Self {
-            events_tx,
-            events_rx,
-            pending: VecDeque::new(),
-            next_id: 1,
-            tasks: FetchTasks::new(handle, true),
-        }
-    }
-
-    /// The next event a browser would dispatch now, if any.
-    pub fn next_event(&mut self) -> Option<FetchEvent> {
-        loop {
-            let event = match self.pending.pop_front() {
-                Some(event) => event,
-                None => self.events_rx.try_recv()?,
-            };
-            if self.tasks.admit(event.id()) {
-                return Some(event);
-            }
-        }
-    }
-
-    /// Waits until a raw event has arrived, without consuming it; `next_event` then decides
-    /// whether it is dispatched.
-    pub async fn wait(&mut self) {
-        if self.pending.is_empty()
-            && let Some(event) = self.events_rx.recv().await
-        {
-            self.pending.push_back(event);
-        }
-    }
-}
-
-impl FetchTransport for TokioFetchTransport {
-    fn fetch(&mut self, url: &str) -> RequestId {
-        let id = RequestId(self.next_id);
-        self.next_id += 1;
-        self.tasks.spawn(id, url, &self.events_tx, |event| event);
-        id
-    }
-
-    fn fetch_abort(&mut self, id: RequestId) {
-        self.tasks.abort(id);
     }
 }
 
@@ -272,7 +213,7 @@ impl Reader {
 
 /// `fetch(url)` reduced to the response, read through the body when `read_body` is set;
 /// `None` is a network error.
-async fn get(url: &str, read_body: bool) -> Option<Response> {
+async fn get(url: &str, read_body: bool, options: &NetOptions) -> Option<Response> {
     let uri = Uri::try_from(percent_encode(url)).ok()?;
     if uri.scheme_str() != Some("http") {
         return None;
@@ -281,7 +222,8 @@ async fn get(url: &str, read_body: bool) -> Option<Response> {
     let authority = uri.authority()?.as_str().to_owned();
     let path = uri.path_and_query().map_or("/", |p| p.as_str());
     let path = if path.is_empty() { "/" } else { path };
-    let mut stream = TcpStream::connect((host.as_str(), port)).await.ok()?;
+    let (to_host, to_port) = options.dial(&host, port);
+    let mut stream = TcpStream::connect((to_host.as_str(), to_port)).await.ok()?;
     let request = format!(
         "GET {path} HTTP/1.1\r\nHost: {authority}\r\nAccept: */*\r\nConnection: close\r\n\r\n"
     );
@@ -367,6 +309,10 @@ mod tests {
     use super::*;
     use tokio::net::TcpListener;
 
+    fn options() -> NetOptions {
+        NetOptions::new(tokio::runtime::Handle::current())
+    }
+
     async fn serve_once(reply: &'static [u8]) -> String {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -385,14 +331,14 @@ mod tests {
     async fn bodies_follow_content_length_and_chunked_framing() {
         let url =
             serve_once(b"HTTP/1.1 200 OK\r\nContent-Length: 7\r\n\r\n\xEF\xBB\xBF{\"a\":1}").await;
-        let response = get(&url, true).await.unwrap();
+        let response = get(&url, true, &options()).await.unwrap();
         assert_eq!((response.status, response.body.as_str()), (200, "{\"a\""));
 
         let url = serve_once(
             b"HTTP/1.1 100 Continue\r\n\r\nHTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n3;x=1\r\n{\"a\r\n4\r\n\":1}\r\n0\r\n\r\n",
         )
         .await;
-        let response = get(&url, true).await.unwrap();
+        let response = get(&url, true, &options()).await.unwrap();
         assert_eq!(
             (response.status, response.body.as_str()),
             (200, "{\"a\":1}")
@@ -400,7 +346,7 @@ mod tests {
         assert_eq!(response.url, url);
 
         let url = serve_once(b"HTTP/1.1 404 Not Found\r\nContent-Length: 5\r\n\r\nnope!").await;
-        let response = get(&url, false).await.unwrap();
+        let response = get(&url, false, &options()).await.unwrap();
         assert_eq!((response.status, response.body.as_str()), (404, ""));
     }
 }

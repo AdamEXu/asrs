@@ -5,6 +5,7 @@ use asrs_parity::json::{self, Json};
 
 use crate::Result;
 use crate::oracle::{self, Paths};
+use crate::vectors;
 
 const USAGE: &str = "usage: cargo xtask corpus <command>
 
@@ -130,9 +131,12 @@ fn generate(paths: &Paths, args: &[String]) -> Result {
 
 fn run_specs(paths: &Paths, specs: &[&Spec], mode: Mode) -> Result {
     oracle::build_harness(paths)?;
-    let oracle_hash = oracle::hash_tree(
+    if mode == Mode::Write {
+        vectors::sync_entry_inputs(paths, false)?;
+    }
+    let entry_hashes = vectors::entry_hashes(
         &paths.oracle_src,
-        &["src", "build.mjs", "package-lock.json"],
+        &vectors::read_entry_inputs(&paths.dist.join(vectors::ENTRY_INPUTS))?,
     )?;
     let mut failures = Vec::new();
     for spec in specs {
@@ -148,13 +152,7 @@ fn run_specs(paths: &Paths, specs: &[&Spec], mode: Mode) -> Result {
                 .arg(&staging),
             Vec::new(),
         )?;
-        let generator = oracle::hash_bytes(
-            format!(
-                "{oracle_hash}:{}",
-                oracle::hash_bytes(&oracle::read(&spec.path)?)
-            )
-            .as_bytes(),
-        );
+        let generator = generator_hash(&entry_hashes, spec)?;
         let manifest = build_manifest(paths, spec, &generator, &stdout, &staging)?;
         let manifest_path = manifest_path(&paths.root, &spec.name);
         if mode != Mode::Write {
@@ -198,6 +196,24 @@ fn run_specs(paths: &Paths, specs: &[&Spec], mode: Mode) -> Result {
 
 fn manifest_path(root: &Path, name: &str) -> PathBuf {
     synthetic_dir(root).join(format!("{name}{MANIFEST_SUFFIX}"))
+}
+
+fn generator_hash(entry_hashes: &[(String, String)], spec: &Spec) -> Result<String> {
+    let Some((_, entry_hash)) = entry_hashes.iter().find(|(name, _)| name == &spec.entry) else {
+        return Err(format!(
+            "{}: entry {:?} is not a harness entry point (oracle/src/{}.ts)",
+            spec.path.display(),
+            spec.entry,
+            spec.entry
+        ));
+    };
+    Ok(oracle::hash_bytes(
+        format!(
+            "{entry_hash}:{}",
+            oracle::hash_bytes(&oracle::read(&spec.path)?)
+        )
+        .as_bytes(),
+    ))
 }
 
 /// Regenerates every named corpus whose target/ tree is missing or differs from its committed
@@ -679,5 +695,45 @@ mod tests {
                 "{entry}: {stderr}"
             );
         }
+    }
+
+    #[test]
+    fn generator_hash_ignores_inputs_the_entry_does_not_use() {
+        let dir = Scratch::new("generator-hash");
+        for (rel, text) in [
+            ("build.mjs", "build"),
+            ("package-lock.json", "{}"),
+            ("src/corpusA.ts", "a"),
+            ("src/corpus/shared.ts", "s"),
+            ("src/corpusB.ts", "b"),
+            ("src/unrelated.ts", "u"),
+        ] {
+            dir.write(rel, text.as_bytes());
+        }
+        let inputs = vec![
+            (
+                "corpusA".to_owned(),
+                vec![
+                    "src/corpusA.ts".to_owned(),
+                    "src/corpus/shared.ts".to_owned(),
+                ],
+            ),
+            ("corpusB".to_owned(), vec!["src/corpusB.ts".to_owned()]),
+        ];
+        dir.write("a.spec.json", b"{}");
+        let spec = Spec {
+            name: "a".to_owned(),
+            path: dir.0.join("a.spec.json"),
+            entry: "corpusA".to_owned(),
+            seed: "0".to_owned(),
+        };
+        let hashes = || vectors::entry_hashes(&dir.0, &inputs).unwrap();
+        let before = generator_hash(&hashes(), &spec).unwrap();
+        dir.write("src/unrelated.ts", b"u2");
+        assert_eq!(before, generator_hash(&hashes(), &spec).unwrap());
+        dir.write("src/corpus/shared.ts", b"s2");
+        assert_ne!(before, generator_hash(&hashes(), &spec).unwrap());
+        dir.write("a.spec.json", b"{}\n");
+        assert_ne!(before, generator_hash(&hashes(), &spec).unwrap());
     }
 }

@@ -200,7 +200,7 @@ impl Cx<'_> {
     }
 }
 
-pub trait Protocol {
+pub trait Protocol: Send {
     fn ports(&self) -> Vec<f64>;
     fn accept_ws(&mut self, _url: &str, _protocols: &[String]) -> Option<String> {
         None

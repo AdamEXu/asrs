@@ -2,7 +2,8 @@
 //! that applies Node's rules itself (held writes while connecting, `Error` then `Close` on a
 //! refused connection or a socket error, one `Close`, the idle `setTimeout`) and posts events to
 //! the foreground side, which drains them in send order. `destroy` takes effect at once, as
-//! `socket.destroyed` does: nothing but the `Close` is dispatched for that socket afterwards.
+//! `socket.destroyed` does: the task is gone and nothing but the `Close` is dispatched for that
+//! socket afterwards.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::io;
@@ -11,18 +12,17 @@ use std::time::Duration;
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
-use tokio::runtime::Handle;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use tokio::task::JoinHandle;
 use tokio::time::Instant;
 
-use crate::channel::{EventReceiver, EventSender, event_channel};
+use crate::channel::{EventReceiver, EventSender, event_channel_notifying};
+use crate::net_options::{Backlog, NetOptions, Waiting};
 
 use super::transport::{RlogNetEvent, RlogTransport, TcpId};
 
 enum Command {
     Write(Vec<u8>),
-    Destroy,
     SetTimeout(Duration),
 }
 
@@ -38,20 +38,34 @@ struct Socket {
     task: JoinHandle<()>,
 }
 
+struct Event {
+    event: RlogNetEvent,
+    _waiting: Option<Waiting>,
+}
+
+impl From<RlogNetEvent> for Event {
+    fn from(event: RlogNetEvent) -> Self {
+        Event {
+            event,
+            _waiting: None,
+        }
+    }
+}
+
 pub struct TokioRlogTransport {
-    handle: Handle,
-    events_tx: EventSender<RlogNetEvent>,
-    events_rx: EventReceiver<RlogNetEvent>,
-    pending: VecDeque<RlogNetEvent>,
+    options: NetOptions,
+    events_tx: EventSender<Event>,
+    events_rx: EventReceiver<Event>,
+    pending: VecDeque<Event>,
     next_id: u32,
     sockets: BTreeMap<u32, Socket>,
 }
 
 impl TokioRlogTransport {
-    pub fn new(handle: Handle) -> Self {
-        let (events_tx, events_rx) = event_channel();
+    pub fn new(options: NetOptions) -> Self {
+        let (events_tx, events_rx) = event_channel_notifying(options.notify.clone());
         Self {
-            handle,
+            options,
             events_tx,
             events_rx,
             pending: VecDeque::new(),
@@ -67,8 +81,8 @@ impl TokioRlogTransport {
                 Some(event) => event,
                 None => self.events_rx.try_recv()?,
             };
-            if self.admit(&event) {
-                return Some(event);
+            if self.admit(&event.event) {
+                return Some(event.event);
             }
         }
     }
@@ -169,9 +183,11 @@ impl RlogTransport for TokioRlogTransport {
         let events = self.events_tx.clone();
         // Node connects to `localhost` when `host` is empty.
         let host = if host.is_empty() { "localhost" } else { host };
+        let (host, port) = self.options.dial(host, port as u16);
         let task = self
+            .options
             .handle
-            .spawn(run_socket(id, host.to_owned(), port as u16, rx, events));
+            .spawn(run_socket(id, host, port, rx, events));
         self.sockets.insert(
             id.0,
             Socket {
@@ -196,7 +212,8 @@ impl RlogTransport for TokioRlogTransport {
             && !matches!(s.state, State::Closed)
         {
             s.state = State::Closed;
-            let _ = s.commands.send(Command::Destroy);
+            s.task.abort();
+            let _ = self.events_tx.send(RlogNetEvent::Close(id).into());
         }
     }
 
@@ -240,13 +257,13 @@ async fn run_socket(
     host: String,
     port: u16,
     mut commands: UnboundedReceiver<Command>,
-    events: EventSender<RlogNetEvent>,
+    events: EventSender<Event>,
 ) {
-    let close = |events: &EventSender<RlogNetEvent>| {
-        let _ = events.send(RlogNetEvent::Close(id));
+    let close = |events: &EventSender<Event>| {
+        let _ = events.send(RlogNetEvent::Close(id).into());
     };
-    let fail = |events: &EventSender<RlogNetEvent>| {
-        let _ = events.send(RlogNetEvent::Error(id));
+    let fail = |events: &EventSender<Event>| {
+        let _ = events.send(RlogNetEvent::Error(id).into());
         close(events);
     };
     let mut idle = Idle {
@@ -270,18 +287,18 @@ async fn run_socket(
                     idle.pending_report = true;
                     idle.deadline = Some(Instant::now() + ms);
                 }
-                Some(Command::Destroy) | None => return close(&events),
+                None => return close(&events),
             },
             _ = idle.fire() => {
                 if idle.pending_report {
                     idle.pending_report = false;
-                    let _ = events.send(RlogNetEvent::Timeout(id));
+                    let _ = events.send(RlogNetEvent::Timeout(id).into());
                 }
             }
         }
     };
     let _ = stream.set_nodelay(true);
-    let _ = events.send(RlogNetEvent::Connect(id));
+    let _ = events.send(RlogNetEvent::Connect(id).into());
     idle.arm();
     for data in held {
         if stream.write_all(&data).await.is_err() {
@@ -289,6 +306,7 @@ async fn run_socket(
         }
         idle.arm();
     }
+    let backlog = Backlog::new();
     let mut buf = vec![0u8; 65536];
     loop {
         tokio::select! {
@@ -297,7 +315,11 @@ async fn run_socket(
                 Err(_) => return fail(&events),
                 Ok(n) => {
                     idle.arm();
-                    let _ = events.send(RlogNetEvent::Data(id, buf[..n].to_vec()));
+                    let waiting = backlog.reserve(n).await;
+                    let _ = events.send(Event {
+                        event: RlogNetEvent::Data(id, buf[..n].to_vec()),
+                        _waiting: waiting,
+                    });
                 }
             },
             command = commands.recv() => match command {
@@ -312,12 +334,12 @@ async fn run_socket(
                     idle.pending_report = true;
                     idle.deadline = Some(Instant::now() + ms);
                 }
-                Some(Command::Destroy) | None => return close(&events),
+                None => return close(&events),
             },
             _ = idle.fire() => {
                 if idle.pending_report {
                     idle.pending_report = false;
-                    let _ = events.send(RlogNetEvent::Timeout(id));
+                    let _ = events.send(RlogNetEvent::Timeout(id).into());
                 }
             }
         }
