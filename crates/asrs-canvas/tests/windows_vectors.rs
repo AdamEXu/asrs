@@ -1,6 +1,6 @@
 #![cfg(windows)]
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::Path;
 
@@ -94,22 +94,55 @@ fn file_problem(path: &Path, recorded: &BTreeMap<String, String>) -> Option<Stri
     (*want != hash).then(|| format!("{name} is not the render host's file"))
 }
 
+const FALLBACKS: &str = include_str!("../../../parity/vectors/canvas/fallback-windows.json");
+
+struct Probe {
+    font: String,
+    text: String,
+    metrics: Vec<f64>,
+}
+
+fn probes(key: &str) -> Vec<Probe> {
+    let vectors = json::parse(FALLBACKS).unwrap();
+    let rows = vectors.get(key).and_then(Json::as_array).unwrap();
+    let text = |r: &Json, key: &str| r.get(key).unwrap().as_str().unwrap().to_string_lossy();
+    rows.iter()
+        .map(|r| Probe {
+            font: text(r, "font"),
+            text: text(r, "text"),
+            metrics: r
+                .get("metrics")
+                .and_then(Json::as_array)
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().unwrap())
+                .collect(),
+        })
+        .collect()
+}
+
 /// The backend with the render host's ClearType settings, or `None` where a font of `fonts` or a
 /// font they fall back to is not the file the vectors were recorded with.
 fn pinned_backend(fonts: &[&str]) -> Option<DirectWrite> {
-    let recorded = recorded_fonts();
+    pinned_backend_for(fonts, &[])
+}
+
+fn pinned_backend_for(fonts: &[&str], characters: &[char]) -> Option<DirectWrite> {
     let mut backend = DirectWrite::with_settings(Some(TextSettings::DEFAULT)).unwrap();
-    let mut problems: Vec<String> = Vec::new();
+    let mut files = BTreeSet::new();
     for css in fonts {
         let spec = FontSpec::parse(css).unwrap();
-        let mut files = vec![backend.font_file(&spec).unwrap().0];
-        for (c, emoji) in [('日', false), ('\u{1f916}', true)] {
-            files.extend(backend.fallback_file(&spec, c, emoji));
+        files.insert(backend.font_file(&spec).unwrap().0);
+        for c in ['日', 'か', '\u{1f5fa}'].iter().chain(characters) {
+            files.extend(backend.fallback_file(&spec, *c, false));
         }
-        problems.extend(files.iter().filter_map(|f| file_problem(f, &recorded)));
+        files.extend(backend.fallback_file(&spec, '\u{1f916}', true));
     }
-    problems.sort();
-    problems.dedup();
+    let recorded = recorded_fonts();
+    let problems: Vec<String> = files
+        .iter()
+        .filter_map(|f| file_problem(f, &recorded))
+        .collect();
     if problems.is_empty() {
         return Some(backend);
     }
@@ -154,7 +187,7 @@ fn characters_fall_back_as_chromium_falls_back() {
     let spec = FontSpec::parse("12px system-ui").unwrap();
     for (c, emoji, name) in [
         ('日', false, "msyh.ttc"),
-        ('か', false, "yugothm.ttc"),
+        ('か', false, "yugothr.ttc"),
         ('\u{1f916}', true, "seguiemj.ttf"),
         ('\u{2699}', false, "seguisym.ttf"),
     ] {
@@ -201,6 +234,48 @@ fn text_metrics_are_bit_exact_against_chromium() {
         wrong.len(),
         &wrong[..wrong.len().min(40)]
     );
+}
+
+fn check_probes(backend: &mut DirectWrite, probes: &[Probe]) {
+    let mut wrong = Vec::new();
+    for p in probes {
+        let font = FontSpec::parse(&p.font).unwrap();
+        let m = measure_text(backend, &font, "left", "alphabetic", &p.text);
+        for (name, want) in FIELDS.iter().zip(&p.metrics) {
+            let got = field(&m, name);
+            if got != *want {
+                wrong.push(format!("{} {} {name}: {got} vs {want}", p.font, p.text));
+            }
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
+/// Sizes of the joysticks and swerve painters: Blink's font cache keys sizes to 1/100 px.
+#[test]
+fn fractional_sizes_are_floored_as_blink_floors_them() {
+    let Some(mut backend) = pinned_backend(&["10px sans-serif"]) else {
+        return;
+    };
+    let probes = probes("sizes");
+    assert_eq!(probes.len(), 10);
+    check_probes(&mut backend, &probes);
+}
+
+/// Text no primary font covers, in scripts of most of Blink's fallback families, upright, bold
+/// and italic.
+#[test]
+fn fallback_text_measures_as_chromium_measures_it() {
+    let probes = probes("fallback");
+    assert_eq!(probes.len(), 4 * 13);
+    let fonts: Vec<&str> = probes.iter().map(|p| p.font.as_str()).collect();
+    let mut characters: Vec<char> = probes.iter().flat_map(|p| p.text.chars()).collect();
+    characters.sort_unstable();
+    characters.dedup();
+    let Some(mut backend) = pinned_backend_for(&fonts, &characters) else {
+        return;
+    };
+    check_probes(&mut backend, &probes);
 }
 
 #[test]

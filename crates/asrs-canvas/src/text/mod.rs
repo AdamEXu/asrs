@@ -145,6 +145,11 @@ pub trait TextBackend {
         None
     }
 
+    /// Whether glyphs sit at quarter pixels rather than whole ones.
+    fn subpixel_positioning(&self) -> bool {
+        true
+    }
+
     /// The display scale the app runs at, returning whether it changes what the backend answers.
     /// Chromium turns hinting off for every font, canvas fonts included, on a Linux display scaled
     /// above 1.
@@ -196,6 +201,10 @@ impl<T: TextBackend + ?Sized> TextBackend for Box<T> {
         phase: u8,
     ) -> Option<Arc<LcdMask>> {
         (**self).raw_lcd_mask(glyph, scale, x_scale, phase)
+    }
+
+    fn subpixel_positioning(&self) -> bool {
+        (**self).subpixel_positioning()
     }
 
     fn set_device_scale(&mut self, scale: f32) -> bool {

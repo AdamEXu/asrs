@@ -1332,11 +1332,21 @@ fn font_hashes() -> Result<Vec<(String, Option<String>)>> {
             "consola.ttf",
             "consolab.ttf",
             "times.ttf",
+            "timesbd.ttf",
+            "timesi.ttf",
+            "tahoma.ttf",
+            "tahomabd.ttf",
+            "malgun.ttf",
+            "malgunbd.ttf",
+            "simsunb.ttf",
+            "l_10646.ttf",
             "cambria.ttc",
             "msyh.ttc",
             "msyhbd.ttc",
             "msyhl.ttc",
-            "YuGothM.ttc",
+            "YuGothB.ttc",
+            "YuGothL.ttc",
+            "YuGothR.ttc",
         ]
         .iter()
         .map(|f| format!("C:/Windows/Fonts/{f}"))

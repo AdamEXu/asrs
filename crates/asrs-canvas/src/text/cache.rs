@@ -147,6 +147,10 @@ impl<B: TextBackend> TextBackend for Cached<B> {
         mask
     }
 
+    fn subpixel_positioning(&self) -> bool {
+        self.backend.subpixel_positioning()
+    }
+
     fn set_device_scale(&mut self, scale: f32) -> bool {
         if !self.backend.set_device_scale(scale) {
             return false;

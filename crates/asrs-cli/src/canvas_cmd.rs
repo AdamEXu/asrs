@@ -39,7 +39,7 @@ fn js_text(v: Option<&JsValue>) -> Option<String> {
 }
 
 fn render_scenes(scenes: &Path, out: &Path, wanted: &[String]) -> Result<(), String> {
-    let mut glyphs = platform_backend().zip(MaskGammaLut::system());
+    let mut glyphs = platform_backend().zip(MaskGammaLut::embedded());
     if glyphs.is_none() {
         eprintln!(
             "no text backend or mask-gamma table on this platform: skipping scenes with text"
@@ -272,6 +272,9 @@ fn text_scene(path: &Path) -> Result<TextScene, String> {
 fn fit_lut(reference: &Path, out: &Path) -> Result<(), String> {
     let mut backend = platform_backend().ok_or("no text backend on this machine")?;
     let mut rows: [Option<[u8; 256]>; lut::ROWS] = [None; lut::ROWS];
+    // DirectWrite's averaged coverage skips a few values, which Skia's own table then fills.
+    let prior = cfg!(windows)
+        .then(|| MaskGammaLut::skia(MaskGammaLut::WINDOWS_CONTRAST, MaskGammaLut::WINDOWS_GAMMA));
     let mut residuals = Vec::new();
     for k in 0..lut::ROWS {
         let name = format!("calib-{k}");
@@ -293,7 +296,7 @@ fn fit_lut(reference: &Path, out: &Path) -> Result<(), String> {
                 "{name}: luminance bucket {bucket} calibrated twice"
             ));
         }
-        let row = lut::fit_row(&samples);
+        let row = lut::fit_row(&samples, prior.as_ref().map(|p| p.row(bucket)));
         let off: Vec<u8> = samples
             .iter()
             .map(|&(r, c)| row[r as usize].abs_diff(c))
@@ -359,7 +362,7 @@ mod tests {
 
     #[cfg(target_os = "linux")]
     fn text() -> Option<(Box<dyn TextBackend>, MaskGammaLut)> {
-        platform_backend().zip(MaskGammaLut::system())
+        platform_backend().zip(MaskGammaLut::embedded())
     }
 
     /// The machine's fonts with the render host's ClearType settings.
@@ -397,7 +400,9 @@ mod tests {
             eprintln!("skipped: {problem} (FONTCONFIG_FILE)");
             return;
         }
-        assert!(cfg!(windows), "{problem}");
+        if !cfg!(windows) {
+            panic!("{problem}");
+        }
         let line = format!("\n::warning title=Windows text scenes not run::{problem}\n");
         let _ = std::io::stdout().write_all(line.as_bytes());
     }

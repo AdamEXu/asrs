@@ -6,6 +6,7 @@
 #![allow(unsafe_code)]
 
 mod color;
+mod embolden;
 mod fallback;
 mod outline;
 pub mod settings;
@@ -47,6 +48,8 @@ use crate::skpath::SkPath;
 
 /// `kBoldWeightValue`.
 const BOLD: f32 = 700.0;
+/// `kBoldThreshold`.
+const SYNTHETIC_BOLD: f32 = 600.0;
 /// `SK_MAX_SIZE_FOR_LCDTEXT`.
 const LCD_MAX_SIZE: f32 = 48.0;
 
@@ -55,6 +58,8 @@ struct Face {
     size: f32,
     /// Blink's synthetic italic.
     skew: bool,
+    /// Blink's synthetic bold.
+    embolden: bool,
     fallback: bool,
 }
 
@@ -109,7 +114,7 @@ impl DirectWrite {
             let fallback = factory.GetSystemFontFallback().ok();
             (factory, collection?, fallback)
         };
-        let settings = settings.unwrap_or_else(|| TextSettings::system(&factory));
+        let settings = settings.unwrap_or_else(TextSettings::system);
         let mut backend = DirectWrite {
             settings,
             factory,
@@ -224,7 +229,7 @@ impl DirectWrite {
 
     fn fallback_typeface(&mut self, spec: &FontSpec, c: char, emoji: bool) -> Option<usize> {
         let priority = Priority::of(c, emoji);
-        let families = fallback::families(c, priority);
+        let families = fallback::families(c, priority, spec.family == Family::Monospace);
         let first = families
             .candidates
             .iter()
@@ -261,7 +266,8 @@ impl DirectWrite {
             DWRITE_FONT_STYLE_NORMAL
         };
         let family = match spec.family {
-            Family::System => &self.system_family,
+            Family::Courier => "Courier",
+            Family::Arial => "Arial",
             _ => "",
         };
         let (mut mapped, mut font, mut scale) = (0, None, 0.0);
@@ -285,16 +291,22 @@ impl DirectWrite {
         font
     }
 
+    fn face(&self, spec: &FontSpec, typeface: usize, fallback: bool) -> Face {
+        let loaded = &self.typefaces[typeface];
+        Face {
+            typeface,
+            size: spec.size,
+            skew: spec.italic && !loaded.italic,
+            embolden: spec.weight >= SYNTHETIC_BOLD && !loaded.bold,
+            fallback,
+        }
+    }
+
     fn substitute_face(&mut self, spec: &FontSpec, typeface: usize) -> u32 {
         if let Some(&face) = self.substitutes.get(&(spec.key(), typeface)) {
             return face;
         }
-        self.faces.push(Face {
-            typeface,
-            size: spec.size,
-            skew: spec.italic && !self.typefaces[typeface].italic,
-            fallback: true,
-        });
+        self.faces.push(self.face(spec, typeface, true));
         let face = (self.faces.len() - 1) as u32;
         self.substitutes.insert((spec.key(), typeface), face);
         face
@@ -456,7 +468,7 @@ impl DirectWrite {
         })
     }
 
-    /// The glyph outline under `split`'s remaining matrix, for glyphs DirectWrite gives no bitmap.
+    /// The glyph outline under `split`'s remaining matrix, for glyphs Skia fills itself.
     fn device_path(
         &self,
         typeface: &Typeface,
@@ -483,7 +495,10 @@ impl DirectWrite {
             .ok()
             .filter(|&id| id < typeface.glyph_count)?;
         let transform = transform(&split.remaining, phase);
-        if let Some(bitmap) = self.bitmap(typeface, &strike, id, &transform) {
+        let drawn = (!face.embolden)
+            .then(|| self.bitmap(typeface, &strike, id, &transform))
+            .flatten();
+        if let Some(bitmap) = drawn {
             if bitmap.channels == 1 || lcd {
                 return Some(bitmap);
             }
@@ -493,7 +508,13 @@ impl DirectWrite {
                 ..bitmap
             });
         }
-        let path = self.device_path(typeface, &strike, id, &transform)?;
+        let mut path = self.device_path(typeface, &strike, id, &transform)?;
+        if face.embolden {
+            let post = device_matrix(post);
+            let local = path.transformed(&post.inverse()?);
+            let width = embolden::extra_width(face.size);
+            path = embolden::embolden(&local, width).transformed(&post);
+        }
         if self.settings.edging != Edging::SubpixelAntiAlias {
             let mask = path_mask::gray(&path)?;
             return Some(Bitmap {
@@ -586,6 +607,17 @@ fn transform(m: &M2, phase: (u8, u8)) -> DWRITE_MATRIX {
         m22: m.sy,
         dx: f32::from(phase.0) / 4.0,
         dy: f32::from(phase.1) / 4.0,
+    }
+}
+
+fn device_matrix(m: &M2) -> Affine {
+    Affine {
+        a: f64::from(m.sx),
+        b: f64::from(m.ky),
+        c: f64::from(m.kx),
+        d: f64::from(m.sy),
+        e: 0.0,
+        f: 0.0,
     }
 }
 
@@ -733,22 +765,31 @@ impl Faces for DirectWrite {
             return Some(face);
         }
         let typeface = self.resolve(spec)?;
-        self.faces.push(Face {
-            typeface,
-            size: spec.size,
-            skew: spec.italic && !self.typefaces[typeface].italic,
-            fallback: false,
-        });
+        self.faces.push(self.face(spec, typeface, false));
         let face = (self.faces.len() - 1) as u32;
         self.primary.insert(spec.key(), face);
         Some(face)
+    }
+
+    fn standard(&mut self, spec: &FontSpec) -> Option<u32> {
+        let serif = FontSpec {
+            family: Family::Serif,
+            ..*spec
+        };
+        let typeface = self.resolve(&serif)?;
+        if self.resolve(spec) == Some(typeface) {
+            return self.primary(spec);
+        }
+        Some(self.substitute_face(spec, typeface))
     }
 
     fn substitute(&mut self, spec: &FontSpec, c: char, emoji: bool) -> Option<u32> {
         if is_private_use(c) || is_noncharacter(c) {
             return None;
         }
-        if !emoji && (spec.italic || spec.weight >= BOLD) {
+        // Blink looks the list's first family up by name, which a generic one does not have.
+        let named = matches!(spec.family, Family::Courier | Family::Arial);
+        if !emoji && named && (spec.italic || spec.weight >= BOLD) {
             let regular = FontSpec {
                 weight: 400.0,
                 italic: false,
@@ -819,6 +860,10 @@ impl TextBackend for DirectWrite {
             right,
             bottom,
         })
+    }
+
+    fn subpixel_positioning(&self) -> bool {
+        self.settings.edging != Edging::Alias
     }
 
     fn raw_mask(&mut self, glyph: Glyph, scale: f64, x_scale: f64, phase: u8) -> Option<Arc<Mask>> {

@@ -82,7 +82,7 @@ impl Default for CanvasText {
     fn default() -> Self {
         CanvasText {
             backend: platform_backend(),
-            lut: MaskGammaLut::system(),
+            lut: MaskGammaLut::embedded(),
         }
     }
 }

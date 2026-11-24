@@ -18,6 +18,9 @@ use windows::core::Interface;
 
 use super::settings::wide;
 
+/// `SkFontStyle::isBold`.
+const SEMI_BOLD: i32 = 600;
+
 /// One range of a `gasp` table, its sizes inclusive.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GaspRange {
@@ -42,6 +45,7 @@ pub struct Typeface {
     pub shaper: rustybuzz::Face<'static>,
     pub metrics: DWRITE_FONT_METRICS,
     pub glyph_count: u16,
+    pub bold: bool,
     pub italic: bool,
     pub family: String,
     /// The face, if it has colour glyphs, with its COLR version 1 interface where there is one.
@@ -75,8 +79,8 @@ fn gasp_ranges(table: &[u8]) -> Option<(u16, Vec<(u16, u16)>)> {
     Some((version, ranges))
 }
 
-/// The square sizes `has_bitmap_strike` counts: the `EBLC` strikes with at least four glyphs and
-/// every `EBSC` one.
+/// The square sizes `has_bitmap_strike` counts: the `EBLC` strikes it takes to have several glyphs
+/// and every `EBSC` one.
 fn strike_sizes(eblc: Option<&[u8]>, ebsc: Option<&[u8]>) -> Vec<u16> {
     const VERSION: u32 = 0x0002_0000;
     let sizes = |table: &[u8], record: usize| {
@@ -97,8 +101,9 @@ fn strike_sizes(eblc: Option<&[u8]>, ebsc: Option<&[u8]>) -> Vec<u16> {
             return Vec::new();
         };
         for at in records {
-            let (first, last) = (u16_at(table, at + 40), u16_at(table, at + 42));
-            if u32::from(last.unwrap_or(0)) >= u32::from(first.unwrap_or(0)) + 3 {
+            // Skia compares the glyph range without swapping its bytes.
+            let raw = |at: usize| u16_at(table, at).map_or(0, |v| u32::from(v.swap_bytes()));
+            if raw(at + 42) >= raw(at + 40) + 3 {
                 add(table, at + 44);
             }
         }
@@ -116,12 +121,12 @@ fn strike_sizes(eblc: Option<&[u8]>, ebsc: Option<&[u8]>) -> Vec<u16> {
 impl Typeface {
     pub fn new(font: &IDWriteFont) -> Option<Typeface> {
         // SAFETY: plain COM calls on live objects; `GetMetrics` writes the struct it is given.
-        let (face, metrics, style, family) = unsafe {
+        let (face, metrics, weight, style, family) = unsafe {
             let face = font.CreateFontFace().ok()?;
             let mut metrics = DWRITE_FONT_METRICS::default();
             face.GetMetrics(&mut metrics);
             let family = family_name(&font.GetFontFamily().ok()?);
-            (face, metrics, font.GetStyle(), family)
+            (face, metrics, font.GetWeight(), font.GetStyle(), family)
         };
         let (data, path) = font_data(&face)?;
         // SAFETY: plain COM calls on a live face.
@@ -137,6 +142,7 @@ impl Typeface {
         Some(Typeface {
             glyph_count,
             metrics,
+            bold: weight.0 >= SEMI_BOLD,
             italic: style != DWRITE_FONT_STYLE_NORMAL,
             family,
             color,
@@ -367,9 +373,8 @@ mod tests {
     #[test]
     fn only_square_strikes_with_glyphs_count() {
         let mut eblc = vec![0, 2, 0, 0, 0, 0, 0, 3];
-        for (first, last, x, y) in [(1u16, 9u16, 12u8, 12u8), (1, 3, 13, 13), (1, 9, 14, 7)] {
+        for (last, x, y) in [(0x0104u16, 12u8, 12u8), (0x0100, 13, 13), (0x0104, 14, 7)] {
             let mut record = [0u8; 48];
-            record[40..42].copy_from_slice(&first.to_be_bytes());
             record[42..44].copy_from_slice(&last.to_be_bytes());
             record[44] = x;
             record[45] = y;

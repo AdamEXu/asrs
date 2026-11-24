@@ -387,18 +387,72 @@ fn all_of(width: u32, height: u32) -> Spans {
     spans
 }
 
+fn polygon(points: &[P]) -> SkPath {
+    let mut path = SkPath::new();
+    path.move_to(points[0]);
+    for &p in &points[1..] {
+        path.line_to(p);
+    }
+    path.close();
+    path
+}
+
+/// `SkEdge::setLine` for a non-antialiased fill: the rows it spans, its 16.16 x on the first of
+/// them and its step.
+fn edge(a: P, b: P) -> Option<(std::ops::Range<i32>, i64, i64)> {
+    let dot6 = |v: f32| i64::from((v * 64.0) as i32);
+    let (a, b) = if a.y <= b.y { (a, b) } else { (b, a) };
+    let [x0, y0, x1, y1] = [a.x, a.y, b.x, b.y].map(dot6);
+    let (top, bottom) = ((y0 + 32) >> 6, (y1 + 32) >> 6);
+    if top == bottom {
+        return None;
+    }
+    let slope = ((x1 - x0) << 16) / (y1 - y0);
+    let dy = ((top << 6) + 32) - y0;
+    let x = (x0 + ((slope * dy) >> 16)) << 10;
+    Some((top as i32..bottom as i32, x, slope))
+}
+
+/// The pixels Skia's non-antialiased fill of a convex quad covers, as rows of whole pixels.
+fn whole_pixels(quad: &[P; 4]) -> SkPath {
+    let edges: Vec<_> = (0..4)
+        .filter_map(|i| edge(quad[i], quad[(i + 1) % 4]))
+        .collect();
+    let top = edges.iter().map(|e| e.0.start).min().unwrap_or(0);
+    let bottom = edges.iter().map(|e| e.0.end).max().unwrap_or(0);
+    let mut path = SkPath::new();
+    for y in top..bottom {
+        let columns = edges.iter().filter(|e| e.0.contains(&y)).map(|e| {
+            let x = e.1 + e.2 * i64::from(y - e.0.start);
+            ((x + 0x8000) >> 16) as i32
+        });
+        let (left, right) = columns.fold((i32::MAX, i32::MIN), |(l, r), x| (l.min(x), r.max(x)));
+        if left < right {
+            let [l, t, r, b] = [left, y, right, y + 1].map(|v| v as f32);
+            path.move_to(P { x: l, y: t });
+            for (x, y) in [(r, t), (r, b), (l, b)] {
+                path.line_to(P { x, y });
+            }
+            path.close();
+        }
+    }
+    path
+}
+
 fn clip_rect(clip: &RasterClip, matrix: &Affine, r: &Rect, antialias: bool) -> RasterClip {
     if matrix.b != 0.0 || matrix.c != 0.0 {
-        let mut path = SkPath::new();
-        path.move_to(P {
-            x: r.left,
-            y: r.top,
+        let corners = [
+            (r.left, r.top),
+            (r.right, r.top),
+            (r.right, r.bottom),
+            (r.left, r.bottom),
+        ]
+        .map(|(x, y)| map_point(matrix, P { x, y }));
+        return clip.intersect_path(&if antialias {
+            polygon(&corners)
+        } else {
+            whole_pixels(&corners)
         });
-        for (x, y) in [(r.right, r.top), (r.right, r.bottom), (r.left, r.bottom)] {
-            path.line_to(P { x, y });
-        }
-        path.close();
-        return clip.intersect_path(&path.transformed(matrix));
     }
     let mut device = map_rect(matrix, r);
     if !antialias {

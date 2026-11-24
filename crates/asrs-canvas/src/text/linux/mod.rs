@@ -316,6 +316,18 @@ impl Faces for Fontations {
         Some(face)
     }
 
+    fn standard(&mut self, spec: &FontSpec) -> Option<u32> {
+        let serif = FontSpec {
+            family: Family::Serif,
+            ..*spec
+        };
+        let typeface = self.resolve(&serif)?.2;
+        if self.resolve(spec).is_some_and(|found| found.2 == typeface) {
+            return self.primary(spec);
+        }
+        Some(self.substitute_face(spec, typeface))
+    }
+
     fn substitute(&mut self, spec: &FontSpec, c: char, emoji: bool) -> Option<u32> {
         if !emoji && (spec.italic || spec.weight >= BOLD) {
             let regular = FontSpec {

@@ -243,7 +243,7 @@ fn by_script(script: Script) -> &'static [&'static str] {
     }
 }
 
-pub fn families(c: char, priority: Priority) -> Families {
+pub fn families(c: char, priority: Priority, monospace: bool) -> Families {
     let symbols = match priority {
         Priority::Emoji => Some(COLOR_EMOJI),
         Priority::EmojiText => Some(MONO_EMOJI),
@@ -266,7 +266,10 @@ pub fn families(c: char, priority: Priority) -> Families {
     };
     Families {
         candidates: if code <= 0xffff {
-            by_script(script)
+            match script {
+                Script::Arabic | Script::Hebrew if monospace => &["courier new"],
+                _ => by_script(script),
+            }
         } else {
             &[]
         },
@@ -292,7 +295,7 @@ mod tests {
     #[test]
     fn characters_reach_blinks_families() {
         let first = |c: char, emoji: bool| {
-            let families = families(c, Priority::of(c, emoji));
+            let families = families(c, Priority::of(c, emoji), false);
             let first = families.candidates.first().copied();
             first.or(families.last_resort).unwrap()
         };
@@ -307,6 +310,8 @@ mod tests {
         assert_eq!(first('\u{20000}', false), "simsun-extb");
         assert_eq!(first('\u{2192}', false), "Cambria Math");
         assert_eq!(first('\u{2603}', false), "Segoe UI Symbol");
+        let monospace = families('א', Priority::Text, true);
+        assert_eq!(monospace.candidates, ["courier new"]);
         assert_eq!(locale('日', Priority::Text), "zh-Hant");
     }
 }

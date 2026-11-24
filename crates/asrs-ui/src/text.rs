@@ -73,7 +73,7 @@ impl Default for TextSystem {
     fn default() -> Self {
         TextSystem {
             backend: platform_backend().unwrap_or_else(|| Box::new(FixedAdvance)),
-            lut: MaskGammaLut::system().unwrap_or_else(MaskGammaLut::identity),
+            lut: MaskGammaLut::embedded().unwrap_or_else(MaskGammaLut::identity),
             windows: HashMap::new(),
             clock: 0,
             budget: (CACHE_BYTES, CACHE_ENTRIES),

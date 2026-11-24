@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use rustybuzz::{BufferClusterLevel, UnicodeBuffer};
 
-use super::shaping::{effective, emoji_clusters, hb_scale, words};
+use super::shaping::{effective, emoji_clusters, hb_scale, script_runs, words};
 use super::{FontSpec, Glyph, Shaped, ShapedGlyph};
 
 /// The sized fonts a backend shapes with.
@@ -19,6 +19,9 @@ pub(crate) trait Faces {
     fn advance(&mut self, face: u32, id: u32, size: f32) -> f32;
 
     fn primary(&mut self, spec: &FontSpec) -> Option<u32>;
+
+    /// The standard font Blink tries after the families of every font list.
+    fn standard(&mut self, spec: &FontSpec) -> Option<u32>;
 
     /// `FontCache::PlatformFallbackFontForCharacter`.
     fn substitute(&mut self, spec: &FontSpec, c: char, emoji: bool) -> Option<u32>;
@@ -136,8 +139,8 @@ fn shape_range(
 }
 
 /// Blink's `HarfBuzzShaper` with its `FontFallbackIterator`: the emoji font first for emoji
-/// presentation, then the font itself, then a system fallback by character, and the font's
-/// missing glyph for what no font has.
+/// presentation, then the font itself, the standard font, then a system fallback by character,
+/// and the font's missing glyph for what no font has.
 fn shape_segment(
     faces: &mut dyn Faces,
     spec: &FontSpec,
@@ -153,11 +156,21 @@ fn shape_segment(
     }
     tried.push(primary);
     let mut pending = vec![range];
-    for &face in &tried {
-        pending = pending
+    let shape_pending = |faces: &dyn Faces, face, pending: Vec<_>, out: &mut _| -> Vec<_> {
+        pending
             .into_iter()
             .flat_map(|r| shape_range(faces, face, word, r, out))
-            .collect();
+            .collect()
+    };
+    for &face in &tried {
+        pending = shape_pending(faces, face, pending, out);
+    }
+    if !pending.is_empty()
+        && let Some(face) = faces.standard(spec)
+        && !tried.contains(&face)
+    {
+        tried.push(face);
+        pending = shape_pending(faces, face, pending, out);
     }
     while let Some(range) = pending.pop() {
         let Some(c) = word[range.0..range.1].chars().next() else {
@@ -207,8 +220,11 @@ fn shape_word(
     let mut runs = Vec::new();
     let clusters = emoji_clusters(word, 0);
     for segment in clusters.chunk_by(|a, b| a.2 == b.2) {
-        let range = (bytes[&segment[0].0], bytes[&segment[segment.len() - 1].1]);
-        shape_segment(faces, spec, primary, word, range, segment[0].2, &mut runs);
+        let (from, to) = (bytes[&segment[0].0], bytes[&segment[segment.len() - 1].1]);
+        for (start, end) in script_runs(&word[from..to]) {
+            let range = (from + start, from + end);
+            shape_segment(faces, spec, primary, word, range, segment[0].2, &mut runs);
+        }
     }
     runs.sort_by_key(|r| r.start);
     let size = spec.size * zoom;

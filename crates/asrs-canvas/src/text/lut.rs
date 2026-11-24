@@ -38,7 +38,8 @@ impl MaskGammaLut {
         self.0.iter().flatten().copied().collect()
     }
 
-    /// `SK_GAMMA_CONTRAST` of Chromium's Windows Skia.
+    /// `SK_GAMMA_CONTRAST` of Chromium's Windows Skia. Electron leaves the contrast and gamma of
+    /// the ClearType tuner unused: its renderers draw with these whatever the registry holds.
     pub const WINDOWS_CONTRAST: f32 = 1.0;
     /// `SK_GAMMA_SRGB`.
     pub const WINDOWS_GAMMA: f32 = 0.0;
@@ -60,20 +61,6 @@ impl MaskGammaLut {
 
     pub fn apply(&self, rgb: [u8; 3], coverage: u8) -> u8 {
         self.0[luminance_bucket(rgb)][coverage as usize]
-    }
-
-    /// The table for the user's text settings, where the platform has any that Chromium follows.
-    pub fn system() -> Option<Self> {
-        #[cfg(windows)]
-        {
-            use crate::text::win::settings::TextSettings;
-            let settings = TextSettings::current();
-            let tuned = (settings.contrast, settings.gamma);
-            if tuned != (Self::WINDOWS_CONTRAST, Self::WINDOWS_GAMMA) {
-                return Some(Self::skia(settings.contrast, settings.gamma));
-            }
-        }
-        Self::embedded()
     }
 
     /// The table committed for the platform this was built for, if it has one.
@@ -131,14 +118,20 @@ fn correcting_row(bucket: usize, contrast: f64, gamma: f64) -> [u8; 256] {
     row
 }
 
+/// The 3-bit luminance Skia picks a row by: `SkComputeLuminance` of the colour as
+/// `SkScalerContextRec` keeps it, 3 bits a channel.
 pub fn luminance_bucket(rgb: [u8; 3]) -> usize {
-    let lum = 0.2126 * f64::from(rgb[0]) + 0.7152 * f64::from(rgb[1]) + 0.0722 * f64::from(rgb[2]);
-    (lum.round().clamp(0.0, 255.0) as usize) >> 5
+    let [r, g, b] = rgb.map(|v| {
+        let bits = u32::from(v) & 0xe0;
+        bits | bits >> 3 | bits >> 6
+    });
+    ((r * 54 + g * 183 + b * 19) >> 8) as usize >> 5
 }
 
 /// One table row from `(raw coverage, Chromium coverage)` pairs: the median Chromium value of
-/// each raw value seen at least three times, linear in between, 0 and 255 fixed at the ends.
-pub fn fit_row(samples: &[(u8, u8)]) -> [u8; 256] {
+/// each raw value seen at least three times, `prior` or else linear in between, 0 and 255 fixed
+/// at the ends.
+pub fn fit_row(samples: &[(u8, u8)], prior: Option<&[u8; 256]>) -> [u8; 256] {
     let mut by_raw: Vec<Vec<u8>> = vec![Vec::new(); 256];
     for &(raw, chromium) in samples {
         by_raw[raw as usize].push(chromium);
@@ -148,6 +141,8 @@ pub fn fit_row(samples: &[(u8, u8)]) -> [u8; 256] {
         if values.len() >= 3 {
             values.sort_unstable();
             known.push((raw, f64::from(values[values.len() / 2])));
+        } else if let Some(prior) = prior {
+            known.push((raw, f64::from(prior[raw])));
         }
     }
     if known.last().is_some_and(|&(raw, _)| raw != 255) {
@@ -175,6 +170,8 @@ mod tests {
         }
         assert_eq!(luminance_bucket([0x22, 0x22, 0x22]), 1);
         assert_eq!(luminance_bucket([0xee, 0xee, 0xee]), 7);
+        assert_eq!(luminance_bucket([0x7f, 0x7f, 0x7f]), 3);
+        assert_eq!(luminance_bucket([0xff, 0x9f, 0x1f]), 4);
     }
 
     #[test]
@@ -184,12 +181,17 @@ mod tests {
             samples.push((100, v));
         }
         samples.extend([(50, 1), (50, 2)]);
-        let row = fit_row(&samples);
+        let row = fit_row(&samples, None);
         assert_eq!(row[0], 0);
         assert_eq!(row[100], 110);
         assert_eq!(row[50], 55);
         assert_eq!(row[255], 255);
         assert_eq!(row[178], 183);
+        let row = fit_row(&samples, Some(&[7; 256]));
+        assert_eq!(
+            [row[0], row[50], row[100], row[178], row[255]],
+            [0, 7, 110, 7, 7]
+        );
     }
 
     #[test]

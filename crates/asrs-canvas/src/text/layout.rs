@@ -92,7 +92,9 @@ pub fn place_text(
     let matrix = pre_translate(matrix, location.0, location.1);
     let [a, b, c, d, e, f] = matrix;
     let axis_aligned = b == 0.0 && c == 0.0 && a > 0.0 && d > 0.0;
-    let (round_x, round_y, keep_x, keep_y) = if relax(b) == 0.0 {
+    let (round_x, round_y, keep_x, keep_y) = if !backend.subpixel_positioning() {
+        (0.5, 0.5, false, false)
+    } else if relax(b) == 0.0 {
         (0.125, 0.5, true, false)
     } else if relax(a) == 0.0 {
         (0.5, 0.125, false, true)

@@ -6,15 +6,10 @@
 use std::ffi::c_void;
 
 use windows::Win32::Foundation::ERROR_SUCCESS;
-use windows::Win32::Graphics::DirectWrite::{
-    DWRITE_FACTORY_TYPE_SHARED, DWriteCreateFactory, IDWriteFactory,
-};
 use windows::Win32::Graphics::Gdi::{
     DISPLAY_DEVICE_PRIMARY_DEVICE, DISPLAY_DEVICEW, EnumDisplayDevicesW,
 };
-use windows::Win32::System::Registry::{
-    HKEY, HKEY_CURRENT_USER, KEY_READ, RRF_RT_REG_DWORD, RegCloseKey, RegGetValueW, RegOpenKeyExW,
-};
+use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RRF_RT_REG_DWORD, RegGetValueW};
 use windows::Win32::UI::WindowsAndMessaging::{
     FE_FONTSMOOTHINGCLEARTYPE, FE_FONTSMOOTHINGORIENTATIONBGR, FE_FONTSMOOTHINGORIENTATIONRGB,
     NONCLIENTMETRICSW, SPI_GETFONTSMOOTHING, SPI_GETFONTSMOOTHINGORIENTATION,
@@ -22,8 +17,6 @@ use windows::Win32::UI::WindowsAndMessaging::{
     SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW,
 };
 use windows::core::{HSTRING, w};
-
-use crate::text::lut::MaskGammaLut;
 
 /// `SkFont::Edging` as `FontPlatformData::CreateSkFont` sets it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,38 +31,21 @@ pub struct TextSettings {
     pub edging: Edging,
     /// The display's subpixels run blue, green, red.
     pub bgr: bool,
-    pub contrast: f32,
-    /// Skia's device gamma; 0 is sRGB.
-    pub gamma: f32,
 }
 
 impl TextSettings {
-    /// `SK_GAMMA_CONTRAST` and `SK_GAMMA_SRGB` of Chromium's Windows Skia, with ClearType on an
-    /// RGB panel, as Windows ships.
+    /// ClearType on an RGB panel, as Windows ships.
     pub const DEFAULT: TextSettings = TextSettings {
         edging: Edging::SubpixelAntiAlias,
         bgr: false,
-        contrast: MaskGammaLut::WINDOWS_CONTRAST,
-        gamma: MaskGammaLut::WINDOWS_GAMMA,
     };
 
     /// The user's settings now.
-    pub fn current() -> TextSettings {
-        // SAFETY: a plain COM call.
-        match unsafe { DWriteCreateFactory::<IDWriteFactory>(DWRITE_FACTORY_TYPE_SHARED) } {
-            Ok(factory) => TextSettings::system(&factory),
-            Err(_) => TextSettings::DEFAULT,
-        }
-    }
-
-    pub fn system(factory: &IDWriteFactory) -> TextSettings {
-        let mut settings = TextSettings::DEFAULT;
-        let tuned = avalon_key().filter(key_exists);
-        if let Some((contrast, gamma)) = tuned.as_ref().and_then(|_| rendering_params(factory)) {
-            settings.contrast = contrast;
-            settings.gamma = gamma;
-        }
-        settings.edging = Edging::Alias;
+    pub fn system() -> TextSettings {
+        let mut settings = TextSettings {
+            edging: Edging::Alias,
+            ..TextSettings::DEFAULT
+        };
         if parameter(SPI_GETFONTSMOOTHING) == Some(0) {
             return settings;
         }
@@ -77,7 +53,7 @@ impl TextSettings {
         if parameter(SPI_GETFONTSMOOTHINGTYPE) != Some(FE_FONTSMOOTHINGCLEARTYPE) {
             return settings;
         }
-        let structure = match tuned.as_ref().and_then(pixel_structure) {
+        let structure = match avalon_key().as_ref().and_then(pixel_structure) {
             Some(structure) => structure,
             None => match parameter(SPI_GETFONTSMOOTHINGORIENTATION) {
                 Some(FE_FONTSMOOTHINGORIENTATIONRGB) => 1,
@@ -129,18 +105,6 @@ fn avalon_key() -> Option<HSTRING> {
     None
 }
 
-fn key_exists(key: &HSTRING) -> bool {
-    let mut handle = HKEY::default();
-    // SAFETY: the out handle is closed once opened.
-    unsafe {
-        if RegOpenKeyExW(HKEY_CURRENT_USER, key, None, KEY_READ, &mut handle) != ERROR_SUCCESS {
-            return false;
-        }
-        let _ = RegCloseKey(handle);
-    }
-    true
-}
-
 fn pixel_structure(key: &HSTRING) -> Option<u32> {
     let (mut value, mut size) = (0u32, size_of::<u32>() as u32);
     // SAFETY: the value is a DWORD, which fits `value`.
@@ -156,16 +120,6 @@ fn pixel_structure(key: &HSTRING) -> Option<u32> {
         )
     };
     (status == ERROR_SUCCESS).then_some(value)
-}
-
-fn rendering_params(factory: &IDWriteFactory) -> Option<(f32, f32)> {
-    // SAFETY: plain COM calls on a live factory.
-    let (contrast, gamma) = unsafe {
-        let params = factory.CreateRenderingParams().ok()?;
-        (params.GetEnhancedContrast(), params.GetGamma())
-    };
-    let below_four = 4.0 - f32::EPSILON;
-    Some((contrast.clamp(0.0, 1.0), gamma.clamp(0.0, below_four)))
 }
 
 /// `FontCache::MenuFontFamily`, which `system-ui` stands for.
