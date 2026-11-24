@@ -21,7 +21,8 @@ cargo run -p asrs-app   # the asrs binary
 cargo xtask check       # layout rules, replay-harness lint, formatting, clippy and tests
 cargo xtask licenses    # third-party license bundle for release builds
 cargo xtask libm        # build the LGPL sin/cos library asrs loads at runtime
-cargo xtask bundle      # release directory: app, sin/cos library, documentation, licenses
+cargo xtask bundle      # release packages: app, sin/cos library, documentation, licenses
+cargo xtask smoke       # check the packages: install, start, OCR, file types, library swap
 ```
 
 Building needs a checkout of upstream AdvantageScope at the commit pinned in
@@ -31,6 +32,25 @@ development packages; `.github/workflows/ci.yml` lists them for Ubuntu. It also 
 WebKitGTK 4.1, which only `asrs-webview` links: the process that shows the Documentation tab's
 page. Without it (not built, no WebKitGTK, or a Wayland window) the tab links to the online
 documentation instead.
+
+## Packages
+
+`cargo xtask bundle` builds the packages of the platform it runs on in `target/bundle/host`:
+
+| Platform | Packages | Needs |
+|---|---|---|
+| macOS 12 and later | `.dmg` with `asrs.app` | Xcode's command line tools |
+| Windows 10 and later | `.zip`, installer for the current user | [Inno Setup 6](https://jrsoftware.org) |
+| Linux (the build machine's glibc and later) | `.tar.gz` with `install.sh`, AppImage | squashfs-tools |
+
+The packages carry the workspace's version. They are unsigned; `asrs.app` is signed ad hoc with
+the hardened runtime and `packaging/macos/entitlements.plist`, as a Developer ID signature would
+be. asrs registers as an alternate program for `.wpilog`, `.wpilogxz`, `.rlog`, `.revlog`,
+`.csv`, `.dslog` and `.dsevents` files and never as their default, except that the system may
+treat it as one where nothing else opens the type. The icon in `packaging/icons` is a placeholder.
+`--no-docs` leaves out the documentation, which may not be published yet (#310).
+
+`asrs --self-test [<image> <left> <top> <width> <height>]` checks a package without a window.
 
 ## Public logs and local vectors
 
@@ -51,9 +71,10 @@ Without them, the tests that use them (`wpilog_vectors::public` and `::search_ke
 ## Continuous integration
 
 CI builds and tests natively on Windows (x64, arm64), macOS (arm64) and Linux (x64, arm64),
-runs `cargo fmt`, clippy with and without the parity features, the committed-vector tests,
-`cargo xtask docs` and `cargo xtask bundle`, and uploads each bundle without the documentation. While the repository is private only the
-ubuntu-latest job runs. CI sets `ASRS_CI=1`, under which these tests skip with a printed
+and runs `cargo fmt`, clippy with and without the parity features and the committed-vector tests.
+The `package` jobs run `cargo xtask docs`, `bundle` and `smoke` on the same five targets and upload
+the packages without the documentation (and without the AppImage, whose runtime contains LGPL code
+that comes without its source). While the repository is private only the x64 Linux jobs run. CI sets `ASRS_CI=1`, under which these tests skip with a printed
 `note: skipping` line:
 
 - the local vector tests above (downloaded public logs)
@@ -86,5 +107,5 @@ port of glibc's `sin` and `cos` that V8 uses for `Math.sin` and `Math.cos`, is l
 the LGPL-2.1-or-later. It builds a separate shared library (`libasrs_libm_lgpl.dylib`,
 `asrs_libm_lgpl.dll` or `libasrs_libm_lgpl.so`) that asrs loads at runtime from next to its
 executable, or from the path in `ASRS_LIBM_LGPL`. You can replace that library with your own
-build; see [its README](crates/asrs-libm-lgpl/README.md). `cargo xtask bundle` assembles a
-release directory with the app, the library, its source and every license text.
+build; see [its README](crates/asrs-libm-lgpl/README.md). Every package `cargo xtask bundle`
+makes contains the app, the library, its source and every license text.

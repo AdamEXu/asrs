@@ -50,6 +50,19 @@ function run(argv) {
   return paths.join("\n");
 }"#;
 
+/// Prints the program Windows opens CSV files with.
+const CSV_PROGRAM: &str = r#"
+$query = Add-Type -PassThru -Namespace Asrs -Name Assoc -MemberDefinition @'
+[DllImport("shlwapi.dll", CharSet = CharSet.Unicode)]
+public static extern uint AssocQueryString(
+    uint flags, uint what, string type, string extra, System.Text.StringBuilder text, ref uint length);
+'@
+$text = New-Object System.Text.StringBuilder 1024
+[uint32]$length = 1024
+[void]$query::AssocQueryString(0, 2, '.csv', [NullString]::Value, $text, [ref]$length)
+$text.ToString()
+"#;
+
 const LICENSE_FILES: &[&str] = &[
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
@@ -459,7 +472,8 @@ impl Smoke {
         self.refuses("was not found", &[])?;
         let env = [("ASRS_LIBM_LGPL", own.as_path())];
         let report = self_test(&self.exe(), &self.frame, &env)?;
-        self.check_report(&report, &own)
+        self.check_report(&report, &own)?;
+        fs::write(self.library_path(), shipped).map_err(at(&self.library_path()))
     }
 
     fn refuses(&self, reason: &str, env: &[(&str, &Path)]) -> Result {
@@ -502,6 +516,7 @@ impl Smoke {
     fn installer(&self) -> Result {
         let setup = &self.bundle.packages()[1];
         let installed = self.dir.join("installed");
+        let csv = powershell(CSV_PROGRAM)?;
         run_tool(
             Command::new(setup)
                 .args(["/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART"])
@@ -521,6 +536,10 @@ impl Smoke {
              $folder = (New-Object -ComObject Shell.Application).Namespace((Split-Path $lnk))
              $folder.ParseName('asrs.lnk').ExtendedProperty('System.AppUserModel.ID')",
         )?;
+        let now = powershell(CSV_PROGRAM)?;
+        if now != csv {
+            return Err(format!("the default for .csv went from {csv:?} to {now:?}"));
+        }
         let expected = format!("\"{}\" \"%1\"", exe.display());
         if !registered.contains(&expected) || !registered.contains("AdamXu.asrs") {
             return Err(format!("registered {registered:?}, expected {expected}"));
