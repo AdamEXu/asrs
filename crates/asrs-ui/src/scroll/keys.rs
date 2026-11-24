@@ -4,9 +4,14 @@ use gpui_kit::Keystroke;
 
 /// `kPixelsPerLineStep`.
 pub(super) const LINE: f64 = 40.0;
-/// How much of a scroller a page goes by at least, and the most device px it leaves.
+/// How much of a scroller a page goes by at least, and the most device px it leaves, which only
+/// macOS's theme limits.
 const PAGE_FRACTION: f64 = 0.875;
-const PAGE_OVERLAP: f64 = 40.0;
+const PAGE_OVERLAP: f64 = if cfg!(target_os = "macos") {
+    40.0
+} else {
+    f64::INFINITY
+};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Step {
