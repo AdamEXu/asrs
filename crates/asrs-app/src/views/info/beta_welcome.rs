@@ -6,6 +6,7 @@ use asrs_canvas::text::dom::Lu;
 use asrs_js::value::JsValue;
 use asrs_tabs::info::BetaWelcome;
 use asrs_tabs::info::beta_welcome::CHECKBOXES;
+use asrs_ui::focus;
 use asrs_ui::gpui::{
     AnyElement, App, Context, Div, EventEmitter, FocusHandle, Focusable, HoverListenerMode,
     InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent, MouseButton, MouseDownEvent,
@@ -13,7 +14,7 @@ use asrs_ui::gpui::{
 };
 use asrs_ui::input::{Checkbox, PointerState};
 use asrs_ui::parity::probed;
-use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH};
+use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS};
 
 use super::layout::{BetaLayout, BetaRow, LuRect, TextBlock, Typesetter};
 use super::page::{self, PageScroll, Placer, ScrolledPage, mix};
@@ -55,7 +56,6 @@ pub struct BetaWelcomePage {
     body: FocusHandle,
     checkboxes: [FocusHandle; CHECKBOXES],
     button: FocusHandle,
-    button_from_keyboard: bool,
     /// GPUI's own hover styles end at a key press.
     hovered: Option<Control>,
     pressed: Option<Control>,
@@ -80,7 +80,6 @@ impl BetaWelcomePage {
             body,
             checkboxes: std::array::from_fn(|_| cx.focus_handle()),
             button: cx.focus_handle(),
-            button_from_keyboard: false,
             hovered: None,
             pressed: None,
             space: None,
@@ -336,10 +335,7 @@ impl BetaWelcomePage {
         let opacity = self.opacity(cx);
         let pick =
             |colors: [u32; 2]| mix(appearance.pick(colors[0], colors[1]), background, opacity);
-        let focused = self.active(window) == Some(Control::Button);
-        self.button_from_keyboard =
-            focused && (self.button_from_keyboard || window.last_input_was_keyboard());
-        let ring = self.button_from_keyboard && window.is_window_active();
+        let ring = self.page.enabled() && focus::focus_visible(&self.button, window, cx);
         let radius = if ring {
             FOCUS_RING_RADIUS
         } else {
@@ -365,17 +361,7 @@ impl BetaWelcomePage {
         }
         let mut boxed = placer.place(bounds).child(button);
         if ring {
-            boxed = boxed.child(
-                div()
-                    .absolute()
-                    .top(px(-FOCUS_RING_WIDTH))
-                    .left(px(-FOCUS_RING_WIDTH))
-                    .right(px(-FOCUS_RING_WIDTH))
-                    .bottom(px(-FOCUS_RING_WIDTH))
-                    .border(px(FOCUS_RING_WIDTH))
-                    .border_color(rgb(appearance.theme().focus_ring))
-                    .rounded(px(FOCUS_RING_RADIUS + FOCUS_RING_WIDTH)),
-            );
+            boxed = boxed.child(focus::outline(appearance));
         }
         let label = placer.block(text, |_| mix(0xffffff, background, opacity), cx);
         div()

@@ -10,6 +10,7 @@ use gpui_kit::{
     WeakEntity, Window, canvas, div, px, rgba,
 };
 
+use crate::focus;
 use crate::icon::{IconSource, Placement, paint_icon};
 use crate::input::model::{FieldModel, FieldValue};
 use crate::input::native::paint_text_field;
@@ -445,7 +446,9 @@ impl<M: FieldModel> Render for TextField<M> {
         let text_style = self.text_style();
         let line = text::layout(cx, &text_style, "0", scale, None).height as f32 / 64.0;
         let g = geometry(&style, self.size.0, self.size.1, line, scale);
-        let focused = self.focus_handle(cx).is_focused(window);
+        let handle = self.focus_handle(cx);
+        let focused = handle.is_focused(window);
+        let has_focus = focus::has_focus(&handle, window, cx);
         let (width, height) = self.size;
         let disabled = self.disabled;
         let color = match style.frame {
@@ -467,7 +470,7 @@ impl<M: FieldModel> Render for TextField<M> {
                 radius,
             } => {
                 let background = match style.focus_background {
-                    Some(bg) if focused => bg,
+                    Some(bg) if has_focus => bg,
                     _ => background,
                 };
                 div()
@@ -568,7 +571,7 @@ impl<M: FieldModel> Render for TextField<M> {
         }
 
         let cancel_visible =
-            (focused || self.hovered) && !self.disabled && !self.value.shown().is_empty();
+            (has_focus || self.hovered) && !self.disabled && !self.value.shown().is_empty();
         if let (Some([cx0, cy0, cw, ch]), true) = (g.cancel, cancel_visible) {
             let (cl, _) = split(cx0, scale);
             let (ct, _) = split(cy0, scale);
