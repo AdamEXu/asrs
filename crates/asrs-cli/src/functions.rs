@@ -2,9 +2,11 @@ use asrs_js::number::{self, IntlOptions, SignDisplay};
 use asrs_parity::{Response, Utf16String, Value};
 
 use crate::{
-    js_color, js_json, js_math, js_msgpack, js_regex, js_string, js_time, log_field, log_keys,
-    log_run, log_struct, photon, tabs_console,
+    js_color, js_json, js_math, js_msgpack, js_ops, js_regex, js_string, js_time, log_field,
+    log_keys, log_run, log_struct, photon, tabs_console,
 };
+
+pub(crate) use crate::js_ops::{array_join, to_units};
 
 pub type Function = fn(&[Value]) -> Response;
 
@@ -50,8 +52,9 @@ fn oracle_call(args: &[Value]) -> Response {
         Some(s) => s.to_string_lossy(),
         None => return Response::Error("oracle:call needs a source string".to_owned()),
     };
-    match js_math::CALLS
+    match js_ops::CALLS
         .iter()
+        .chain(js_math::CALLS)
         .chain(js_time::CALLS)
         .chain(js_regex::CALLS)
         .chain(tabs_console::CALLS)
@@ -126,44 +129,6 @@ pub(crate) fn to_number(value: &Value) -> Result<f64, Response> {
 
 fn to_integer(value: &Value) -> Result<f64, Response> {
     Ok(number::to_integer_or_infinity(to_number(value)?))
-}
-
-/// `ToString` on a CVE-1 value, with the JS special case that `String(symbol)`
-/// is allowed while other ToString uses throw.
-pub(crate) fn to_units(value: &Value) -> Result<Vec<u16>, Response> {
-    Ok(match value {
-        Value::Undefined => "undefined".encode_utf16().collect(),
-        Value::Null => "null".encode_utf16().collect(),
-        Value::Bool(b) => if *b { "true" } else { "false" }.encode_utf16().collect(),
-        Value::Number(bits) => number::to_string(f64::from_bits(*bits))
-            .encode_utf16()
-            .collect(),
-        Value::String(s) => s.units().to_vec(),
-        Value::BigInt(digits) => digits.encode_utf16().collect(),
-        Value::Symbol(_) => {
-            return Err(type_error("Cannot convert a Symbol value to a string"));
-        }
-        Value::Array(items) => array_join(items),
-        _ => "[object Object]".encode_utf16().collect(),
-    })
-}
-
-pub(crate) fn array_join(items: &[Value]) -> Vec<u16> {
-    let mut out: Vec<u16> = Vec::new();
-    for (i, item) in items.iter().enumerate() {
-        if i > 0 {
-            out.push(b',' as u16);
-        }
-        match item {
-            Value::Undefined | Value::Null | Value::Hole => {}
-            other => {
-                if let Ok(units) = to_units(other) {
-                    out.extend_from_slice(&units);
-                }
-            }
-        }
-    }
-    out
 }
 
 /// `thisNumberValue`: the receiver of `Number.prototype` methods.

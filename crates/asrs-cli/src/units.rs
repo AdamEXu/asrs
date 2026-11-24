@@ -5,7 +5,8 @@ use asrs_log::{line_graph_filter::LineGraphFilter, units};
 use asrs_parity::{Response, Utf16String, Value};
 
 use crate::functions::{arg, ok_number, to_number, type_error};
-use crate::shared::{Function, cannot_read, get_prop, prop_key, strict_equal};
+use crate::js_ops::{cannot_read, get_prop, prop_key};
+use crate::shared::{Function, strict_equal};
 
 pub const FUNCTIONS: &[(&str, Function)] = &[
     ("shared/units:Units.convert", convert_fn),
