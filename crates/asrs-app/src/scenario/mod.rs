@@ -222,10 +222,20 @@ pub fn default_window() -> (f64, f64) {
     (options.width, options.height)
 }
 
-const TOP_KEYS: [&str; 10] = [
-    "page", "window", "scales", "themes", "gl", "prefs", "userData", "robot", "actions", "about",
+const TOP_KEYS: [&str; 11] = [
+    "page",
+    "window",
+    "scales",
+    "themes",
+    "gl",
+    "prefs",
+    "userData",
+    "robot",
+    "platforms",
+    "actions",
+    "about",
 ];
-const ACTION_KEYS: [&str; 18] = [
+const ACTION_KEYS: [&str; 20] = [
     "main",
     "open",
     "eval",

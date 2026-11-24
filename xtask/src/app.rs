@@ -195,6 +195,21 @@ fn scenarios_dir(paths: &Paths) -> PathBuf {
     paths.root.join("parity/scenarios")
 }
 
+/// Whether the scenario runs on this platform: `platforms` lists `process.platform`s, all without
+/// one.
+pub(crate) fn runs_here(scenario: &Json) -> bool {
+    let here = match std::env::consts::OS {
+        "macos" => "darwin",
+        "windows" => "win32",
+        other => other,
+    };
+    let platforms = scenario.get("platforms").and_then(Json::as_array);
+    platforms.is_none_or(|list| {
+        list.iter()
+            .any(|p| p.as_str().is_some_and(|p| p.to_string() == here))
+    })
+}
+
 fn load_scenarios(paths: &Paths, only: &[String]) -> Result<Vec<Scenario>> {
     let dir = scenarios_dir(paths);
     let mut names: Vec<String> = fs::read_dir(&dir)
@@ -216,7 +231,13 @@ fn load_scenarios(paths: &Paths, only: &[String]) -> Result<Vec<Scenario>> {
         .filter(|n| only.is_empty() || only.contains(n))
         .map(|name| {
             let file = dir.join(format!("{name}.json"));
-            let value = read_json(&file)?;
+            read_json(&file).map(|value| (name, file, value))
+        })
+        .filter(|read| {
+            !only.is_empty() || !matches!(read, Ok((_, _, value)) if !runs_here(value))
+        })
+        .map(|read| {
+            let (name, file, value) = read?;
             let numbers = |key: &str, default: &[u32]| -> Vec<u32> {
                 value.get(key).and_then(Json::as_array).map_or_else(
                     || default.to_vec(),

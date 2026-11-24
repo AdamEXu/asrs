@@ -908,7 +908,12 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
     if let Some(missing) = options.scenarios.iter().find(|n| !names.contains(n)) {
         return Err(format!("no scenario {missing} in {}", scenarios.display()));
     }
-    if !options.scenarios.is_empty() {
+    if options.scenarios.is_empty() {
+        names.retain(|n| {
+            let scenario = read_json(&scenarios.join(format!("{n}.json")));
+            scenario.is_ok_and(|s| app::runs_here(&s))
+        });
+    } else {
         names.retain(|n| options.scenarios.contains(n));
     }
     let root = parity_dir().join("port").join(&options.label);
