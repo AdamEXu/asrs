@@ -119,6 +119,77 @@ fn js(text: &str) -> JsString {
     JsString::from(text)
 }
 
+/// What a loop iteration of `decode` reads, the log aside.
+struct ParseState {
+    offset: i64,
+    main: bool,
+    last_timestamp: Option<u64>,
+    key_ids: HashMap<i16, JsString>,
+    key_types: HashMap<i16, JsString>,
+}
+
+impl ParseState {
+    fn is(&self, decoder: &RlogDecoder, offset: i64, main: bool) -> bool {
+        self.offset == offset
+            && self.main == main
+            && self.last_timestamp == decoder.last_timestamp.map(f64::to_bits)
+            && self.key_ids == decoder.key_ids
+            && self.key_types == decoder.key_types
+    }
+}
+
+/// A negative length can send the offset back, and a decode that keeps returning to the same
+/// state spins forever upstream. From the first step that does not go forward, this keeps one
+/// earlier state, replaced at doubling intervals (Brent's algorithm), so it costs a comparison
+/// per iteration.
+///
+/// The state leaves the log out, and the log can end a loop: a descriptor added again throws.
+/// Everything a lap adds to the log that a later lap could trip over, it adds the first time
+/// round, so a second lap that comes back shows that every further one will.
+#[derive(Default)]
+struct CycleWatch {
+    previous: Option<i64>,
+    armed: bool,
+    mark: Option<ParseState>,
+    steps: u64,
+    interval: u64,
+    laps: u32,
+}
+
+impl CycleWatch {
+    fn check(&mut self, decoder: &RlogDecoder, offset: i64, main: bool) -> Result<(), Fail> {
+        let previous = self.previous.replace(offset);
+        self.armed |= previous.is_some_and(|previous| offset <= previous);
+        if !self.armed {
+            return Ok(());
+        }
+        if self
+            .mark
+            .as_ref()
+            .is_some_and(|mark| mark.is(decoder, offset, main))
+        {
+            self.laps += 1;
+            if self.laps == 2 {
+                return Err(Fail::Abort(Abort::NeverReturns));
+            }
+        }
+        if self.steps == self.interval {
+            self.interval = (self.interval * 2).max(64);
+            self.steps = 0;
+            self.laps = 0;
+            self.mark = Some(ParseState {
+                offset,
+                main,
+                last_timestamp: decoder.last_timestamp.map(f64::to_bits),
+                key_ids: decoder.key_ids.clone(),
+                key_types: decoder.key_types.clone(),
+            });
+        }
+        self.steps += 1;
+        Ok(())
+    }
+}
+
 /// `type.split(prefix)[1]` for a type that starts with `prefix`.
 fn schema_type(type_: &JsString, prefix: &str) -> JsString {
     type_.split(Some(&js(prefix)), None)[1].clone()
@@ -202,6 +273,7 @@ impl RlogDecoder {
             }
         }
         shift(&mut offset, 1);
+        let mut cycles = CycleWatch::default();
         'main: loop {
             if offset >= data.len() as i64 {
                 break 'main;
@@ -209,6 +281,7 @@ impl RlogDecoder {
             if crate::worker::stop_requested() {
                 return Err(Fail::Abort(Abort::Threw));
             }
+            cycles.check(self, offset, true)?;
             let mut timestamp = f64_at(data, shift(&mut offset, 8))?;
             if timestamp < 0.0 {
                 timestamp = 0.0;
@@ -226,6 +299,7 @@ impl RlogDecoder {
             }
             self.last_timestamp = Some(timestamp);
             'read: loop {
+                cycles.check(self, offset, false)?;
                 let Some(entry_type) = u8_at(data, shift(&mut offset, 1)) else {
                     break 'read;
                 };

@@ -207,7 +207,7 @@ fn load_state(
         if !contained {
             let primary = ws.primary_display();
             let hubs_length = ops::get(&hubs, "length")?;
-            let is_hub = less_than(&JsValue::Number(index as f64), &hubs_length).unwrap_or(false);
+            let is_hub = ops::lt(&JsValue::Number(index as f64), &hubs_length).unwrap_or(false);
             let (default_width, default_height) = if is_hub {
                 (constants::HUB_DEFAULT_WIDTH, constants::HUB_DEFAULT_HEIGHT)
             } else {
@@ -283,62 +283,19 @@ fn describe(value: &JsValue) -> String {
     }
 }
 
-/// ToPrimitive with a Number hint: JSON-reachable objects coerce through `toString`.
-fn to_primitive(value: &JsValue) -> JsValue {
-    match value {
-        JsValue::Object(_)
-        | JsValue::Array(_)
-        | JsValue::Bytes(_)
-        | JsValue::Date(_)
-        | JsValue::ExtData(..) => JsValue::String(ops::to_string(value)),
-        other => other.clone(),
-    }
-}
-
-/// `IsLessThan(a, b)`; `None` is the spec's `undefined` for a NaN operand.
-fn less_than(a: &JsValue, b: &JsValue) -> Option<bool> {
-    let a = to_primitive(a);
-    let b = to_primitive(b);
-    if let (JsValue::String(x), JsValue::String(y)) = (&a, &b) {
-        return Some(x.units() < y.units());
-    }
-    let x = match ops::value_to_number(&a) {
-        Ok(x) => x,
-        Err(_) => return None,
-    };
-    let y = match ops::value_to_number(&b) {
-        Ok(y) => y,
-        Err(_) => return None,
-    };
-    if x.is_nan() || y.is_nan() {
-        None
-    } else {
-        Some(x < y)
-    }
-}
-
 /// `a >= b` where `b` is a display bound number.
 fn ge(a: &JsValue, b: f64) -> bool {
-    !less_than(a, &JsValue::Number(b)).unwrap_or(true)
+    ops::ge(a, &JsValue::Number(b)).unwrap_or(false)
 }
 
 /// `a <= b` where `b` is a display bound number.
 fn le(a: &JsValue, b: f64) -> bool {
-    !less_than(&JsValue::Number(b), a).unwrap_or(true)
+    ops::le(a, &JsValue::Number(b)).unwrap_or(false)
 }
 
-/// `a + b` (string concat wins after ToPrimitive).
+/// `a + b` on state-file JSON, which cannot hold a BigInt for `ops::add` to reject.
 fn js_add(a: &JsValue, b: &JsValue) -> JsValue {
-    let a = to_primitive(a);
-    let b = to_primitive(b);
-    if matches!(a, JsValue::String(_)) || matches!(b, JsValue::String(_)) {
-        let mut units = ops::to_string(&a).units().to_vec();
-        units.extend_from_slice(ops::to_string(&b).units());
-        return JsValue::String(JsString::from_units(units));
-    }
-    let x = ops::value_to_number(&a).unwrap_or(f64::NAN);
-    let y = ops::value_to_number(&b).unwrap_or(f64::NAN);
-    JsValue::Number(x + y)
+    ops::add(a, b).unwrap_or(JsValue::Number(f64::NAN))
 }
 
 /// `window.x = v`: class bodies are strict code even in the app's sloppy CJS bundle, so

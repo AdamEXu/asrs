@@ -831,6 +831,11 @@
     "src/logRun.ts",
     "src/logScript.ts"
   ],
+  "mcapReentry": [
+    "src/environment.ts",
+    "src/mcapReentry.ts",
+    "src/shims.ts"
+  ],
   "protoRenderer": [
     "src/corpus/bytes.ts",
     "src/corpus/corpus.ts",
@@ -854,6 +859,13 @@
     "src/logFieldRun.ts",
     "src/logRun.ts",
     "src/registry.ts",
+    "src/shims.ts"
+  ],
+  "rlogCycles": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rlog.ts",
+    "src/environment.ts",
+    "src/rlogCycles.ts",
     "src/shims.ts"
   ],
   "robotServer": [

@@ -471,7 +471,8 @@ again. Lines are written synchronously, so a worker that never answers leaves th
 upstream's `WorkerManager` on `log.toSerialized()`, as `prepare-export` does, and writes what main's
 `write-export` would: a string as UTF-8 (lone surrogates become U+FFFD), bytes as they are. Exit
 status 3 means the worker rejected (the hub's "Failed to export data"); 4 means the run was
-skipped. Two option sets are skipped because upstream would never finish:
+skipped. Two option sets are skipped, the first because upstream runs out of memory and the second
+for its size:
 
 - `fixed` sampling when `(range[1] - range[0]) / (samplingPeriod / 1000)` is not at most the
   sample limit (100000 by default), or when adding the step to either end of the range leaves it
@@ -481,7 +482,8 @@ skipped. Two option sets are skipped because upstream would never finish:
   64 plus the key's UTF-8 length, plus for each sample timestamp with a value at or before it,
   31 plus the UTF-8 length of `JSON.stringify({ value })`. The sampled MCAP branch calls
   `addMessage` without awaiting it, so once a chunk fills, every later message re-finalizes an
-  ever larger chunk.
+  ever larger chunk, and the file repeats them until it passes the longest `ArrayBuffer` and the
+  worker rejects. `export/mcap-reentry` (`src/mcapReentry.ts`) records that case.
 
 The port's `asrs-cli decode <file>` must print the same dump and `asrs-cli export <file> --options
 <json>` the same bytes, with the same skip rules, so `cargo xtask parity decode` and `export` can
