@@ -27,9 +27,16 @@ use crate::main_process::MainProcess;
 use confined::Confined;
 use net::Net;
 
-/// Whether the app downloads assets when it starts: not in a `parity` build, whose scenarios and
-/// tests start the loop themselves.
+/// Not in a `parity` build, whose scenarios and tests start the loop themselves.
 pub const ENABLED: bool = !cfg!(feature = "parity");
+
+/// Keeps the app off the network, for the smoke test of the release packages.
+pub const OFF_VARIABLE: &str = "ASRS_NO_ASSET_DOWNLOADS";
+
+/// Whether the app downloads assets when it starts.
+pub fn enabled() -> bool {
+    ENABLED && std::env::var_os(OFF_VARIABLE).is_none()
+}
 
 const GITHUB_API: &str = "https://api.github.com";
 

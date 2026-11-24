@@ -1369,7 +1369,7 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
     }
 
     MainProcess::check_for_update(cx, false);
-    if asset_download::ENABLED {
+    if asset_download::enabled() {
         let folders = cx.global::<MainProcess>().state.paths.asset_folders();
         asset_download::start(asset_download::Config::new(folders), cx);
     }
