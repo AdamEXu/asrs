@@ -183,11 +183,18 @@ unsafe extern "C-unwind" fn did_fail_to_enter(window: &AnyObject, _: Sel, _: Opt
     unsafe { center.postNotificationName_object(&name, Some(window)) };
 }
 
+type MayQuit = Rc<dyn Fn() -> bool>;
 type Ask = Rc<dyn Fn(&mut App)>;
 
+#[derive(Clone)]
+struct QuitHandler {
+    cx: AsyncApp,
+    may_quit: MayQuit,
+    ask: Ask,
+}
+
 thread_local! {
-    static QUIT: RefCell<Option<(AsyncApp, Rc<dyn Fn() -> bool>, Ask)>> =
-        const { RefCell::new(None) };
+    static QUIT: RefCell<Option<QuitHandler>> = const { RefCell::new(None) };
 }
 
 /// AppKit may ask from inside an update of the app, so only `may_quit` answers it.
@@ -196,7 +203,7 @@ unsafe extern "C-unwind" fn should_terminate(
     _: Sel,
     _: Option<&AnyObject>,
 ) -> NSApplicationTerminateReply {
-    let Some((cx, may_quit, ask)) = QUIT.with_borrow(Clone::clone) else {
+    let Some(QuitHandler { cx, may_quit, ask }) = QUIT.with_borrow(Clone::clone) else {
         return NSApplicationTerminateReply::TerminateNow;
     };
     if may_quit() {
@@ -214,7 +221,11 @@ pub(in super::super) fn on_quit_request(
     let Some(mtm) = MainThreadMarker::new() else {
         return;
     };
-    QUIT.set(Some((cx.to_async(), Rc::new(may_quit), Rc::new(ask))));
+    QUIT.set(Some(QuitHandler {
+        cx: cx.to_async(),
+        may_quit: Rc::new(may_quit),
+        ask: Rc::new(ask),
+    }));
     let Some(delegate) = NSApplication::sharedApplication(mtm).delegate() else {
         return;
     };
@@ -236,9 +247,11 @@ pub(in super::super) fn on_quit_request(
     }
 }
 
+type OnChange = Rc<dyn Fn(bool, &mut App)>;
+
 struct FullScreenIvars {
     cx: AsyncApp,
-    on_change: Rc<dyn Fn(bool, &mut App)>,
+    on_change: OnChange,
 }
 
 define_class!(
