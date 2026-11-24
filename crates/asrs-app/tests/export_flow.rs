@@ -26,6 +26,7 @@ use asrs_app::main_process::{self, BetaTime, MainProcess};
 use asrs_app::menus::bridge::MenuAction;
 use asrs_app::menus::dispatch::dispatch;
 use asrs_app::menus::model::Command;
+use asrs_app::quit;
 use asrs_app::windows::{self, WindowId, WindowKind, Windows};
 use asrs_hub::hub::HubModel;
 use asrs_js::ops;
@@ -445,6 +446,7 @@ fn exports_in_a_fresh_home() {
     a_write_that_fails_is_reported(&mut app, hub);
     a_hub_asks_before_closing_on_an_export(&mut app, hub);
     a_close_button_asks_and_takes_the_prompt_along(&mut app);
+    quitting_closes_every_window_and_asks_exporting_hubs(&mut app);
 }
 
 struct Run {
@@ -645,6 +647,58 @@ fn a_close_button_asks_and_takes_the_prompt_along(app: &mut AppUnderTest) {
     let handle = app.handle(other);
     let shown = app.run(&[], |app| assert!(app.cx.simulate_close(handle)));
     assert!(shown.is_empty() && !app.hubs().contains(&other));
+}
+
+/// `Browser::Quit` and `WindowList::CloseAllWindows`: the windows close by age, on macOS the
+/// newest first, also after one is kept, which only keeps the app from quitting.
+fn quitting_closes_every_window_and_asks_exporting_hubs(app: &mut AppUnderTest) {
+    let [oldest] = app.hubs()[..] else {
+        panic!("{:?}", app.hubs());
+    };
+    for _ in 0..2 {
+        app.click(Command::NewWindow, &[]);
+    }
+    let mut hubs = app.hubs();
+    hubs.sort_unstable();
+    let [first, idle, last] = hubs[..] else {
+        panic!("{hubs:?}");
+    };
+    assert_eq!(first, oldest);
+    for hub in [first, last] {
+        app.send_main(hub, HubToMain::SetExporting, JsValue::Bool(true));
+    }
+    let mut order = [first, last];
+    if cfg!(target_os = "macos") {
+        order.reverse();
+    }
+    let handles = order.map(|hub| app.handle(hub));
+    let quit = |app: &mut AppUnderTest, replies: &[Reply]| {
+        let shown = app.run(replies, |app| {
+            let role = MenuAction::Role("quit".to_owned());
+            app.cx.update(|cx| dispatch(role, cx));
+        });
+        let asked: Vec<_> = shown
+            .iter()
+            .map(|(parent, shown)| {
+                let Shown::Message(options) = shown else {
+                    panic!("{shown:?}");
+                };
+                assert_eq!(options.message, "Export in progress");
+                assert_eq!(options.buttons, ["Don't Close", "Close"]);
+                parent.expect("a parent")
+            })
+            .collect();
+        asked
+    };
+
+    let replies = [Reply::Button(0), Reply::Button(1)];
+    assert_eq!(quit(app, &replies), handles);
+    assert_eq!(app.hubs(), [order[0]], "{idle} closes unasked");
+    assert!(!app.cx.update(|cx| quit::is_quitting(cx)));
+
+    assert_eq!(quit(app, &[Reply::Button(1)]), handles[..1]);
+    assert!(app.hubs().is_empty());
+    assert!(app.cx.update(|cx| quit::is_quitting(cx)));
 }
 
 fn a_hub_asks_before_closing_on_an_export(app: &mut AppUnderTest, hub: WindowId) {

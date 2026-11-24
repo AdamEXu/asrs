@@ -40,17 +40,22 @@ pub(crate) fn exports_changed(cx: &mut App) {
     }
 }
 
+pub fn is_quitting(cx: &App) -> bool {
+    cx.try_global::<Quit>().is_some_and(|quit| quit.quitting)
+}
+
 pub fn quit(cx: &mut App) {
     let Some(quit) = cx.try_global::<Quit>() else {
         return cx.quit();
     };
-    if quit.unasked.get() {
-        return cx.quit();
-    }
     if quit.asking {
         return;
     }
+    let unasked = quit.unasked.get();
     cx.global_mut::<Quit>().quitting = true;
+    if unasked {
+        return cx.quit();
+    }
     let mut windows = Windows::ids(cx);
     // `WindowList::CloseAllWindows` goes by age, and macOS reverses it.
     if !cfg!(target_os = "macos") {
@@ -87,8 +92,7 @@ fn close_all(mut windows: Vec<WindowId>, cx: &mut App) {
 
 /// `Browser::OnWindowAllClosed`, with `main.ts`'s `window-all-closed` listener.
 pub(crate) fn windows_all_closed(cx: &mut App) {
-    let quitting = cx.try_global::<Quit>().is_some_and(|quit| quit.quitting);
-    if quitting || !cfg!(target_os = "macos") {
+    if is_quitting(cx) || !cfg!(target_os = "macos") {
         cx.quit();
     }
 }
