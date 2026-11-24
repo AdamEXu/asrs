@@ -235,6 +235,11 @@ impl TextSelection {
         })
     }
 
+    /// The button went up where no release came from, as over a system menu.
+    pub fn release_lost(&mut self) {
+        self.mouse = None;
+    }
+
     /// Takes the endpoints along with what the page did to its text.
     pub fn sync(&mut self, doc: &dyn Document) {
         let generation = doc.generation();

@@ -755,22 +755,17 @@ impl<H: FrameHost> HubFrame<H> {
                     let layer = if bold { &mut first_cells } else { &mut cells };
                     let drawn = std::mem::replace(layer, div());
                     *layer = selected.paint(grid, &placed, backend, drawn);
-                    let pieces = |color| {
-                        let shown = cell.pieces.iter().enumerate().filter(|(k, (_, dx))| {
-                            let to = cell.pieces.get(k + 1).map_or(cell.width, |next| next.1);
-                            cell.pieces.len() == 1
-                                || (text_left + to >= x && text_left + dx < x + width)
-                        });
-                        shown
-                            .map(|(_, (piece, dx))| {
-                                let text = plain(piece, cell_style(bold), color).unrecorded();
-                                grid.text(text, [text_left + dx, top + CELL_PADDING])
-                            })
-                            .collect()
-                    };
-                    let rects = placed.rects(&selected.range, backend);
-                    let rects = rects.into_iter();
-                    over.extend(rects.filter_map(|rect| selected.recoloured(grid, rect, pieces)));
+                    for (_, piece, rect) in placed.pieces(&selected.range, backend) {
+                        let in_view = rect[0] + rect[2] >= x && rect[0] < x + width;
+                        let Some(k) = piece.filter(|_| in_view) else {
+                            continue;
+                        };
+                        let (piece, dx) = &cell.pieces[k];
+                        over.extend(selected.recoloured(grid, rect, |color| {
+                            let text = plain(piece, cell_style(bold), color).unrecorded();
+                            vec![grid.text(text, [text_left + dx, top + CELL_PADDING])]
+                        }));
+                    }
                 }
                 for (k, (piece, dx)) in cell.pieces.iter().enumerate() {
                     let from = text_left + dx;

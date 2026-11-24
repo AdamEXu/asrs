@@ -1,3 +1,5 @@
+// Ported from Blink, Chromium m142 (BSD-3-Clause, Copyright The Chromium Authors). See THIRD_PARTY_NOTICES.md.
+
 //! What a page's selectable text is made of, and the text a range of it copies.
 
 use std::borrow::Cow;
@@ -92,7 +94,7 @@ pub fn extract(doc: &dyn Document, range: &Range<Position>) -> String {
 pub fn clipboard_text(text: &str) -> String {
     let text = text.replace('\u{a0}', " ").replace('\0', "");
     if cfg!(windows) {
-        text.replace('\n', "\r\n")
+        text.replace("\r\n", "\n").replace('\n', "\r\n")
     } else {
         text
     }

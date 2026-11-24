@@ -35,7 +35,7 @@ use asrs_ui::selection::{Document, Hit, Place};
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, Theme};
 
-use super::cell_text::{CellText, css};
+use super::cell_text::{CellLine, CellText, css};
 use super::frame::{FrameHost, HubFrame, wheel_of};
 use super::large_table::{Grid, mean};
 use super::number::FormNumber;
@@ -311,12 +311,12 @@ pub(super) fn text_lines(
     color: u32,
     layer: Div,
 ) -> Div {
-    lines_of(grid, text, style, [x, y], color, false, layer)
+    lines_of(grid, &text.lines, style, [x, y], color, false, layer)
 }
 
 fn lines_of(
     grid: Grid,
-    text: &CellText,
+    lines: &[CellLine],
     style: &TextStyle,
     [x, y]: [f64; 2],
     color: u32,
@@ -327,7 +327,7 @@ fn lines_of(
     style.white_space = WhiteSpace::Pre;
     style.align = text::Align::Start;
     let scale = grid.scale as f32;
-    text.lines.iter().fold(layer, |layer, line| {
+    lines.iter().fold(layer, |layer, line| {
         let at = [x + css(line.left, scale), y + css(line.top, scale)];
         let text = Text::new(line.text.clone(), style).color(color);
         let text = if again { text.unrecorded() } else { text };
@@ -489,11 +489,25 @@ pub(super) fn selected_lines(
     block: &PlacedBlock<'_>,
     backend: &mut dyn TextBackend,
 ) -> Vec<Div> {
-    let rects = block.rects(&selected.range, backend);
-    let lines = |color| vec![lines_of(grid, text, style, at, color, true, div())];
-    rects
-        .into_iter()
-        .filter_map(|rect| selected.recoloured(grid, rect, lines))
+    if selected.colors.text.is_none() {
+        return Vec::new();
+    }
+    let mut count = 0;
+    let shown: Vec<usize> = (block.block.lines.iter())
+        .map(|line| {
+            let before = count;
+            count += usize::from(!line.pieces.is_empty());
+            before
+        })
+        .collect();
+    (block.pieces(&selected.range, backend).into_iter())
+        .filter(|(_, piece, _)| piece.is_some())
+        .filter_map(|(line, _, rect)| {
+            let lines = &text.lines[shown[line]..=shown[line]];
+            selected.recoloured(grid, rect, |color| {
+                vec![lines_of(grid, lines, style, at, color, true, div())]
+            })
+        })
         .collect()
 }
 

@@ -39,10 +39,11 @@ pub(super) fn popup_menu(
 
 pub(super) fn install_edit_commands(_: &mut App, _: impl Fn(EditCommand, &mut App) + 'static) {}
 
-/// What Electron selects text with on the Windows and Linux render hosts.
+/// `RendererPreferences`' defaults, which Electron leaves as they are: its render hosts show
+/// #3367d1 for the active one, this blended with white over white.
 pub(super) fn selection_colors() -> SystemSelection {
     SystemSelection {
-        active: 0x3367d1,
+        active: 0x1967d2,
         inactive: 0xc8c8c8,
         text: Some([0xffffff, 0x323232]),
     }

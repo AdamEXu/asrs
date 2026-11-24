@@ -154,7 +154,10 @@ pub fn root<V: ScrolledPage>(
                 if phase == DispatchPhase::Bubble {
                     let at = [event.position.x, event.position.y];
                     let at = at.map(|v| mouse_client(f32::from(v)));
-                    let _ = view.update(cx, |view, cx| text::mouse_move(view, at, window, cx));
+                    let pressed = event.pressed_button.is_some();
+                    let _ = view.update(cx, |view, cx| {
+                        text::mouse_move(view, at, pressed, window, cx);
+                    });
                 }
             });
             let view = entity.clone();

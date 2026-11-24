@@ -1,3 +1,5 @@
+// Ported from Blink, Chromium m142 (BSD-3-Clause, Copyright The Chromium Authors). See THIRD_PARTY_NOTICES.md.
+
 //! The colours of selected text (`LayoutTheme`).
 
 use gpui_kit::{App, Global, Rgba, Window};

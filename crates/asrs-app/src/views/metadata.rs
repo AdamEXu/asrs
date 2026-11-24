@@ -261,6 +261,9 @@ impl<H: FrameHost> HubFrame<H> {
         cx: &mut Context<'_, Self>,
     ) -> Option<AnyElement> {
         let hub = self.host().hub(cx);
+        let live = (hub.tabs().tabs()).any(|tab| tab.tab_type() == Some(TabType::Metadata));
+        self.text_retain(|owner| live || *owner != Owner::Metadata);
+        let hub = self.host().hub(cx);
         let satellite = hub.page().is_satellite();
         let renderer = displayed(hub)?;
         let (table, builds) = (renderer.table().clone(), renderer.builds());

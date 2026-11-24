@@ -184,9 +184,13 @@ pub fn mouse_down<V: ScrolledPage>(
 pub fn mouse_move<V: ScrolledPage>(
     view: &mut V,
     at: [f64; 2],
+    pressed: bool,
     window: &mut Window,
     cx: &mut Context<'_, V>,
 ) {
+    if !pressed && view.text().gesture.take().is_some() {
+        view.text().state.release_lost();
+    }
     if let Some(gesture) = &mut view.text().gesture {
         gesture.at = at;
         drag(view, window, cx);

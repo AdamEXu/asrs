@@ -356,9 +356,13 @@ impl<H: FrameHost> HubFrame<H> {
     pub(super) fn text_mouse_move(
         &mut self,
         at: [f64; 2],
+        pressed: bool,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
+        if !pressed && self.text.gesture.take().is_some() {
+            self.text.state.release_lost();
+        }
         if self.text.gesture.is_none() {
             let on_text = self
                 .page_text(cx)

@@ -454,7 +454,7 @@ impl<H: FrameHost> HubFrame<H> {
     ) {
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
-        self.text_mouse_move([x, y], window, cx);
+        self.text_mouse_move([x, y], event.pressed_button.is_some(), window, cx);
         self.source_list_mouse_move(x, y, cx);
         self.table_mouse_move(x, y, event.pressed_button.is_some(), cx);
         self.console_mouse_move(x, y, cx);
