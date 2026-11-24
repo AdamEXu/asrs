@@ -8,11 +8,12 @@
 //!   iteration looks up `log.getRange(undefined)`, which is the field keyed `"undefined"`
 //!   when the log has one.
 //!
-//! The sampled branch calls `addValue` without awaiting it. Its writes still happen in order
-//! until a chunk fills mid-loop, and those option sets never finish upstream (the harness
-//! skips them before export), so here every call completes in order. A sample whose
-//! `addValue` throws is an unhandled rejection, which Chromium only logs: the message is lost
-//! and the export goes on.
+//! The sampled branch calls `addValue` without awaiting it. Once a message fills the chunk, each
+//! later one of that field re-enters `finalizeChunk` before the chunk and the record buffer are
+//! reset, so the file repeats ever longer chunks; `end` is called before the last field's
+//! calls resume, and repeats them once more. The export fails once that no longer fits an
+//! `ArrayBuffer`. A sample whose `addValue` throws is an unhandled rejection, which Chromium
+//! only logs: the message is lost and the export goes on.
 
 use asrs_js::json;
 use asrs_js::math;
@@ -23,7 +24,7 @@ use asrs_log::log::{Log, LoggableType};
 use asrs_log::util::upper_bound;
 
 use crate::export::{ExportError, fraction};
-use crate::mcap::{McapError, McapWriter, Message, Time};
+use crate::mcap::{McapWriter, Message, Time};
 
 fn schema_json(value: &str) -> Vec<u8> {
     format!(r#"{{"type":"object","properties":{{"value":{value}}}}}"#).into_bytes()
@@ -80,36 +81,81 @@ pub fn value_json(set: &LogValueSetAny, index: usize) -> Option<Vec<u8>> {
         .map(String::into_bytes)
 }
 
-/// `addValue`: `BigInt(Math.round(timestamp * 1e9))` throws `RangeError` once the product
-/// overflows, before `addMessage` runs.
-fn add_value(
-    writer: &mut McapWriter,
+/// `addValue` up to `addMessage`: `BigInt(Math.round(timestamp * 1e9))` throws `RangeError`
+/// once the product overflows, and encoding the JSON text of a typeless value throws.
+fn message_at(
     channel_id: u32,
     set: &LogValueSetAny,
     timestamp: f64,
     index: usize,
     sequence: usize,
-) -> Result<(), ()> {
-    let time = Time::from_integral(math::round(timestamp * 1e9)).ok_or(())?;
-    let data = value_json(set, index).ok_or(())?;
-    writer
-        .add_message(Message {
-            channel_id,
-            sequence: sequence as u32,
-            log_time: time,
-            publish_time: time,
-            data,
-        })
-        .map_err(|_: McapError| ())
+) -> Option<Message> {
+    let time = Time::from_integral(math::round(timestamp * 1e9))?;
+    let data = value_json(set, index)?;
+    Some(Message {
+        channel_id,
+        sequence: sequence as u32,
+        log_time: time,
+        publish_time: time,
+        data,
+    })
 }
 
+enum Stop {
+    Failed,
+    Reentered,
+}
+
+/// Repeated chunks grow quadratically, so an export that re-enters the writer is first measured
+/// and only written when it fits.
 pub fn generate_mcap(
     log: &Log,
     fields: &[JsString],
     timestamps: &Option<Vec<f64>>,
     progress: &mut dyn FnMut(f64),
 ) -> Result<Vec<u8>, ExportError> {
-    let mut writer = McapWriter::new();
+    let mut posted = 0usize;
+    let first = write_fields(McapWriter::new(), true, log, fields, timestamps, &mut |p| {
+        posted += 1;
+        progress(p);
+    });
+    match first {
+        Ok(file) => return Ok(file),
+        Err(Stop::Failed) => return Err(ExportError::Rejected),
+        Err(Stop::Reentered) => {}
+    }
+    let fits = write_fields(
+        McapWriter::measuring(),
+        false,
+        log,
+        fields,
+        timestamps,
+        &mut |_| {},
+    )
+    .is_ok();
+    let writer = if fits {
+        McapWriter::new()
+    } else {
+        McapWriter::measuring()
+    };
+    let mut seen = 0usize;
+    write_fields(writer, false, log, fields, timestamps, &mut |p| {
+        if seen >= posted {
+            progress(p);
+        }
+        seen += 1;
+    })
+    .map_err(|_| ExportError::Rejected)
+}
+
+fn write_fields(
+    mut writer: McapWriter,
+    stop_on_reentry: bool,
+    log: &Log,
+    fields: &[JsString],
+    timestamps: &Option<Vec<f64>>,
+    progress: &mut dyn FnMut(f64),
+) -> Result<Vec<u8>, Stop> {
     writer.start(&JsString::new(), &JsString::from("AdvantageScope"));
 
     let boolean = register_single(&mut writer, "boolean");
@@ -153,8 +199,9 @@ pub fn generate_mcap(
         match timestamps {
             None => {
                 for (i, &timestamp) in field_timestamps.iter().enumerate() {
-                    add_value(&mut writer, channel_id, &field_data, timestamp, i, i)
-                        .map_err(|()| ExportError::Rejected)?;
+                    message_at(channel_id, &field_data, timestamp, i, i)
+                        .and_then(|message| writer.add_message(message).ok())
+                        .ok_or(Stop::Failed)?;
                     progress(fraction(field_index, i, field_data.len(), filtered.len()));
                 }
             }
@@ -162,15 +209,14 @@ pub fn generate_mcap(
                 let mut next_index = 0;
                 for (i, &timestamp) in timestamps.iter().enumerate() {
                     next_index = upper_bound(field_timestamps, timestamp, next_index);
-                    if next_index != 0 {
-                        let _ = add_value(
-                            &mut writer,
-                            channel_id,
-                            &field_data,
-                            timestamp,
-                            next_index - 1,
-                            i,
-                        );
+                    if next_index != 0
+                        && let Some(message) =
+                            message_at(channel_id, &field_data, timestamp, next_index - 1, i)
+                    {
+                        let _ = writer.add_message_unawaited(message);
+                        if stop_on_reentry && writer.reentered() {
+                            return Err(Stop::Reentered);
+                        }
                     }
                     progress(fraction(field_index, i, timestamps.len(), fields.len()));
                 }
@@ -178,7 +224,10 @@ pub fn generate_mcap(
         }
     }
 
-    Ok(writer.end())
+    if stop_on_reentry && writer.chunk_parked() {
+        return Err(Stop::Reentered);
+    }
+    writer.end().map_err(|_| Stop::Failed)
 }
 
 #[cfg(test)]

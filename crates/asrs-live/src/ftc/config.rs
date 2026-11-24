@@ -67,9 +67,12 @@ fn merge_modified(base: &JsValue, latest: &JsValue, depth: usize) -> Result<JsVa
         let base_value = ops::get(base, "__value")?;
         let mut out = JsObject::new();
         for key in ops::object_keys(&latest_value)? {
-            // `in` also sees inherited `Object.prototype` members upstream; merging one of those
-            // reaches `inflate(latest)` on every path, as a missing key does.
-            let child = if !base_value.is_null() && ops::has_key(&base_value, &key)? {
+            // Upstream merges inherited `Object.prototype` members too, which reaches
+            // `inflate(latest)` on every path, as a missing key does.
+            let child = if !base_value.is_null()
+                && ops::has_key(&base_value, &key)?
+                && ops::has_own(&base_value, &key)?
+            {
                 merge_modified(
                     &ops::get_key(&base_value, &key)?,
                     &ops::get_key(&latest_value, &key)?,

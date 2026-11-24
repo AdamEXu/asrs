@@ -36,7 +36,7 @@ use asrs_js::time::{Clock, Rng, SetClock, V8MathRandom};
 use asrs_js::value::{JsValue, ToJs};
 use asrs_live::rlog::{Ipc, MainCall, MainContext, RlogMain};
 use asrs_live::{ManualClock, TimerQueue, TunedValue};
-use asrs_log::log::{Log, SerializedLog};
+use asrs_log::log::{Log, LogError, SerializedLog};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::selection::Selection;
@@ -447,7 +447,11 @@ impl HubHost for Host {
             (Ok(log), Some(options)) => export(&log, &options, &mut |value| {
                 replies.push(ExportReply::Progress(value))
             }),
-            (Err(_), _) => Err(ExportError::Unported("a log the export worker cannot read")),
+            (Err(LogError::Proto(_) | LogError::StackOverflow), _) => Err(ExportError::Rejected),
+            (Err(LogError::NeverCompletes), _) => Err(ExportError::Unported(
+                "a log the export worker never finishes reading",
+            )),
+            (Err(LogError::Unmodeled(what)), _) => Err(ExportError::Unported(what)),
             (_, None) => Err(ExportError::Unported("export options of another shape")),
         };
         match output {

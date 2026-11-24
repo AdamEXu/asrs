@@ -15,7 +15,7 @@ use asrs_js::time::{Clock, Rng, V8MathRandom};
 use asrs_js::value::JsValue;
 use asrs_live::nt4::TokioTransport;
 use asrs_live::{NetOptions, TimerId, TimerQueue};
-use asrs_log::log::{Log, SerializedLog};
+use asrs_log::log::{Log, LogError, SerializedLog};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_services::fs::RealFs;
@@ -410,7 +410,11 @@ fn run_export(
         export_options(options),
     ) {
         (Ok(log), Some(options)) => export(&log, &options, progress),
-        (Err(_), _) => Err(ExportError::Unported("a log the export worker cannot read")),
+        (Err(LogError::Proto(_) | LogError::StackOverflow), _) => Err(ExportError::Rejected),
+        (Err(LogError::NeverCompletes), _) => Err(ExportError::Unported(
+            "a log the export worker never finishes reading",
+        )),
+        (Err(LogError::Unmodeled(what)), _) => Err(ExportError::Unported(what)),
         (_, None) => Err(ExportError::Unported("export options of another shape")),
     };
     ExportMessage::Reply(ExportReply::Payload(match output {
@@ -630,7 +634,21 @@ impl HubHost for GpuiHost<'_, '_> {
 
 #[cfg(test)]
 mod tests {
+    use asrs_log::log::proto_decoder::SerializedProtoDecoder;
+
     use super::*;
+
+    #[test]
+    fn an_export_whose_log_replay_throws_fails() {
+        let anon = b"\x22\x11\x0a\x04Anon\x12\x09\x0a\x01x\x18\x01\x20\x01\x28\x05".to_vec();
+        let mut log = Log::new(true).to_serialized();
+        log.proto_decoder = SerializedProtoDecoder(vec![anon.clone()]);
+        let once = run_export(log.clone(), &JsValue::Null, &mut |_| {});
+        assert!(matches!(once, ExportMessage::Unmodeled(_)));
+        log.proto_decoder = SerializedProtoDecoder(vec![anon.clone(), anon]);
+        let reply = run_export(log, &JsValue::Null, &mut |_| {});
+        assert!(matches!(reply, ExportMessage::Reply(ExportReply::Failed)));
+    }
 
     #[test]
     fn intervals_stay_on_their_period_grid() {
