@@ -1009,6 +1009,14 @@ app.whenReady().then(() => {
                 |f: fn((u32, u32), (u32, u32)) -> (u32, u32)| pixels.iter().copied().reduce(f);
             let min = corner(|a, b| (a.0.min(b.0), a.1.min(b.1)));
             let max = corner(|a, b| (a.0.max(b.0), a.1.max(b.1)));
+            if off > 1 {
+                let flat = |image: &Rgba| pixel::composite(image, [255, 255, 255]);
+                dump(
+                    &format!("own window {scale}x"),
+                    &flat(&own),
+                    &flat(&scenario),
+                );
+            }
             report.check(
                 &format!("the hub's own window at {scale}x equals the scenario's capture"),
                 same_size && off <= 1,
@@ -1049,6 +1057,10 @@ app.whenReady().then(() => {
                     .expect("hub")
                     .0;
                 sleep(cx, 1500).await;
+                if std::env::var_os("X04_OWN").is_some() {
+                    own_window(cx, &mut report).await;
+                    std::process::exit(0);
+                }
                 captions(cx, &electron, &mut report).await;
                 menus(cx, &mut report, hub).await;
                 accelerators(cx, &mut report, hub).await;
