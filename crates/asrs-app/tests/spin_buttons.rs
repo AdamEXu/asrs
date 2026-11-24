@@ -85,9 +85,9 @@ impl<'a> Page<'a> {
         if let Some(step) = attribute(markup, "step") {
             input.set_step(JsString::from(step));
         }
-        input.set_value(JsString::from(
-            attribute(markup, "value").unwrap_or_default(),
-        ));
+        if let Some(value) = attribute(markup, "value") {
+            input.set_value(JsString::from(value));
+        }
         let events = Events::default();
         let heard = events.clone();
         let window = headless

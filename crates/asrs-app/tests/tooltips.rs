@@ -23,7 +23,8 @@ fn record(path: &Path) -> Json {
 }
 
 fn array<'a>(value: &'a Json, key: &str) -> &'a [Json] {
-    value.get(key).and_then(Json::as_array).unwrap_or_default()
+    let array = value.get(key).and_then(Json::as_array);
+    array.unwrap_or_else(|| panic!("no array {key}"))
 }
 
 fn texts(value: &Json, key: &str) -> Vec<String> {
@@ -104,7 +105,7 @@ fn compare(at: &str, upstream: &Json, port: &Json, wrong: &mut Vec<String>) -> [
             extra.title, extra.rect
         ));
     }
-    if texts(upstream, "left") != texts(port, "left") {
+    if upstream.get("left") != port.get("left") {
         wrong.push(format!("{at}: leaving the window"));
     }
     let (want, got) = (grid(upstream), grid(port));
