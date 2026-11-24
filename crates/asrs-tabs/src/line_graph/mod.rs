@@ -40,7 +40,7 @@ pub use renderer::{
 };
 
 use crate::cx::{TabCx, display_offset};
-use crate::list_cx::{ListParts, SourceListCx, js_error, route_lists, source_state, with_env};
+use crate::list_cx::{self, ListParts, SourceListCx, js_error, route_lists, with_env};
 use axis::unmodeled;
 
 const RANGE_MARGIN: f64 = 0.05;
@@ -628,7 +628,9 @@ impl LineGraphController {
                 .map(|data| data.timestamps);
             let (left_fields, left_data) = add_numeric(
                 &log,
-                self.left_list.state(),
+                self.left_list
+                    .state_for_command(|item| is_available(&log, item))
+                    .map_err(js_error)?,
                 &self.left,
                 &mut self.left_cache,
                 dark,
@@ -637,7 +639,9 @@ impl LineGraphController {
             )?;
             let (right_fields, right_data) = add_numeric(
                 &log,
-                self.right_list.state(),
+                self.right_list
+                    .state_for_command(|item| is_available(&log, item))
+                    .map_err(js_error)?,
                 &self.right,
                 &mut self.right_cache,
                 dark,
@@ -648,14 +652,18 @@ impl LineGraphController {
             if truthy(&self.show_robot_mode) {
                 discrete_fields.extend(robot_mode_field(&log, time_range, dark));
             }
+            let discrete = self
+                .discrete_list
+                .state_for_command(|item| is_available(&log, item))
+                .map_err(js_error)?;
             add_discrete(
                 &log,
-                self.discrete_list.state(),
+                discrete,
                 time_range,
                 dark,
                 &mut discrete_fields,
             )?;
-            let alerts = add_alerts(&log, self.discrete_list.state(), time_range);
+            let alerts = add_alerts(&log, discrete, time_range);
             (
                 left_fields,
                 left_data,
@@ -1204,11 +1212,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for LineGraphController {
             ("discreteSources", ListId::Discrete),
         ] {
             if let Some(v) = state.get(key) {
-                let items = source_state(v)?;
-                with_env(cx, |env| {
-                    self.with_list(id, |list, _| list.set_state(env, items))
-                })
-                .map_err(js_error)?;
+                self.with_list(id, |list, _| list_cx::set_source_state(list, cx, v))?;
             }
         }
         Ok(())

@@ -38,7 +38,6 @@ use asrs_model::preferences::Preferences;
 use asrs_model::selection::Selection;
 use asrs_model::selection_impl::{KeyTarget, SelectionImpl};
 use asrs_model::source_list::{ListInput, ListPointer, Rect, SourceList};
-use asrs_model::source_list_config::{SourceListTypeMemory, SourceListTypeMemoryEntry};
 use asrs_model::tab_controller::{TabCommand, TabController, TabRenderer, keyboard_clicks};
 use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
@@ -544,7 +543,7 @@ struct Host {
     assets_raw: JsValue,
     assets: Option<AdvantageScopeAssets>,
     /// `window.typeMemory`.
-    type_memory: SourceListTypeMemory,
+    type_memory: JsValue,
     dark: bool,
     /// `new Date().getTime()` — the same scripted clock the selection reads.
     clock: Rc<Cell<f64>>,
@@ -639,26 +638,6 @@ fn assets_from_js(data: &JsValue) -> Result<Option<AdvantageScopeAssets>, String
         }
     }
     Ok(Some(assets))
-}
-
-fn type_memory_from_js(data: &JsValue) -> Result<SourceListTypeMemory, String> {
-    let JsValue::Object(ids) = data else {
-        return Err(format!("type memory {data:?} is not an object"));
-    };
-    let mut memory = SourceListTypeMemory::new();
-    for (id, entries) in ids.iter() {
-        let JsValue::Object(entries) = entries else {
-            return Err(format!("type memory for {id:?} is not an object"));
-        };
-        let mut map = JsObject::new();
-        for (key, entry) in entries.iter() {
-            let entry = SourceListTypeMemoryEntry::from_js(entry)
-                .ok_or_else(|| format!("type memory entry {entry:?} has another shape"))?;
-            map.insert(key.clone(), entry);
-        }
-        memory.insert(id.clone(), map);
-    }
-    Ok(memory)
 }
 
 impl TabsHost for Host {
@@ -1966,7 +1945,7 @@ fn replay(
         messages: Vec::new(),
         assets_raw: JsValue::Null,
         assets: None,
-        type_memory: SourceListTypeMemory::new(),
+        type_memory: JsValue::Object(JsObject::new()),
         dark: theme_dark,
         clock: clock_cell.clone(),
     };
@@ -2028,7 +2007,7 @@ fn replay(
                     host.assets_raw = data;
                 }
                 "restore-type-memory" => {
-                    host.type_memory = type_memory_from_js(&js_json::to_js(&data)?).map_err(err)?;
+                    host.type_memory = js_json::to_js(&data)?;
                 }
                 "set-version" => set_platform(&mut host.selection, &js_json::to_js(&data)?),
                 "set-fullscreen"
@@ -2321,7 +2300,7 @@ impl Runner {
                 }
             }
             "restore-type-memory" => {
-                self.host.type_memory = type_memory_from_js(data).map_err(unmodeled)?;
+                self.host.type_memory = data.clone();
             }
             "video-data" => {
                 for (uuid, controller) in self

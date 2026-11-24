@@ -420,7 +420,7 @@ impl<C: SourceListCx + ?Sized> TabController<C> for Field2dController {
         let timestamp_range = cx.tab_log().get_timestamp_range();
         let sources = {
             let log = cx.tab_log();
-            self.list.displayed_state(&log)
+            self.list.drawn_state(&log).map_err(js_error)?
         };
 
         // Heatmap "visible" samples call `selection.getTimelineRange()` once per

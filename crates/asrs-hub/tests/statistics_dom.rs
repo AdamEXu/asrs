@@ -27,7 +27,6 @@ use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::Selection;
 use asrs_model::selection_impl::{SelectionImpl, SharedLog};
-use asrs_model::source_list_config::{SourceListTypeMemory, SourceListTypeMemoryEntry};
 use asrs_model::tab_controller::{Command, TabCommand, TabController, TabRenderer};
 use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
@@ -128,7 +127,7 @@ struct Host {
     selection: SelectionImpl,
     clock: Rc<Cell<f64>>,
     rng: Mulberry,
-    type_memory: SourceListTypeMemory,
+    type_memory: JsValue,
     dark: bool,
     seeds: Vec<Seed>,
     current: Vec<Current>,
@@ -460,24 +459,6 @@ fn selection_value(sel: &mut SelectionImpl) -> Value {
     ])
 }
 
-fn type_memory_of(value: &JsValue) -> SourceListTypeMemory {
-    let mut out = SourceListTypeMemory::new();
-    if let JsValue::Object(ids) = value {
-        for (id, entries) in ids.iter() {
-            let mut inner = JsObject::new();
-            if let JsValue::Object(entries) = entries {
-                for (key, entry) in entries.iter() {
-                    if let Some(entry) = SourceListTypeMemoryEntry::from_js(entry) {
-                        inner.insert(key.clone(), entry);
-                    }
-                }
-            }
-            out.insert(id.clone(), inner);
-        }
-    }
-    out
-}
-
 /// `e instanceof Error ? `${name}: ${message}` : String(e)`; `js_error` marks thrown non-Error
 /// values with an empty name.
 fn thrown_text(e: &JsError) -> String {
@@ -664,7 +645,7 @@ impl Runner {
             }
             "set-assets" => tabs.new_assets(cx),
             "restore-type-memory" => {
-                cx.type_memory = type_memory_of(&data);
+                cx.type_memory = data.clone();
                 Ok(())
             }
             "set-version" => {
@@ -1316,7 +1297,7 @@ fn replay(spec_path: &Path, records: &[Record]) -> Result<Vec<Emit>, String> {
         selection: SelectionImpl::new(log.clone(), Rc::new(ScriptedClock(clock.clone()))),
         clock: clock.clone(),
         rng,
-        type_memory: SourceListTypeMemory::new(),
+        type_memory: JsValue::Object(JsObject::new()),
         dark,
         seeds: seeds(&infos)?,
         current: Vec::new(),

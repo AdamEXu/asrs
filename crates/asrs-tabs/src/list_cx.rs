@@ -13,14 +13,14 @@ use asrs_model::selection::Selection;
 use asrs_model::source_list::{
     Env, ListInput, ListOutput, ListPointer, Rect, SourceList, SourceListDom, SourceListError,
 };
-use asrs_model::source_list_config::{SourceListItemState, SourceListTypeMemory};
+use asrs_model::source_list_config::SourceListItemState;
 
 use crate::cx::TabCx;
 
 pub struct ListParts<'a> {
     pub log: Ref<'a, Log>,
     /// `window.typeMemory`.
-    pub type_memory: &'a mut SourceListTypeMemory,
+    pub type_memory: &'a mut JsValue,
     pub selection: &'a mut dyn Selection,
     /// `prefers-color-scheme: dark`.
     pub dark: bool,
@@ -247,43 +247,11 @@ pub fn js_error(error: SourceListError) -> JsError {
     }
 }
 
-/// A saved `SourceListState` for `setState`. A value of another shape makes upstream throw
-/// midway through `setState`, which is not modelled.
-pub fn source_state(value: &JsValue) -> Result<Vec<SourceListItemState>, JsError> {
-    let unmodeled = |what: &str| JsError::new("Unmodeled", format!("source list: {what}"));
-    value
-        .as_array()
-        .ok_or_else(|| unmodeled("restored sources that are not an array"))?
-        .iter()
-        .map(|item| {
-            SourceListItemState::from_js(item)
-                .ok_or_else(|| unmodeled("a restored source item of another shape"))
-        })
-        .collect()
-}
-
-/// `sourceList.setState(value)`: `clear()`, then `value.forEach(addListItem)`. An item
-/// `SourceListItemState` cannot hold stays in upstream's state after `addListItem`
-/// pushes it, so the port reports it as unmodeled instead of guessing.
+/// `sourceList.setState(value)`.
 pub fn set_source_state<C: SourceListCx + ?Sized>(
     list: &mut SourceList,
     cx: &mut C,
     value: &JsValue,
 ) -> Result<(), JsError> {
-    let JsValue::Array(items) = value else {
-        list.clear();
-        if let JsValue::Bytes(_) = value {
-            return Err(JsError::new("Unmodeled", "a typed array of sources"));
-        }
-        ops::get(value, "forEach")?;
-        return Err(JsError::type_error("state.forEach is not a function"));
-    };
-    let items = items
-        .iter()
-        .map(|item| {
-            SourceListItemState::from_js(item)
-                .ok_or_else(|| JsError::new("Unmodeled", "a source item of another shape"))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-    with_env(cx, |env| list.set_state(env, items)).map_err(js_error)
+    with_env(cx, |env| list.restore(env, value)).map_err(js_error)
 }
