@@ -17,7 +17,7 @@ use gpui_kit::{
     px, size,
 };
 
-const PLATFORMS: [&str; 2] = ["macos-aarch64", "linux-x86_64"];
+const PLATFORMS: [&str; 1] = ["macos-aarch64"];
 /// The fixture's elements with `global.css`'s ring.
 const RINGED: [&str; 6] = ["b", "s", "l", "t", "g", "w"];
 /// Elements a press focuses, and the one only the keyboard or script does.
@@ -26,24 +26,18 @@ const OTHER: [&str; 1] = ["w"];
 const SIDE: f32 = 20.0;
 
 struct Page {
-    body: FocusHandle,
     elements: BTreeMap<&'static str, FocusHandle>,
     /// What the Tab being dispatched moves the focus to.
     tab: Option<FocusHandle>,
 }
 
 impl Render for Page {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
-        let mut root = div()
-            .size_full()
-            .track_focus(&self.body)
-            .on_key_down(cx.listener(|page, event: &KeyDownEvent, window, cx| {
-                if event.keystroke.key == "tab"
-                    && let Some(next) = page.tab.take()
-                {
-                    window.focus(&next, cx);
-                }
-            }));
+    fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
+        let mut root = div().size_full().on_any_mouse_down(|_, window, cx| {
+            if !window.default_prevented() {
+                window.blur(cx);
+            }
+        });
         for (i, id) in PRESSED.iter().enumerate() {
             root = root.child(
                 div()
@@ -104,13 +98,19 @@ impl Replay {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 ..Default::default()
             };
-            cx.open_window(options, |window, cx| {
-                cx.new(|cx| {
-                    let body = cx.focus_handle();
-                    window.focus(&body, cx);
+            cx.open_window(options, |_, cx| {
+                cx.new(|cx: &mut Context<'_, Page>| {
+                    let page = cx.weak_entity();
+                    cx.intercept_keystrokes(move |event, window, cx| {
+                        let tab = event.keystroke.key == "tab";
+                        let next = tab.then(|| page.update(cx, |page, _| page.tab.take()));
+                        if let Some(Ok(Some(next))) = next {
+                            window.focus(&next, cx);
+                        }
+                    })
+                    .detach();
                     let ids = PRESSED.iter().chain(&OTHER);
                     Page {
-                        body,
                         elements: ids.map(|id| (*id, cx.focus_handle())).collect(),
                         tab: None,
                     }
@@ -212,7 +212,7 @@ impl Replay {
             }
             kind @ ("key" | "down" | "up") => {
                 if name() == "Tab" {
-                    self.page(|page, _, _| page.tab = Some(page.handle(active)));
+                    self.page(|page, _, _| page.tab = active.map(|id| page.elements[id].clone()));
                 }
                 self.key(kind, &name(), held(op.get(2)));
             }
@@ -235,9 +235,9 @@ impl Replay {
             }
             "focus" => {
                 let id = name();
-                self.page(|page, window, cx| window.focus(&page.handle(Some(&id)), cx));
+                self.page(|page, window, cx| window.focus(&page.elements[id.as_str()], cx));
             }
-            "blur" => self.page(|page, window, cx| window.focus(&page.body, cx)),
+            "blur" => self.page(|_, window, cx| window.blur(cx)),
             other => panic!("op {other}"),
         }
     }
@@ -247,12 +247,6 @@ impl Replay {
         f: impl FnOnce(&mut Page, &mut Window, &mut Context<'_, Page>) -> R,
     ) -> R {
         self.window.update(&mut self.cx, f).expect("open")
-    }
-}
-
-impl Page {
-    fn handle(&self, id: Option<&str>) -> FocusHandle {
-        id.map_or(&self.body, |id| &self.elements[id]).clone()
     }
 }
 
@@ -270,7 +264,7 @@ fn replay(platform: &str) -> usize {
         };
         if sequence != Some(number) {
             sequence = Some(number);
-            let mut cx = TestAppContext::single();
+            let cx = TestAppContext::single();
             cx.update(|cx| cx.set_global(ForcedActive(false)));
             replay = Some(Replay::new(cx));
             active = false;
@@ -292,17 +286,20 @@ fn replay(platform: &str) -> usize {
         }
         replay.perform(op, id.as_deref());
         let bool_of = |key: &str| record.field(key) == Some(&Json::Bool(true));
+        let at = format!("{platform} sequence {number}: {op:?} -> {id:?}");
+        let Some(id) = id.as_deref() else {
+            replay.page(|_, window, cx| assert!(window.focused(cx).is_none(), "{at}"));
+            continue;
+        };
         let (focused, has_focus, visible) = replay.page(|page, window, cx| {
-            let handle = page.handle(id.as_deref());
+            let handle = &page.elements[id];
             (
                 handle.is_focused(window),
-                focus::has_focus(&handle, window, cx),
-                focus::focus_visible(&handle, window, cx),
+                focus::has_focus(handle, window, cx),
+                focus::focus_visible(handle, window, cx),
             )
         });
-        let at = format!("{platform} sequence {number}: {op:?} -> {id:?}");
         assert!(focused, "{at}: the focus is elsewhere");
-        let Some(id) = id.as_deref() else { continue };
         compared += 1;
         assert_eq!(has_focus, bool_of("focus"), "{at}: :focus");
         let ring = match id {

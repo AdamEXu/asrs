@@ -10,7 +10,8 @@ import fs from "node:fs";
 //   ["focus", id], ["blur"] script
 // Input is webContents.sendInputEvent's, so it is trusted. After each op it writes {"sequence",
 // "op", "active", "focus", "visible", "ring"}: the id of document.activeElement, whether it matches
-// :focus and :focus-visible, and whether its computed style has the rule's outline.
+// :focus and :focus-visible, and whether its computed style has the rule's outline; with a fixture's
+// `styles`, a list of [selector, pseudo-element or null, property], also their computed values.
 
 const request = JSON.parse(fs.readFileSync(process.argv[process.argv.length - 1], "utf8"));
 const fixture = request.fixture;
@@ -54,6 +55,8 @@ const READ = `(() => {
     ring: active !== null && getComputedStyle(active).outline === "rgb(68, 108, 227) solid 2px"
   };
 })()`;
+
+const STYLES = `${JSON.stringify(fixture.styles ?? [])}.map(([selector, pseudo, property]) => getComputedStyle(document.querySelector(selector), pseudo)[property])`;
 
 app.setPath("userData", request.userData);
 app.dock?.hide();
@@ -125,10 +128,10 @@ app
       } else fail(`unknown op ${JSON.stringify(op)}`);
     };
 
-    const random = mulberry32(fixture.random.seed);
+    const random = mulberry32(fixture.random?.seed ?? 0);
     const pick = <T>(list: T[]): T => list[Math.floor(random() * list.length)];
     const sequences: any[][] = [...fixture.sequences];
-    for (let i = 0; i < fixture.random.sequences; i++) {
+    for (let i = 0; i < (fixture.random?.sequences ?? 0); i++) {
       const ops: any[] = [["active", true]];
       while (ops.length < fixture.random.length) ops.push(pick(fixture.random.ops));
       sequences.push(ops);
@@ -146,7 +149,7 @@ app
         if (op[0] === "key" && op[1] === "Enter" && focused === "s") continue;
         await perform(op);
         await settle();
-        const record = { sequence, op, ...(await evaluate(READ)) };
+        const record = { sequence, op, ...(await evaluate(READ)), ...(fixture.styles && { styles: await evaluate(STYLES) }) };
         focused = record.active;
         lines.push(JSON.stringify(record));
       }
