@@ -230,9 +230,9 @@ pub fn will_resize(window: &Window, size: (f64, f64)) -> Option<(f64, f64)> {
     imp::probe::will_resize(window, size)
 }
 
-/// How much taller a titled, resizable window's frame is than its content.
-pub fn framed_title_bar() -> Option<f64> {
-    imp::probe::framed_title_bar()
+/// How much larger a titled, resizable window's frame is than its content.
+pub fn framed_window() -> Option<(f64, f64)> {
+    imp::probe::framed_window()
 }
 
 /// Takes a key-down event with this virtual key code off the application's queue, and what
@@ -392,7 +392,8 @@ pub fn can_capture_screen() -> bool {
     imp::probe::can_capture_screen()
 }
 
-/// An X11 window's `WM_NORMAL_HINTS`, in device px, and whether it is kept above others.
+/// An X11 window's `WM_NORMAL_HINTS` or a Win32 window's track sizes, in device px, and whether it
+/// is kept above others.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SizeHints {
     pub min: Option<(i32, i32)>,
@@ -402,12 +403,12 @@ pub struct SizeHints {
     pub above: bool,
 }
 
-/// The hints of the X11 window `number` (see [`window_number`]) on `window`'s display.
+/// The hints of the window `number` (see [`window_number`]) on `window`'s display.
 pub fn size_hints(window: &Window, number: u32) -> Option<SizeHints> {
     imp::probe::size_hints(window, number)
 }
 
-/// Presses the keys of X11 keysyms in turn, then releases them.
+/// Presses the keys of X11 keysyms or Windows virtual key codes in turn, then releases them.
 pub fn post_keys(keysyms: &[u32]) -> bool {
     imp::probe::post_keys(keysyms)
 }
@@ -420,4 +421,40 @@ pub fn split_monitors(x: Option<u16>) -> bool {
 /// What [`power`](super::power) reads from the system.
 pub fn battery_power() -> Option<bool> {
     super::power::source::battery_power()
+}
+
+/// `DWMWA_SYSTEMBACKDROP_TYPE` of the window with this handle.
+#[cfg(windows)]
+pub fn backdrop_type(number: u32) -> Option<i32> {
+    imp::probe::backdrop_type(number)
+}
+
+/// The window's and its client area's `[left, top, right, bottom]` on screen, in device px.
+#[cfg(windows)]
+pub fn rects(number: u32) -> Option<[[i32; 4]; 2]> {
+    imp::probe::rects(number)
+}
+
+/// What the window answers a live resize of `edge` (a `WMSZ_*`) to this window rect with.
+#[cfg(windows)]
+pub fn sizing(number: u32, edge: u32, rect: [i32; 4]) -> [i32; 4] {
+    imp::probe::sizing(number, edge, rect)
+}
+
+/// Tells the window its display's scale changed.
+#[cfg(windows)]
+pub fn change_scale(number: u32, scale: u32) {
+    imp::probe::change_scale(number, scale);
+}
+
+/// The screen's pixels, in device px.
+#[cfg(windows)]
+pub fn screen_image(x: i32, y: i32, width: i32, height: i32) -> Option<WindowImage> {
+    imp::probe::screen_image(x, y, width, height)
+}
+
+/// Electron's `minimize`, `maximize`, `unmaximize` or `restore` of the window with this handle.
+#[cfg(windows)]
+pub fn show_window(number: u32, state: &str) {
+    imp::probe::show_window(number, state);
 }

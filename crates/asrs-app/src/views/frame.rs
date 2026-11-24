@@ -25,12 +25,14 @@ use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::canvas_view::{
     CanvasBorder, CanvasMetrics, CanvasState, canvas_view, with_text_backend,
 };
+use asrs_ui::caption::caption_buttons;
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, BoxShadow, ClickEvent, Context, CursorStyle, DispatchPhase,
     Entity, ExternalPaths, FocusHandle, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent,
     MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
     Render, ScrollDelta, ScrollEvent, ScrollHandle, SharedString, StatefulInteractiveElement,
-    Styled, TouchDragEvent, TouchPhase, Window, canvas, div, point, px, rgb, rgba,
+    Styled, TouchDragEvent, TouchPhase, Window, WindowControlArea, canvas, div, point, px, rgb,
+    rgba,
 };
 use asrs_ui::icon::IconFit;
 use asrs_ui::input;
@@ -1290,6 +1292,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     }
                 },
             );
+            if classes.title_bar_win {
+                bar = bar.window_control_area(WindowControlArea::Drag);
+            }
             if let Some(text_rect) = layout.rect(FrameElement::TitleBarText) {
                 bar = bar.child(probe(
                     FrameElement::TitleBarText,
@@ -1309,7 +1314,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
             let menu = self.title_bar_menu(rect, window, cx);
             root = root.child(probe(
                 FrameElement::TitleBarMenu,
-                place(rect, (0.0, 0.0)).child(menu),
+                place(rect, (0.0, 0.0)).occlude().child(menu),
             ));
         }
         for element in [
@@ -1417,6 +1422,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     .into_any_element(),
             };
             root = root.child(item);
+        }
+        if classes.title_bar_win && !window.is_fullscreen() {
+            root = root.child(caption_buttons(dark, window, cx));
         }
         root
     }

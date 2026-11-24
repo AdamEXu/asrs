@@ -1,19 +1,21 @@
 #![allow(unsafe_code)]
 
 #[cfg(not(target_os = "macos"))]
-#[cfg_attr(target_os = "linux", allow(dead_code))]
+#[allow(dead_code)]
 mod fallback;
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "macos")]
 mod mac;
+#[cfg(windows)]
+pub(crate) mod win;
 
-#[cfg(not(any(target_os = "macos", target_os = "linux")))]
-use fallback as imp;
 #[cfg(target_os = "linux")]
 use linux as imp;
 #[cfg(target_os = "macos")]
 use mac as imp;
+#[cfg(windows)]
+use win as imp;
 
 pub mod dialog;
 #[cfg(not(target_os = "linux"))]
@@ -210,7 +212,22 @@ pub struct ScriptedNumpadEnter(pub bool);
 #[cfg(feature = "parity")]
 impl gpui_kit::Global for ScriptedNumpadEnter {}
 
-/// Electron's `vibrancy: "sidebar"`. The window must be opened with a transparent background.
+/// `os.release()` on Windows.
+#[cfg(windows)]
+pub fn os_release() -> String {
+    imp::os_release()
+}
+
+/// Whether `main.ts` gives hub windows `backgroundMaterial: "acrylic"` here.
+pub fn has_acrylic() -> bool {
+    #[cfg(windows)]
+    return imp::has_acrylic();
+    #[cfg(not(windows))]
+    false
+}
+
+/// Electron's `vibrancy: "sidebar"` on macOS and `backgroundMaterial: "acrylic"` on Windows. The
+/// window must be opened with a background that is not opaque.
 pub fn install_sidebar_vibrancy(window: &Window) -> bool {
     imp::install_sidebar_vibrancy(window)
 }
@@ -227,15 +244,15 @@ pub fn set_aspect_ratio(window: &Window, aspect_ratio: f64) {
     imp::set_aspect_ratio(window, aspect_ratio);
 }
 
-/// A window's native handle for the work AppKit answers with synchronous resize and move
+/// A window's native handle for the work AppKit and Win32 answer with synchronous resize and move
 /// notifications. GPUI handles those by borrowing the app, so these calls belong in a
-/// foreground task outside any window update. `None` on Windows and Wayland.
+/// foreground task outside any window update. `None` on Wayland.
 pub fn native_window(window: &Window) -> Option<NativeWindow> {
     imp::window::native(window).map(NativeWindow)
 }
 
 /// Electron's `getBounds()`: the window frame (on X11 its content) as `(x, y, width, height)` in
-/// top-left coordinates of the primary screen. `None` on Windows and Wayland.
+/// top-left coordinates of the primary screen. `None` on Wayland.
 pub fn window_bounds(window: &Window) -> Option<(f64, f64, f64, f64)> {
     imp::window::bounds(window)
 }
@@ -272,10 +289,17 @@ impl NativeWindow {
         self.0.set_content_size(width, height);
     }
 
-    /// Puts the content's top-left corner at a screen position where the window manager places
-    /// windows (X11). AppKit opens them where they ask.
+    /// Puts the top-left corner of the window's bounds at a screen position: the content's where
+    /// the window manager places windows (X11), the frame's on Windows. AppKit opens them where
+    /// they ask.
     pub fn set_content_origin(&self, x: f64, y: f64) {
         self.0.set_content_origin(x, y);
+    }
+
+    /// Where Electron puts a window opened without `x` and `y` on Windows: over its parent, or in
+    /// the middle of the work area. Elsewhere the window already opened in its place.
+    pub fn center(&self, parent: Option<&NativeWindow>) {
+        self.0.center(parent.map(|parent| &parent.0));
     }
 
     /// Minimum and maximum content sizes, enforced during live resize.
@@ -370,9 +394,10 @@ pub enum SelectMenuItemKind {
 }
 
 /// Chromium's popup for a `<select>`: on macOS an `NSPopUpButtonCell` menu with the selected
-/// item over the control, as `WebMenuRunner` shows it, on Linux a drawn list below it. `bounds` is the select's border box in
-/// window content coordinates `[x, y, width, height]`. The menu opens on a later turn of the
-/// event loop, and `on_close` gets the chosen item's index in `menu.items`, if any.
+/// item over the control, as `WebMenuRunner` shows it, elsewhere a drawn list below it. `bounds` is
+/// the select's border box in window content coordinates `[x, y, width, height]`. The menu opens on
+/// a later turn of the event loop, and `on_close` gets the chosen item's index in `menu.items`, if
+/// any.
 pub fn select_popup(
     window: &Window,
     cx: &mut App,

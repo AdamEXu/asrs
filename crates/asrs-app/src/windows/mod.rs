@@ -29,11 +29,11 @@ pub struct Windows {
 
 type OnClosed = Box<dyn FnOnce(&mut App)>;
 
-/// Stands in for the platform's frame where windows have none: the height of the title bar of a
-/// framed window.
+/// Stands in for the platform's frame where windows have none: how much larger a framed window's
+/// bounds are than its content.
 #[cfg(feature = "parity")]
 pub struct ScriptedFrame {
-    pub title_bar: f64,
+    pub size: (f64, f64),
 }
 
 #[cfg(feature = "parity")]

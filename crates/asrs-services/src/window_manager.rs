@@ -4,7 +4,7 @@
 //!
 //! Options are built for one `process.platform`. Only macOS's are complete: the hub's
 //! `vibrancy` and `titleBarStyle`, and no `icon` (`WINDOW_ICON` is undefined there). The Windows
-//! and Linux hub chrome and window icon belong to X04 and X05.
+//! hub's `backgroundMaterial`, `titleBarStyle` and `titleBarOverlay` are `asrs_app::windows`'.
 
 use asrs_js::value::JsObject;
 

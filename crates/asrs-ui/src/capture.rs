@@ -1,9 +1,11 @@
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+#[cfg(not(windows))]
+use gpui_kit::platform;
 use gpui_kit::{
     AnyWindowHandle, App, AssetSource, Entity, HeadlessAppContext, Pixels,
-    PlatformHeadlessRenderer, Render, Result, Size, Window, WindowHandle, platform,
+    PlatformHeadlessRenderer, Render, Result, Size, Window, WindowHandle,
 };
 
 #[derive(Clone, PartialEq, Eq)]
@@ -75,18 +77,34 @@ fn renderer(transparent: bool) -> Result<Option<Box<dyn PlatformHeadlessRenderer
         metal.update_transparency(true);
         return Ok(Some(Box::new(TransparentMetal(metal))));
     }
-    let _ = transparent;
-    platform::current_headless_renderer()
+    #[cfg(windows)]
+    return Ok(Some(Box::new(
+        crate::platform::win::offscreen::ShownWindow::open(transparent)?,
+    )));
+    #[cfg(not(windows))]
+    {
+        let _ = transparent;
+        platform::current_headless_renderer()
+    }
+}
+
+fn text_system() -> Result<Arc<dyn gpui_kit::PlatformTextSystem>> {
+    #[cfg(windows)]
+    return Ok(crate::platform::win::offscreen::platform().text_system());
+    #[cfg(not(windows))]
+    {
+        if platform::current_headless_renderer()?.is_none() {
+            anyhow::bail!("this platform has no headless renderer");
+        }
+        Ok(platform::current_platform(true).text_system())
+    }
 }
 
 impl HeadlessCapture {
     /// Must run on the main thread: on macOS the text system comes from a `MacPlatform`, which
     /// panics anywhere else, so tests using this need `harness = false`.
     pub fn new(assets: Arc<dyn AssetSource>) -> Result<Self> {
-        if platform::current_headless_renderer()?.is_none() {
-            anyhow::bail!("this platform has no headless renderer");
-        }
-        let text_system = platform::current_platform(true).text_system();
+        let text_system = text_system()?;
         let transparent = Arc::new(AtomicBool::new(false));
         let flag = transparent.clone();
         let mut cx = HeadlessAppContext::with_platform(text_system, assets, move || {
@@ -98,7 +116,7 @@ impl HeadlessCapture {
     }
 
     /// Whether windows opened from now on are transparent: frames clear to alpha 0 rather than
-    /// opaque black (macOS; elsewhere windows are opaque).
+    /// opaque black (macOS and Windows; on Linux windows are opaque).
     pub fn set_transparent_windows(&mut self, transparent: bool) {
         self.transparent.store(transparent, Ordering::Relaxed);
     }
