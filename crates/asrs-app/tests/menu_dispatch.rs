@@ -353,6 +353,17 @@ impl AppUnderTest {
         }
     }
 
+    /// The headless platform toggles full screen without the resize real ones send.
+    fn bounds_changed(&mut self, window: WindowId) {
+        let handle = self.cx.update(|cx| Windows::handle(cx, window));
+        self.cx
+            .update_window(handle.expect("open"), |_, window, cx| {
+                window.bounds_changed(cx);
+            })
+            .expect("open");
+        self.settle();
+    }
+
     fn fullscreen(&mut self, window: WindowId) -> bool {
         let handle = self.cx.update(|cx| Windows::handle(cx, window));
         self.cx
@@ -1195,6 +1206,12 @@ fn accelerators_reach_the_window_they_were_pressed_in(app: &mut AppUnderTest, hu
     for on in [true, false] {
         assert!(app.press(hub, "f11", &[]).is_empty());
         assert_eq!(app.fullscreen(hub), on);
+        app.bounds_changed(hub);
+        assert_eq!(app.hub(hub, HubModel::is_fullscreen), on);
+        let strip = app.hub(hub, |hub| {
+            hub.body_classes().contains(&"fancy-title-bar-mac")
+        });
+        assert_eq!(strip, cfg!(target_os = "macos") && !on);
     }
 }
 

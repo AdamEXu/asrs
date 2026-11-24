@@ -22,8 +22,9 @@ pub mod probe;
 mod startup_error;
 
 use std::path::Path;
+use std::time::Duration;
 
-use gpui_kit::{App, Bounds, Pixels, ScrollDelta, ScrollEvent, Window};
+use gpui_kit::{App, Bounds, Pixels, Point, ScrollDelta, ScrollEvent, Window};
 
 /// Chromium's pixel size of one notched wheel tick on macOS (`kScrollbarPixelsPerCocoaTick`).
 pub const PIXELS_PER_WHEEL_TICK: f32 = 40.0;
@@ -387,6 +388,47 @@ pub(crate) fn dismiss_popup(window: &Window) -> bool {
     imp::dismiss_popup(window)
 }
 
+/// `ScrollbarTheme`'s `InitialAutoscrollTimerDelay` and `AutoscrollTimerDelay`, which also pace a
+/// held spin button.
+pub(crate) fn scroll_button_delays() -> (Duration, Duration) {
+    imp::scroll_button_delays()
+}
+
+/// Whether the window is the one keys go to.
+pub(crate) fn is_key_window(window: &Window) -> bool {
+    imp::is_key_window(window)
+}
+
+/// Sets the native tooltip at the pointer; empty removes it. Only macOS has one.
+pub(crate) fn set_tooltip(window: &Window, text: &str) {
+    imp::set_tooltip(window, text);
+}
+
+/// Has a popup take neither the pointer nor the activation on Windows; on Linux it takes the
+/// pointer, as Chromium's does, and cannot be activated.
+pub(crate) fn ignore_input(window: &Window) {
+    #[cfg(windows)]
+    imp::ignore_input(window);
+    let _ = window;
+}
+
+/// Where a popup at `at` in the window goes: the window's content origin on screen, `None` where
+/// the compositor places popups itself, and the display the popup stays on.
+pub(crate) fn popup_space(
+    window: &Window,
+    at: Point<Pixels>,
+    cx: &App,
+) -> Option<(Option<Point<Pixels>>, Bounds<Pixels>)> {
+    #[cfg(target_os = "linux")]
+    return imp::popup_space(window, at, cx);
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = at;
+        let display = window.display(cx).or_else(|| cx.primary_display())?;
+        Some((Some(window.bounds().origin), display.bounds()))
+    }
+}
+
 /// Electron's `menu.closePopup(window)`.
 pub fn close_popup_menu(window: &Window) {
     imp::close_popup_menu(window);
@@ -429,14 +471,49 @@ pub fn selection_colors() -> SystemSelection {
     imp::selection_colors()
 }
 
-/// Has the windows take the Edit menu's Copy and Select All, which AppKit sends to the first
-/// responder. Elsewhere the menu's roles reach the app.
-pub fn install_edit_commands(cx: &mut App, on_command: impl Fn(EditCommand, &mut App) + 'static) {
+/// Has the windows take the Edit menu's roles and Toggle Full Screen, which AppKit sends to the
+/// first responder. Elsewhere the menu's roles reach the app.
+pub fn install_edit_commands(
+    cx: &mut App,
+    on_command: impl Fn(EditCommand, &mut Window, &mut App) + 'static,
+) {
     imp::install_edit_commands(cx, on_command);
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum EditCommand {
+    Undo,
+    Redo,
+    Cut,
     Copy,
+    Paste,
+    PasteAndMatchStyle,
+    Delete,
     SelectAll,
+}
+
+/// Where the system asks the app to quit, it may unless `may_quit` says no, and then `ask` runs.
+/// `may_quit` must not use the app, which may be updating.
+pub fn on_quit_request(
+    cx: &mut App,
+    may_quit: impl Fn() -> bool + 'static,
+    ask: impl Fn(&mut App) + 'static,
+) {
+    imp::on_quit_request(cx, may_quit, ask);
+}
+
+pub struct FullScreenObserver(#[allow(dead_code)] imp::FullScreenObserver);
+
+impl FullScreenObserver {
+    pub fn stop(self) {}
+}
+
+/// `enter-full-screen` and `leave-full-screen` of a hub window, until the observer is dropped,
+/// where the system says when its transitions end.
+pub fn observe_full_screen(
+    window: &Window,
+    cx: &App,
+    on_change: impl Fn(bool, &mut App) + 'static,
+) -> Option<FullScreenObserver> {
+    imp::observe_full_screen(window, cx, on_change).map(FullScreenObserver)
 }

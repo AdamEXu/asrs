@@ -11,6 +11,7 @@ mod segmented;
 mod select;
 pub(crate) mod skia;
 mod slider;
+mod spin;
 pub mod style;
 
 pub use field::{FieldEvent, FieldGeometry, FieldKind, TextField, geometry};
@@ -30,6 +31,10 @@ pub use slider::{
     thumb_offset,
 };
 pub use style::{FieldStyle, Frame, SliderStyle, SplitStyle};
+
+pub use gpui_kit::base::input::{Cut, Paste, Redo, Undo};
+
+gpui_kit::actions!(text_field, [DeleteSelection]);
 
 /// The key context of the components that are an `<input>` in upstream's pages.
 const CONTEXT: &str = "HtmlInput";

@@ -15,6 +15,7 @@ mod js_color;
 mod js_json;
 mod js_math;
 mod js_msgpack;
+mod js_ops;
 mod js_regex;
 mod js_string;
 mod js_time;

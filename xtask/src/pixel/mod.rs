@@ -593,7 +593,7 @@ fn compare_focus(label: &str, reference: &Path, port: &Path) -> Result<Option<Ca
             None => format!("{} equal", theirs.len()),
         };
         let name = name.to_string_lossy();
-        outcome.push("focus", &name, differences.is_empty(), detail);
+        outcome.push("focus", &*name, differences.is_empty(), detail);
     }
     Ok(Some(CaptureResult {
         label: format!("{label} focus"),

@@ -4,8 +4,8 @@
 //! through the production `asrs_hub::factory::HubTabFactory`, so every tab runs its real
 //! controller and, where ported, its real renderer; the oracle's `field3dStub.ts` stands in for
 //! `Field3dRenderer` on both sides. Emitted records are compared with the committed
-//! `dom/tabs/<case>` vector, line for line. `dom`, `canvas`, `measure` and `sourceLists` capture
-//! kinds belong to other layers and are skipped while comparing.
+//! `dom/tabs/<case>` vector, line for line; `NOT_COMPARED` lists the records whose payload is
+//! not.
 //!
 //! The table fixtures (`TABLE_FIXTURES`) ran on Blink with real geometry: the tab's layout reads
 //! and scroll writes are answered from and checked against the recorded ones, which the port's
@@ -22,6 +22,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use asrs_canvas::Canvas2d;
 use asrs_hub::factory::{HubTabFactory, RendererHook};
 use asrs_hub::hub::assets_alert;
 use asrs_hub::tabs::{Tabs, TabsHost};
@@ -36,13 +37,14 @@ use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::Selection;
 use asrs_model::selection_impl::{KeyTarget, SelectionImpl};
-use asrs_model::source_list::{Rect, SourceList};
+use asrs_model::source_list::{ListInput, ListPointer, Rect, SourceList};
 use asrs_model::source_list_config::{SourceListTypeMemory, SourceListTypeMemoryEntry};
 use asrs_model::tab_controller::{TabCommand, TabController, TabRenderer, keyboard_clicks};
 use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
 use asrs_parity::geometry::{GeometryRecord, ScriptedReads};
 use asrs_parity::json::{self, Json};
+use asrs_parity::tally::{Fields, Tally};
 use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::{self, Record};
 use asrs_tabs::console::controller::{
@@ -372,6 +374,7 @@ enum DomKind {
 struct Recorder {
     inner: Box<dyn TabRenderer<Host>>,
     slot: Rc<RefCell<Option<JsValue>>>,
+    drawing: Rc<RefCell<Option<Drawing>>>,
 }
 
 impl TabRenderer<Host> for Recorder {
@@ -389,7 +392,18 @@ impl TabRenderer<Host> for Recorder {
 
     fn render(&mut self, cx: &mut Host, command: &dyn TabCommand) -> Result<(), JsError> {
         *self.slot.borrow_mut() = Some(command.to_js());
-        self.inner.render(cx, command)
+        let result = self.inner.render(cx, command);
+        if let Some((class, canvas)) = take_painted(&mut *self.inner) {
+            let mut drawing = self.drawing.borrow_mut();
+            let frames = drawing.as_ref().map_or(0, |d| d.frames) + 1;
+            *drawing = Some(Drawing {
+                class,
+                frames,
+                canvas,
+                drawn_since_capture: true,
+            });
+        }
+        result
     }
 
     fn renderer_uuid(&self) -> Option<&JsString> {
@@ -461,6 +475,7 @@ impl RendererHook<Host> for Hook {
         Box::new(Recorder {
             inner,
             slot: Rc::new(RefCell::new(None)),
+            drawing: Rc::new(RefCell::new(None)),
         })
     }
 }
@@ -656,8 +671,36 @@ impl TabsHost for Host {
     }
 }
 
-struct Emit {
-    values: Vec<(&'static str, Value)>,
+enum Emit {
+    Record {
+        values: Vec<(&'static str, Value)>,
+    },
+    /// One `canvas` capture: what the port's painters drew since the last one.
+    Canvases(Vec<Drawing>),
+}
+
+/// A `RecordingContext`: the last frame on a canvas, the number of frames so far and whether
+/// the next capture records it.
+#[derive(Clone)]
+struct Drawing {
+    class: &'static str,
+    frames: usize,
+    canvas: Canvas2d,
+    drawn_since_capture: bool,
+}
+
+const COMPARED_CANVASES: [&str; 3] = ["swerve-canvas", "joysticks-canvas", "field-2d-canvas"];
+
+fn take_painted(renderer: &mut dyn TabRenderer<Host>) -> Option<(&'static str, Canvas2d)> {
+    let (class, painted) = if let Some(r) = renderer.downcast_mut::<SwerveRenderer>() {
+        ("swerve-canvas", r.dom().borrow_mut().painted.take())
+    } else if let Some(r) = renderer.downcast_mut::<JoysticksRenderer>() {
+        ("joysticks-canvas", r.dom().borrow_mut().painted.take())
+    } else {
+        let r = renderer.downcast_mut::<Field2dRenderer>()?;
+        ("field-2d-canvas", r.dom().borrow_mut().painted.take())
+    };
+    painted.map(|canvas| (class, canvas))
 }
 
 fn pair_value(pair: Option<[f64; 2]>) -> Value {
@@ -738,13 +781,13 @@ impl Runner {
         if self.ignored.iter().any(|i| i == name) {
             return;
         }
-        self.emitted.push(Emit {
+        self.emitted.push(Emit::Record {
             values: vec![("main", cve_str(name)), ("data", data)],
         });
     }
 
     fn exception(&mut self, where_: String, error: impl Into<String>) {
-        self.emitted.push(Emit {
+        self.emitted.push(Emit::Record {
             values: vec![
                 ("exception", cve_str(&where_)),
                 ("error", cve_str(&error.into())),
@@ -950,7 +993,7 @@ impl Runner {
     /// then every controller's handler runs in registration order.
     fn dispatch_drag(&mut self, detail: &JsValue) {
         let get = |key: &str| ops::get(detail, key).unwrap_or(JsValue::Undefined);
-        self.emitted.push(Emit {
+        self.emitted.push(Emit::Record {
             values: vec![
                 ("drag", js_json::from_js(&get("data"))),
                 ("end", js_json::from_js(&get("end"))),
@@ -1378,6 +1421,14 @@ fn run_eval(r: &mut Runner, expr: &str) -> Result<JsValue, String> {
                 fields.into_iter().map(JsValue::String).collect(),
             ))
         }
+        // `updateElements` sets the var every pass; it is `""` only before the first.
+        "document.documentElement.style.getPropertyValue(\"--show-timeline\")" => {
+            Ok(JsValue::String(js(match r.tabs.show_timeline() {
+                Some(true) => "1",
+                Some(false) => "0",
+                None => "",
+            })))
+        }
         "window.tabs.isValidUUID(window.tabs.tabList[window.tabs.selectedTab].controller.UUID)" => {
             let uuid = r
                 .tabs
@@ -1425,6 +1476,49 @@ fn tab_source_list(controller: &mut dyn TabController<Host>) -> Option<&mut Sour
     }
     any.downcast_mut::<PointsController>()
         .map(PointsController::source_list_mut)
+}
+
+/// The classes `www/hub.html` gives an `<input>`, and gives nothing else.
+const INPUT_CLASSES: [&str; 13] = [
+    "console-table-jump-input",
+    "data-table-jump-input",
+    "dimensions-height",
+    "dimensions-width",
+    "filter",
+    "max-speed",
+    "range-max",
+    "range-min",
+    "side-bar-search",
+    "size-x",
+    "size-y",
+    "step-size",
+    "video-timeline-slider",
+];
+
+/// What the keydown guards in `SelectionImpl` and `VideoController` ask of `event.target`: its
+/// tag as the selector's last compound spells it, or as `www/hub.html` gives its class. A class
+/// this does not know fails.
+fn key_target_of(target: &str) -> Result<KeyTarget, String> {
+    let element = target.rsplit(' ').next().expect("rsplit yields a part");
+    let mut parts = element.split(['.', '#', '[', ':']);
+    let tag = parts.next().expect("split yields a part");
+    if !tag.is_empty() {
+        return match tag {
+            "input" => Ok(KeyTarget::Input),
+            "textarea" => Ok(KeyTarget::TextArea),
+            "window" | "document" | "body" | "div" | "select" | "button" => Ok(KeyTarget::Other),
+            _ => Err(err(format!("keydown on a {tag} is not modeled"))),
+        };
+    }
+    for class in parts {
+        if INPUT_CLASSES.contains(&class) {
+            return Ok(KeyTarget::Input);
+        }
+        if class == "xr-button" {
+            return Ok(KeyTarget::Other);
+        }
+    }
+    Err(err(format!("keydown on {target}: spell the element's tag")))
 }
 
 /// `setupKeyboardControls`: `event.key` is `undefined` unless the event is a `KeyboardEvent`
@@ -1695,16 +1789,34 @@ fn json_to_layout(fixture: &Json) -> Result<Layout, String> {
     Ok(Layout { rules })
 }
 
-fn skippable(record: &Record) -> bool {
-    record.field("dom").is_some()
-        || record.field("read").is_some()
-        || record.field("write").is_some()
-        || record.field("canvas").is_some()
-        || record.field("sourceLists").is_some()
-        || record.field("measure").is_some()
-        || record.field("tuner").is_some()
-        || record.field("read").is_some()
-        || record.field("write").is_some()
+/// A record's kind for the tally: its first key, with the canvas a `canvas` record is for and
+/// whether a geometry access is on the tab's own table container.
+fn kind_of(record: &Record) -> String {
+    let key = match &record.json {
+        Json::Object(pairs) if !pairs.is_empty() => pairs[0].0.to_string_lossy(),
+        _ => panic!("line {}: the record has no first key", record.line),
+    };
+    match key.as_str() {
+        "canvas" => format!("canvas:{}", canvas_class(record)),
+        "read" | "write" if on_tab_table(record) => TAB_GEOMETRY.to_owned(),
+        "read" | "write" => HUB_GEOMETRY.to_owned(),
+        _ => key,
+    }
+}
+
+const TAB_GEOMETRY: &str = "tab geometry";
+const HUB_GEOMETRY: &str = "hub geometry";
+
+fn canvas_class(record: &Record) -> String {
+    let id = record.string("canvas").expect("a canvas record has an id");
+    let (class, _) = id.split_once('#').expect("a canvas id is class#n");
+    class.to_owned()
+}
+
+fn on_tab_table(record: &Record) -> bool {
+    record.string("el").is_some_and(|el| {
+        el.contains("div.data-table-container:") || el.contains("div.console-table-container:")
+    })
 }
 
 /// The recording's accesses to Console containers and rows. A real-geometry run also records
@@ -2274,6 +2386,9 @@ impl Runner {
         let iv = |name: &str| init.get(name).and_then(Json::as_f64).unwrap_or(0.0);
         let (x, y) = (iv("clientX"), iv("clientY"));
         let props = event.get("props");
+        // `div.controls-content > :not([hidden])` scopes a selector to the selected
+        // tab's controls; without it matches span every tab's, then the templates.
+        let scoped = target.starts_with("div.controls-content > :not([hidden])");
         self.sync_dom();
 
         match (target.as_str(), etype.as_str()) {
@@ -2325,54 +2440,66 @@ impl Runner {
             // `asrs-tabs/tests/dom_tab_views.rs` replays the console's jump.
             (t, "keydown" | "click") if t.contains("console-table-jump") => {}
             (t, "change") if t.contains("input.max-speed") => {
-                self.swerve_change(SwerveInput::MaxSpeed, props)?
+                self.swerve_change(SwerveInput::MaxSpeed, index, scoped, props)?
             }
             (t, "change") if t.contains("input.size-x") => {
-                self.swerve_change(SwerveInput::SizeX, props)?
+                self.swerve_change(SwerveInput::SizeX, index, scoped, props)?
             }
             (t, "change") if t.contains("input.size-y") => {
-                self.swerve_change(SwerveInput::SizeY, props)?
+                self.swerve_change(SwerveInput::SizeY, index, scoped, props)?
             }
             (t, "change") if t.contains(".field-3d-settings .field-select") => {
-                self.field3d_select_change(index, props)?
+                self.field3d_select_change(index, scoped, props)?
             }
             (t, "click") if t.contains(".field-3d-settings .xr-button") => {
-                self.field3d_xr_click(index)?
+                self.field3d_xr_click(index, scoped)?
             }
             (t, "keydown") if t.contains(".field-3d-settings .xr-button") => {
                 if event_key_clicks(&init)? {
-                    self.field3d_xr_click(index)?;
+                    self.field3d_xr_click(index, scoped)?;
                 }
             }
-            (t, "click") if t.contains("orientation-switcher") => self.swerve_rotate(index)?,
+            (t, "click") if t.contains("orientation-switcher") => {
+                self.orientation_click(index, scoped)?
+            }
             (t, "keydown") if t.contains("orientation-switcher") => {
                 if event_key_clicks(&init)? {
-                    self.swerve_rotate(index)?;
+                    self.orientation_click(index, scoped)?;
                 }
             }
             (t, "change") if t.contains("input.dimensions-width") => {
-                self.points_change(Dimension::Width, props)?
+                self.points_change(Dimension::Width, index, scoped, props)?
             }
             (t, "change") if t.contains("input.dimensions-height") => {
-                self.points_change(Dimension::Height, props)?
+                self.points_change(Dimension::Height, index, scoped, props)?
             }
             (t, "change") if t.contains("select.orientation") => {
-                self.points_select(PointsSelect::Orientation, props)?
+                self.points_select(PointsSelect::Orientation, index, scoped, props)?
             }
             (t, "change") if t.contains("select.origin") => {
-                self.points_select(PointsSelect::Origin, props)?
+                self.points_select(PointsSelect::Origin, index, scoped, props)?
             }
             (t, "change") if t.contains("table.joystick-selector select") => {
-                self.joystick_change(index, props)?
+                self.joystick_change(index, scoped, props)?
             }
             // One `button.hide` and one `button.remove` per `.source-list .item`, so `index`
             // is the item's position in the list.
             (t, "click") if t.contains(".source-list .list .item button.hide") => {
-                self.source_item_click(index, false)?
+                self.source_item_click(index, false, scoped)?
             }
             (t, "click") if t.contains(".source-list .list .item button.remove") => {
-                self.source_item_click(index, true)?
+                self.source_item_click(index, true, scoped)?
             }
+            // None of these has a keydown listener that acts on what the fixtures type; the
+            // event bubbles to the window's.
+            (
+                ".max-speed" | ".size-y" | ".dimensions-width" | ".side-bar-search" | ".filter"
+                | "select.origin",
+                "keydown",
+            ) if init
+                .get("code")
+                .and_then(Json::as_str)
+                .is_some_and(|c| c.to_string_lossy() == "Space") => {}
             // Video controls: `index` is the querySelectorAll position inside the
             // selected tab's controls (`div.controls-content > :not([hidden])`).
             (t, "click") if t.contains(".video-source button") => self.video_source_click(index)?,
@@ -2395,14 +2522,7 @@ impl Runner {
                 .and_then(Json::as_str)
                 .map(|c| c.to_string_lossy())
                 .unwrap_or_default();
-            let element = target.rsplit(' ').next().unwrap_or_default();
-            let key_target = if element.starts_with("input") {
-                KeyTarget::Input
-            } else if element.starts_with("textarea") {
-                KeyTarget::TextArea
-            } else {
-                KeyTarget::Other
-            };
+            let key_target = key_target_of(&target)?;
             // `window.tabs` reads that SelectionImpl resolves per keydown upstream:
             // `getSelectedTabType()` and `isUnlockedVideoSelected()`.
             {
@@ -2582,23 +2702,6 @@ impl Runner {
         }
     }
 
-    fn selected_controller<T: 'static>(&mut self) -> Result<&mut T, String> {
-        let i = self
-            .tabs
-            .selected_index()
-            .ok_or_else(|| err("no tab is selected"))?;
-        self.tabs
-            .controller_mut(&JsValue::Number(i as f64))
-            .map_err(|e| err(e.to_string()))?
-            .downcast_mut::<T>()
-            .ok_or_else(|| {
-                err(format!(
-                    "the selected tab is not a {}",
-                    std::any::type_name::<T>()
-                ))
-            })
-    }
-
     /// `props.value`, assigned to the target before the event is dispatched.
     fn prop_value(props: Option<&Json>) -> Result<Option<JsString>, String> {
         match props.and_then(|p| p.get("value")) {
@@ -2610,9 +2713,83 @@ impl Runner {
         }
     }
 
-    fn swerve_change(&mut self, input: SwerveInput, props: Option<&Json>) -> Result<(), String> {
+    fn controller_as<T: 'static>(&mut self, tab: usize) -> Result<&mut T, String> {
+        self.tabs
+            .controller_mut(&JsValue::Number(tab as f64))
+            .map_err(|e| err(e.to_string()))?
+            .downcast_mut::<T>()
+            .ok_or_else(|| err(format!("tab {tab} is not a {}", std::any::type_name::<T>())))
+    }
+
+    /// The tabs whose controls a selector reaches, in document order: the selected one when the
+    /// selector starts at `div.controls-content > :not([hidden])`, every one otherwise.
+    fn controls_tabs(&mut self, scoped: bool) -> Vec<usize> {
+        if scoped {
+            return self.tabs.selected_index().into_iter().collect();
+        }
+        self.sync_controls_order(false);
+        let ids = self.tab_ids();
+        self.controls_order
+            .iter()
+            .filter_map(|id| ids.iter().position(|i| i == id))
+            .collect()
+    }
+
+    /// `div.controls-content > :not([hidden])` scopes a selector to the selected tab's
+    /// controls; without it, matches span every tab's controls in `controls_order`
+    /// (`count` of them per `kinds` tab), then `templates` more in the `#controllerN`
+    /// templates, which have no listeners. The answer is (tab, index within its
+    /// controls), or `None` when the match lands in a template.
+    fn controls_match(
+        &mut self,
+        index: usize,
+        scoped: bool,
+        kinds: &[TabType],
+        count: impl Fn(&dyn TabController<Host>) -> usize,
+        templates: usize,
+        what: &str,
+    ) -> Result<Option<(usize, usize)>, String> {
+        let order = self.controls_tabs(scoped);
+        let mut at = index;
+        for i in order {
+            let Some(tab) = self.tabs.tab(i) else {
+                continue;
+            };
+            if !tab.tab_type().is_some_and(|k| kinds.contains(&k)) {
+                continue;
+            }
+            let n = count(tab.controller());
+            if at < n {
+                return Ok(Some((i, at)));
+            }
+            at -= n;
+        }
+        if !scoped && at < templates {
+            return Ok(None);
+        }
+        Err(err(format!("no {what} match {index}")))
+    }
+
+    fn swerve_change(
+        &mut self,
+        input: SwerveInput,
+        index: usize,
+        scoped: bool,
+        props: Option<&Json>,
+    ) -> Result<(), String> {
         let value = Self::prop_value(props)?;
-        let controller = self.selected_controller::<SwerveController>()?;
+        let Some((tab, _)) = self.controls_match(
+            index,
+            scoped,
+            &[TabType::Swerve],
+            |_| 1,
+            1,
+            "a Swerve input",
+        )?
+        else {
+            return Ok(());
+        };
+        let controller = self.controller_as::<SwerveController>(tab)?;
         if let Some(value) = value {
             controller.input_mut(input).set_value(value);
         }
@@ -2620,19 +2797,58 @@ impl Runner {
         Ok(())
     }
 
-    fn swerve_rotate(&mut self, index: usize) -> Result<(), String> {
-        let controller = self.selected_controller::<SwerveController>()?;
-        match index {
-            0 => controller.rotate_left(),
-            1 => controller.rotate_right(),
-            _ => return Err(err(format!("orientation switcher has no child {index}"))),
+    /// `.orientation-switcher > div`: two children per switcher, on the controls of both
+    /// Swerve and Field2d tabs; `#controller2` and `#controller9` hold a switcher each.
+    fn orientation_click(&mut self, index: usize, scoped: bool) -> Result<(), String> {
+        let Some((tab, child)) = self.controls_match(
+            index,
+            scoped,
+            &[TabType::Swerve, TabType::Field2d],
+            |_| 2,
+            4,
+            "an orientation switcher",
+        )?
+        else {
+            return Ok(());
+        };
+        match self.tabs.tab(tab).and_then(|t| t.tab_type()) {
+            Some(TabType::Swerve) => match child {
+                0 => self.controller_as::<SwerveController>(tab)?.rotate_left(),
+                1 => self.controller_as::<SwerveController>(tab)?.rotate_right(),
+                _ => {
+                    return Err(err(format!("orientation switcher has no child {child}")));
+                }
+            },
+            Some(TabType::Field2d) if child < 2 => self
+                .controller_as::<Field2dController>(tab)?
+                .click_orientation(child),
+            _ => {
+                return Err(err(format!("orientation switcher has no child {child}")));
+            }
         }
         Ok(())
     }
 
-    fn points_change(&mut self, dimension: Dimension, props: Option<&Json>) -> Result<(), String> {
+    fn points_change(
+        &mut self,
+        dimension: Dimension,
+        index: usize,
+        scoped: bool,
+        props: Option<&Json>,
+    ) -> Result<(), String> {
         let value = Self::prop_value(props)?;
-        let controller = self.selected_controller::<PointsController>()?;
+        let Some((tab, _)) = self.controls_match(
+            index,
+            scoped,
+            &[TabType::Points],
+            |_| 1,
+            1,
+            "a Points input",
+        )?
+        else {
+            return Ok(());
+        };
+        let controller = self.controller_as::<PointsController>(tab)?;
         if let Some(value) = value {
             controller.dimension_mut(dimension).set_value(value);
         }
@@ -2641,9 +2857,26 @@ impl Runner {
     }
 
     /// The selects have no `change` listener; only the assigned value matters.
-    fn points_select(&mut self, select: PointsSelect, props: Option<&Json>) -> Result<(), String> {
+    fn points_select(
+        &mut self,
+        select: PointsSelect,
+        index: usize,
+        scoped: bool,
+        props: Option<&Json>,
+    ) -> Result<(), String> {
         let value = Self::prop_value(props)?;
-        let controller = self.selected_controller::<PointsController>()?;
+        let Some((tab, _)) = self.controls_match(
+            index,
+            scoped,
+            &[TabType::Points],
+            |_| 1,
+            1,
+            "a Points select",
+        )?
+        else {
+            return Ok(());
+        };
+        let controller = self.controller_as::<PointsController>(tab)?;
         if let Some(value) = value {
             controller.select_mut(select).set_value(&value);
         }
@@ -2651,12 +2884,34 @@ impl Runner {
     }
 
     /// The selects have no `change` listener; only the assigned value matters.
-    fn joystick_change(&mut self, index: usize, props: Option<&Json>) -> Result<(), String> {
+    fn joystick_change(
+        &mut self,
+        index: usize,
+        scoped: bool,
+        props: Option<&Json>,
+    ) -> Result<(), String> {
         let value = Self::prop_value(props)?;
-        let controller = self.selected_controller::<JoysticksController>()?;
+        // Each Joysticks tab holds one `select` per joystick; the `#controller8`
+        // template holds 6.
+        let Some((tab, at)) = self.controls_match(
+            index,
+            scoped,
+            &[TabType::Joysticks],
+            |controller| {
+                controller
+                    .downcast_ref::<JoysticksController>()
+                    .map_or(0, |c| (0..).take_while(|&i| c.select(i).is_some()).count())
+            },
+            6,
+            "a joystick select",
+        )?
+        else {
+            return Ok(());
+        };
+        let controller = self.controller_as::<JoysticksController>(tab)?;
         let select = controller
-            .select_mut(index)
-            .ok_or_else(|| err(format!("no joystick select {index}")))?;
+            .select_mut(at)
+            .ok_or_else(|| err(format!("no joystick select {at}")))?;
         if let Some(value) = value {
             select.set_value(&value);
         }
@@ -2666,20 +2921,21 @@ impl Runner {
     /// The tab whose controls hold match `index` of a selector inside `.field-3d-settings`.
     /// `None` is the match one past the tabs: the hidden `#controller3` template after
     /// `.controls-content`, which has no listeners.
-    fn field3d_controls_tab(&mut self, index: usize) -> Result<Option<usize>, String> {
-        self.sync_controls_order(false);
-        let ids = self.tab_ids();
-        let tabs: Vec<usize> = self
-            .controls_order
-            .iter()
-            .filter_map(|id| ids.iter().position(|i| i == id))
-            .filter(|&i| self.tabs.tab(i).and_then(|t| t.tab_type()) == Some(TabType::Field3d))
-            .collect();
-        match tabs.get(index) {
-            Some(&i) => Ok(Some(i)),
-            None if index == tabs.len() => Ok(None),
-            None => Err(err(format!("no .field-3d-settings match {index}"))),
-        }
+    fn field3d_controls_tab(
+        &mut self,
+        index: usize,
+        scoped: bool,
+    ) -> Result<Option<usize>, String> {
+        Ok(self
+            .controls_match(
+                index,
+                scoped,
+                &[TabType::Field3d],
+                |_| 1,
+                1,
+                ".field-3d-settings",
+            )?
+            .map(|(tab, _)| tab))
     }
 
     fn tab_ids(&self) -> Vec<usize> {
@@ -2705,9 +2961,14 @@ impl Runner {
         }
     }
 
-    fn field3d_select_change(&mut self, index: usize, props: Option<&Json>) -> Result<(), String> {
+    fn field3d_select_change(
+        &mut self,
+        index: usize,
+        scoped: bool,
+        props: Option<&Json>,
+    ) -> Result<(), String> {
         let value = Self::prop_value(props)?;
-        let Some(tab) = self.field3d_controls_tab(index)? else {
+        let Some(tab) = self.field3d_controls_tab(index, scoped)? else {
             return Ok(());
         };
         let controller = field3d_controller(&mut self.tabs, tab)?;
@@ -2719,8 +2980,8 @@ impl Runner {
             .map_err(|e| format!("{}: {}", e.name, e.message))
     }
 
-    fn field3d_xr_click(&mut self, index: usize) -> Result<(), String> {
-        let Some(tab) = self.field3d_controls_tab(index)? else {
+    fn field3d_xr_click(&mut self, index: usize, scoped: bool) -> Result<(), String> {
+        let Some(tab) = self.field3d_controls_tab(index, scoped)? else {
             return Ok(());
         };
         let uuid = self.tabs.tab(tab).map(|t| t.uuid().clone()).unwrap();
@@ -2728,24 +2989,53 @@ impl Runner {
         Ok(())
     }
 
-    fn source_item_click(&mut self, index: usize, remove: bool) -> Result<(), String> {
-        let i = self
-            .tabs
-            .selected_index()
-            .ok_or_else(|| err("no tab is selected"))?;
-        let controller = self
-            .tabs
-            .controller_mut(&JsValue::Number(i as f64))
-            .map_err(|e| err(e.to_string()))?;
-        let list = tab_source_list(controller)
-            .ok_or_else(|| err("the selected tab has no modeled source list"))?;
-        if remove {
-            list.remove(index);
-            Ok(())
-        } else {
-            with_env(&mut self.host, |env| list.toggle_hidden(env, index))
-                .map_err(|e| js_error(e).message)
+    /// `.source-list .list .item button.*`: one match per item of every list the selector
+    /// can reach: the selected tab's lists when it is scoped, every tab's in
+    /// `controls_order` otherwise (the `#controllerN` lists are empty, so they match
+    /// nothing). The click goes to the list that owns the match.
+    fn source_item_click(
+        &mut self,
+        index: usize,
+        remove: bool,
+        scoped: bool,
+    ) -> Result<(), String> {
+        let order = self.controls_tabs(scoped);
+        let mut at = index;
+        for i in order {
+            let Some(tab) = self.tabs.tab(i) else {
+                continue;
+            };
+            let lists: Vec<(String, usize)> = tab
+                .controller()
+                .source_lists()
+                .iter()
+                .map(|list| (list.uuid().to_owned(), list.items().len()))
+                .collect();
+            for (uuid, count) in lists {
+                if at < count {
+                    let event = if remove {
+                        ListPointer::RemoveClick(at)
+                    } else {
+                        ListPointer::HideClick(at)
+                    };
+                    let mut errors = Vec::new();
+                    self.tabs
+                        .controller_mut(&JsValue::Number(i as f64))
+                        .map_err(|e| err(e.to_string()))?
+                        .source_list_input(
+                            &mut self.host,
+                            ListInput::Pointer { uuid: &uuid, event },
+                            &mut errors,
+                        );
+                    return match errors.into_iter().next() {
+                        Some(e) => Err(e.message),
+                        None => Ok(()),
+                    };
+                }
+                at -= count;
+            }
         }
+        Err(err(format!("no .source-list .list .item match {index}")))
     }
 
     fn console_highlight_click(&mut self) {
@@ -2856,8 +3146,29 @@ impl Runner {
         Ok(())
     }
 
+    /// The canvases drawn since the last capture, in context creation order.
+    fn take_drawings(&mut self) -> Vec<Drawing> {
+        self.sync_controls_order(false);
+        let ids = self.tab_ids();
+        let mut out = Vec::new();
+        for id in &self.controls_order {
+            let recorder = ids
+                .iter()
+                .position(|i| i == id)
+                .and_then(|i| self.tabs.tab(i))
+                .and_then(|tab| tab.renderer().downcast_ref::<Recorder>());
+            if let Some(recorder) = recorder
+                && let Some(drawing) = recorder.drawing.borrow_mut().as_mut()
+                && std::mem::take(&mut drawing.drawn_since_capture)
+            {
+                out.push(drawing.clone());
+            }
+        }
+        out
+    }
+
     fn capture(&mut self, spec: &Json, label: Option<String>) -> Result<(), String> {
-        self.emitted.push(Emit {
+        self.emitted.push(Emit::Record {
             values: vec![
                 ("capture", cve_str(&label.unwrap_or_default())),
                 ("time", Value::number(self.now - self.start)),
@@ -2905,7 +3216,7 @@ impl Runner {
                             ("title", js_json::from_js(tab.title())),
                             ("uuid", js_json::from_js(&JsValue::String(js(&uuid)))),
                         ]);
-                        self.emitted.push(Emit {
+                        self.emitted.push(Emit::Record {
                             values: vec![("command", meta), ("value", js_json::from_js(&command))],
                         });
                     }
@@ -2927,13 +3238,13 @@ impl Runner {
                         ("sidebar", sidebar),
                         ("tabs", js_json::from_js(&self.tabs.save_state(&self.host))),
                     ]);
-                    self.emitted.push(Emit {
+                    self.emitted.push(Emit::Record {
                         values: vec![("state", state)],
                     });
                 }
                 "selection" => {
                     let value = selection_value(&mut self.host.selection);
-                    self.emitted.push(Emit {
+                    self.emitted.push(Emit::Record {
                         values: vec![("selection", value)],
                     });
                 }
@@ -2944,18 +3255,34 @@ impl Runner {
                         .map(|s| s.to_string_lossy())
                         .unwrap_or_default();
                     match run_eval(self, &expr) {
-                        Ok(value) => self.emitted.push(Emit {
+                        Ok(value) => self.emitted.push(Emit::Record {
                             values: vec![
                                 ("eval", cve_str(&expr)),
                                 ("value", js_json::from_js(&value)),
                             ],
                         }),
-                        Err(e) => self.emitted.push(Emit {
+                        Err(e) => self.emitted.push(Emit::Record {
                             values: vec![("eval", cve_str(&expr)), ("throw", cve_str(&e))],
                         }),
                     }
                 }
-                "dom" | "canvas" | "sourceLists" | "measure" | "tuner" => {}
+                "dom" => {
+                    let selector = kind
+                        .get("selector")
+                        .and_then(Json::as_str)
+                        .map(|s| s.to_string_lossy())
+                        .ok_or_else(|| err("dom capture has no selector"))?;
+                    self.emitted.push(Emit::Record {
+                        values: vec![("dom", cve_str(&selector))],
+                    });
+                }
+                "canvas" => {
+                    if kind.get("selector").is_some() {
+                        return Err(err("a canvas capture with a selector is not modeled"));
+                    }
+                    let drawings = self.take_drawings();
+                    self.emitted.push(Emit::Canvases(drawings));
+                }
                 other => return Err(err(format!("capture kind {other} is not modeled"))),
             }
         }
@@ -3006,55 +3333,158 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
         .then(|| console_reads(&records))
         .transpose()?;
     let emitted = replay(spec, table.clone(), reads.clone())?;
-    if let Some(table) = table {
-        let mut t = table.0.borrow_mut();
-        if let Some(mismatch) = t.mismatches.first() {
-            return Err(format!("{} mismatches, {mismatch}", t.mismatches.len()));
+    let mut tally = Tally::new(vector_id, &records, kind_of);
+    let checked = (|| -> Result<(), String> {
+        if let Some(table) = table {
+            let mut t = table.0.borrow_mut();
+            if let Some(mismatch) = t.mismatches.first() {
+                return Err(format!("{} mismatches, {mismatch}", t.mismatches.len()));
+            }
+            let compared = std::mem::take(&mut t.reads).finish()?;
+            if compared < 20 || t.checked < 20 {
+                return Err(format!("only {compared} geometry records compared"));
+            }
+            (0..compared).for_each(|_| tally.compared(TAB_GEOMETRY));
         }
-        let compared = std::mem::take(&mut t.reads).finish()?;
-        if compared < 20 || t.checked < 20 {
-            return Err(format!("only {compared} geometry records compared"));
+        if let Some(RecordedConsole(reads)) = reads {
+            let compared = reads.take().finish()?;
+            (0..compared).for_each(|_| tally.compared(TAB_GEOMETRY));
+        }
+        compare_emitted(&records, &emitted, &mut tally)
+    })();
+    if let Err(e) = checked {
+        std::mem::forget(tally);
+        return Err(e);
+    }
+    for (kind, by) in NOT_COMPARED {
+        if records.iter().any(|r| kind_of(r) == kind) {
+            tally.covered_elsewhere(kind, by);
         }
     }
-    if let Some(RecordedConsole(reads)) = reads {
-        reads.take().finish()?;
-    }
-    let mut expected = records.iter().peekable();
-    let mut skipped = 0;
-    for emit in &emitted {
-        while let Some(record) = expected.peek() {
-            if skippable(record) {
-                expected.next();
-                skipped += 1;
+    Ok(tally.finish())
+}
+
+/// Kinds whose payload no replay compares for these vectors (#397), with the suites that compare
+/// the same production code on their own.
+const NOT_COMPARED: [(&str, &str); 6] = [
+    ("dom", "asrs-tabs's dom_tab_views, in part"),
+    (HUB_GEOMETRY, "tabs_dom and sidebar_dom, in part"),
+    ("canvas:timeline-canvas", "timeline_traces"),
+    ("canvas:line-graph-canvas", "asrs-tabs's line_graph_dom"),
+    ("canvas:heatmap-canvas", "asrs-tabs's heatmap_vectors"),
+    (
+        "canvas:canvas",
+        "asrs-tabs's histogram_dom and heatmap_vectors",
+    ),
+];
+
+fn compare_emitted(records: &[Record], emitted: &[Emit], tally: &mut Tally) -> Result<(), String> {
+    let mut expected = records
+        .iter()
+        .filter(|r| ![TAB_GEOMETRY, HUB_GEOMETRY].contains(&kind_of(r).as_str()))
+        .peekable();
+    for emit in emitted {
+        let values = match emit {
+            Emit::Record { values } => values,
+            Emit::Canvases(drawings) => {
+                let mut drawings = drawings.iter();
+                while let Some(record) = expected.next_if(|r| r.field("canvas").is_some()) {
+                    let class = canvas_class(record);
+                    if !COMPARED_CANVASES.contains(&class.as_str()) {
+                        continue;
+                    }
+                    let drawing = drawings
+                        .next()
+                        .ok_or_else(|| format!("line {}: the port drew no {class}", record.line))?;
+                    tally.compare(&kind_of(record), record, |fields| {
+                        compare_canvas(fields, drawing)
+                    })?;
+                }
+                if let Some(drawing) = drawings.next() {
+                    return Err(format!(
+                        "the port drew a {}, upstream did not",
+                        drawing.class
+                    ));
+                }
                 continue;
             }
-            break;
-        }
+        };
         let record = expected
             .next()
             .ok_or_else(|| err("port emitted more records than the vector has"))?;
-        for (key, value) in &emit.values {
-            let expected_value = record.value(key).map_err(|e| {
-                format!(
-                    "line {} missing {key}: {e}; the port emitted {value:?}",
-                    record.line
-                )
-            })?;
-            if let Some(report) = asrs_parity::diff::report(&expected_value, value) {
-                return Err(format!("line {} ({key}): {report}", record.line));
+        let compare_values = |fields: &Fields<'_>| -> Result<(), String> {
+            for (key, value) in values {
+                let expected_value = fields.value(key).map_err(|e| {
+                    format!(
+                        "line {} missing {key}: {e}; the port emitted {value:?}",
+                        record.line
+                    )
+                })?;
+                if let Some(report) = asrs_parity::diff::report(&expected_value, value) {
+                    return Err(format!("line {} ({key}): {report}", record.line));
+                }
             }
+            Ok(())
+        };
+        let kind = kind_of(record);
+        if kind == "dom" {
+            compare_values(&Fields::new(record))?;
+        } else {
+            tally.compare(&kind, record, compare_values)?;
         }
     }
-    for record in expected {
-        if !skippable(record) {
-            return Err(format!(
-                "line {}: the port emitted nothing for this record",
-                record.line
-            ));
-        }
-        skipped += 1;
+    match expected.next() {
+        Some(record) => Err(format!(
+            "line {}: the port emitted nothing for this record",
+            record.line
+        )),
+        None => Ok(()),
     }
-    Ok(skipped)
+}
+
+/// The oracle names a canvas passed to `drawImage` by its id, the port the heatmap's `@heatmap`.
+fn name_heatmap(value: Value) -> Value {
+    match value {
+        Value::Array(items) => Value::Array(items.into_iter().map(name_heatmap).collect()),
+        Value::String(s) if s.to_string_lossy().starts_with("@canvas:heatmap-canvas#") => {
+            Value::string("@heatmap")
+        }
+        other => other,
+    }
+}
+
+/// Assigning `CANVAS.width` and then `CANVAS.height` resets the context twice a frame.
+const RESETS_PER_FRAME: usize = 2;
+
+fn compare_canvas(fields: &Fields<'_>, drawing: &Drawing) -> Result<(), String> {
+    let id = fields.string("canvas")?;
+    if id.split('#').next() != Some(drawing.class) {
+        return Err(format!("{id}: the port drew a {}", drawing.class));
+    }
+    let calls = asrs_canvas::trace::encode(&drawing.canvas.calls)
+        .lines()
+        .map(|line| {
+            json::parse(line)
+                .map_err(|e| format!("port trace line {line}: {e:?}"))
+                .and_then(|json| Value::from_json(&json).map_err(|e| e.0))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    for (key, value) in [
+        (
+            "frame",
+            Value::number((drawing.frames * RESETS_PER_FRAME) as f64),
+        ),
+        ("width", Value::number(f64::from(drawing.canvas.width))),
+        ("height", Value::number(f64::from(drawing.canvas.height))),
+        ("calls", Value::Array(calls)),
+    ] {
+        let recorded = fields.value(key).map_err(|e| e.0)?;
+        let recorded = name_heatmap(recorded);
+        if let Some(report) = asrs_parity::diff::report(&recorded, &value) {
+            return Err(format!("line {} {id} {key}: {report}", fields.line()));
+        }
+    }
+    Ok(())
 }
 
 fn spec_files() -> Vec<(PathBuf, String)> {
@@ -3102,15 +3532,15 @@ fn dom_tabs_fixtures() {
     let specs = spec_files();
     assert!(!specs.is_empty(), "no dom/tabs specs");
     let mut failures = Vec::new();
-    let mut skipped = 0;
+    let mut compared = 0;
     for (spec, id) in &specs {
         match compare(spec, id) {
-            Ok(n) => skipped += n,
+            Ok(n) => compared += n,
             Err(e) => failures.push(format!("{id}: {e}")),
         }
     }
     eprintln!(
-        "dom/tabs: {} fixtures, {skipped} records skipped for other layers",
+        "dom/tabs: {} fixtures, {compared} records compared",
         specs.len()
     );
     assert!(failures.is_empty(), "{}", failures.join("\n\n"));

@@ -28,6 +28,7 @@ use asrs_ui::input::{Slider, SliderEvent, SliderStyle, paint_in_rounded};
 use asrs_ui::parity::probed;
 use asrs_ui::text::{self, TextStyle, WhiteSpace};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, FONT_SIZE, IconTint, chains};
+use asrs_ui::tooltip::titled;
 
 use super::frame::{FrameHost, HubFrame};
 use super::large_table::symbol;
@@ -76,6 +77,14 @@ impl Source {
             Source::Local => "video-local",
             Source::YouTube => "video-youtube",
             Source::Tba => "video-tba",
+        }
+    }
+
+    fn title(self) -> &'static str {
+        match self {
+            Source::Local => "Open local video file",
+            Source::YouTube => "Paste YouTube video URL",
+            Source::Tba => "Download match video from The Blue Alliance",
         }
     }
 
@@ -138,6 +147,19 @@ impl Control {
             Control::SkipForward => "video-skip-forward",
             Control::Lock => "video-lock",
             Control::Unlock => "video-unlock",
+        }
+    }
+
+    fn title(self) -> &'static str {
+        match self {
+            Control::SkipBack => "Go back 5 seconds",
+            Control::FrameBack => "Previous frame",
+            Control::Play => "Play video",
+            Control::Pause => "Pause video",
+            Control::FrameForward => "Next frame",
+            Control::SkipForward => "Go forward 5 seconds",
+            Control::Lock => "Lock video timeline synchronization",
+            Control::Unlock => "Unlock video timeline synchronization",
         }
     }
 
@@ -829,6 +851,7 @@ impl<H: FrameHost> HubFrame<H> {
                 }
             };
             let mut button = IconButton::new((source.id(), key), symbol(source.icon()))
+                .title(source.title())
                 .size(
                     (snap(rect[0] + rect[2]) - snap(rect[0])) as f32,
                     (snap(rect[1] + rect[3]) - snap(rect[1])) as f32,
@@ -875,6 +898,7 @@ impl<H: FrameHost> HubFrame<H> {
         for (control, rect, id) in shown {
             let place = places.iter().find(|(c, _)| *c == control);
             let mut button = IconButton::new((control.id(), key), symbol(control.icon()))
+                .title(control.title())
                 .size(BUTTON as f32, BUTTON as f32)
                 .subpixel(rect[0] - snap(rect[0]), rect[1] - snap(rect[1]))
                 .translate(0.0, -BUTTON / 2.0)
@@ -913,10 +937,13 @@ impl<H: FrameHost> HubFrame<H> {
             .child(probed("div.video-timeline-container", at(layout.timeline)))
             .child(probed(
                 "input.video-timeline-slider",
-                at(layout.slider)
-                    .tab_group()
-                    .tab_index(SLIDER_ORDER)
-                    .child(slider),
+                titled(
+                    "Video timeline",
+                    at(layout.slider)
+                        .tab_group()
+                        .tab_index(SLIDER_ORDER)
+                        .child(slider),
+                ),
             ))
             .child(marker)
             .child(probed(

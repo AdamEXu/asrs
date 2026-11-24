@@ -36,6 +36,7 @@ use asrs_ui::parity::probed;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, FONT_FAMILY};
+use asrs_ui::tooltip::{titled, untitled};
 
 use super::field_image::{self, FieldImage};
 use super::frame::{FrameHost, HubFrame, SETTINGS_SECTION, wheel_of};
@@ -59,6 +60,8 @@ const SELECT_HEIGHT: f64 = 24.0;
 const SELECT_CHROME: f64 = 4.0 + 1.0 + 15.0 + 2.0;
 const SOURCE_PADDING: f64 = 5.0;
 const ORIENTATION_ICONS: [&str; 2] = ["rotateleft.svg", "rotateright.svg"];
+const ORIENTATION_TITLES: &[&str] = &["Rotate field counter-clockwise", "Rotate field clockwise"];
+const SIZE_TITLES: &[&str] = &["Large robot size", "Medium robot size", "Small robot size"];
 
 /// The settings' rows in document order, as [`focus::section`] has them.
 #[derive(Clone, Copy)]
@@ -774,10 +777,13 @@ impl<H: FrameHost> HubFrame<H> {
         }
         panel = panel.child(probed(
             "select.field-select",
-            local(layout.select)
-                .tab_group()
-                .tab_index(Block::Field as isize)
-                .child(select),
+            titled(
+                "Select field image",
+                local(layout.select)
+                    .tab_group()
+                    .tab_index(Block::Field as isize)
+                    .child(select),
+            ),
         ));
         if let (Some([lx, ly]), Some(width)) = (layout.source, source_width) {
             let (_, h) = text::measure(cx, &source_style(), "Source", scale);
@@ -788,7 +794,14 @@ impl<H: FrameHost> HubFrame<H> {
             // On the select's baseline.
             let top = ly + f64::from(select_baseline(scale, cx) - ascent / scale);
             let r = [lx + SOURCE_PADDING, top - (h - content) / 2.0, width, h];
-            panel = panel.child(
+            let padded = [
+                r[0] - SOURCE_PADDING,
+                top - SOURCE_PADDING,
+                r[2] + 2.0 * SOURCE_PADDING,
+                content + 2.0 * SOURCE_PADDING,
+            ];
+            panel = panel.child(titled("Open field image source URL", local(padded)));
+            panel = panel.child(untitled(
                 local(r)
                     .tab_group()
                     .tab_index(Block::Field as isize)
@@ -813,7 +826,7 @@ impl<H: FrameHost> HubFrame<H> {
                                 snap_remainder(r[1] as f32, scale),
                             ),
                     ),
-            );
+            ));
             if focus.visible {
                 let around = SOURCE_PADDING + LINK_OUTLINE_OFFSET;
                 let outlined = [
@@ -839,13 +852,21 @@ impl<H: FrameHost> HubFrame<H> {
             (
                 "f2d-orientation",
                 orientation,
+                ORIENTATION_TITLES,
                 None,
                 layout.orientation,
                 orientation_input,
             ),
-            ("f2d-size", size, Some(state.size), layout.size, size_input),
+            (
+                "f2d-size",
+                size,
+                SIZE_TITLES,
+                Some(state.size),
+                layout.size,
+                size_input,
+            ),
         ];
-        for (id, segments, selected, r, input) in switchers {
+        for (id, segments, titles, selected, r, input) in switchers {
             let snapped = |v: f64| math::round(v * f64::from(scale)) / f64::from(scale);
             let (x, y) = (snapped(r[0]), snapped(r[1]));
             let entity = entity.clone();
@@ -855,6 +876,7 @@ impl<H: FrameHost> HubFrame<H> {
                     .tab_index(Block::Switchers as isize)
                     .child(
                         SegmentedControl::new((id, key), segments)
+                            .titles(titles)
                             .subpixel((r[0] - x) as f32)
                             .selected(selected)
                             .size(r[2] as f32, r[3] as f32)

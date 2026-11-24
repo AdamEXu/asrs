@@ -27,6 +27,7 @@ use asrs_ui::icon::{Icon, IconFit, IconSource};
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Measurer, Text, TextStyle, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
+use asrs_ui::tooltip::{titled_rtl, untitled};
 
 use super::frame::{FrameHost, HubFrame};
 
@@ -434,6 +435,7 @@ fn item_body(
         body = body.child(fade(
             translated_button(
                 IconButton::new(("sl-type", index), icon)
+                    .title("Edit field configuration")
                     .tint(NO_FILTER)
                     .fit(OBJECT_FIT)
                     .on_click(on(dispatch, ListPointer::TypeClick(index))),
@@ -494,10 +496,13 @@ fn item_body(
             .max_w(px(max as f32))
             .overflow_hidden()
             .child(
-                Text::new(key, key_style())
+                Text::new(key.clone(), key_style())
                     .color(theme.text)
                     .subpixel(text_dx(NAME_LEFT + indent + type_width), 0.0),
-            );
+            )
+            .child(untitled(
+                div().absolute().left_0().right_0().top(px(6.0)).h(px(18.0)),
+            ));
         if !r.available {
             key_box = key_box.child(
                 div()
@@ -509,7 +514,7 @@ fn item_body(
                     .bg(rgb(theme.text)),
             );
         }
-        body = body.child(fade(key_box, hidden));
+        body = body.child(titled_rtl(key, fade(key_box, hidden)));
     }
     if item.preview_shown == Some(true) {
         body = body
@@ -559,6 +564,7 @@ fn item_body(
                 "visibilityoff.svg"
             }),
         )
+        .title(if visible { "Hide field" } else { "Show field" })
         .on_click(on(dispatch, ListPointer::HideClick(index))),
         origin_x,
         width - 40.0 - 2.0 * half,
@@ -566,17 +572,19 @@ fn item_body(
         f64::from(scale),
     ))
     .child(translated_button(
-        IconButton::new(("sl-remove", index), symbol("close.svg")).on_click({
-            let remove = on(dispatch, ListPointer::RemoveClick(index));
-            let item = places.map(|places| places.item.clone());
-            move |event, window, cx| {
-                // The focused button goes with its item, and Tab goes on from there.
-                if let Some(item) = &item {
-                    item.focus(window, cx);
+        IconButton::new(("sl-remove", index), symbol("close.svg"))
+            .title("Remove field")
+            .on_click({
+                let remove = on(dispatch, ListPointer::RemoveClick(index));
+                let item = places.map(|places| places.item.clone());
+                move |event, window, cx| {
+                    // The focused button goes with its item, and Tab goes on from there.
+                    if let Some(item) = &item {
+                        item.focus(window, cx);
+                    }
+                    remove(event, window, cx);
                 }
-                remove(event, window, cx);
-            }
-        }),
+            }),
         origin_x,
         width - 15.0 - 2.0 * half,
         half,
@@ -789,21 +797,24 @@ impl<H: FrameHost> HubFrame<H> {
             }))
         };
         let half = f64::from(BUTTON) / 2.0;
-        let corner = |right: f64, id: &'static str, icon: Symbol, fit: IconFit, event| {
-            translated_button(
-                IconButton::new((id, uuid_hash(&uuid)), icon)
-                    .fit(fit)
-                    .on_click(on(&dispatch, event)),
-                left,
-                inner - right - 2.0 * half,
-                half,
-                scale,
-            )
-        };
+        let corner =
+            |right: f64, id: &'static str, title: &'static str, icon: Symbol, fit, event| {
+                translated_button(
+                    IconButton::new((id, uuid_hash(&uuid)), icon)
+                        .fit(fit)
+                        .title(title)
+                        .on_click(on(&dispatch, event)),
+                    left,
+                    inner - right - 2.0 * half,
+                    half,
+                    scale,
+                )
+            };
         if list.edit_button {
             element = element.child(corner(
                 15.0,
                 "sl-edit",
+                "Edit settings",
                 symbol("morehoriz.svg"),
                 IconFit::BUTTON,
                 ListPointer::EditClick,
@@ -817,6 +828,7 @@ impl<H: FrameHost> HubFrame<H> {
                 .child(corner(
                     15.0,
                     "sl-clear",
+                    "Clear all fields",
                     symbol("delete.svg"),
                     clear_fit,
                     ListPointer::ClearClick,
@@ -824,6 +836,7 @@ impl<H: FrameHost> HubFrame<H> {
                 .child(corner(
                     40.0,
                     "sl-help",
+                    "Help",
                     symbol("help.svg"),
                     IconFit::BUTTON,
                     ListPointer::HelpClick,

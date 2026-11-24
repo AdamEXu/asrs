@@ -27,6 +27,9 @@ use asrs_ui::platform::dialog::{Reply, Script};
 use asrs_ui::platform::{self, EditCommand};
 use asrs_ui::selection::colors::ForcedActive;
 use asrs_ui::theme::ThemeSource;
+use asrs_ui::tooltip::{ForcedHost, Host};
+
+mod tooltips;
 
 use super::capture::{self, Probes, Shot};
 use super::{
@@ -52,7 +55,8 @@ use crate::windows::{self, ScriptedFrame, WindowId, WindowKind, Windows};
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 [--scale 1|2]... [--theme light|dark]... [--inputs <dir>] [--probes <probes.json>] \
-[--bundled-assets <dir>] [--licenses <file>] [--work-area [<scale>:]<x>,<y>]... [--robot <port>]
+[--bundled-assets <dir>] [--licenses <file>] [--work-area [<scale>:]<x>,<y>]... [--robot <port>] \
+[--tooltips <reference>]
 
 --inputs holds the logs `app:<name>` opens (<name>.wpilog, as the Electron driver writes them
 under inputs/); --probes defaults to probes.json beside the scenario directory;
@@ -60,7 +64,9 @@ under inputs/); --probes defaults to probes.json beside the scenario directory;
 automatic folders of each variant's userData/; --licenses is the licenses.json the Licenses window
 lists; --work-area is the primary display's work area origin on the Electron driver's host, which
 places its window 16 px inside it (default 0,0), at one scale or at every scale;
---robot is where the scenario's robot listens on 127.0.0.1; --no-captures renders no captures.";
+--robot is where the scenario's robot listens on 127.0.0.1; --no-captures renders no captures;
+--tooltips writes the tooltips (<name>.tooltips.json) at each capture the reference has, as the
+Electron driver does, and captures nothing else.";
 
 /// A tick of the page: one animation frame and this much executor time, which the page's `Date`
 /// and its scroll sensors' frame clock both run on.
@@ -153,6 +159,7 @@ struct Options {
     work_areas: Vec<(Option<u32>, (f64, f64))>,
     robot: Option<u16>,
     no_captures: bool,
+    tooltips: Option<PathBuf>,
 }
 
 fn options(args: &[String]) -> Result<Options, String> {
@@ -161,6 +168,7 @@ fn options(args: &[String]) -> Result<Options, String> {
     let mut work_areas = Vec::new();
     let mut robot = None;
     let mut no_captures = false;
+    let mut tooltips = None;
     let (mut scales, mut themes) = (Vec::new(), Vec::new());
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -176,6 +184,7 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--licenses" => licenses = Some(PathBuf::from(value()?)),
             "--no-captures" => no_captures = true,
             "--robot" => robot = Some(value()?.parse().map_err(|_| "--robot is a port")?),
+            "--tooltips" => tooltips = Some(PathBuf::from(value()?)),
             "--work-area" => {
                 let text = value()?;
                 let (scale, at) = match text.split_once(':') {
@@ -206,6 +215,7 @@ fn options(args: &[String]) -> Result<Options, String> {
         work_areas,
         robot,
         no_captures,
+        tooltips,
     })
 }
 
@@ -260,6 +270,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     headless.context().update(|cx| {
         windows::init(cx);
         cx.set_global(ForcedActive(false));
+        cx.set_global(ForcedHost(Host::Native));
     });
     if let Some(file) = options.licenses.clone() {
         headless
@@ -273,6 +284,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
         None if scenario.robot => return Err(format!("{name} needs --robot")),
         None => {}
     }
+    let tooltips = match &options.tooltips {
+        Some(file) => Some(capture_names(file)?),
+        None => None,
+    };
     for &scale in &scenario.scales {
         if !options.scales.is_empty() && !options.scales.contains(&scale) {
             continue;
@@ -305,6 +320,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 saved: Vec::new(),
                 exceptions: Rc::default(),
                 pressed: None,
+                pointer: (0.0, 0.0),
+                tooltips: tooltips.as_deref(),
             };
             variant
                 .run()
@@ -312,6 +329,18 @@ pub fn run(args: &[String]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// The captures of a tooltip reference.
+fn capture_names(file: &Path) -> Result<Vec<String>, String> {
+    let text = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
+    let reference =
+        asrs_js::json::parse_str(&text).map_err(|e| format!("{}: {e:?}", file.display()))?;
+    let captures = reference.as_object().ok_or("the reference is no object")?;
+    Ok(captures
+        .iter()
+        .map(|(name, _)| name.to_string_lossy())
+        .collect())
 }
 
 /// The `save-state` messages the hub has sent main.
@@ -343,6 +372,9 @@ struct Variant<'a> {
     exceptions: Rc<RefCell<Vec<String>>>,
     /// The button a `mouse down` left pressed, which moves carry until `mouse up`.
     pressed: Option<MouseButton>,
+    pointer: (f64, f64),
+    /// The captures that record the tooltips, where none is taken.
+    tooltips: Option<&'a [String]>,
 }
 
 /// `{...scenario.prefs, theme}`, the `prefs.json` the Electron driver seeds.
@@ -871,6 +903,7 @@ impl Variant<'_> {
         click_count: usize,
         names: &[String],
     ) -> Result<(), String> {
+        self.pointer = (x, y);
         let modifiers = modifiers(names)?;
         let position = point(px(x as f32), px(y as f32));
         let button = match button {
@@ -1091,7 +1124,15 @@ impl Variant<'_> {
                 name,
                 probes,
                 masks,
-            } => self.capture(name, probes, masks)?,
+            } => {
+                if let Some(names) = self.tooltips {
+                    if names.contains(name) {
+                        self.capture_tooltips(name)?;
+                    }
+                } else {
+                    self.capture(name, probes, masks)?;
+                }
+            }
         }
         if matches!(
             action,

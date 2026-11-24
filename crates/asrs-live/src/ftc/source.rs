@@ -66,34 +66,11 @@ impl BasicVarType {
     }
 }
 
-/// The `WebSocket` calls the source makes; every [`Nt4Transport`] satisfies them.
-pub trait FtcTransport {
-    fn ws_open(&mut self, url: &str) -> Result<SocketId, Thrown>;
-    fn ws_ready_state(&self, id: SocketId) -> ReadyState;
-    fn ws_send(&mut self, id: SocketId, text: String) -> Result<(), Thrown>;
-    fn ws_close(&mut self, id: SocketId);
-}
-
-impl<T: Nt4Transport> FtcTransport for T {
-    fn ws_open(&mut self, url: &str) -> Result<SocketId, Thrown> {
-        Nt4Transport::ws_open(self, url, &[])
-    }
-    fn ws_ready_state(&self, id: SocketId) -> ReadyState {
-        Nt4Transport::ws_ready_state(self, id)
-    }
-    fn ws_send(&mut self, id: SocketId, text: String) -> Result<(), Thrown> {
-        Nt4Transport::ws_send(self, id, WsMessage::Text(text))
-    }
-    fn ws_close(&mut self, id: SocketId) {
-        Nt4Transport::ws_close(self, id)
-    }
-}
-
 /// The environment the source's callbacks run against: the hub's timer queue, the websocket
 /// transport and `Date`.
 pub struct FtcContext<'a> {
     pub timers: &'a mut TimerQueue,
-    pub net: &'a mut dyn FtcTransport,
+    pub net: &'a mut dyn Nt4Transport,
     pub clock: &'a dyn Clock,
 }
 
@@ -175,15 +152,14 @@ impl FtcSource {
             self.tunable_keys_types.clear();
             // A WebSocket constructor failure would leave the old socket in place; the scripted
             // transport cannot produce one, but keep the same shape.
-            if let Ok(id) = cx.net.ws_open(&self.url) {
+            if let Ok(id) = cx.net.ws_open(&self.url, &[]) {
                 self.socket = Some(id);
             }
         } else if let Some(id) = self.socket
             && cx.net.ws_ready_state(id) == ReadyState::Open
         {
-            let _ = cx
-                .net
-                .ws_send(id, "{\"type\":\"GET_ROBOT_STATUS\"}".to_owned());
+            let status = WsMessage::Text("{\"type\":\"GET_ROBOT_STATUS\"}".to_owned());
+            let _ = cx.net.ws_send(id, status);
         }
     }
 
@@ -466,7 +442,7 @@ impl FtcSource {
             .map_err(|e| Thrown::error("SyntaxError", e))?
             .unwrap_or_default();
         match self.socket {
-            Some(socket) => cx.net.ws_send(socket, message),
+            Some(socket) => cx.net.ws_send(socket, WsMessage::Text(message)),
             None => Err(Thrown::type_error(
                 "Cannot read properties of null (reading 'send')",
             )),

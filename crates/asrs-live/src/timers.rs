@@ -8,7 +8,8 @@
 //!   `setInterval` call on every repeat, because its repeats stay on the grid of its first due
 //!   time, which real time puts before any timer created later with the same nominal due time.
 //! - A repeating timer is rescheduled before its callback runs, drift free: when it fires late
-//!   it fires once and the next fire returns to its grid.
+//!   it fires once and the next fire returns to its grid, at least a 20th of its period later
+//!   (one of 250 ms fired 235 ms late fires again after 15 ms, 240 ms late after 260 ms).
 //!
 //! - Timers carry the HTML timer nesting level. A timer created while a timer task runs at
 //!   level n gets level n + 1 (one created by any other task gets 1), an interval's level rises
@@ -23,6 +24,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Instant;
 
+use asrs_js::math::min2;
 use asrs_js::number::to_int32;
 use asrs_js::time::Clock;
 
@@ -47,6 +49,7 @@ pub struct TimerQueue {
     next_id: u32,
     timers: Vec<Timer>,
     running_level: u32,
+    idle_period: Option<f64>,
 }
 
 const MIN_DELAY_MS: f64 = 4.0;
@@ -65,7 +68,13 @@ impl TimerQueue {
             next_id: 1,
             timers: Vec::new(),
             running_level: 0,
+            idle_period: None,
         }
+    }
+
+    /// The page has an idle period this often. Without one, idle callbacks run at their timeout.
+    pub fn set_idle_period(&mut self, period: Option<f64>) {
+        self.idle_period = period;
     }
 
     pub fn now(&self) -> f64 {
@@ -109,6 +118,13 @@ impl TimerQueue {
     /// nesting level 0. Shares the timer id space and the due-time order.
     pub fn post_delayed_task(&mut self, delay: f64) -> TimerId {
         self.add(delay, false, false)
+    }
+
+    /// `requestIdleCallback(callback, { timeout })`. A page that draws frames runs one that asks
+    /// for itself again once per frame (Electron 39).
+    pub fn request_idle_callback(&mut self, timeout: f64) -> TimerId {
+        let delay = self.idle_period.map_or(timeout, |p| min2(p, timeout));
+        self.post_delayed_task(delay)
     }
 
     /// Call before dispatching any task that is not a timer (a network event, an IPC message,
@@ -155,7 +171,8 @@ impl TimerQueue {
         self.running_level = timer.level;
         match timer.repeat {
             Some(interval) => {
-                timer.due = now + (interval - (now - timer.due) % interval);
+                let late = now - timer.due + interval / 20.0;
+                timer.due += (late / interval).ceil() * interval;
                 timer.level += 1;
             }
             None => {
@@ -285,6 +302,30 @@ mod tests {
         assert_eq!(q.fire_next(), Some(id));
         assert_eq!(q.fire_next(), None);
         assert_eq!(q.next_due(), Some(128.0));
+    }
+
+    /// Recorded in Electron 39 with a blocked renderer thread.
+    #[test]
+    fn interval_fired_at_the_end_of_its_period_skips_the_next_one() {
+        for (period, late, next) in [
+            (250.0, 0.0, 250.0),
+            (250.0, 200.0, 250.0),
+            (250.0, 235.0, 250.0),
+            (250.0, 240.0, 500.0),
+            (250.0, 248.0, 500.0),
+            (250.0, 252.0, 500.0),
+            (250.0, 480.0, 500.0),
+            (250.0, 495.0, 750.0),
+            (50.0, 46.0, 50.0),
+            (50.0, 48.5, 100.0),
+            (50.0, 60.0, 100.0),
+        ] {
+            let (clock, mut q) = queue(0.0);
+            let id = q.set_interval(period);
+            clock.set(period + late);
+            assert_eq!(q.fire_next(), Some(id));
+            assert_eq!(q.next_due(), Some(period + next), "{period}, {late} late");
+        }
     }
 
     #[test]

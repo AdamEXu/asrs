@@ -22,6 +22,9 @@ mod js_math;
 #[path = "../../asrs-cli/src/js_msgpack.rs"]
 #[allow(dead_code)]
 mod js_msgpack;
+#[path = "../../asrs-cli/src/js_ops.rs"]
+#[allow(dead_code)]
+mod js_ops;
 #[path = "../../asrs-cli/src/js_regex.rs"]
 #[allow(dead_code)]
 mod js_regex;
@@ -59,7 +62,7 @@ mod tabs_console {
 }
 
 use std::cell::{Cell, Ref, RefCell};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::rc::Rc;
 
 use asrs_canvas::text::FixedAdvance;
@@ -74,13 +77,16 @@ use asrs_model::preferences::{Preferences, Timestamps};
 use asrs_model::selection::{Selection, SelectionMode, TimeSupplier};
 use asrs_model::source_list::Undisplayed;
 use asrs_model::source_list::{
-    Env, ItemView, Length, ListButton, ListInput, ListPointer, Rect, SourceList, SourceListDom,
+    ClearPrompt, Env, ItemView, Length, ListButton, ListInput, ListPointer, Rect, SourceList,
+    SourceListDom, TypePrompt,
 };
 use asrs_model::source_list_config::{
-    SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
+    SourceListConfig, SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
 };
 use asrs_model::tab_controller::TabController;
 use asrs_parity::Value;
+use asrs_parity::json::Json;
+use asrs_parity::tally::Tally;
 use asrs_parity::vectors::{Record, load, vectors_dir};
 use asrs_tabs::cx::TabCx;
 use asrs_tabs::line_graph::{
@@ -499,6 +505,98 @@ fn encode(v: &JsValue) -> String {
     js_json::from_js(v).encode()
 }
 
+/// Kinds no replay compares whole for these vectors (#397), with the suite that compares the same
+/// code on its own.
+const COVERED: [(&str, &str); 6] = [
+    ("capture", "asrs-hub's dom_tabs"),
+    (OTHER_LISTS, "asrs-model's source_list_vectors"),
+    (
+        "state",
+        "the line graph controllers here, the rest of it tabs_dom",
+    ),
+    (
+        "eval",
+        "the line graphs' active fields here, the rest of the set dom_tabs",
+    ),
+    ("selection", "asrs-hub's selection_traces"),
+    ("main:show", "asrs-hub's dom_tabs"),
+];
+
+const OTHER_LISTS: &str = "sl of another tab";
+
+/// The ids of the default Field2d and Field3d tabs' source lists.
+fn other_lists(records: &[Record]) -> Result<BTreeSet<usize>, String> {
+    let mut ours = BTreeSet::new();
+    for record in records {
+        if record.string("lg").as_deref() == Some("create") {
+            for uuid in js(record, "uuids")?.as_array().ok_or("uuids")? {
+                ours.insert(text(uuid)?);
+            }
+        }
+    }
+    let mut others = BTreeSet::new();
+    for record in records.iter().filter(|r| r.field("create").is_some()) {
+        if !ours.contains(&text(member(&js(record, "create")?, "uuid")?)?) {
+            others.insert(index(&js(record, "sl")?)?);
+        }
+    }
+    Ok(others)
+}
+
+fn kind_of(record: &Record, others: &BTreeSet<usize>) -> String {
+    for key in ["lg", "main"] {
+        if let Some(name) = record.string(key) {
+            return format!("{key}:{name}");
+        }
+    }
+    if let Ok(id) = js(record, "sl").and_then(|id| index(&id))
+        && others.contains(&id)
+    {
+        return OTHER_LISTS.to_owned();
+    }
+    match &record.json {
+        Json::Object(pairs) if !pairs.is_empty() => pairs[0].0.to_string_lossy(),
+        _ => panic!("line {}: the record has no first key", record.line),
+    }
+}
+
+fn strings(list: &[JsString]) -> JsValue {
+    JsValue::Array(list.iter().cloned().map(JsValue::String).collect())
+}
+
+fn member<'a>(value: &'a JsValue, key: &str) -> Result<&'a JsValue, String> {
+    value.get(key).ok_or_else(|| format!("no {key}"))
+}
+
+/// `TabType.LineGraph`.
+const LINE_GRAPH: JsValue = JsValue::Number(1.0);
+
+fn rect_js(rect: Rect) -> JsValue {
+    let mut o = JsObject::new();
+    o.insert("x", JsValue::Number(rect.x));
+    o.insert("y", JsValue::Number(rect.y));
+    o.insert("width", JsValue::Number(rect.width));
+    o.insert("height", JsValue::Number(rect.height));
+    JsValue::Object(o)
+}
+
+/// What `list_cx` turns a prompt into, for `host.sent`.
+fn type_prompt_message(prompt: &TypePrompt) -> NamedMessage<HubToMain> {
+    let mut o = JsObject::new();
+    o.insert("uuid", JsValue::string(&prompt.uuid));
+    o.insert("config", prompt.config.to_js());
+    o.insert("state", prompt.state.to_js());
+    o.insert("rect", rect_js(prompt.rect));
+    NamedMessage::new(HubToMain::SourceListTypePrompt, JsValue::Object(o))
+}
+
+fn clear_prompt_message(prompt: &ClearPrompt) -> NamedMessage<HubToMain> {
+    let mut o = JsObject::new();
+    o.insert("uuid", JsValue::string(&prompt.uuid));
+    o.insert("rect", rect_js(prompt.rect));
+    NamedMessage::new(HubToMain::SourceListClearPrompt, JsValue::Object(o))
+}
+
 fn error_text(e: &JsError) -> String {
     if e.name.is_empty() {
         e.message.clone()
@@ -626,12 +724,23 @@ struct Stats {
 struct Harness {
     host: Host,
     realm: JsRealm,
+    others: BTreeSet<usize>,
     controllers: Vec<LineGraphController>,
     previews: Vec<VecDeque<Preview>>,
     list_uuids: HashMap<usize, String>,
+    /// `create` records seen before their controller's, by list uuid.
+    creates: HashMap<String, JsValue>,
     bound: HashMap<String, (usize, ListId)>,
     pending_prompt: Option<JsValue>,
     pending_errors: VecDeque<String>,
+    /// What the previous record threw, which the port's throw equalled.
+    last_threw: Option<String>,
+    /// The commands rendered since the last capture, by controller.
+    rendered: BTreeMap<usize, JsValue>,
+    /// What `saveState` and `getActiveFields` returned since the last capture read them.
+    saved: Vec<JsValue>,
+    active: Vec<Vec<JsString>>,
+    tabs: usize,
     painters: Vec<Painter>,
     clock: Rc<Cell<f64>>,
     text: Rc<RefCell<FixedAdvance>>,
@@ -655,8 +764,9 @@ fn lg_id(record: &Record) -> Result<usize, String> {
 }
 
 impl Harness {
-    fn new() -> Harness {
+    fn new(others: BTreeSet<usize>) -> Harness {
         Harness {
+            others,
             host: Host {
                 log: RefCell::new(Log::new(true)),
                 memory: JsObject::new(),
@@ -671,13 +781,27 @@ impl Harness {
             controllers: Vec::new(),
             previews: Vec::new(),
             list_uuids: HashMap::new(),
+            creates: HashMap::new(),
             bound: HashMap::new(),
             pending_prompt: None,
             pending_errors: VecDeque::new(),
+            last_threw: None,
+            rendered: BTreeMap::new(),
+            saved: Vec::new(),
+            active: Vec::new(),
+            tabs: 0,
             painters: Vec::new(),
             clock: Rc::new(Cell::new(0.0)),
             text: Rc::new(RefCell::new(FixedAdvance)),
             stats: Stats::default(),
+        }
+    }
+
+    /// Counts a record as compared, unless its kind is [`COVERED`].
+    fn mark(&self, tally: &mut Tally, record: &Record) {
+        let kind = kind_of(record, &self.others);
+        if !COVERED.iter().any(|(k, _)| *k == kind) {
+            tally.compared(&kind);
         }
     }
 
@@ -689,10 +813,6 @@ impl Harness {
             log_run::apply(&mut log, &mut self.realm, op, &mut results)?;
         }
         Ok(())
-    }
-
-    fn list_of(&self, sl: usize) -> Option<(usize, ListId)> {
-        self.bound.get(self.list_uuids.get(&sl)?).copied()
     }
 
     fn set_context(&mut self, record: &Record) -> Result<(), String> {
@@ -733,7 +853,13 @@ impl Harness {
         }
     }
 
-    fn bracket(&mut self, record: &Record, inner: Vec<Record>, end: &Record) -> Result<(), String> {
+    fn bracket(
+        &mut self,
+        record: &Record,
+        inner: Vec<Record>,
+        end: &Record,
+        tally: &mut Tally,
+    ) -> Result<(), String> {
         let id = lg_id(record)?;
         let name = record.string("lg").unwrap_or_default();
         self.set_context(record)?;
@@ -796,7 +922,7 @@ impl Harness {
         self.stats.calls += 1;
         same_error(&name, threw(end), result.err().map(|e| error_text(&e)))?;
         for r in rest {
-            self.record(r)?;
+            self.record(r, tally)?;
         }
         Ok(())
     }
@@ -969,16 +1095,24 @@ impl Harness {
             }
             "promptType" => {
                 let i = index(at(&args, 1))?;
+                let mut prompt = None;
                 controller.with_list(list, |l, _| {
-                    l.prompt_type(Undisplayed::dom(), i);
+                    prompt = l.prompt_type(Undisplayed::dom(), i);
                 });
+                if let Some(prompt) = prompt {
+                    host.sent.push(type_prompt_message(&prompt));
+                }
                 None
             }
             "contextMenu" => {
                 let (i, x, y) = (index(at(&args, 1))?, num(at(&args, 2))?, num(at(&args, 3))?);
+                let mut prompt = None;
                 controller.with_list(list, |l, _| {
-                    l.context_menu(i, x, y);
+                    prompt = l.context_menu(i, x, y);
                 });
+                if let Some(prompt) = prompt {
+                    host.sent.push(type_prompt_message(&prompt));
+                }
                 None
             }
             "typeResponse" => {
@@ -1014,9 +1148,13 @@ impl Harness {
                 None
             }
             "clearClick" => {
+                let mut prompt = None;
                 controller.with_list(list, |l, _| {
-                    l.request_clear(Undisplayed::dom());
+                    prompt = Some(l.request_clear(Undisplayed::dom()));
                 });
+                if let Some(prompt) = prompt {
+                    host.sent.push(clear_prompt_message(&prompt));
+                }
                 None
             }
             "clearResponse" => {
@@ -1059,6 +1197,7 @@ impl Harness {
             .clone()
             .ok_or("upstream rendered a command the port never built")?;
         let mut log = WriteLog::default();
+        self.rendered.insert(id, command.to_js());
         let result =
             painter
                 .renderer
@@ -1219,6 +1358,7 @@ impl Harness {
         record: &Record,
         kind: &str,
         records: &mut std::slice::Iter<'_, Record>,
+        tally: &mut Tally,
     ) -> Result<(), String> {
         match kind {
             "create" => {
@@ -1254,6 +1394,9 @@ impl Harness {
                     ),
                     command: None,
                 });
+                for uuid in js(record, "uuids")?.as_array().ok_or("uuids")? {
+                    self.compare_create(&text(uuid)?)?;
+                }
                 Ok(())
             }
             "command" => self.command(record),
@@ -1279,24 +1422,22 @@ impl Harness {
                 let id = lg_id(record)?;
                 self.stats.saves += 1;
                 let expected = encode(&js(record, "value")?);
-                let actual = encode(&TabController::save_state(
-                    &self.controllers[id],
-                    &self.host,
-                ));
+                let state = TabController::save_state(&self.controllers[id], &self.host);
+                let actual = encode(&state);
                 if expected != actual {
                     return Err(format!(
                         "saved state\n upstream {expected}\n port     {actual}"
                     ));
                 }
+                self.saved.push(state);
                 Ok(())
             }
             "activeFields" => {
                 let id = lg_id(record)?;
                 let expected = encode(&js(record, "value")?);
                 let fields = TabController::active_fields(&self.controllers[id], &self.host);
-                let actual = encode(&JsValue::Array(
-                    fields.into_iter().map(JsValue::String).collect(),
-                ));
+                let actual = encode(&strings(&fields));
+                self.active.push(fields);
                 if expected != actual {
                     return Err(format!(
                         "active fields\n upstream {expected}\n port     {actual}"
@@ -1361,6 +1502,7 @@ impl Harness {
                     let next = records
                         .next()
                         .ok_or_else(|| format!("{name} never ended"))?;
+                    self.mark(tally, next);
                     if next.string("lg").as_deref() == Some(name)
                         && next.string("phase").as_deref() == Some("end")
                         && next.field("id").cloned() == id
@@ -1369,23 +1511,123 @@ impl Harness {
                     }
                     inner.push(next.clone());
                 };
-                self.bracket(record, inner, end)
+                self.bracket(record, inner, end, tally)?;
+                self.last_threw = threw(end);
+                Ok(())
             }
         }
     }
 
-    fn record(&mut self, record: &Record) -> Result<(), String> {
+    /// A `create` record against the list of the controller that owns it, once both are known.
+    fn compare_create(&mut self, uuid: &str) -> Result<(), String> {
+        let Some((ctrl, list)) = self.bound.get(uuid).copied() else {
+            return Ok(());
+        };
+        let Some(create) = self.creates.remove(uuid) else {
+            return Ok(());
+        };
+        let list = self.controllers[ctrl].list(list);
+        let config =
+            SourceListConfig::from_js(member(&create, "config")?).ok_or("create config")?;
+        // The recorder first sees a list before or after its constructor titles it; the dumps
+        // compare the title.
+        let expected = (&config, member(&create, "editButton")?);
+        let edit_button = list.has_edit_button().to_js();
+        let actual = (list.config(), &edit_button);
+        if expected != actual {
+            return Err(format!(
+                "create\n upstream {expected:?}\n port     {actual:?}"
+            ));
+        }
+        Ok(())
+    }
+
+    /// The command the last frame of a tab drew; its `index`, `title` and `uuid` are `Tabs`'s.
+    fn captured_command(&mut self, record: &Record) -> Result<(), String> {
+        if *member(&js(record, "command")?, "type")? != LINE_GRAPH {
+            return Err("a command of another tab".to_owned());
+        }
+        let expected = encode(&js(record, "value")?);
+        let drawn = self.rendered.iter().find(|(_, c)| encode(c) == expected);
+        match drawn.map(|(id, _)| *id) {
+            Some(id) => {
+                self.rendered.remove(&id);
+                Ok(())
+            }
+            None => Err(format!(
+                "no controller's last rendered command is {expected}"
+            )),
+        }
+    }
+
+    /// The controllers' part of `tabs.saveState()`, which called `saveState` on each in turn.
+    fn captured_state(&mut self, record: &Record) -> Result<(), String> {
+        let state = js(record, "state")?;
+        let tabs = member(member(&state, "tabs")?, "tabs")?;
+        let mut expected = Vec::new();
+        for tab in tabs.as_array().ok_or("tabs is a list")? {
+            if *member(tab, "type")? == LINE_GRAPH {
+                expected.push(member(tab, "controller")?.clone());
+            }
+        }
+        self.tabs = expected.len();
+        let saved = std::mem::take(&mut self.saved);
+        let last = &saved[saved.len().saturating_sub(self.tabs)..];
+        let (expected, actual) = (
+            encode(&JsValue::Array(expected)),
+            encode(&JsValue::Array(last.to_vec())),
+        );
+        if expected != actual {
+            return Err(format!(
+                "captured controllers\n upstream {expected}\n port     {actual}"
+            ));
+        }
+        Ok(())
+    }
+
+    /// `[...window.tabs.getActiveFields()]`: a set over the tabs in turn, the line graphs first,
+    /// then the log's mode keys.
+    fn captured_active_fields(&mut self, record: &Record) -> Result<(), String> {
+        let expr = record.string("eval").ok_or("eval is a string")?;
+        if expr != "[...window.tabs.getActiveFields()]" {
+            return Err(format!("eval {expr} is not modeled"));
+        }
+        let active = std::mem::take(&mut self.active);
+        let mut fields: Vec<JsString> = Vec::new();
+        for field in active[active.len().saturating_sub(self.tabs)..]
+            .iter()
+            .flatten()
+        {
+            if !fields.contains(field) {
+                fields.push(field.clone());
+            }
+        }
+        let expected = js(record, "value")?;
+        let recorded = expected.as_array().ok_or("eval is a list")?;
+        let head = JsValue::Array(recorded.iter().take(fields.len()).cloned().collect());
+        let (expected, actual) = (encode(&head), encode(&strings(&fields)));
+        if expected != actual {
+            return Err(format!(
+                "active fields of every tab\n upstream {expected}\n port     {actual}"
+            ));
+        }
+        Ok(())
+    }
+
+    fn record(&mut self, record: &Record, tally: &mut Tally) -> Result<(), String> {
         let mut empty = [].iter();
-        self.record_in(record, &mut empty)
+        self.record_in(record, &mut empty, tally)
     }
 
     fn record_in(
         &mut self,
         record: &Record,
         records: &mut std::slice::Iter<'_, Record>,
+        tally: &mut Tally,
     ) -> Result<(), String> {
+        let previous_threw = std::mem::replace(&mut self.last_threw, threw(record));
         if let Some(kind) = record.string("lg") {
-            return self.handle_lg(record, &kind, records);
+            return self.handle_lg(record, &kind, records, tally);
         }
         if let Some(ops) = record.field("slLog") {
             let ops = Value::from_json(ops).map_err(|e| e.0)?;
@@ -1395,6 +1637,16 @@ impl Harness {
             let value = js(record, "slTypeMemory")?;
             self.host.memory = SourceListTypeMemoryEntry::memory_from_js(&value)
                 .ok_or("slTypeMemory does not parse")?;
+            return Ok(());
+        }
+        if record.field("slMemory").is_some() {
+            let expected = encode(&js(record, "slMemory")?);
+            let actual = encode(&self.host.memory.to_js());
+            if expected != actual {
+                return Err(format!(
+                    "type memory\n upstream {expected}\n port     {actual}"
+                ));
+            }
             return Ok(());
         }
         if record.string("main").as_deref() == Some("ask-edit-axis") {
@@ -1415,6 +1667,40 @@ impl Harness {
         if record.string("main").as_deref() == Some("update-preferences") {
             return self.help_timer(record);
         }
+        if let Some(name) = record.string("main")
+            && matches!(
+                name.as_str(),
+                "source-list-type-prompt" | "source-list-clear-prompt"
+            )
+        {
+            let want = if name == "source-list-type-prompt" {
+                HubToMain::SourceListTypePrompt
+            } else {
+                HubToMain::SourceListClearPrompt
+            };
+            // `rect` comes from layout reads the `Undisplayed` dom answers as zero.
+            let mut expected = js(record, "data")?;
+            expected.as_object_mut().and_then(|o| o.remove("rect"));
+            let pos = self
+                .host
+                .sent
+                .iter()
+                .position(|m| m.name == want)
+                .ok_or_else(|| format!("upstream sent a {name}, the port did not"))?;
+            let mut actual = self.host.sent.remove(pos).data;
+            actual.as_object_mut().and_then(|o| o.remove("rect"));
+            let (expected, actual) = (encode(&expected), encode(&actual));
+            if expected != actual {
+                return Err(format!("{name}\n upstream {expected}\n port     {actual}"));
+            }
+            return Ok(());
+        }
+        if let Some(name) = record.string("main") {
+            return match name.as_str() {
+                "show" => Ok(()),
+                other => Err(format!("the main message {other} is not modeled here")),
+            };
+        }
         if record.string("exception").as_deref() == Some("event") {
             let error = record.string("error").unwrap_or_default();
             return match self.pending_errors.pop_front() {
@@ -1423,6 +1709,18 @@ impl Harness {
                     "event exception: upstream {error:?}, port {port:?}"
                 )),
             };
+        }
+        if let Some(kind) = record.string("exception") {
+            let error = record.string("error").ok_or("an exception has an error")?;
+            let thrown = previous_threw
+                .ok_or_else(|| format!("{kind} {error:?} after a call that threw nothing"))?;
+            // Upstream throws some strings, and `name` and `message` of a string are undefined.
+            let reported = match kind.as_str() {
+                "unhandledRejection" if !thrown.contains("Error: ") => "undefined: undefined",
+                "unhandledRejection" | "requestAnimationFrame" => &thrown,
+                other => return Err(format!("exception in {other} is not modeled")),
+            };
+            return same_error(&kind, Some(error), Some(reported.to_owned()));
         }
         if record.field("capture").is_some() {
             if self.pending_prompt.is_some() {
@@ -1434,11 +1732,30 @@ impl Harness {
                     self.pending_errors
                 ));
             }
+            return Ok(());
+        }
+        if record.field("command").is_some() {
+            return self.captured_command(record);
+        }
+        if record.field("state").is_some() {
+            return self.captured_state(record);
+        }
+        if record.field("eval").is_some() {
+            return self.captured_active_fields(record);
+        }
+        if record.field("selection").is_some() {
+            return Ok(());
         }
         let Some(sl) = record.field("sl") else {
-            return Ok(());
+            return Err(format!(
+                "record kind {:?} is not modeled",
+                kind_of(record, &self.others)
+            ));
         };
         let sl = index(&js_json::to_js(&Value::from_json(sl).map_err(|e| e.0)?)?)?;
+        if self.others.contains(&sl) {
+            return Ok(());
+        }
         if record.field("create").is_some() {
             let create = js(record, "create")?;
             let uuid = text(
@@ -1447,11 +1764,25 @@ impl Harness {
                     .and_then(|o| o.get("uuid"))
                     .ok_or("create uuid")?,
             )?;
-            self.list_uuids.insert(sl, uuid);
-            return Ok(());
+            self.list_uuids.insert(sl, uuid.clone());
+            self.creates.insert(uuid.clone(), create);
+            return self.compare_create(&uuid);
         }
-        let Some((ctrl, list)) = self.list_of(sl) else {
-            return Ok(());
+        let Some(uuid) = self.list_uuids.get(&sl) else {
+            return Err(format!("source list {sl} was never created"));
+        };
+        let Some((ctrl, list)) = self.bound.get(uuid).copied() else {
+            // A controller's constructor titles its lists before the recorder sees it; the dumps
+            // compare the titles.
+            let op = js(record, "op")?;
+            return match op
+                .as_array()
+                .and_then(|op| op.first())
+                .and_then(JsValue::as_str)
+            {
+                Some(name) if name.to_string_lossy() == "setTitle" => Ok(()),
+                _ => Err(format!("source list {sl} is in no controller")),
+            };
         };
         if record.field("op").is_some() {
             return self.op(record, ctrl, list);
@@ -1459,7 +1790,17 @@ impl Harness {
         if record.field("dump").is_some() {
             self.stats.dumps += 1;
             let mut expected = js(record, "dump")?;
-            expected.as_object_mut().and_then(|o| o.remove("config"));
+            let config = expected
+                .as_object_mut()
+                .and_then(|o| o.remove("config"))
+                .and_then(|config| SourceListConfig::from_js(&config))
+                .ok_or("dump config")?;
+            let port = self.controllers[ctrl].list(list).config();
+            if &config != port {
+                return Err(format!(
+                    "{list:?} config\n upstream {config:?}\n port     {port:?}"
+                ));
+            }
             let expected = encode(&expected);
             let actual = encode(&list_dump(
                 self.controllers[ctrl].list(list),
@@ -1470,8 +1811,9 @@ impl Harness {
                     "{list:?} list dump\n upstream {expected}\n port     {actual}"
                 ));
             }
+            return Ok(());
         }
-        Ok(())
+        Err("sl record without create, op or dump".to_owned())
     }
 }
 
@@ -1578,20 +1920,62 @@ fn case_ids() -> Vec<String> {
 
 fn run_case(id: &str) -> Result<Stats, String> {
     let records = load(id)?;
-    let mut harness = Harness::new();
+    let others = other_lists(&records)?;
+    let mut tally = Tally::new(id, &records, |r| kind_of(r, &others));
+    for (kind, by) in COVERED {
+        if records.iter().any(|r| kind_of(r, &others) == kind) {
+            tally.covered_elsewhere(kind, by);
+        }
+    }
+    let mut harness = Harness::new(others);
     let mut iter = records.iter();
+    let mut result = Ok(());
     while let Some(record) = iter.next() {
-        harness
-            .record_in(record, &mut iter)
-            .map_err(|e| format!("{id} line {}: {e}", record.line))?;
+        match harness.record_in(record, &mut iter, &mut tally) {
+            Ok(()) => harness.mark(&mut tally, record),
+            Err(e) => {
+                result = Err(format!("{id} line {}: {e}", record.line));
+                break;
+            }
+        }
     }
-    if harness.pending_prompt.is_some() {
-        return Err(format!("{id}: the port asked to edit an axis at the end"));
+    let result = result.and_then(|()| {
+        if harness.pending_prompt.is_some() {
+            return Err(format!("{id}: the port asked to edit an axis at the end"));
+        }
+        if harness.controllers.is_empty() {
+            return Err(format!("{id}: no line graph controller was recorded"));
+        }
+        let unsent = harness
+            .host
+            .sent
+            .iter()
+            .filter(|m| {
+                !matches!(
+                    m.name,
+                    HubToMain::SaveState
+                        | HubToMain::SaveTypeMemory
+                        | HubToMain::UpdateTouchBarSlider
+                )
+            })
+            .count();
+        if unsent > 0 {
+            return Err(format!(
+                "{id}: the port sent {unsent} main messages upstream never saw"
+            ));
+        }
+        Ok(harness.stats)
+    });
+    match result {
+        Err(e) => {
+            std::mem::forget(tally);
+            Err(e)
+        }
+        Ok(stats) => {
+            tally.finish();
+            Ok(stats)
+        }
     }
-    if harness.controllers.is_empty() {
-        return Err(format!("{id}: no line graph controller was recorded"));
-    }
-    Ok(harness.stats)
 }
 
 #[test]

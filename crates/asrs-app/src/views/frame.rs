@@ -817,7 +817,8 @@ impl<H: FrameHost> HubFrame<H> {
         cx.notify();
     }
 
-    /// One `Timeline.periodic()`, after the frame's scroll step for the timeline's overlay.
+    /// One `Timeline.periodic()`, after the frame's scroll step for the timeline's overlay. It is
+    /// part of `Tabs`' frame loop and ends with it; its scroll listener does not.
     fn paint_timeline(
         &mut self,
         metrics: &CanvasMetrics,
@@ -830,7 +831,8 @@ impl<H: FrameHost> HubFrame<H> {
         let (timeline, sensor) = (&mut self.timeline, &mut self.timeline_sensor);
         sensor.animate(now);
         let scroll = sensor.scroll_step(now, width != 0.0 || height != 0.0);
-        if height != 0.0 {
+        let alive = self.host.hub(cx).tabs().frame_loop_alive();
+        if alive && height != 0.0 {
             sensor.periodic(now);
         }
         let host = &mut self.host;
@@ -851,6 +853,7 @@ impl<H: FrameHost> HubFrame<H> {
                     preferences: preferences.as_ref(),
                 };
                 let log = log.borrow();
+                let text = text.filter(|_| alive);
                 text.and_then(|text| timeline.periodic(&frame, selection, &log, text))
             })
         });
@@ -904,11 +907,23 @@ impl<H: FrameHost> HubFrame<H> {
             FrameElement::AddTab => ("add.svg", IconTint::BUTTON, IconFit::BUTTON),
             _ => return None,
         };
+        let title = match element {
+            FrameElement::Update => "Update available",
+            FrameElement::Feedback => "Share feedback",
+            FrameElement::Play => "Play",
+            FrameElement::Pause => "Pause",
+            FrameElement::Lock => "Lock playback to real-time",
+            FrameElement::Unlock => "Unlock playback",
+            FrameElement::Close => "Close tab",
+            FrameElement::Popup => "Pop out tab",
+            _ => "Add tab",
+        };
         let symbol = Symbol::named(symbol)?;
         let entity = cx.entity().downgrade();
         let button = IconButton::new(element.selector(), symbol)
             .tint(tint)
             .fit(fit)
+            .title(title)
             .blurred(blurred)
             .track_focus(&handle)
             .on_click(move |_, _, cx| {

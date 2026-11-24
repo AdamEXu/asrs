@@ -58,7 +58,7 @@ pub fn with_clock<T>(clock: Box<dyn Clock>, f: impl FnOnce() -> T) -> T {
     })
 }
 
-fn zone() -> NamedZone {
+pub(crate) fn zone() -> NamedZone {
     ZONE.with(|z| z.borrow().clone()).unwrap_or_else(|| {
         std::env::var("ASRS_ORACLE_ZONE")
             .ok()

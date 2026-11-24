@@ -355,6 +355,7 @@ dependencies = [
  "asrs-formats",
  "asrs-hub",
  "asrs-js",
+ "asrs-live",
  "asrs-log",
  "asrs-model",
  "asrs-ocr",
@@ -364,11 +365,14 @@ dependencies = [
  "asrs-ui",
  "async-channel",
  "fs4",
+ "futures-util",
  "image",
  "png 0.18.1",
  "rustls",
  "sha2 0.10.9",
  "socket2",
+ "tokio",
+ "tokio-tungstenite",
  "ureq",
  "winresource",
  "zune-core 0.5.3",
@@ -438,6 +442,7 @@ dependencies = [
  "asrs-log",
  "asrs-parity",
  "indexmap",
+ "sha2 0.10.9",
  "xz2",
 ]
 
@@ -448,11 +453,13 @@ dependencies = [
  "asrs-canvas",
  "asrs-formats",
  "asrs-js",
+ "asrs-live",
  "asrs-log",
  "asrs-model",
  "asrs-parity",
  "asrs-tabs",
  "indexmap",
+ "url",
 ]
 
 [[package]]

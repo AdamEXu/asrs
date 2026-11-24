@@ -24,8 +24,9 @@ pub(super) enum JsDefault {
     /// `util.emptyObject`.
     EmptyObject,
     Long(Long),
-    /// A function reached through `Object.prototype` (an enum default named `toString`).
-    Function,
+    /// A function reached through `Object.prototype` (an enum default named `toString`), with
+    /// its `name`.
+    Function(JsString),
     /// An enum's `valuesById`, reached as `values.__proto__`.
     Object(JsObject<JsString>),
 }
@@ -59,7 +60,7 @@ impl JsDefault {
     /// The value `d.x = <JSON.stringify(typeDefault)>` assigns in generated `toObject` code.
     pub fn json_literal(&self) -> JsValue {
         match self {
-            JsDefault::Undefined | JsDefault::Function => JsValue::Undefined,
+            JsDefault::Undefined | JsDefault::Function(_) => JsValue::Undefined,
             JsDefault::Null => JsValue::Null,
             JsDefault::Bool(b) => JsValue::Bool(*b),
             JsDefault::Number(x) if !x.is_finite() => JsValue::Null,
@@ -235,11 +236,63 @@ pub(super) enum Val {
     Map(JsObject<Val>),
 }
 
+impl Val {
+    pub fn is_truthy(&self) -> bool {
+        match self {
+            Val::Num(x) => *x != 0.0 && !x.is_nan(),
+            Val::Bool(b) => *b,
+            Val::Str(s) => !s.is_empty(),
+            _ => true,
+        }
+    }
+}
+
 /// A decoded message: its type and its own enumerable properties in JS order.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Message {
     pub ty: NodeId,
     pub own: JsObject<Val>,
+    pub odd: Option<Box<Odd>>,
+}
+
+impl Message {
+    pub fn new(ty: NodeId, own: JsObject<Val>) -> Self {
+        Message { ty, own, odd: None }
+    }
+
+    /// The `m` a decoder handed a truthy non-message merge target writes to.
+    pub fn onto(ty: NodeId, own: JsObject<Val>, target: Target) -> Self {
+        Message {
+            ty,
+            own,
+            odd: Some(Box::new(Odd {
+                unknowns: None,
+                target,
+            })),
+        }
+    }
+
+    pub fn target(&self) -> Target {
+        self.odd.as_ref().map_or(Target::Message, |o| o.target)
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct Odd {
+    /// The own non-enumerable `$unknowns` property `util.makeProp` defines.
+    pub unknowns: Option<Val>,
+    pub target: Target,
+}
+
+/// What `m` is: a message instance, or the truthy non-message value the decoder merges into.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum Target {
+    #[default]
+    Message,
+    /// A `$unknowns` array of this length; `own` holds its elements under their index keys.
+    Array(usize),
+    /// A string, number or boolean, on which property writes do nothing.
+    Primitive,
 }
 
 /// A `bytes` field's string default: base64 when it looks like base64, UTF-8 otherwise.

@@ -2,20 +2,20 @@
 
 pub mod gpui {
     pub use gpui_kit::{
-        AnyElement, AnyWindowHandle, App, AppContext, Application, AsyncApp, BackgroundExecutor,
-        Bounds, BoxShadow, ClickEvent, ClipboardItem, Context, Corners, CursorStyle, DispatchPhase,
-        Div, Entity, EventEmitter, ExternalPaths, FocusHandle, Focusable, Global,
-        HoverListenerMode, Hsla, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent,
-        KeyboardButton, Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseExitEvent,
-        MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, PlatformInput, Point, Render,
-        RenderImage, Result, Rgba, ScrollDelta, ScrollEvent, ScrollHandle, SharedString, Stateful,
-        StatefulInteractiveElement, Styled, Subscription, Task, TitlebarOptions, TouchPhase,
-        WeakEntity, Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind,
-        WindowOptions, anchored, application, canvas, deferred, div, fill, linear_color_stop,
-        linear_gradient, point, px, rgb, rgba, size,
+        Action, AnyElement, AnyWindowHandle, App, AppContext, Application, AsyncApp,
+        BackgroundExecutor, Bounds, BoxShadow, ClickEvent, ClipboardItem, Context, Corners,
+        CursorStyle, DispatchPhase, Div, Entity, EventEmitter, ExternalPaths, FocusHandle,
+        Focusable, Global, HoverListenerMode, Hsla, InteractiveElement, IntoElement, KeyDownEvent,
+        KeyUpEvent, KeyboardButton, Keystroke, Modifiers, MouseButton, MouseDownEvent,
+        MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, PlatformInput, Point,
+        Render, RenderImage, Result, Rgba, ScrollDelta, ScrollEvent, ScrollHandle, SharedString,
+        Stateful, StatefulInteractiveElement, Styled, Subscription, Task, TitlebarOptions,
+        TouchPhase, WeakEntity, Window, WindowBackgroundAppearance, WindowBounds, WindowHandle,
+        WindowKind, WindowOptions, anchored, application, canvas, deferred, div, fill,
+        linear_color_stop, linear_gradient, point, px, rgb, rgba, size,
     };
     #[cfg(feature = "parity")]
-    pub use gpui_kit::{HeadlessAppContext, NoopTextSystem};
+    pub use gpui_kit::{HeadlessAppContext, NoopTextSystem, TestAppContext, WindowVisibility};
 }
 
 pub mod button;
@@ -36,6 +36,7 @@ pub mod svg;
 pub mod symbols;
 pub mod text;
 pub mod theme;
+pub mod tooltip;
 pub mod webview;
 
 use gpui::{AnyWindowHandle, App, Entity, Render, Window, WindowOptions};

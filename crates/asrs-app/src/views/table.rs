@@ -37,6 +37,7 @@ use asrs_ui::selection::geometry::{Block, Line, Piece};
 use asrs_ui::selection::{Caret, Document, Hit, Place, Position};
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY};
+use asrs_ui::tooltip::{titled, untitled};
 
 use super::cell_text::following;
 use super::frame::{FrameHost, HubFrame, wheel_of};
@@ -855,7 +856,8 @@ impl<H: FrameHost> HubFrame<H> {
                 .tab_group()
                 .tab_index(column as isize + 1)
                 .child(header_cell(grid, cell, !last, border, &header_palette))
-                .child(key_box);
+                .child(titled(field.title.to_string_lossy(), grid.place(cell)))
+                .child(untitled(key_box));
             if !field.available {
                 let key = field.text.to_string_lossy();
                 let style = key_style("left");
@@ -880,6 +882,7 @@ impl<H: FrameHost> HubFrame<H> {
                 let next = place.clone();
                 deletes.push((delete.clone(), [left, w]));
                 let button = IconButton::new(SharedString::from(id), symbol("close.svg"))
+                    .title("")
                     .track_focus(&delete)
                     .on_click(cx.listener(move |frame, _, window, cx| {
                         // The focused button goes with its header cell, and Tab goes on from there.
@@ -899,6 +902,7 @@ impl<H: FrameHost> HubFrame<H> {
         let jump_at = [first[0] + jx, y + jy, jw, jh];
         let jump_id = SharedString::from(format!("table-jump-{shown_key:?}"));
         let button = IconButton::new(jump_id, symbol("verticalalignbottom.svg"))
+            .title("Go to timestamp")
             .on_click(cx.listener(|frame, _, _, cx| frame.table_jump(cx)));
         let button_at = [first[0] + JUMP_BUTTON_LEFT, y + BUTTON_TOP];
         header = header
@@ -915,7 +919,7 @@ impl<H: FrameHost> HubFrame<H> {
                     .inset_0()
                     .tab_group()
                     .tab_index(1)
-                    .child(grid.place(jump_at).child(jump))
+                    .child(titled("Go to timestamp", grid.place(jump_at).child(jump)))
                     .child(grid.button(button, button_at)),
             );
         self.table.deletes = deletes;

@@ -160,7 +160,7 @@ impl ProtoDecoder {
         };
         let mut reader = Reader::new(data);
         let message = self.root.decode(ty, &mut reader, None, 0, None)?;
-        let mut schema_types = self.root.schema_types(&message);
+        let mut schema_types = self.root.schema_types(&message)?;
         let mut data = self.root.message_to_object(ty, &message)?;
         self.apply_post_processors(ty, &mut data, &mut schema_types, &JsString::new());
         Ok(Decoded { data, schema_types })

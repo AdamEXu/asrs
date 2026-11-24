@@ -7,14 +7,11 @@ use std::path::Path;
 
 use asrs_app::scenario;
 use asrs_parity::json::{self, Json};
+use asrs_parity::tally::Tally;
+use asrs_parity::vectors::Record;
 use asrs_parity::{focus, vectors};
 
-struct Expected {
-    scenario: String,
-    traverse: String,
-    index: usize,
-    focused: Json,
-}
+const VECTOR: &str = "focus/order";
 
 fn unhex(text: &str) -> Vec<u8> {
     let digit = |at: usize| u8::from_str_radix(&text[at..at + 2], 16).expect("hex");
@@ -50,37 +47,46 @@ fn main() {
     let dir = std::env::temp_dir().join(format!("asrs-hub-tab-order-{}", std::process::id()));
     let inputs = dir.join("inputs");
     std::fs::create_dir_all(&inputs).unwrap();
-    let mut expected = Vec::new();
-    for record in vectors::load(&vectors::platform_vector("focus/order"))
-        .unwrap()
-        .iter()
-    {
-        if let Some(log) = record.string("log") {
-            std::fs::write(inputs.join(log), unhex(&record.string("bytes").unwrap())).unwrap();
-            continue;
-        }
-        expected.push(Expected {
-            scenario: record.string("scenario").unwrap(),
-            traverse: record.string("traverse").unwrap(),
-            index: record.field("index").and_then(Json::as_f64).unwrap() as usize,
-            focused: record.field("focused").unwrap().clone(),
-        });
+    let id = vectors::platform_vector(VECTOR);
+    let records = vectors::load(&id).unwrap();
+    let is_log = |record: &Record| record.field("log").is_some();
+    let kind = |record: &Record| if is_log(record) { "log" } else { "focused" }.to_owned();
+    let mut tally = Tally::new(&id, &records, kind);
+    for record in records.iter().filter(|r| is_log(r)) {
+        let log = record.string("log").unwrap();
+        std::fs::write(inputs.join(log), unhex(&record.string("bytes").unwrap())).unwrap();
+        tally.compared("log");
     }
-    let mut scenarios: Vec<&str> = expected.iter().map(|e| e.scenario.as_str()).collect();
-    scenarios.dedup();
+    let mut ran = Vec::new();
     let mut differences = Vec::new();
-    for name in scenarios {
-        run(name, &inputs, &dir);
-        for e in expected.iter().filter(|e| e.scenario == name) {
-            let at = format!("{name}/1x-light/files/focus/{}.json", e.traverse);
-            let records = std::fs::read_to_string(dir.join(at)).unwrap();
-            let focused = json::parse(records.lines().nth(e.index).unwrap()).unwrap();
-            if let Some(difference) = focus::difference(&e.focused, &focused) {
-                differences.push(format!("{name} {} {}: {difference}", e.traverse, e.index));
-            }
+    for record in records.iter().filter(|r| !is_log(r)) {
+        let name = record.string("scenario").unwrap();
+        if !ran.contains(&name) {
+            run(&name, &inputs, &dir);
+            ran.push(name.clone());
         }
+        let compared: Result<(), String> = tally.compare("focused", record, |fields| {
+            let traverse = fields.string("traverse")?;
+            let index = fields.field("index").and_then(Json::as_f64);
+            let index = index.ok_or("no index")? as usize;
+            let expected = fields.field("focused").ok_or("no focused")?;
+            let at = format!(
+                "{}/1x-light/files/focus/{traverse}.json",
+                fields.string("scenario")?
+            );
+            let kept = std::fs::read_to_string(dir.join(at)).map_err(|e| e.to_string())?;
+            let line = kept
+                .lines()
+                .nth(index)
+                .ok_or("the port pressed fewer keys")?;
+            match focus::difference(expected, &json::parse(line).map_err(|e| e.to_string())?) {
+                Some(difference) => Err(format!("{name} {traverse} {index}: {difference}")),
+                None => Ok(()),
+            }
+        });
+        differences.extend(compared.err());
     }
     let _ = std::fs::remove_dir_all(&dir);
     assert!(differences.is_empty(), "{}", differences.join("\n"));
-    println!("hub tab order: {} records equal", expected.len());
+    println!("hub tab order: {} records equal", tally.finish());
 }

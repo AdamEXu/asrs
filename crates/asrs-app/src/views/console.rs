@@ -27,6 +27,7 @@ use asrs_ui::parity::probed;
 use asrs_ui::selection::{Document, Hit, Place};
 use asrs_ui::text::{self, TextStyle, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
+use asrs_ui::tooltip::titled;
 
 use super::console_layout::{
     CELL_PADDING, Cell, CellNode, ConsoleLayout, HEADER_HEIGHT, LINE_HEIGHT, TIME_WIDTH, cell_font,
@@ -764,6 +765,7 @@ impl<H: FrameHost> HubFrame<H> {
         } else {
             let at = [key_left + key_end + DELETE_MARGIN, y + BUTTON_TOP];
             let button = IconButton::new(("console-delete", shown.key), symbol("close.svg"))
+                .title("Remove from view")
                 .blurred(blurred)
                 .on_click(cx.listener(|frame, _, _, cx| frame.console_close(cx)));
             key_box.child(probed(
@@ -786,8 +788,10 @@ impl<H: FrameHost> HubFrame<H> {
             ("console-jump", shown.key),
             symbol("verticalalignbottom.svg"),
         )
+        .title("Go to timestamp")
         .on_click(cx.listener(|frame, _, _, cx| frame.console_jump(cx)));
         let highlight = IconButton::new(("console-highlight", shown.key), symbol("palette.svg"))
+            .title("Highlight warning/error messages")
             .tint(if view.highlight_active {
                 HIGHLIGHT_ACTIVE
             } else {
@@ -818,7 +822,7 @@ impl<H: FrameHost> HubFrame<H> {
             ))
             .child(probed(
                 "input.console-table-jump-input",
-                grid.place(shown.jump_rect()).child(jump),
+                titled("Go to timestamp", grid.place(shown.jump_rect()).child(jump)),
             ))
             .child(button(
                 jump_button,
@@ -828,6 +832,7 @@ impl<H: FrameHost> HubFrame<H> {
             .child(key_box);
         if view.has_controller {
             let export = IconButton::new(("console-export", shown.key), symbol("download.svg"))
+                .title("Export console log")
                 .on_click(cx.listener(|frame, _, _, cx| {
                     frame.console_input(cx, |renderer, page| renderer.export_click(page));
                 }));
@@ -845,7 +850,10 @@ impl<H: FrameHost> HubFrame<H> {
             ))
             .child(probed(
                 "input.filter",
-                grid.place(shown.filter_rect()).child(filter),
+                titled(
+                    "Filter console log",
+                    grid.place(shown.filter_rect()).child(filter),
+                ),
             ))
             .into_any_element()
     }

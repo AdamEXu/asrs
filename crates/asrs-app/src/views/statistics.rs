@@ -35,6 +35,7 @@ use asrs_ui::parity::probed;
 use asrs_ui::selection::{Document, Hit, Place};
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, Theme};
+use asrs_ui::tooltip::titled;
 
 use super::cell_text::{CellLine, CellText, css};
 use super::frame::{FrameHost, HubFrame, SETTINGS_SECTION, wheel_of};
@@ -61,6 +62,11 @@ const SELECT_HEIGHT: f64 = 25.0;
 /// A number input's padding and borders, across and down.
 const FIELD_CHROME: [f64; 2] = [8.0, 6.0];
 const TITLES: [&str; 3] = ["Time Range", "Data Range", "Step Size"];
+const FIELD_TITLES: [&str; 3] = [
+    "Minimum histogram value",
+    "Maximum histogram value",
+    "Histogram step size",
+];
 const FIELD_PROBES: [&str; 3] = ["input.range-min", "input.range-max", "input.step-size"];
 
 fn lu(v: f64) -> f64 {
@@ -1205,17 +1211,20 @@ impl<H: FrameHost> HubFrame<H> {
         }
         out = out.child(probed(
             "select.time-range",
-            within
-                .place(select_rect)
-                .tab_group()
-                .tab_index(block(0) + 1)
-                .child(select),
+            titled(
+                "Select time range",
+                within
+                    .place(select_rect)
+                    .tab_group()
+                    .tab_index(block(0) + 1)
+                    .child(select),
+            ),
         ));
-        let fields = fields.into_iter().zip(FIELD_PROBES).zip(layout.fields);
-        for (((field, id), rect), row) in fields.zip([1, 1, 2]) {
+        let fields = fields.into_iter().zip(FIELD_PROBES).zip(FIELD_TITLES);
+        for ((((field, id), title), rect), row) in fields.zip(layout.fields).zip([1, 1, 2]) {
             let input = within.place(scrolled(rect)).tab_group();
             let input = input.tab_index(block(row) + 1).child(field);
-            out = out.child(probed(id, input));
+            out = out.child(probed(id, titled(title, input)));
         }
         Some(probed("div.stats-settings", out).into_any_element())
     }

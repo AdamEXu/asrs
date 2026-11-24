@@ -44,6 +44,7 @@ use asrs_ui::platform;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FOCUS_RING_WIDTH, FONT_FAMILY, chains};
+use asrs_ui::tooltip::{titled, untitled};
 
 use super::frame::{FrameHost, HubFrame, SETTINGS_SECTION};
 use super::select::FormSelect;
@@ -1383,7 +1384,7 @@ impl<H: FrameHost> HubFrame<H> {
                 }
             }));
         if let Some(icon) = xr_icon() {
-            xr = xr.child(
+            xr = xr.child(untitled(
                 div()
                     .absolute()
                     .left(px((img_x - 1.0) as f32))
@@ -1391,7 +1392,7 @@ impl<H: FrameHost> HubFrame<H> {
                     .w(px(side as f32))
                     .h(px(side as f32))
                     .child(Icon::new(icon, chains::XR_BUTTON).fit(IconFit::Natural)),
-            );
+            ));
         }
 
         xr = xr.children(focus.visible.then(|| {
@@ -1413,9 +1414,12 @@ impl<H: FrameHost> HubFrame<H> {
             .border_color(rgb(if dark { 0x000000 } else { 0xdddddd }))
             .overflow_hidden()
             .child(field_title)
-            .child(probed("select.field-select", select_el))
+            .child(probed(
+                "select.field-select",
+                titled("Select field model", select_el),
+            ))
             .child(xr_title)
-            .child(probed("div.xr-button", xr));
+            .child(probed("div.xr-button", titled("Start XR streaming", xr)));
         Some(probed("div.field-3d-settings", block).into_any_element())
     }
 }
