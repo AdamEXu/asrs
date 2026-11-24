@@ -220,17 +220,11 @@ impl Value {
                 write_string(message.units(), out);
                 out.push_str("]}");
             }
-            // Upstream encodes BigInt and Symbol wrappers as constructor instances; the
-            // primitive wrappers keep `box`.
-            Value::Boxed(inner) => match inner.as_ref() {
-                Value::BigInt(_) => out.push_str(r#"{"c":["BigInt",[]]}"#),
-                Value::Symbol(_) => out.push_str(r#"{"c":["Symbol",[]]}"#),
-                _ => {
-                    out.push_str(r#"{"box":"#);
-                    inner.encode_into(out);
-                    out.push('}');
-                }
-            },
+            Value::Boxed(inner) => {
+                out.push_str(r#"{"box":"#);
+                inner.encode_into(out);
+                out.push('}');
+            }
             Value::Function(name) => {
                 out.push_str(r#"{"fn":"#);
                 write_string(name.units(), out);
@@ -480,11 +474,11 @@ fn decode_tag(tag: &str, body: &Json) -> Decoded {
             Ok(Value::Error(name.clone(), message))
         }
         "box" => Ok(match decode_value(body, false)? {
-            primitive @ (Value::Number(_)
-            | Value::String(_)
-            | Value::Bool(_)
-            | Value::BigInt(_)
-            | Value::Symbol(_)) => Value::Boxed(Box::new(primitive)),
+            primitive @ (Value::Number(_) | Value::String(_) | Value::Bool(_)) => {
+                Value::Boxed(Box::new(primitive))
+            }
+            Value::BigInt(_) => Value::Instance(Utf16String::from("BigInt"), Vec::new()),
+            Value::Symbol(_) => Value::Instance(Utf16String::from("Symbol"), Vec::new()),
             Value::Null | Value::Undefined => Value::Object(Vec::new()),
             object => object,
         }),

@@ -186,9 +186,9 @@ fn load_state(
     let mut state = json_file::parse(&fs.read(state_file)?)?;
     let hubs = ops::get(&state, "hubs")?;
     let satellites = ops::get(&state, "satellites")?;
-    let mut windows = ops::spread_iter(&hubs)?;
+    let mut windows = spread_iter(&hubs)?;
     let hubs_count = windows.len();
-    windows.extend(ops::spread_iter(&satellites)?);
+    windows.extend(spread_iter(&satellites)?);
     for (index, window) in windows.iter_mut().enumerate() {
         if !allow_reset {
             break;
@@ -252,6 +252,37 @@ fn write_back(state: &mut JsValue, windows: &[JsValue], hubs_count: usize) {
     }
 }
 
+/// `[...value]`: arrays spread elements, strings code units, typed arrays bytes; the rest throw.
+fn spread_iter(value: &JsValue) -> Result<Vec<JsValue>, JsError> {
+    match value {
+        JsValue::Array(items) => Ok(items.clone()),
+        JsValue::String(s) => Ok(s
+            .units()
+            .iter()
+            .map(|&u| JsValue::String(JsString::from_units(vec![u])))
+            .collect()),
+        JsValue::Bytes(bytes) => Ok(bytes
+            .iter()
+            .map(|&b| JsValue::Number(f64::from(b)))
+            .collect()),
+        other => Err(JsError::type_error(format!(
+            "{} is not iterable (cannot read property Symbol(Symbol.iterator))",
+            describe(other)
+        ))),
+    }
+}
+
+fn describe(value: &JsValue) -> String {
+    match value {
+        JsValue::Undefined => "undefined".to_owned(),
+        JsValue::Null => "null".to_owned(),
+        JsValue::Object(_) | JsValue::ExtData(..) => "{}".to_owned(),
+        JsValue::Array(_) => ops::to_string(value).to_string_lossy(),
+        JsValue::String(s) => format!("'{}'", s.to_string_lossy()),
+        other => ops::to_string(other).to_string_lossy(),
+    }
+}
+
 /// `a >= b` where `b` is a display bound number.
 fn ge(a: &JsValue, b: f64) -> bool {
     ops::ge(a, &JsValue::Number(b)).unwrap_or(false)
@@ -259,7 +290,7 @@ fn ge(a: &JsValue, b: f64) -> bool {
 
 /// `a <= b` where `b` is a display bound number.
 fn le(a: &JsValue, b: f64) -> bool {
-    ops::le(&JsValue::Number(b), a).unwrap_or(false)
+    ops::le(a, &JsValue::Number(b)).unwrap_or(false)
 }
 
 /// `a + b` on state-file JSON, which cannot hold a BigInt for `ops::add` to reject.

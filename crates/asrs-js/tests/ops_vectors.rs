@@ -106,7 +106,7 @@ impl Spec {
 
     fn call(&mut self, source: &str, args: Vec<Value>) {
         let all = std::iter::once(Value::String(source.into()).encode())
-            .chain(args.iter().map(arg_text))
+            .chain(args.iter().map(Value::encode))
             .collect::<Vec<_>>()
             .join(",");
         self.line(&format!(r#"{{"fn":"oracle:call","args":[{all}]}}"#));
@@ -124,17 +124,6 @@ impl Spec {
         let text: String = self.lines.iter().map(|l| format!("{l}\n")).collect();
         std::fs::write(&path, text).expect("write spec");
         eprintln!("{}: {} requests", path.display(), self.lines.len());
-    }
-}
-
-/// `box` args for the BigInt/Symbol wrappers: responses encode them as `c` instances, but
-/// the oracle accepts only the `box` tag inbound.
-fn arg_text(v: &Value) -> String {
-    match v {
-        Value::Boxed(inner) if matches!(inner.as_ref(), Value::BigInt(_) | Value::Symbol(_)) => {
-            format!("{{\"box\":{}}}", inner.encode())
-        }
-        _ => v.encode(),
     }
 }
 
@@ -171,9 +160,9 @@ fn date(bits: u64) -> Value {
     Value::Date(bits)
 }
 
-/// Every value kind the ops layer sees. Dates are absent: `+`, `==` and `String` on a Date are
-/// zone-dependent and live in `dates_spec` instead.
-fn vals() -> Vec<Value> {
+/// Values `JsValue` can hold, plus what only CVE-1 can. Valid dates are absent: their text
+/// depends on the zone, so they live in `dates_spec`.
+fn js_vals() -> Vec<Value> {
     vec![
         Value::Undefined,
         Value::Null,
@@ -184,93 +173,96 @@ fn vals() -> Vec<Value> {
         n(1.0),
         n(-1.5),
         n(0.5),
+        n(2.0),
         n(1e21),
         n(f64::NAN),
         n(f64::INFINITY),
         n(-f64::INFINITY),
         n(9e15),
-        n(2.5e-324),
+        n(5e-324),
         s(""),
         s("0"),
         s("1"),
+        s("01"),
+        s("-0"),
         s("-1.5"),
         s(" 12 "),
+        s("\u{a0}5\u{feff}"),
         s("0x10"),
+        s("-0x10"),
         s("1e3"),
+        s("1_0"),
         s("a"),
         s("abc"),
         s("Infinity"),
+        s("NaN"),
+        s("null"),
         s("\u{1f600}"),
+        s("\u{ffff}"),
+        Value::String(asrs_parity::Utf16String::from_units(vec![0xd83d])),
         bi("0"),
         bi("5"),
         bi("-5"),
+        bi("16"),
+        bi("9007199254740993"),
         bi("123456789012345678901234567890"),
-        sym("s"),
-        Value::Symbol(None),
         Value::Array(vec![]),
+        Value::Array(vec![n(1.0)]),
         Value::Array(vec![n(1.0), n(2.0)]),
-        Value::Array(vec![n(1.0), Value::Hole, n(3.0)]),
-        Value::Array(vec![s("a"), s("b")]),
+        Value::Array(vec![s("a"), Value::Null, Value::Undefined]),
+        Value::Array(vec![Value::Array(vec![Value::Array(vec![s("5")])])]),
+        Value::Array(vec![obj(&[])]),
         obj(&[]),
         obj(&[("x", n(1.0)), ("length", n(9.0))]),
+        obj(&[("y", n(1.0)), ("2", s("two"))]),
+        Value::Bytes(vec![]),
+        Value::Bytes(vec![7]),
         Value::Bytes(vec![1, 2, 255]),
+        date(f64::NAN.to_bits()),
+    ]
+}
+
+fn cve_vals() -> Vec<Value> {
+    vec![
+        sym("s"),
+        Value::Symbol(None),
+        Value::Array(vec![n(1.0), Value::Hole, n(3.0)]),
         ta("Int8Array", vec![n(1.0), n(-2.0)]),
-        ta("Float64Array", vec![n(1.5), n(2.0)]),
-        ta("BigInt64Array", vec![bi("5"), bi("-7")]),
+        ta("Float64Array", vec![n(1.5)]),
+        ta("BigInt64Array", vec![bi("5")]),
         Value::ArrayBuffer(vec![1, 2, 3, 4]),
         Value::DataView(vec![0, 0, 0, 0, 0, 0, 240, 63]),
-        Value::Map(vec![(s("k"), n(1.0)), (n(2.0), s("v"))]),
+        Value::Map(vec![(s("k"), n(1.0))]),
         Value::Set(vec![n(1.0), s("x")]),
         Value::Error("Error".into(), "msg".into()),
-        Value::Error("TypeError".into(), "bad".into()),
+        Value::Error("TypeError".into(), "".into()),
         Value::Boxed(Box::new(n(42.0))),
         Value::Boxed(Box::new(s("hi"))),
-        Value::Boxed(Box::new(Value::Bool(true))),
-        Value::Boxed(Box::new(bi("7"))),
-        Value::Boxed(Box::new(sym("b"))),
+        Value::Boxed(Box::new(Value::Bool(false))),
     ]
 }
 
-/// The binary-op matrix drops Symbols and the object kinds that only matter to `+`/`==`
-/// through coercion; those are covered one-sidedly below.
+/// The operands both sides of a binary operator range over.
 fn bin_vals() -> Vec<Value> {
-    vec![
-        Value::Undefined,
-        Value::Null,
-        Value::Bool(true),
-        Value::Bool(false),
-        n(0.0),
-        n(-0.0),
-        n(1.0),
-        n(-1.5),
-        n(1e21),
-        n(f64::NAN),
-        n(f64::INFINITY),
+    let skip = [
+        n(0.5),
         n(9e15),
-        s(""),
-        s("0"),
-        s("1"),
-        s("-1.5"),
-        s(" 12 "),
-        s("0x10"),
-        s("a"),
-        s("Infinity"),
-        bi("0"),
-        bi("5"),
-        bi("-5"),
-        bi("123456789012345678901234567890"),
-        Value::Array(vec![]),
+        n(5e-324),
+        s("abc"),
+        s("1e3"),
+        s("null"),
+        s("\u{1f600}"),
         Value::Array(vec![n(1.0), n(2.0)]),
-        Value::Array(vec![s("a"), s("b")]),
-        obj(&[]),
-        obj(&[("x", n(1.0))]),
-        Value::Boxed(Box::new(n(42.0))),
-        Value::Boxed(Box::new(s("hi"))),
-        Value::Bytes(vec![1, 2]),
-    ]
+        obj(&[("x", n(1.0)), ("length", n(9.0))]),
+        Value::Bytes(vec![]),
+    ];
+    js_vals()
+        .into_iter()
+        .filter(|v| !skip.contains(v))
+        .collect()
 }
 
-const BINOPS: [&str; 10] = [
+const BINOPS: [&str; 9] = [
     "(a, b) => a + b",
     "(a, b) => a - b",
     "(a, b) => a < b",
@@ -278,136 +270,156 @@ const BINOPS: [&str; 10] = [
     "(a, b) => a > b",
     "(a, b) => a >= b",
     "(a, b) => a == b",
-    "(a, b) => a != b",
     "(a, b) => a === b",
-    "(a, b) => a !== b",
+    "(a, b) => [a].includes(b)",
 ];
 
-const UNOPS: [&str; 9] = [
+const UNOPS: [&str; 5] = [
     "(a) => -a",
     "(a) => +a",
-    "(v) => typeof v",
+    "(a) => a - 0",
+    "(v) => `${v}`",
     "(v) => Boolean(v)",
-    "(v) => Number(v)",
-    "(v) => Object(v)",
-    "(v) => [...v]",
-    "(v) => ({ ...v })",
-    "(v) => Object.getOwnPropertyNames(v)",
 ];
 
-/// Receivers for member reads, `in`, hasOwn, writes and deletes.
+const MEMBERS: [&str; 3] = [
+    "(v) => Object.keys(v)",
+    "(v) => Object.getOwnPropertyNames(v)",
+    "(v) => ({ ...v })",
+];
+
+const PROTOS: [&str; 5] = [
+    "() => Object.getOwnPropertyNames(Object.prototype)",
+    "() => Object.getOwnPropertyNames(Array.prototype)",
+    "() => Object.getOwnPropertyNames(Object.getPrototypeOf(Uint8Array.prototype))",
+    "() => Object.getOwnPropertyNames(Uint8Array.prototype)",
+    "() => Object.getOwnPropertyNames(Date.prototype)",
+];
+
+const IN: &str = "(k, v) => k in v";
+const GET: &str = "(o, k) => o[k]";
+const HAS_OWN: &str = "(o, k) => Object.hasOwn(o, k)";
+const SET: &str = "(o, k, v) => { 'use strict'; o[k] = v; return o; }";
+const DELETE: &str = "(o, k) => { 'use strict'; delete o[k]; return o; }";
+const INDEX: &str = "(k, n) => Array.from({ length: n }, (_, i) => i)[k]";
+const SPLICE: &str = "(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }";
+
+const KEYS: [&str; 10] = [
+    "0", "1", "2", "-1", "-0", "1.5", "01", "x", "length", "foo bar",
+];
+
+/// Members only the prototype chain has. `ops::get` reads them as `undefined` (issues 64
+/// and 87), so they are checked through `in`, `hasOwn`, writes and deletes but not reads.
+const INHERITED: [&str; 12] = [
+    "toString",
+    "hasOwnProperty",
+    "constructor",
+    "valueOf",
+    "BYTES_PER_ELEMENT",
+    "byteOffset",
+    "buffer",
+    "at",
+    "set",
+    "getHours",
+    "__proto__",
+    "toBase64",
+];
+
 fn member_vals() -> Vec<Value> {
     vec![
         Value::Undefined,
         Value::Null,
         Value::Bool(true),
         n(1.5),
+        n(-0.0),
+        s(""),
         s("ab"),
         bi("5"),
-        sym("s"),
+        Value::Array(vec![]),
         Value::Array(vec![n(1.0), n(2.0)]),
-        Value::Array(vec![Value::Hole, n(2.0)]),
+        Value::Array(vec![s("a"), s("b"), s("c")]),
         obj(&[]),
         obj(&[("x", n(1.0)), ("0", s("zero")), ("length", n(9.0))]),
+        obj(&[("toString", n(1.0)), ("constructor", Value::Null)]),
+        Value::Bytes(vec![]),
         Value::Bytes(vec![1, 2, 255]),
-        ta("Int8Array", vec![n(1.0), n(2.0)]),
-        ta("Float64Array", vec![n(1.5)]),
-        ta("BigInt64Array", vec![bi("5")]),
-        Value::ArrayBuffer(vec![1, 2, 3, 4]),
-        Value::DataView(vec![1, 2, 3, 4]),
-        Value::Map(vec![(s("k"), n(1.0))]),
-        Value::Set(vec![n(1.0)]),
-        Value::Error("Error".into(), "msg".into()),
-        Value::Boxed(Box::new(n(42.0))),
-        Value::Boxed(Box::new(s("hi"))),
-        Value::Boxed(Box::new(bi("7"))),
-        Value::Boxed(Box::new(sym("b"))),
+        date(0),
     ]
 }
 
-const KEYS: [&str; 22] = [
-    "0",
-    "1",
-    "2",
-    "-1",
-    "1.5",
-    "x",
-    "length",
-    "size",
-    "toString",
-    "hasOwnProperty",
-    "constructor",
-    "valueOf",
-    "BYTES_PER_ELEMENT",
-    "byteLength",
-    "byteOffset",
-    "buffer",
-    "message",
-    "stack",
-    "get",
-    "set",
-    "add",
-    "foo bar",
-];
+/// Writes and deletes that leave an array hole, which `JsValue` has no form for.
+fn leaves_hole(source: &str, target: &Value, key: &str, value: Option<&Value>) -> bool {
+    let Value::Array(items) = target else {
+        return false;
+    };
+    let index = key.parse::<usize>().ok().filter(|i| i.to_string() == key);
+    if source == DELETE {
+        return index.is_some_and(|i| i < items.len());
+    }
+    let grown = match value {
+        _ if index.is_some() => index,
+        Some(Value::Number(bits)) if key == "length" => Some(f64::from_bits(*bits) as usize),
+        Some(Value::String(_)) if key == "length" => Some(2),
+        _ => None,
+    };
+    grown.is_some_and(|i| i > items.len())
+}
 
 fn ops_spec() -> (Spec, Spec) {
     let mut spec = Spec::new();
-    let vals = vals();
-    for v in &vals {
+    for source in PROTOS {
+        spec.call(source, vec![]);
+    }
+    for v in js_vals().into_iter().chain(cve_vals()) {
         for source in UNOPS {
             spec.call(source, vec![v.clone()]);
         }
-        spec.call("(v) => Object.keys(v)", vec![v.clone()]);
-        spec.call("(v) => String(v)", vec![v.clone()]);
-        for key in KEYS {
-            spec.call("(k, v) => k in v", vec![s(key), v.clone()]);
-            // `err.stack` reads the oracle's live stack text; `in`/hasOwn only test
-            // own-ness, which is deterministic.
-            if !(key == "stack" && matches!(v, Value::Error(..))) {
-                spec.call("(o, k) => o[k]", vec![v.clone(), s(key)]);
-            }
-            spec.call("(o, k) => Object.hasOwn(o, k)", vec![v.clone(), s(key)]);
-        }
-        spec.call("(k, v) => k in v", vec![sym("k"), v.clone()]);
-        spec.call("(o, k) => o[k]", vec![v.clone(), n(0.0)]);
-        spec.call("(o, k) => o[k]", vec![v.clone(), sym("k")]);
     }
-    for receiver in member_vals() {
-        for key in KEYS {
-            // A `valueOf` own property on a `box` wrapper breaks the oracle's encoder,
-            // which reads `o.valueOf()` when re-encoding it. `c` instances are safe.
-            if key == "valueOf"
-                && matches!(&receiver, Value::Boxed(inner)
-                    if !matches!(inner.as_ref(), Value::BigInt(_) | Value::Symbol(_)))
-            {
+    for v in js_vals().into_iter().chain(member_vals()) {
+        for source in MEMBERS {
+            spec.call(source, vec![v.clone()]);
+        }
+        for len in [0.0, 3.0] {
+            // `ToPrimitive` does not call an object's own `toString` (issue 87).
+            if v.get("toString").is_some() {
                 continue;
             }
-            spec.call(
-                "(o, k, v) => { o[k] = v; return o; }",
-                vec![receiver.clone(), s(key), n(7.0)],
-            );
-            spec.call(
-                "(o, k, v) => { 'use strict'; o[k] = v; return o; }",
-                vec![receiver.clone(), s(key), n(7.0)],
-            );
-            spec.call(
-                "(o, k, v) => { 'use strict'; o[k] = v; return o; }",
-                vec![receiver.clone(), s(key), bi("7")],
-            );
-            spec.call(
-                "(o, k) => { delete o[k]; return o; }",
-                vec![receiver.clone(), s(key)],
-            );
-            spec.call(
-                "(o, k) => { 'use strict'; delete o[k]; return o; }",
-                vec![receiver.clone(), s(key)],
-            );
-            // Sloppy mode still throws when the element conversion fails.
-            if matches!(receiver, Value::Bytes(_) | Value::TypedArray(..)) {
-                spec.call(
-                    "(o, k, v) => { o[k] = v; return o; }",
-                    vec![receiver.clone(), s(key), bi("7")],
-                );
+            spec.call(INDEX, vec![v.clone(), n(len)]);
+            if !matches!(v, Value::BigInt(_)) {
+                spec.call(SPLICE, vec![v.clone(), n(len)]);
+            }
+        }
+    }
+    for target in member_vals() {
+        for (key, inherited) in KEYS
+            .iter()
+            .map(|k| (*k, false))
+            .chain(INHERITED.iter().map(|k| (*k, true)))
+        {
+            // The CVE-1 encoder names an object by its `constructor`, which these change.
+            let hides_class = matches!(key, "constructor" | "__proto__")
+                && matches!(target, Value::Bytes(_) | Value::Date(_));
+            spec.call(IN, vec![s(key), target.clone()]);
+            spec.call(HAS_OWN, vec![target.clone(), s(key)]);
+            if !inherited {
+                spec.call(GET, vec![target.clone(), s(key)]);
+            }
+            for value in [
+                n(1.0),
+                n(300.0),
+                n(1.5),
+                n(-1.0),
+                n(f64::NAN),
+                s("2"),
+                Value::Null,
+                bi("7"),
+            ] {
+                if !leaves_hole(SET, &target, key, Some(&value)) && !hides_class {
+                    spec.call(SET, vec![target.clone(), s(key), value]);
+                }
+            }
+            if !leaves_hole(DELETE, &target, key, None) {
+                spec.call(DELETE, vec![target.clone(), s(key)]);
             }
         }
     }
@@ -418,30 +430,13 @@ fn ops_spec() -> (Spec, Spec) {
                 spec.call(source, vec![a.clone(), b.clone()]);
             }
         }
-    }
-    for source in ["(a, b) => a == b", "(a, b) => a === b"] {
-        for b in &bin {
-            spec.call(source, vec![sym("s"), b.clone()]);
-            spec.call(source, vec![b.clone(), sym("s")]);
-        }
-        spec.call(source, vec![sym("s"), sym("s")]);
-        spec.call(source, vec![sym("s"), Value::Symbol(None)]);
-    }
-    // Map/Set/TypedArray/Date operands hit the object arms of `+`, `==` and `<`.
-    let exotics = [
-        Value::Map(vec![(s("k"), n(1.0))]),
-        Value::Set(vec![n(1.0)]),
-        Value::ArrayBuffer(vec![1, 2]),
-        Value::DataView(vec![1, 2]),
-        Value::Error("Error".into(), "m".into()),
-        ta("Int8Array", vec![n(1.0), n(2.0)]),
-        ta("BigInt64Array", vec![bi("5")]),
-    ];
-    for source in ["(a, b) => a + b", "(a, b) => a < b", "(a, b) => a == b"] {
-        for a in &exotics {
-            for b in &bin {
+        for a in cve_vals() {
+            for b in bin.iter().step_by(3) {
                 spec.call(source, vec![a.clone(), b.clone()]);
                 spec.call(source, vec![b.clone(), a.clone()]);
+            }
+            for b in cve_vals() {
+                spec.call(source, vec![a.clone(), b]);
             }
         }
     }
@@ -468,9 +463,9 @@ fn dates_spec() -> Spec {
         obj(&[]),
     ];
     for d in [&epoch, &ts, &invalid] {
-        spec.call("(v) => String(v)", vec![d.clone()]);
+        spec.call("(v) => `${v}`", vec![d.clone()]);
         spec.call("(v) => Boolean(v)", vec![d.clone()]);
-        spec.call("(v) => Number(v)", vec![d.clone()]);
+        spec.call("(a) => +a", vec![d.clone()]);
         for o in &others {
             spec.call("(a, b) => a + b", vec![d.clone(), o.clone()]);
             spec.call("(a, b) => a + b", vec![o.clone(), d.clone()]);

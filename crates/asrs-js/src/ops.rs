@@ -6,6 +6,7 @@
 //! implements it here and the CVE-1 `Value` implements it in the `fn` harness, so both share
 //! the one coercion table.
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 
 use crate::math::{self, BigInt};
@@ -41,14 +42,13 @@ pub enum Hint {
 /// A value after `ToPrimitive`: every primitive `JsValue` can produce plus `Symbol`, which
 /// only CVE-1 values carry. `Symbol` holds no identity; `===`/`==` treat any two as
 /// different, which is right for operands decoded separately.
-#[derive(Clone)]
-pub enum Prim {
+pub enum Prim<'a> {
     Undefined,
     Null,
     Bool(bool),
     Number(f64),
-    String(JsString),
-    BigInt(BigInt),
+    String(Cow<'a, JsString>),
+    BigInt(Cow<'a, BigInt>),
     Symbol,
 }
 
@@ -57,32 +57,30 @@ pub enum Prim {
 /// only copy.
 pub trait JsOps: Sized {
     /// `ToPrimitive`; primitive receivers map to themselves.
-    fn to_primitive(&self, hint: Hint) -> Prim;
+    fn to_primitive(&self, hint: Hint) -> Prim<'_>;
     /// Whether the value is already primitive (objects reduce through `to_primitive`).
     fn is_primitive(&self) -> bool;
     /// Wraps the primitive an operator produces back into the value type.
-    fn from_prim(p: Prim) -> Self;
+    fn from_prim(p: Prim<'_>) -> Self;
 }
 
 impl JsOps for JsValue {
-    fn to_primitive(&self, hint: Hint) -> Prim {
+    fn to_primitive(&self, hint: Hint) -> Prim<'_> {
         match self {
             JsValue::Undefined => Prim::Undefined,
             JsValue::Null => Prim::Null,
             JsValue::Bool(b) => Prim::Bool(*b),
             JsValue::Number(x) => Prim::Number(*x),
-            JsValue::String(s) => Prim::String(s.clone()),
-            JsValue::BigInt(b) => Prim::BigInt(b.clone()),
-            JsValue::Array(_) | JsValue::Bytes(_) => Prim::String(to_string(self)),
+            JsValue::String(s) => Prim::String(Cow::Borrowed(s)),
+            JsValue::BigInt(b) => Prim::BigInt(Cow::Borrowed(b)),
+            JsValue::Array(_) | JsValue::Bytes(_) => Prim::String(Cow::Owned(to_string(self))),
             // `ToPrimitive` without a number hint goes through `Date.prototype.toString`,
             // whose local-zone text `to_string` does not model (see its docs).
             JsValue::Date(t) => match hint {
                 Hint::Number => Prim::Number(*t),
-                _ => Prim::String(JsString::from("Invalid Date")),
+                _ => Prim::String(Cow::Owned(to_string(self))),
             },
-            JsValue::Object(_) | JsValue::ExtData(..) => {
-                Prim::String(JsString::from("[object Object]"))
-            }
+            JsValue::Object(_) | JsValue::ExtData(..) => Prim::String(Cow::Owned(to_string(self))),
         }
     }
 
@@ -98,20 +96,20 @@ impl JsOps for JsValue {
         )
     }
 
-    fn from_prim(p: Prim) -> Self {
+    fn from_prim(p: Prim<'_>) -> Self {
         match p {
             Prim::Undefined => JsValue::Undefined,
             Prim::Null => JsValue::Null,
             Prim::Bool(b) => JsValue::Bool(b),
             Prim::Number(x) => JsValue::Number(x),
-            Prim::String(s) => JsValue::String(s),
-            Prim::BigInt(b) => JsValue::BigInt(b),
+            Prim::String(s) => JsValue::String(s.into_owned()),
+            Prim::BigInt(b) => JsValue::BigInt(b.into_owned()),
             Prim::Symbol => unreachable!("JsValue cannot hold a Symbol"),
         }
     }
 }
 
-impl Prim {
+impl Prim<'_> {
     /// `ToNumber` on a primitive.
     pub fn to_number(&self) -> Result<f64, JsError> {
         Ok(match self {
@@ -141,7 +139,7 @@ impl Prim {
             Prim::Null => JsString::from("null"),
             Prim::Bool(b) => JsString::from(if *b { "true" } else { "false" }),
             Prim::Number(x) => JsString::from(number::to_string(*x)),
-            Prim::String(s) => s.clone(),
+            Prim::String(s) => s.clone().into_owned(),
             Prim::BigInt(b) => JsString::from(format!("{b}")),
             Prim::Symbol => {
                 return Err(JsError::type_error(
@@ -166,17 +164,17 @@ impl Prim {
 }
 
 /// `ToNumeric`: a BigInt stays a BigInt, everything else becomes a number.
-enum Numeric {
+enum Numeric<'a> {
     Num(f64),
-    Big(BigInt),
+    Big(&'a BigInt),
 }
 
-fn to_numeric(p: &Prim) -> Result<Numeric, JsError> {
+fn to_numeric<'a>(p: &'a Prim<'_>) -> Result<Numeric<'a>, JsError> {
     match p {
         Prim::Symbol => Err(JsError::type_error(
             "Cannot convert a Symbol value to a number",
         )),
-        Prim::BigInt(b) => Ok(Numeric::Big(b.clone())),
+        Prim::BigInt(b) => Ok(Numeric::Big(b)),
         other => Ok(Numeric::Num(other.to_number()?)),
     }
 }
@@ -187,42 +185,41 @@ fn cannot_mix() -> JsError {
 
 /// `+` on two primitives: string concatenation wins when either side is a string, then a
 /// BigInt pair adds, a lone BigInt is the mix TypeError, and the rest is numeric.
-fn add_prims(a: &Prim, b: &Prim) -> Result<Prim, JsError> {
+fn add_prims(a: &Prim<'_>, b: &Prim<'_>) -> Result<Prim<'static>, JsError> {
     if matches!(a, Prim::String(_)) || matches!(b, Prim::String(_)) {
         let mut s = a.to_js_string()?;
         s.push_str(&b.to_js_string()?);
-        return Ok(Prim::String(s));
+        return Ok(Prim::String(Cow::Owned(s)));
     }
     match (to_numeric(a)?, to_numeric(b)?) {
-        (Numeric::Big(x), Numeric::Big(y)) => Ok(Prim::BigInt(x.add(&y))),
+        (Numeric::Big(x), Numeric::Big(y)) => Ok(Prim::BigInt(Cow::Owned(x.add(y)))),
         (Numeric::Big(_), _) | (_, Numeric::Big(_)) => Err(cannot_mix()),
         (Numeric::Num(x), Numeric::Num(y)) => Ok(Prim::Number(x + y)),
     }
 }
 
 /// `-` on two primitives: the numeric half of `add_prims`.
-fn sub_prims(a: &Prim, b: &Prim) -> Result<Prim, JsError> {
+fn sub_prims(a: &Prim<'_>, b: &Prim<'_>) -> Result<Prim<'static>, JsError> {
     match (to_numeric(a)?, to_numeric(b)?) {
-        (Numeric::Big(x), Numeric::Big(y)) => Ok(Prim::BigInt(x.sub(&y))),
+        (Numeric::Big(x), Numeric::Big(y)) => Ok(Prim::BigInt(Cow::Owned(x.sub(y)))),
         (Numeric::Big(_), _) | (_, Numeric::Big(_)) => Err(cannot_mix()),
         (Numeric::Num(x), Numeric::Num(y)) => Ok(Prim::Number(x - y)),
     }
 }
 
-/// `StringToBigInt` for the decimal case (`StringToNumeric` would also take radix
-/// literals, which callers never send).
+/// `StringToBigInt`.
 fn string_to_bigint(s: &JsString) -> Option<BigInt> {
     BigInt::parse(&s.trim().to_string_lossy()).ok()
 }
 
 /// What a BigInt comparison converts the other operand to; `None` is the spec's
 /// `undefined` (an unparsable string, `undefined` or `NaN`).
-fn prim_to_bigint(p: &Prim) -> Option<BigInt> {
+fn prim_to_bigint<'a>(p: &'a Prim<'_>) -> Option<Cow<'a, BigInt>> {
     match p {
-        Prim::BigInt(b) => Some(b.clone()),
-        Prim::Bool(b) => Some(BigInt::from_i64(i64::from(*b))),
-        Prim::Null => Some(BigInt::zero()),
-        Prim::String(s) => string_to_bigint(s),
+        Prim::BigInt(b) => Some(Cow::Borrowed(&**b)),
+        Prim::Bool(b) => Some(Cow::Owned(BigInt::from_i64(i64::from(*b)))),
+        Prim::Null => Some(Cow::Owned(BigInt::zero())),
+        Prim::String(s) => string_to_bigint(s).map(Cow::Owned),
         _ => None,
     }
 }
@@ -248,8 +245,8 @@ fn bigint_cmp_f64(big: &BigInt, x: f64) -> Option<Ordering> {
     })
 }
 
-/// `SameValue` for primitives, the leaf of `===`.
-fn strict_eq_prims(a: &Prim, b: &Prim) -> bool {
+/// `===` on primitives.
+fn strict_eq_prims(a: &Prim<'_>, b: &Prim<'_>) -> bool {
     match (a, b) {
         (Prim::Undefined, Prim::Undefined) | (Prim::Null, Prim::Null) => true,
         (Prim::Bool(x), Prim::Bool(y)) => x == y,
@@ -262,7 +259,7 @@ fn strict_eq_prims(a: &Prim, b: &Prim) -> bool {
 
 /// `==` on primitives. Two symbols are never equal here: operands arrive as separate
 /// values, so they hold distinct symbols upstream too.
-fn loose_eq_prims(a: &Prim, b: &Prim) -> bool {
+fn loose_eq_prims(a: &Prim<'_>, b: &Prim<'_>) -> bool {
     match (a, b) {
         (Prim::Undefined | Prim::Null, Prim::Undefined | Prim::Null) => true,
         (Prim::Undefined | Prim::Null, _) | (_, Prim::Undefined | Prim::Null) => false,
@@ -277,17 +274,17 @@ fn loose_eq_prims(a: &Prim, b: &Prim) -> bool {
             *x == number::to_number(s.units())
         }
         (Prim::BigInt(x), Prim::String(s)) | (Prim::String(s), Prim::BigInt(x)) => {
-            string_to_bigint(s).is_some_and(|b| b == *x)
+            string_to_bigint(s).is_some_and(|b| b == **x)
         }
         (Prim::Number(x), Prim::BigInt(b)) | (Prim::BigInt(b), Prim::Number(x)) => {
-            x.is_finite() && x.fract() == 0.0 && BigInt::from_f64(*x).is_ok_and(|v| v == *b)
+            x.is_finite() && x.fract() == 0.0 && BigInt::from_f64(*x).is_ok_and(|v| v == **b)
         }
     }
 }
 
 /// `===` strict equality: numbers by IEEE value (`NaN` never equal, `-0` equals `+0`),
-/// BigInts by value, and reference equality for objects, which is never true here —
-/// every operand upstream compares came from a separate parse.
+/// BigInts by value, and reference equality for objects, which is never true here: every
+/// operand upstream compares came from a separate parse.
 pub fn strict_equals<V: JsOps>(a: &V, b: &V) -> bool {
     a.is_primitive()
         && b.is_primitive()
@@ -340,7 +337,7 @@ pub fn subtract<V: JsOps>(a: &V, b: &V) -> Result<V, JsError> {
 pub fn negate<V: JsOps>(a: &V) -> Result<V, JsError> {
     Ok(V::from_prim(
         match to_numeric(&a.to_primitive(Hint::Number))? {
-            Numeric::Big(b) => Prim::BigInt(b.neg()),
+            Numeric::Big(b) => Prim::BigInt(Cow::Owned(b.neg())),
             Numeric::Num(x) => Prim::Number(-x),
         },
     ))
@@ -356,7 +353,10 @@ pub fn unary_plus<V: JsOps>(a: &V) -> Result<V, JsError> {
 /// The abstract relational comparison; `None` is its `undefined` (a NaN operand).
 pub fn compare<V: JsOps>(a: &V, b: &V) -> Result<Option<Ordering>, JsError> {
     let pa = a.to_primitive(Hint::Number);
-    let pb = b.to_primitive(Hint::Number);
+    let mut pb = b.to_primitive(Hint::Number);
+    if let (Prim::Number(x), Prim::Number(y)) = (&pa, &pb) {
+        return Ok(x.partial_cmp(y));
+    }
     if let (Prim::String(x), Prim::String(y)) = (&pa, &pb) {
         return Ok(Some(x.units().cmp(y.units())));
     }
@@ -365,21 +365,26 @@ pub fn compare<V: JsOps>(a: &V, b: &V) -> Result<Option<Ordering>, JsError> {
             "Cannot convert a Symbol value to a number",
         ));
     }
+    // V8 deviates from the spec here: with a BigInt on the left, an object on the right
+    // compares as the number its text converts to (`5n > [1.5]` is true, `5n > "1.5"` not).
+    if a.is_primitive()
+        && !b.is_primitive()
+        && let (Prim::BigInt(_), Prim::String(s)) = (&pa, &pb)
+    {
+        pb = Prim::Number(number::to_number(s.units()));
+    }
     if matches!(pa, Prim::BigInt(_)) || matches!(pb, Prim::BigInt(_)) {
-        let big_vs_f64 = |big: &Prim, x: f64| match prim_to_bigint(big) {
-            Some(big) => bigint_cmp_f64(&big, x),
-            None => None,
-        };
+        let big_vs_f64 =
+            |big: &Prim<'_>, x: f64| prim_to_bigint(big).and_then(|big| bigint_cmp_f64(&big, x));
         if let Prim::Number(x) = pa {
             return Ok(big_vs_f64(&pb, x).map(Ordering::reverse));
         }
         if let Prim::Number(y) = pb {
             return Ok(big_vs_f64(&pa, y));
         }
-        return Ok(match (prim_to_bigint(&pa), prim_to_bigint(&pb)) {
-            (Some(x), Some(y)) => Some(x.cmp(&y)),
-            _ => None,
-        });
+        return Ok(prim_to_bigint(&pa)
+            .zip(prim_to_bigint(&pb))
+            .map(|(x, y)| x.cmp(&y)));
     }
     Ok(pa.to_number()?.partial_cmp(&pb.to_number()?))
 }
@@ -426,7 +431,6 @@ pub fn get(value: &JsValue, key: &str) -> Result<JsValue, JsError> {
                 .get(i as usize)
                 .map_or(JsValue::Undefined, |b| JsValue::Number(f64::from(*b))),
             None if key == "length" || key == "byteLength" => JsValue::Number(bytes.len() as f64),
-            None if key == "byteOffset" => JsValue::Number(0.0),
             None => JsValue::Undefined,
         }),
         JsValue::String(s) => Ok(match array_index(&key.encode_utf16().collect::<Vec<_>>()) {
@@ -741,38 +745,6 @@ pub fn has_own(value: &JsValue, key: &JsString) -> Result<bool, JsError> {
     })
 }
 
-/// `[...value]`: arrays spread elements, strings code units, typed arrays bytes;
-/// everything else is not iterable.
-pub fn spread_iter(value: &JsValue) -> Result<Vec<JsValue>, JsError> {
-    match value {
-        JsValue::Array(items) => Ok(items.clone()),
-        JsValue::String(s) => Ok(s
-            .units()
-            .iter()
-            .map(|&u| JsValue::String(JsString::from_units(vec![u])))
-            .collect()),
-        JsValue::Bytes(bytes) => Ok(bytes
-            .iter()
-            .map(|&b| JsValue::Number(f64::from(b)))
-            .collect()),
-        other => Err(JsError::type_error(format!(
-            "{} is not iterable (cannot read property Symbol(Symbol.iterator))",
-            spread_describe(other)
-        ))),
-    }
-}
-
-fn spread_describe(value: &JsValue) -> String {
-    match value {
-        JsValue::Undefined => "undefined".to_owned(),
-        JsValue::Null => "null".to_owned(),
-        JsValue::Object(_) | JsValue::ExtData(..) => "{}".to_owned(),
-        JsValue::Array(_) => to_string(value).to_string_lossy(),
-        JsValue::String(s) => format!("'{}'", s.to_string_lossy()),
-        other => to_string(other).to_string_lossy(),
-    }
-}
-
 /// `{...value}`: own enumerable properties, which for a string primitive or a typed
 /// array are the index keys.
 pub fn spread(value: &JsValue) -> JsObject<JsValue> {
@@ -811,6 +783,14 @@ pub fn spread(value: &JsValue) -> JsObject<JsValue> {
         _ => {}
     }
     object
+}
+
+/// Whether `CanonicalNumericIndexString(key)` is a number. A typed array treats a write to
+/// such a key (`"1.5"` and `"-0"` included) as an element write, which converts the value
+/// even when there is no such element.
+fn canonical_numeric_index(key: &JsString) -> bool {
+    *key == JsString::from("-0")
+        || JsString::from(number::to_string(number::to_number(key.units()))) == *key
 }
 
 // JS arrays go sparse; growing a dense Vec past this many holes would exhaust memory on a
@@ -869,6 +849,11 @@ pub fn set_key(target: &mut JsValue, key: &JsString, value: JsValue) -> Result<(
                 s.to_string_lossy()
             )))
         }
+        JsValue::Bool(_) | JsValue::Number(_) | JsValue::String(_) | JsValue::BigInt(_)
+            if name == "__proto__" =>
+        {
+            Ok(())
+        }
         JsValue::Bool(_) | JsValue::Number(_) | JsValue::String(_) | JsValue::BigInt(_) => {
             Err(JsError::type_error(format!(
                 "Cannot create property '{name}' on {} '{}'",
@@ -877,9 +862,11 @@ pub fn set_key(target: &mut JsValue, key: &JsString, value: JsValue) -> Result<(
             )))
         }
         JsValue::Bytes(bytes) => {
-            if let Some(i) = array_index(key.units()) {
-                if (i as usize) < bytes.len() {
-                    bytes[i as usize] = math::to_uint8(to_number(&value)?);
+            if canonical_numeric_index(key) {
+                let x = to_number(&value)?;
+                if let Some(slot) = array_index(key.units()).and_then(|i| bytes.get_mut(i as usize))
+                {
+                    *slot = math::to_uint8(x);
                 }
                 Ok(())
             } else if matches!(
@@ -999,12 +986,12 @@ pub fn to_string(value: &JsValue) -> JsString {
 
 /// `ToBoolean`.
 pub fn to_boolean(value: &JsValue) -> bool {
-    !value.is_primitive() || JsOps::to_primitive(value, Hint::Default).to_boolean()
+    !value.is_primitive() || value.to_primitive(Hint::Default).to_boolean()
 }
 
 /// `ToNumber`, as unary `+` and an `Array.prototype.length` write apply it.
 pub fn to_number(value: &JsValue) -> Result<f64, JsError> {
-    JsOps::to_primitive(value, Hint::Number).to_number()
+    value.to_primitive(Hint::Number).to_number()
 }
 
 /// `ToNumber`, as a binary `-` applies it: the BigInt failure is the operator's "mix"

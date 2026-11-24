@@ -1,6 +1,6 @@
-{"fn":"oracle:call","args":["(v) => String(v)",{"d":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(v) => `${v}`",{"d":"0000000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Boolean(v)",{"d":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(v) => Number(v)",{"d":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(a) => +a",{"d":"0000000000000000"}]}
 {"fn":"oracle:call","args":["(a, b) => a + b",{"d":"0000000000000000"},{"n":"3ff0000000000000"}]}
 {"fn":"oracle:call","args":["(a, b) => a + b",{"n":"3ff0000000000000"},{"d":"0000000000000000"}]}
 {"fn":"oracle:call","args":["(a, b) => a == b",{"d":"0000000000000000"},{"n":"3ff0000000000000"}]}
@@ -73,9 +73,9 @@
 {"fn":"oracle:call","args":["(a, b) => a < b",{"d":"0000000000000000"},{"d":"7ff8000000000000"}]}
 {"fn":"oracle:call","args":["(a, b) => a === b",{"d":"0000000000000000"},{"d":"7ff8000000000000"}]}
 {"fn":"oracle:call","args":["(a, b) => a == b",{"d":"0000000000000000"},{"d":"7ff8000000000000"}]}
-{"fn":"oracle:call","args":["(v) => String(v)",{"d":"4278bcfe56800000"}]}
+{"fn":"oracle:call","args":["(v) => `${v}`",{"d":"4278bcfe56800000"}]}
 {"fn":"oracle:call","args":["(v) => Boolean(v)",{"d":"4278bcfe56800000"}]}
-{"fn":"oracle:call","args":["(v) => Number(v)",{"d":"4278bcfe56800000"}]}
+{"fn":"oracle:call","args":["(a) => +a",{"d":"4278bcfe56800000"}]}
 {"fn":"oracle:call","args":["(a, b) => a + b",{"d":"4278bcfe56800000"},{"n":"3ff0000000000000"}]}
 {"fn":"oracle:call","args":["(a, b) => a + b",{"n":"3ff0000000000000"},{"d":"4278bcfe56800000"}]}
 {"fn":"oracle:call","args":["(a, b) => a == b",{"d":"4278bcfe56800000"},{"n":"3ff0000000000000"}]}
@@ -148,9 +148,9 @@
 {"fn":"oracle:call","args":["(a, b) => a < b",{"d":"4278bcfe56800000"},{"d":"7ff8000000000000"}]}
 {"fn":"oracle:call","args":["(a, b) => a === b",{"d":"4278bcfe56800000"},{"d":"7ff8000000000000"}]}
 {"fn":"oracle:call","args":["(a, b) => a == b",{"d":"4278bcfe56800000"},{"d":"7ff8000000000000"}]}
-{"fn":"oracle:call","args":["(v) => String(v)",{"d":"7ff8000000000000"}]}
+{"fn":"oracle:call","args":["(v) => `${v}`",{"d":"7ff8000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Boolean(v)",{"d":"7ff8000000000000"}]}
-{"fn":"oracle:call","args":["(v) => Number(v)",{"d":"7ff8000000000000"}]}
+{"fn":"oracle:call","args":["(a) => +a",{"d":"7ff8000000000000"}]}
 {"fn":"oracle:call","args":["(a, b) => a + b",{"d":"7ff8000000000000"},{"n":"3ff0000000000000"}]}
 {"fn":"oracle:call","args":["(a, b) => a + b",{"n":"3ff0000000000000"},{"d":"7ff8000000000000"}]}
 {"fn":"oracle:call","args":["(a, b) => a == b",{"d":"7ff8000000000000"},{"n":"3ff0000000000000"}]}
