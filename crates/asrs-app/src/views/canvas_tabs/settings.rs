@@ -22,6 +22,7 @@ use asrs_ui::parity::probed;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, LineHeight, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY};
+use asrs_ui::tooltip::titled;
 
 use super::super::frame::{FrameHost, HubFrame};
 use super::super::number::FormNumber;
@@ -42,6 +43,10 @@ const SELECT_HEIGHT: f64 = 25.0;
 /// The UA's 2 px border and 1 px (block) or 2 px (inline) padding on both sides of an input.
 const INPUT_CHROME: [f64; 2] = [8.0, 6.0];
 const SPLIT_TOP: f64 = 8.0;
+const ROTATE_TITLES: &[&str] = &[
+    "Rotate swerve module layout counter-clockwise",
+    "Rotate swerve module layout clockwise",
+];
 const ORIENTATION_ICONS: [&str; 2] = ["rotateleft.svg", "rotateright.svg"];
 
 /// A form control by the controller member that holds it.
@@ -58,6 +63,19 @@ pub enum Control {
 }
 
 impl Control {
+    pub(super) fn title(self) -> &'static str {
+        match self {
+            Control::MaxSpeed => "Maximum speed (meters per second)",
+            Control::SizeX => "Robot frame length (meters)",
+            Control::SizeY => "Robot frame width (meters)",
+            Control::Width => "Coordinate system width (pixels)",
+            Control::Height => "Coordinate system height (pixels)",
+            Control::Orientation => "Coordinate system orientation",
+            Control::Origin => "Coordinate system origin",
+            Control::Joystick(_) => "Select joystick data source",
+        }
+    }
+
     fn probe(self) -> &'static str {
         match self {
             Control::MaxSpeed => "input.max-speed",
@@ -480,14 +498,17 @@ impl<H: FrameHost> HubFrame<H> {
                             outside.update(cx, |field, cx| field.blur(window, cx));
                         })
                         .child(field);
-                    content = content.child(probed(control.probe(), element));
+                    content =
+                        content.child(probed(control.probe(), titled(control.title(), element)));
                 }
             }
             if let Block::Select(control) = block {
                 let rect = layout.select(layout.column(), top);
                 if let Some(select) = self.select_control(key, *control, rect, scale, window, cx) {
-                    content =
-                        content.child(probed(control.probe(), local(rect, origin).child(select)));
+                    content = content.child(probed(
+                        control.probe(),
+                        titled(control.title(), local(rect, origin).child(select)),
+                    ));
                 }
             }
             if let Block::Rotate = block {
@@ -547,6 +568,7 @@ impl<H: FrameHost> HubFrame<H> {
         let (x, y) = (snapped(rect[0]), snapped(rect[1]));
         local([x, y, rect[2], rect[3]], origin).child(
             SegmentedControl::new(("swerve-orientation", key), segments)
+                .titles(ROTATE_TITLES)
                 .subpixel((rect[0] - x) as f32)
                 .size(rect[2] as f32, rect[3] as f32)
                 .appearance(appearance)

@@ -3,7 +3,7 @@
 //! Blink's parse and serialization of the inline style values the Mechanism and Points
 //! renderers assign (`element.style.<property> = value`).
 
-use asrs_canvas::color::{self, Parsed, Slow};
+use asrs_canvas::color::{self, Function, Parsed, Slow};
 use asrs_js::string::JsError;
 use asrs_js::{math, number};
 
@@ -311,8 +311,8 @@ fn is_ident(s: &str) -> bool {
 
 /// A `stroke`/`fill` (`paint`) or colour value: `Some(Ok)` as Blink serializes it, `Some(None)`
 /// when Blink rejects it, `None` when it is outside the modelled subset: keywords, `#` hex,
-/// `rgb[a]()` and `hsl[a]()` in the fast path's syntax, `rgb[a]()` of plain number and
-/// percentage tokens, and quirky hashless hex.
+/// `rgb[a]()`, `hsl[a]()` and `hwb()` of number, percentage, angle and `none` tokens, and
+/// quirky hashless hex.
 fn color_value(value: &str, quirky: bool, paint: bool) -> Option<Option<String>> {
     let trimmed = trim(value);
     let lower = trimmed.to_ascii_lowercase();
@@ -347,19 +347,29 @@ fn color_value(value: &str, quirky: bool, paint: bool) -> Option<Option<String>>
     if !blocks_or_escapes {
         return Some(None);
     }
+    if may_substitute(&lower) {
+        return None;
+    }
     let open = trimmed.find('(')?;
     let name = &trimmed[..open];
     if name.contains(is_space) && !name.contains("/*") {
         return Some(None);
     }
-    if !matches!(name.to_ascii_lowercase().as_str(), "rgb" | "rgba") {
-        return None;
-    }
-    match color::parse_rgb_tokens(&trimmed[open + 1..]) {
+    let function = Function::from_name(&name.to_ascii_lowercase())?;
+    match color::parse_function(function, &trimmed[open + 1..]) {
         Slow::Valid(parsed) => Some(Some(serialize_color(parsed))),
         Slow::Invalid => Some(None),
         Slow::Unmodeled => None,
     }
+}
+
+/// Whether the value may hold an arbitrary substitution function (a name may hide behind an
+/// escape), which makes Blink keep it verbatim whatever surrounds it.
+fn may_substitute(lower: &str) -> bool {
+    ["var(", "env(", "attr(", "if(", "inherit(", "\\"]
+        .iter()
+        .any(|f| lower.contains(f))
+        || (lower.contains("--") && lower.contains('('))
 }
 
 /// `Color::SerializeLegacyColorAsCSSColor`. Every value it rounds is non-negative, where C's

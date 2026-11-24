@@ -22,8 +22,9 @@ pub mod probe;
 mod startup_error;
 
 use std::path::Path;
+use std::time::Duration;
 
-use gpui_kit::{App, Bounds, Pixels, ScrollDelta, ScrollEvent, Window};
+use gpui_kit::{App, Bounds, Pixels, Point, ScrollDelta, ScrollEvent, Window};
 
 /// Chromium's pixel size of one notched wheel tick on macOS (`kScrollbarPixelsPerCocoaTick`).
 pub const PIXELS_PER_WHEEL_TICK: f32 = 40.0;
@@ -385,6 +386,47 @@ pub(crate) fn popup_window_opened(
 #[cfg(target_os = "linux")]
 pub(crate) fn dismiss_popup(window: &Window) -> bool {
     imp::dismiss_popup(window)
+}
+
+/// `ScrollbarTheme`'s `InitialAutoscrollTimerDelay` and `AutoscrollTimerDelay`, which also pace a
+/// held spin button.
+pub(crate) fn scroll_button_delays() -> (Duration, Duration) {
+    imp::scroll_button_delays()
+}
+
+/// Whether the window is the one keys go to.
+pub(crate) fn is_key_window(window: &Window) -> bool {
+    imp::is_key_window(window)
+}
+
+/// Sets the native tooltip at the pointer; empty removes it. Only macOS has one.
+pub(crate) fn set_tooltip(window: &Window, text: &str) {
+    imp::set_tooltip(window, text);
+}
+
+/// Has a popup take neither the pointer nor the activation on Windows; on Linux it takes the
+/// pointer, as Chromium's does, and cannot be activated.
+pub(crate) fn ignore_input(window: &Window) {
+    #[cfg(windows)]
+    imp::ignore_input(window);
+    let _ = window;
+}
+
+/// Where a popup at `at` in the window goes: the window's content origin on screen, `None` where
+/// the compositor places popups itself, and the display the popup stays on.
+pub(crate) fn popup_space(
+    window: &Window,
+    at: Point<Pixels>,
+    cx: &App,
+) -> Option<(Option<Point<Pixels>>, Bounds<Pixels>)> {
+    #[cfg(target_os = "linux")]
+    return imp::popup_space(window, at, cx);
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = at;
+        let display = window.display(cx).or_else(|| cx.primary_display())?;
+        Some((Some(window.bounds().origin), display.bounds()))
+    }
 }
 
 /// Electron's `menu.closePopup(window)`.

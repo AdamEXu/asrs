@@ -9,13 +9,12 @@
 //! Lite and XR are out of scope: `DISTRIBUTION` is never `LiteDS` and `activeXRUUID` stays
 //! `null`, which upstream still compares every controller UUID against.
 
-mod js;
-
 use std::cell::{Ref, RefCell};
 use std::fmt;
 use std::rc::Rc;
 
 use asrs_js::math;
+use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsObject, JsValue};
 use asrs_log::log::Log;
@@ -32,8 +31,6 @@ use asrs_tabs::console::controller::{ConsoleController, ConsoleRenderer};
 use indexmap::IndexSet;
 
 use crate::drag::DragUpdate;
-
-use js::{num, read_error};
 
 pub const TAB_DRAG_THRESHOLD_PX: f64 = 5.0;
 pub const DEFAULT_CONTROLS_HEIGHT: f64 = 200.0;
@@ -81,27 +78,21 @@ fn icon(kind: Option<TabType>) -> &'static str {
 fn title_text(kind: Option<TabType>, title: &JsValue) -> JsString {
     let mut text = JsString::from(icon(kind));
     text.push_str(&JsString::from(" "));
-    if js::strict_eq(title, &JsValue::string("")) {
+    if ops::strict_equals(title, &JsValue::string("")) {
         text.push_str(&JsString::from(default_title(kind)));
     } else {
-        text.push_str(&js::to_string(title));
+        text.push_str(&ops::to_string(title));
     }
     text
 }
 
 fn get(value: &JsValue, key: &str) -> JsValue {
-    match value {
-        JsValue::Object(o) => o.get(key).cloned().unwrap_or_default(),
-        _ => JsValue::Undefined,
-    }
+    ops::get(value, key).unwrap_or_default()
 }
 
 /// `value[key]`, which throws on `undefined` and `null`.
 fn read(value: &JsValue, key: &str) -> Result<JsValue> {
-    match value {
-        JsValue::Undefined | JsValue::Null => Err(type_error(read_error(value, key))),
-        _ => Ok(get(value, key)),
-    }
+    ops::get(value, key).map_err(TabsError::from)
 }
 
 fn type_error(message: impl Into<String>) -> TabsError {
@@ -109,7 +100,41 @@ fn type_error(message: impl Into<String>) -> TabsError {
 }
 
 fn missing(property: &str) -> TabsError {
-    type_error(read_error(&JsValue::Undefined, property))
+    ops::cannot_read(&JsValue::Undefined, property).into()
+}
+
+fn num(n: f64) -> JsValue {
+    JsValue::Number(n)
+}
+
+fn len(n: usize) -> JsValue {
+    JsValue::Number(n as f64)
+}
+
+/// `a + b`. Inputs come from a restored layout's JSON, so the BigInt `TypeError`
+/// `ops::add` can raise is unreachable; `NaN` is the inert fallback.
+fn add(a: &JsValue, b: &JsValue) -> JsValue {
+    ops::add(a, b).unwrap_or_else(|_| num(f64::NAN))
+}
+
+fn to_number(v: &JsValue) -> f64 {
+    ops::to_number(v).unwrap_or(f64::NAN)
+}
+
+fn lt(a: &JsValue, b: &JsValue) -> bool {
+    ops::lt(a, b).unwrap_or(false)
+}
+
+fn gt(a: &JsValue, b: &JsValue) -> bool {
+    ops::gt(a, b).unwrap_or(false)
+}
+
+fn le(a: &JsValue, b: &JsValue) -> bool {
+    ops::le(a, b).unwrap_or(false)
+}
+
+fn ge(a: &JsValue, b: &JsValue) -> bool {
+    ops::ge(a, b).unwrap_or(false)
 }
 
 fn contains(rect: &Rect, x: f64, y: f64) -> bool {
@@ -553,13 +578,13 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
 
     /// `tabList[i].controller`, for `eval` steps that reach a tab by index.
     pub fn controller_mut(&mut self, index: &JsValue) -> Result<&mut dyn TabController<Cx>> {
-        let i = js::index(index, self.tabs.len()).ok_or_else(|| missing("controller"))?;
+        let i = ops::list_index(index, self.tabs.len()).ok_or_else(|| missing("controller"))?;
         Ok(&mut *self.tabs[i].controller)
     }
 
     /// `tabList[i].renderer`.
     pub fn renderer_mut(&mut self, index: &JsValue) -> Result<&mut dyn TabRenderer<Cx>> {
-        let i = js::index(index, self.tabs.len()).ok_or_else(|| missing("renderer"))?;
+        let i = ops::list_index(index, self.tabs.len()).ok_or_else(|| missing("renderer"))?;
         Ok(&mut *self.tabs[i].renderer)
     }
 
@@ -599,12 +624,12 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
 
     /// The tab `tabList[selectedTab]` reads.
     pub fn selected_index(&self) -> Option<usize> {
-        js::index(&self.selected, self.tabs.len())
+        ops::list_index(&self.selected, self.tabs.len())
     }
 
     /// Whether `index === selectedTab`, which decides the highlighted tab and local rendering.
     pub fn is_selected(&self, index: usize) -> bool {
-        js::strict_eq(&js::len(index), &self.selected)
+        ops::strict_equals(&len(index), &self.selected)
     }
 
     /// `getSelectedTabType()`.
@@ -656,16 +681,13 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
     fn update_controls_height(&mut self, cx: &Cx) -> Result {
         let mut available = cx.inner_height() - cx.renderer_top(self.show_timeline.unwrap_or(true));
         available -= 150.0;
-        if js::lt(&self.selected, &num(0.0)) || js::ge(&self.selected, &js::len(self.tabs.len())) {
+        if lt(&self.selected, &num(0.0)) || ge(&self.selected, &len(self.tabs.len())) {
             return Ok(());
         }
         let i = self.lookup_selected("type")?;
         let tab = &mut self.tabs[i];
         let fixed = fixed_for_value(&tab.type_value);
-        let mut applied = math::min2(
-            math::max2(js::to_number(&tab.controls_height), 0.0),
-            available,
-        );
+        let mut applied = math::min2(math::max2(to_number(&tab.controls_height), 0.0), available);
         match fixed {
             Some(height) => applied = if applied > 30.0 { height } else { 0.0 },
             None => {
@@ -693,7 +715,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
     fn update_elements(&mut self, cx: &Cx) -> Result {
         self.bar = self.tabs.iter().map(|t| t.element.clone()).collect();
         for (i, tab) in self.tabs.iter_mut().enumerate() {
-            let selected = js::strict_eq(&js::len(i), &self.selected);
+            let selected = ops::strict_equals(&len(i), &self.selected);
             let mut element = tab.element.borrow_mut();
             if selected {
                 element.add("tab-selected");
@@ -741,7 +763,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         let list = match read(state, "tabs")? {
             v @ JsValue::Array(_) => v.into_array().unwrap(),
             v @ (JsValue::Undefined | JsValue::Null) => {
-                return Err(type_error(read_error(&v, "forEach")));
+                return Err(ops::cannot_read(&v, "forEach").into());
             }
             _ => return Err(type_error("state.tabs.forEach is not a function")),
         };
@@ -749,8 +771,8 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             let type_value = read(tab_state, "type")?;
             self.add_tab(cx, &type_value)?;
             let title = get(tab_state, "title");
-            if js::truthy(&title) {
-                self.rename_tab(&js::len(index), title)?;
+            if ops::to_boolean(&title) {
+                self.rename_tab(&len(index), title)?;
             }
             let tab = self
                 .tabs
@@ -762,13 +784,14 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             tab.renderer
                 .restore_state(cx, &get(tab_state, "renderer"))?;
             let controls_height = get(tab_state, "controlsHeight");
-            if js::strict_eq(&controls_height, &num(0.0)) || fixed_for_value(&type_value).is_none()
+            if ops::strict_equals(&controls_height, &num(0.0))
+                || fixed_for_value(&type_value).is_none()
             {
                 tab.controls_height = controls_height;
             }
         }
         let selected = get(state, "selected");
-        self.selected = if js::ge(&selected, &js::len(self.tabs.len())) {
+        self.selected = if ge(&selected, &len(self.tabs.len())) {
             self.last_index()
         } else {
             selected
@@ -807,11 +830,11 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         let i = self.lookup_selected("type")?;
         let tab = &mut self.tabs[i];
         let fixed = fixed_for_value(&tab.type_value);
-        tab.controls_height = if js::strict_eq(&tab.controls_height, &num(0.0)) {
+        tab.controls_height = if ops::strict_equals(&tab.controls_height, &num(0.0)) {
             num(fixed.unwrap_or(DEFAULT_CONTROLS_HEIGHT))
         } else {
             #[allow(clippy::neg_multiply)]
-            let flipped = js::to_number(&tab.controls_height) * -1.0;
+            let flipped = to_number(&tab.controls_height) * -1.0;
             num(flipped)
         };
         self.update_controls_height(cx)
@@ -820,18 +843,18 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
     /// `addTab(type)`, with the raw type value.
     pub fn add_tab(&mut self, cx: &mut Cx, type_value: &JsValue) -> Result {
         let metadata = num(TabType::Metadata.number());
-        if js::strict_eq(type_value, &metadata)
+        if ops::strict_equals(type_value, &metadata)
             && let Some(existing) = self
                 .tabs
                 .iter()
-                .position(|t| js::strict_eq(&t.type_value, &metadata))
+                .position(|t| ops::strict_equals(&t.type_value, &metadata))
         {
-            return self.set_selected(cx, &js::len(existing));
+            return self.set_selected(cx, &len(existing));
         }
         if matches!(type_value, JsValue::Undefined | JsValue::Null) {
-            return Err(type_error(read_error(type_value, "toString")));
+            return Err(ops::cannot_read(type_value, "toString").into());
         }
-        let key = js::to_string(type_value);
+        let key = ops::to_string(type_value);
         let names_template = TabType::ALL
             .iter()
             .any(|t| key == JsString::from(asrs_js::number::to_string(t.number())));
@@ -848,7 +871,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             self.selected = num(-1.0);
         }
         let controls_height = fixed_for_value(type_value).unwrap_or(DEFAULT_CONTROLS_HEIGHT);
-        let at = js::splice_start(&js::add(&self.selected, &num(1.0)), self.tabs.len());
+        let at = ops::splice_start(&add(&self.selected, &num(1.0)), self.tabs.len());
         self.tabs.insert(
             at,
             Tab {
@@ -863,13 +886,13 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
                 controls_height: num(controls_height),
             },
         );
-        self.selected = js::add(&self.selected, &num(1.0));
+        self.selected = add(&self.selected, &num(1.0));
         self.update_elements(cx)
     }
 
     /// `newSatellite()`: asks main for a satellite showing the selected tab.
     pub fn new_satellite(&mut self) -> Result {
-        if js::ge(&self.selected, &num(0.0)) {
+        if ge(&self.selected, &num(0.0)) {
             let i = self.lookup_selected("controller")?;
             let mut o = JsObject::new();
             o.insert("uuid", self.tabs[i].uuid.clone());
@@ -885,11 +908,11 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
     /// `close(index, force)`. A tab whose UUID is `null` matches the unset `activeXRUUID`, so
     /// without `force` upstream asks main to confirm an XR close (out of scope) instead.
     pub fn close(&mut self, cx: &Cx, index: &JsValue, force: &JsValue) -> Result {
-        if js::lt(index, &num(1.0)) || js::gt(index, &self.last_index()) {
+        if lt(index, &num(1.0)) || gt(index, &self.last_index()) {
             return Ok(());
         }
-        let force = js::truthy(force);
-        let i = js::index(index, self.tabs.len()).ok_or_else(|| {
+        let force = ops::to_boolean(force);
+        let i = ops::list_index(index, self.tabs.len()).ok_or_else(|| {
             missing(if force {
                 "rendererElement"
             } else {
@@ -900,17 +923,17 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             return Ok(());
         }
         self.tabs.remove(i);
-        if js::gt(&self.selected, index) {
-            self.selected = num(js::to_number(&self.selected) - 1.0);
+        if gt(&self.selected, index) {
+            self.selected = num(to_number(&self.selected) - 1.0);
         }
-        if js::gt(&self.selected, &self.last_index()) {
+        if gt(&self.selected, &self.last_index()) {
             self.selected = self.last_index();
         }
         self.update_elements(cx)
     }
 
     pub fn set_selected(&mut self, cx: &Cx, index: &JsValue) -> Result {
-        if js::lt(index, &num(0.0)) || js::gt(index, &self.last_index()) {
+        if lt(index, &num(0.0)) || gt(index, &self.last_index()) {
             return Ok(());
         }
         self.selected = index.clone();
@@ -919,38 +942,38 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
 
     /// The `move-tab` message: `setSelected(getSelectedTab() + delta)`.
     pub fn move_selection(&mut self, cx: &Cx, delta: &JsValue) -> Result {
-        let index = js::add(&self.selected, delta);
+        let index = add(&self.selected, delta);
         self.set_selected(cx, &index)
     }
 
     pub fn shift(&mut self, cx: &Cx, index: &JsValue, shift: &JsValue) -> Result {
         let min_index = num(1.0);
-        if js::lt(index, &min_index) {
+        if lt(index, &min_index) {
             return Ok(());
         }
         let mut shift = shift.clone();
-        if js::lt(&js::add(index, &shift), &min_index) {
-            shift = num(1.0 - js::to_number(index));
+        if lt(&add(index, &shift), &min_index) {
+            shift = num(1.0 - to_number(index));
         }
-        if js::gt(&js::add(index, &shift), &self.last_index()) {
-            shift = num(self.tabs.len() as f64 - 1.0 - js::to_number(index));
+        if gt(&add(index, &shift), &self.last_index()) {
+            shift = num(self.tabs.len() as f64 - 1.0 - to_number(index));
         }
-        let offset = num(js::to_number(&self.selected) - js::to_number(index));
-        if js::strict_eq(&self.selected, index) {
-            self.selected = js::add(&self.selected, &shift);
-        } else if js::gt(index, &self.selected) && js::le(&shift, &offset) {
-            self.selected = num(js::to_number(&self.selected) + 1.0);
-        } else if js::lt(index, &self.selected) && js::ge(&shift, &offset) {
-            self.selected = num(js::to_number(&self.selected) - 1.0);
+        let offset = num(to_number(&self.selected) - to_number(index));
+        if ops::strict_equals(&self.selected, index) {
+            self.selected = add(&self.selected, &shift);
+        } else if gt(index, &self.selected) && le(&shift, &offset) {
+            self.selected = num(to_number(&self.selected) + 1.0);
+        } else if lt(index, &self.selected) && ge(&shift, &offset) {
+            self.selected = num(to_number(&self.selected) - 1.0);
         }
-        let start = js::splice_start(index, self.tabs.len());
+        let start = ops::splice_start(index, self.tabs.len());
         if start >= self.tabs.len() {
             return Err(TabsError::Unmodeled(
                 "shift spliced undefined into the tab list",
             ));
         }
         let tab = self.tabs.remove(start);
-        let at = js::splice_start(&js::add(index, &shift), self.tabs.len());
+        let at = ops::splice_start(&add(index, &shift), self.tabs.len());
         self.tabs.insert(at, tab);
         self.update_elements(cx)
     }
@@ -971,14 +994,14 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
     }
 
     pub fn is_valid_uuid(&self, uuid: &JsValue) -> bool {
-        self.tabs.iter().any(|t| js::strict_eq(uuid, &t.uuid))
+        self.tabs.iter().any(|t| ops::strict_equals(uuid, &t.uuid))
     }
 
     /// `renameTab(index, name)`. A name equal to the default title is stored as `""`.
     pub fn rename_tab(&mut self, index: &JsValue, name: JsValue) -> Result {
-        let i = js::index(index, self.tabs.len()).ok_or_else(|| missing("type"))?;
+        let i = ops::list_index(index, self.tabs.len()).ok_or_else(|| missing("type"))?;
         let tab = &mut self.tabs[i];
-        let name = if js::strict_eq(&name, &JsValue::string(default_title(tab.kind))) {
+        let name = if ops::strict_equals(&name, &JsValue::string(default_title(tab.kind))) {
             JsValue::string("")
         } else {
             name
@@ -1053,7 +1076,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
     ) -> Result {
         for i in 0..self.tabs.len() {
             let tab = &self.tabs[i];
-            if tab.kind == Some(TabType::Table) && js::strict_eq(&tab.uuid, controller_uuid) {
+            if tab.kind == Some(TabType::Table) && ops::strict_equals(&tab.uuid, controller_uuid) {
                 let s = self.lookup_selected("controller")?;
                 if self.tabs[s].kind != Some(TabType::Table) {
                     return Err(type_error(
@@ -1134,11 +1157,11 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         self.update_controls_height(cx)?;
         self.update_timeline_visibility(cx)?;
         for (i, tab) in self.tabs.iter_mut().enumerate() {
-            let active_local = js::strict_eq(&js::len(i), &self.selected);
+            let active_local = ops::strict_equals(&len(i), &self.selected);
             let active_satellite = self
                 .active_satellites
                 .iter()
-                .any(|u| js::same_value_zero(u, &tab.uuid));
+                .any(|u| ops::same_value_zero(u, &tab.uuid));
             let active_xr = tab.uuid.is_null();
             if !(active_local || active_satellite || active_xr) {
                 continue;
@@ -1160,7 +1183,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             if active_satellite {
                 let title = if tab.kind == Some(TabType::Documentation) {
                     JsValue::string("Documentation")
-                } else if js::strict_eq(&tab.title, &JsValue::string("")) {
+                } else if ops::strict_equals(&tab.title, &JsValue::string("")) {
                     JsValue::string(default_title(tab.kind))
                 } else {
                     tab.title.clone()
@@ -1190,7 +1213,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         {
             for index in 0..self.tabs.len() {
                 if contains(&self.title_rect(cx, index), x, y) {
-                    self.set_selected(cx, &js::len(index))?;
+                    self.set_selected(cx, &len(index))?;
                 }
             }
         }
@@ -1255,13 +1278,13 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             if !contains(&rect, x, y) {
                 continue;
             }
-            let name = if js::strict_eq(&tab.title, &JsValue::string("")) {
+            let name = if ops::strict_equals(&tab.title, &JsValue::string("")) {
                 JsValue::string(default_title(tab.kind))
             } else {
                 tab.title.clone()
             };
             let mut o = JsObject::new();
-            o.insert("index", js::len(index));
+            o.insert("index", len(index));
             o.insert("name", name);
             o.insert("rect", rect_js(&rect));
             self.messages.push(NamedMessage::new(
@@ -1283,7 +1306,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
                 .iter()
                 .position(|t| Rc::ptr_eq(&t.element, &element))
         {
-            self.set_selected(cx, &js::len(index))?;
+            self.set_selected(cx, &len(index))?;
         }
         Ok(true)
     }

@@ -149,7 +149,7 @@ impl RlogSource {
             JsValue::Bytes(ref bytes) => bytes.clone(),
             _ => Vec::new(),
         };
-        let decode_ok = {
+        let decoded = {
             let log = self.base.log().expect("checked");
             self.decoder.as_mut().expect("checked").decode(
                 cx.realm,
@@ -157,8 +157,12 @@ impl RlogSource {
                 &raw,
                 cx.clock,
                 None,
-            )?
+            )
         };
+        if decoded == Err(Abort::NeverReturns) {
+            self.reconnect(cx);
+        }
+        let decode_ok = decoded?;
         if !decode_ok {
             self.reconnect(cx);
             return Ok(());
@@ -227,5 +231,67 @@ impl RlogSource {
 
     pub fn base(&self) -> &LiveDataSourceBase {
         &self.base
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use asrs_js::time::SetRng;
+    use asrs_js::value::JsObject;
+
+    use super::*;
+    use crate::ManualClock;
+
+    #[test]
+    fn a_frame_that_never_returns_reconnects() {
+        let clock: Rc<dyn Clock> = Rc::new(ManualClock::new(0.0));
+        let mut timers = TimerQueue::new(clock.clone());
+        let mut send_main = VecDeque::new();
+        let preferences = RlogPreferences { rlog_port: 5800.0 };
+        let window_log = Rc::new(RefCell::new(Rc::new(RefCell::new(Log::new(true)))));
+        let mut realm = JsRealm::new(Box::new(SetRng::new(vec![0.5])));
+        let mut cx = RlogContext {
+            timers: &mut timers,
+            send_main: &mut send_main,
+            preferences: Some(&preferences),
+            window_log: &window_log,
+            realm: &mut realm,
+            clock: &*clock,
+        };
+        let mut source = RlogSource::new(&mut SetRng::new(vec![0.5]), clock.clone());
+        source.connect("127.0.0.1", Box::new(|_| {}), Box::new(|_, _| {}), &mut cx);
+        let frame = |source: &RlogSource, raw: &[u8]| {
+            let mut message = JsObject::new();
+            message.insert("uuid", JsValue::from(source.base.uuid()));
+            message.insert("success", JsValue::Bool(true));
+            message.insert("raw", JsValue::Bytes(raw.to_vec()));
+            JsValue::Object(message)
+        };
+
+        let mut keys = vec![2, 0];
+        keys.extend(1f64.to_be_bytes());
+        keys.extend(*b"\x01\x00\x01\x00\x02/A\x00\x06string");
+        let keys = frame(&source, &keys);
+        assert_eq!(source.handle_main_message(&keys, &mut cx), Ok(()));
+        assert_eq!(source.base.status(), LiveDataSourceStatus::Active);
+
+        let mut cycle = vec![0];
+        cycle.extend(3f64.to_be_bytes());
+        cycle.extend(*b"\x02\x00\x01\xff\xfb");
+        let cycle = frame(&source, &cycle);
+        cx.send_main.clear();
+        assert_eq!(
+            source.handle_main_message(&cycle, &mut cx),
+            Err(Abort::NeverReturns)
+        );
+        assert_eq!(source.base.status(), LiveDataSourceStatus::Connecting);
+        assert!(matches!(cx.send_main.pop_front(), Some(MainCall::Stop)));
+
+        let reconnect = source.timeout.expect("a reconnect is scheduled");
+        assert!(source.handle_timer(reconnect, &mut cx));
+        assert!(matches!(
+            cx.send_main.pop_front(),
+            Some(MainCall::Start { .. })
+        ));
     }
 }

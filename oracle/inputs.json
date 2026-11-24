@@ -7,6 +7,7 @@
     "src/app/patches.ts",
     "src/app/scenario.ts",
     "src/app/tap.ts",
+    "src/app/tooltips.ts",
     "src/appMain.ts",
     "src/canvas/png.ts",
     "src/environment.ts"
@@ -829,6 +830,11 @@
     "src/logRun.ts",
     "src/logScript.ts"
   ],
+  "mcapReentry": [
+    "src/environment.ts",
+    "src/mcapReentry.ts",
+    "src/shims.ts"
+  ],
   "protoRenderer": [
     "src/corpus/bytes.ts",
     "src/corpus/corpus.ts",
@@ -854,6 +860,13 @@
     "src/registry.ts",
     "src/shims.ts"
   ],
+  "rlogCycles": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rlog.ts",
+    "src/environment.ts",
+    "src/rlogCycles.ts",
+    "src/shims.ts"
+  ],
   "robotServer": [
     "src/environment.ts",
     "src/robotServer.ts"
@@ -875,5 +888,13 @@
   "shims": [
     "src/environment.ts",
     "src/shims.ts"
+  ],
+  "spinButtons": [
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/spinButtons.ts"
+  ],
+  "spinButtonsMain": [
+    "src/spinButtonsMain.ts"
   ]
 }

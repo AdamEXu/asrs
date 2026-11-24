@@ -5,15 +5,15 @@
 
 use std::cmp::Ordering;
 
-use asrs_js::math::{self, BigInt};
+use asrs_js::math;
 use asrs_js::number;
+use asrs_js::ops;
 use asrs_js::string::JsString;
-use asrs_js::time::{self, NamedZone};
-use asrs_js::value::array_index;
 use asrs_log::util;
 use asrs_parity::{Response, Utf16String, Value};
 
-use crate::functions::{arg, array_join, ok_number, to_number, to_units, type_error};
+use crate::functions::{arg, ok_number, to_number, type_error};
+use crate::js_ops::{Cve, array_join, cannot_read, get_prop, js_typeof, prop_key, throw};
 
 pub type Function = fn(&[Value]) -> Response;
 
@@ -91,25 +91,6 @@ fn range_error(message: &str) -> Response {
     Response::Throw(Value::Error("RangeError".into(), message.into()))
 }
 
-fn zone() -> NamedZone {
-    std::env::var("ASRS_ORACLE_ZONE")
-        .ok()
-        .filter(|n| !n.is_empty())
-        .or_else(|| std::env::var("TZ").ok().filter(|n| !n.is_empty()))
-        .and_then(|name| NamedZone::get(&name).ok())
-        .unwrap_or_else(NamedZone::system)
-}
-
-pub(crate) fn cannot_read(v: &Value, key: &str) -> Response {
-    let what = match v {
-        Value::Null => "null",
-        _ => "undefined",
-    };
-    type_error(format!(
-        "Cannot read properties of {what} (reading '{key}')"
-    ))
-}
-
 /// `.length` on a value: arrays, typed arrays and strings have one; objects
 /// may carry it as an own property; everything else is `undefined`.
 fn length_prop(v: &Value) -> Result<Value, Response> {
@@ -155,58 +136,6 @@ fn byte_length(v: &Value) -> Result<Value, Response> {
     })
 }
 
-/// The property key `ToPropertyKey(v)` produces for reads on plain
-/// containers. Numbers become their canonical string form (`-0` reads `"0"`,
-/// `NaN` reads `"NaN"`); symbols never match a string-keyed container.
-pub(crate) fn prop_key(v: &Value) -> Vec<u16> {
-    match v {
-        Value::Number(bits) => number::to_string(f64::from_bits(*bits))
-            .encode_utf16()
-            .collect(),
-        Value::String(s) => s.units().to_vec(),
-        Value::Bool(b) => if *b { "true" } else { "false" }.encode_utf16().collect(),
-        Value::Null => "null".encode_utf16().collect(),
-        Value::Undefined | Value::Hole => "undefined".encode_utf16().collect(),
-        Value::BigInt(digits) => digits.encode_utf16().collect(),
-        Value::Symbol(_) => vec![0xd800, 0xdc00],
-        other => match to_units(other) {
-            Ok(u) => u,
-            Err(_) => "[object Object]".encode_utf16().collect(),
-        },
-    }
-}
-
-/// `container[name]` for the containers this harness models: arrays (and
-/// typed arrays) by canonical index, strings by index, objects by name.
-pub(crate) fn get_prop(container: &Value, name: &[u16]) -> Result<Value, Response> {
-    let at_index = |len: usize, f: &dyn Fn(usize) -> Value| -> Value {
-        match array_index(name) {
-            Some(i) if (i as usize) < len => f(i as usize),
-            _ => Value::Undefined,
-        }
-    };
-    Ok(match container {
-        Value::Null | Value::Undefined => {
-            return Err(cannot_read(container, &String::from_utf16_lossy(name)));
-        }
-        Value::Array(items) => at_index(items.len(), &|i| match &items[i] {
-            Value::Hole => Value::Undefined,
-            v => v.clone(),
-        }),
-        Value::TypedArray(_, items) => at_index(items.len(), &|i| items[i].clone()),
-        Value::Bytes(bytes) => at_index(bytes.len(), &|i| Value::number(f64::from(bytes[i]))),
-        Value::String(s) => at_index(s.units().len(), &|i| {
-            Value::String(Utf16String::from_units(vec![s.units()[i]]))
-        }),
-        Value::Object(pairs) | Value::Instance(_, pairs) => pairs
-            .iter()
-            .find(|(k, _)| k.units() == name)
-            .map(|(_, v)| v.clone())
-            .unwrap_or(Value::Undefined),
-        _ => Value::Undefined,
-    })
-}
-
 /// `container[i]` where `i` is already a JS number.
 fn get_prop_num(container: &Value, i: f64) -> Result<Value, Response> {
     get_prop(
@@ -219,74 +148,12 @@ fn get_prop_num(container: &Value, i: f64) -> Result<Value, Response> {
 /// equal, `-0` equals `+0`), strings by code units, BigInts by digits, and
 /// reference equality for everything else (never true across CVE-1 values).
 pub(crate) fn strict_equal(a: &Value, b: &Value) -> bool {
-    match (a, b) {
-        (Value::Undefined | Value::Hole, Value::Undefined | Value::Hole) => true,
-        (Value::Null, Value::Null) => true,
-        (Value::Bool(x), Value::Bool(y)) => x == y,
-        (Value::Number(x), Value::Number(y)) => f64::from_bits(*x) == f64::from_bits(*y),
-        (Value::String(x), Value::String(y)) => x.units() == y.units(),
-        (Value::BigInt(x), Value::BigInt(y)) => x == y,
-        _ => false,
-    }
+    ops::strict_equals(&Cve(a.clone()), &Cve(b.clone()))
 }
 
 /// `SameValueZero` (`Set.has`, `Map.has`): `===` except `NaN` equals `NaN`.
 fn same_value_zero(a: &Value, b: &Value) -> bool {
-    match (a, b) {
-        (Value::Number(x), Value::Number(y)) => {
-            let (x, y) = (f64::from_bits(*x), f64::from_bits(*y));
-            x == y || (x.is_nan() && y.is_nan())
-        }
-        _ => strict_equal(a, b),
-    }
-}
-
-/// `ToPrimitive` with a number hint for the values a relational comparison
-/// or `+` can meet: wrappers unwrap, dates read their time, array-likes join.
-fn to_primitive(v: &Value, default_hint_string: bool) -> Value {
-    match v {
-        Value::Boxed(inner) => to_primitive(inner, default_hint_string),
-        Value::Date(bits) => {
-            if default_hint_string {
-                Value::String(Utf16String::from(time::date_to_string(
-                    f64::from_bits(*bits),
-                    &zone(),
-                )))
-            } else {
-                Value::Number(*bits)
-            }
-        }
-        Value::Array(items) | Value::TypedArray(_, items) => {
-            Value::String(Utf16String::from_units(array_join(items)))
-        }
-        Value::Bytes(bytes) => Value::String(Utf16String::from_units(array_join(
-            &bytes
-                .iter()
-                .map(|&b| Value::number(f64::from(b)))
-                .collect::<Vec<_>>(),
-        ))),
-        Value::Map(_) => Value::string("[object Map]"),
-        Value::Set(_) => Value::string("[object Set]"),
-        Value::ArrayBuffer(_) => Value::string("[object ArrayBuffer]"),
-        Value::DataView(_) => Value::string("[object DataView]"),
-        Value::Error(name, message) => {
-            let mut text = name.to_string_lossy();
-            let message = message.to_string_lossy();
-            if !message.is_empty() {
-                if !text.is_empty() {
-                    text.push_str(": ");
-                }
-                text.push_str(&message);
-            }
-            Value::string(&text)
-        }
-        Value::Function(name) => {
-            let name = name.to_string_lossy();
-            Value::string(&format!("function {name}() {{ [native code] }}"))
-        }
-        Value::Object(_) | Value::Instance(..) => Value::string("[object Object]"),
-        primitive => primitive.clone(),
-    }
+    ops::same_value_zero(&Cve(a.clone()), &Cve(b.clone()))
 }
 
 #[derive(Clone, Copy)]
@@ -300,113 +167,23 @@ enum RelOp {
 /// a symbol throws; a BigInt compares mathematically; otherwise `ToNumber`
 /// both sides (any NaN makes every operator false).
 fn rel_cmp(a: &Value, b: &Value, op: RelOp) -> Result<bool, Response> {
-    let pa = to_primitive(a, false);
-    let pb = to_primitive(b, false);
-    if let (Value::String(x), Value::String(y)) = (&pa, &pb) {
-        let (x, y) = (x.units(), y.units());
-        return Ok(match op {
-            RelOp::Lt => x < y,
-            RelOp::Gt => x > y,
-            RelOp::Ge => x >= y,
-        });
+    match ops::compare(&Cve(a.clone()), &Cve(b.clone())) {
+        Err(e) => Err(throw(e)),
+        Ok(ord) => Ok(matches!(
+            (ord, op),
+            (Some(Ordering::Less), RelOp::Lt)
+                | (Some(Ordering::Greater), RelOp::Gt | RelOp::Ge)
+                | (Some(Ordering::Equal), RelOp::Ge)
+        )),
     }
-    if matches!(pa, Value::Symbol(_)) || matches!(pb, Value::Symbol(_)) {
-        return Err(type_error("Cannot convert a Symbol value to a number"));
-    }
-    if matches!(pa, Value::BigInt(_)) || matches!(pb, Value::BigInt(_)) {
-        return Ok(match bigint_cmp(&pa, &pb) {
-            Some(Ordering::Less) => matches!(op, RelOp::Lt),
-            Some(Ordering::Greater) => matches!(op, RelOp::Gt | RelOp::Ge),
-            Some(Ordering::Equal) => matches!(op, RelOp::Ge),
-            None => false,
-        });
-    }
-    let x = to_number(&pa)?;
-    let y = to_number(&pb)?;
-    Ok(match op {
-        RelOp::Lt => x < y,
-        RelOp::Gt => x > y,
-        RelOp::Ge => x >= y,
-    })
-}
-
-/// `StringToBigInt` for the decimal case (`StringToNumeric` would also take
-/// radix literals, which callers never send).
-fn string_to_bigint(s: &Utf16String) -> Option<BigInt> {
-    let trimmed = JsString::from_units(s.units().to_vec())
-        .trim()
-        .to_string_lossy();
-    BigInt::parse(&trimmed).ok()
-}
-
-/// A BigInt's mathematical order against an f64, without converting the
-/// BigInt: compare it to `floor(x)` and use the fraction to break the tie.
-fn bigint_cmp_f64(big: &BigInt, x: f64) -> Option<Ordering> {
-    if x.is_nan() {
-        return None;
-    }
-    let floor = math::floor(x);
-    let Ok(bound) = BigInt::from_f64(floor) else {
-        return Some(if x > 0.0 {
-            Ordering::Less
-        } else {
-            Ordering::Greater
-        });
-    };
-    Some(match big.cmp(&bound) {
-        Ordering::Equal if floor == x => Ordering::Equal,
-        Ordering::Equal => Ordering::Less,
-        other => other,
-    })
-}
-
-fn bigint_cmp(a: &Value, b: &Value) -> Option<Ordering> {
-    let to_big = |v: &Value| -> Option<BigInt> {
-        match v {
-            Value::BigInt(d) => BigInt::parse(d).ok(),
-            Value::Bool(x) => Some(BigInt::from_i64(i64::from(*x))),
-            Value::Null => Some(BigInt::zero()),
-            Value::String(s) => string_to_bigint(s),
-            _ => None,
-        }
-    };
-    if let Value::Number(x) = a {
-        return bigint_cmp_f64(&to_big(b)?, f64::from_bits(*x)).map(Ordering::reverse);
-    }
-    if let Value::Number(y) = b {
-        return bigint_cmp_f64(&to_big(a)?, f64::from_bits(*y));
-    }
-    Some(to_big(a)?.cmp(&to_big(b)?))
 }
 
 /// `a + b`: string when either primitive side is a string, BigInt addition
 /// for two BigInts (and the mix TypeError for one), numeric otherwise.
 fn js_add(a: &Value, b: &Value) -> Result<Value, Response> {
-    let pa = to_primitive(a, true);
-    let pb = to_primitive(b, true);
-    if matches!(pa, Value::Symbol(_)) || matches!(pb, Value::Symbol(_)) {
-        return Err(type_error("Cannot convert a Symbol value to a number"));
-    }
-    match (&pa, &pb) {
-        (Value::BigInt(x), Value::BigInt(y)) => {
-            let x = BigInt::parse(x).unwrap_or_default();
-            let y = BigInt::parse(y).unwrap_or_default();
-            Ok(Value::BigInt(format!("{}", x.add(&y))))
-        }
-        (Value::BigInt(_), _) | (_, Value::BigInt(_)) => Err(type_error(
-            "Cannot mix BigInt and other types, use explicit conversions",
-        )),
-        (Value::String(_), _) | (_, Value::String(_)) => {
-            let mut units = to_units(&pa)?;
-            units.extend(to_units(&pb)?);
-            Ok(Value::String(Utf16String::from_units(units)))
-        }
-        _ => {
-            let x = to_number(&pa)?;
-            let y = to_number(&pb)?;
-            Ok(Value::number(x + y))
-        }
-    }
+    ops::add(&Cve(a.clone()), &Cve(b.clone()))
+        .map(|Cve(v)| v)
+        .map_err(throw)
 }
 
 fn arrays_equal_fn(args: &[Value]) -> Response {
@@ -584,19 +361,6 @@ fn sets_equal_fn(args: &[Value]) -> Response {
         }
     }
     Response::Ok(Value::Bool(true))
-}
-
-fn js_typeof(v: &Value) -> &'static str {
-    match v {
-        Value::Undefined | Value::Hole => "undefined",
-        Value::Bool(_) => "boolean",
-        Value::Number(_) => "number",
-        Value::String(_) => "string",
-        Value::BigInt(_) => "bigint",
-        Value::Symbol(_) => "symbol",
-        Value::Function(_) => "function",
-        _ => "object",
-    }
 }
 
 fn check_array_type_fn(args: &[Value]) -> Response {

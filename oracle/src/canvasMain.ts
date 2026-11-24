@@ -182,7 +182,11 @@ async function ui(out: string, scaleArg: string) {
     if (state.broken.length > 0) throw new Error(`images failed to load: ${state.broken.join(", ")}`);
     if (scene.pointer !== null) {
       const { x, y, down } = scene.pointer;
-      win.webContents.sendInputEvent({ type: "mouseMove", x, y });
+      // What the first move makes :hover show can take the pointer only from the next one on.
+      for (let i = 0; i < 2; i++) {
+        win.webContents.sendInputEvent({ type: "mouseMove", x, y });
+        await win.webContents.executeJavaScript("new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))");
+      }
       if (down) win.webContents.sendInputEvent({ type: "mouseDown", x, y, button: "left", clickCount: 1 });
       const pseudo = down ? ":active" : ":hover";
       const selector = JSON.stringify(scene.pointer.selector + pseudo);

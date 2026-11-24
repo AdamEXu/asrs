@@ -7,7 +7,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use gpui_kit::{
-    AnyWindowHandle, App, AsyncApp, Bounds, Pixels, ScrollDelta, ScrollEvent, Subscription,
+    AnyWindowHandle, App, AsyncApp, Bounds, Pixels, Point, ScrollDelta, ScrollEvent, Subscription,
     WeakEntity, Window, WindowId, point, px, size,
 };
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
@@ -100,6 +100,24 @@ fn placement(window: &Window, bounds: Bounds<Pixels>) -> Placement {
     );
     let monitor = x11.and_then(|x11| x11.monitor_at(anchor.origin).ok().flatten());
     Placement::Screen(anchor, monitor)
+}
+
+pub(super) fn popup_space(
+    window: &Window,
+    at: Point<Pixels>,
+    cx: &App,
+) -> Option<(Option<Point<Pixels>>, Bounds<Pixels>)> {
+    let wayland = is_wayland(window);
+    let anchor = Bounds::new(at, size(px(0.0), px(0.0)));
+    let display = window.display(cx).or_else(|| cx.primary_display());
+    let display = display.map(|display| display.bounds());
+    if wayland {
+        return Some((None, display?));
+    }
+    let Placement::Screen(anchor, monitor) = placement(window, anchor) else {
+        return None;
+    };
+    Some((Some(anchor.origin - at), monitor.or(display)?))
 }
 
 pub(super) fn popup_menu(
