@@ -381,9 +381,10 @@ pub enum SelectMenuItemKind {
 }
 
 /// Chromium's popup for a `<select>`: on macOS an `NSPopUpButtonCell` menu with the selected
-/// item over the control, as `WebMenuRunner` shows it, elsewhere a drawn list below it. `bounds` is the select's border box in
-/// window content coordinates `[x, y, width, height]`. The menu opens on a later turn of the
-/// event loop, and `on_close` gets the chosen item's index in `menu.items`, if any.
+/// item over the control, as `WebMenuRunner` shows it, elsewhere a drawn list below it. `bounds` is
+/// the select's border box in window content coordinates `[x, y, width, height]`. The menu opens on
+/// a later turn of the event loop, and `on_close` gets the chosen item's index in `menu.items`, if
+/// any.
 pub fn select_popup(
     window: &Window,
     cx: &mut App,

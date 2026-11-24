@@ -21,14 +21,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 };
 use windows::core::{PWSTR, w};
 
-pub use super::super::fallback::probe::{
-    app_is_active, can_capture_screen, can_post_events, cancel_sheet_panel, capture_window,
-    choose_open_popup_item, click_sheet_button, has_attached_sheet, has_sidebar_vibrancy,
-    hides_on_deactivate, is_sheet_of, is_tagged_srgb, menu_window_frames as no_menu_window_frames,
-    numpad_enter_for, perform_application_menu_item, perform_key_equivalent, post_wheel,
-    proposed_resize, read_application_menu, read_wheel_sample, screen_height,
-    select_menu_roundtrip, sheet_panel_state, split_monitors, untag_colorspace, will_resize,
-};
+pub use super::super::fallback::probe::*;
 use super::super::probe::{Frame, MouseAction, SizeHints, WheelSample, WindowImage};
 use super::super::{PopupEntry, PopupItem, PopupMenu};
 use super::menu::NativeMenu;
@@ -271,7 +264,6 @@ pub fn menu_window_frames() -> Vec<Frame> {
             height: f64::from(r.bottom - r.top),
         })
         .into_iter()
-        .chain(no_menu_window_frames())
         .collect()
 }
 

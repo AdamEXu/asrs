@@ -21,10 +21,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     WM_CANCELMODE,
 };
 
-pub(super) use super::fallback::{
-    add_recent_document, dialog, install_edit_commands, numpad_enter, selection_colors,
-    set_application_menu, tag_srgb_colorspace,
-};
+pub(super) use super::fallback::*;
 use super::{MenuPath, PopupEntry, PopupMenu, SelectMenu, SelectMenuItemKind, WheelDelta};
 use crate::menu::{CloseHandler, ListStyle, MenuView, Placement};
 
