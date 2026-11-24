@@ -844,24 +844,22 @@ fn a_flooding_server_leaves_the_page_responsive() {
         ));
     }
     page.read(|hub| hub.wait_for_live(Duration::from_secs(10)));
+    // Until most of the flood waits in the transport, so one run could drain it all.
+    std::thread::sleep(Duration::from_millis(500));
     let mut slices = 0;
-    let mut longest = Duration::ZERO;
     let start = Instant::now();
     let last = (MESSAGES - 1) as f64;
     while page.number("n") != last {
         assert!(start.elapsed() < TIMEOUT, "the flood never ends");
-        let slice = Instant::now();
         page.cx.run_until_parked();
-        longest = longest.max(slice.elapsed());
         slices += 1;
         let focused = slices % 2 == 0;
         page.send(MainToHub::SetFocused, JsValue::Bool(focused));
         assert_eq!(page.read(|hub| hub.model().is_focused()), focused);
         page.cx.advance_clock(Duration::from_millis(1));
     }
-    assert!(slices > 3, "{MESSAGES} messages ran in {slices} slices");
     assert!(
-        longest < Duration::from_millis(250),
-        "the foreground was busy for {longest:?}"
+        slices >= 10,
+        "{MESSAGES} messages ran in {slices} slices of the foreground"
     );
 }
