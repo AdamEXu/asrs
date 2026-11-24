@@ -452,7 +452,7 @@ impl Paint {
         let d = dither(x, y);
         let a = c[3];
         let rgb = |v: f32| d.mul_add(1.0 / 255.0, v).min(a).max(0.0);
-        [rgb(c[0]), rgb(c[1]), rgb(c[2]), a].map(|v| v.max(0.0).min(1.0))
+        [rgb(c[0]), rgb(c[1]), rgb(c[2]), a].map(|v| v.clamp(0.0, 1.0))
     }
 }
 
@@ -491,7 +491,7 @@ pub fn blit(pixmap: &mut Pixmap, spans: &Spans, paint: &Paint) {
                 }
             }
             for (d, s) in dst.iter_mut().zip(src) {
-                *d = (s * 255.0).max(0.0).min(255.0).round_ties_even() as u8;
+                *d = (s * 255.0).clamp(0.0, 255.0).round_ties_even() as u8;
             }
         }
     }

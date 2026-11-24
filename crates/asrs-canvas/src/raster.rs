@@ -197,6 +197,7 @@ struct ImageLevel {
     image: Arc<Pixmap>,
     mip: Mip,
     pixels: Arc<Pixmap>,
+    used: bool,
 }
 
 #[derive(Clone)]
@@ -239,7 +240,7 @@ impl ShadeCache {
     fn level(&mut self, image: &Arc<Pixmap>, mip: Mip) -> Option<Arc<Pixmap>> {
         let candidate = self
             .levels
-            .iter()
+            .iter_mut()
             .filter(|l| {
                 Arc::ptr_eq(&l.image, image)
                     && l.mip.src == mip.src
@@ -248,7 +249,10 @@ impl ShadeCache {
             })
             .min_by_key(|l| l.mip.size);
         let pixels = match candidate {
-            Some(level) if level.mip == mip => return Some(level.pixels.clone()),
+            Some(level) if level.mip == mip => {
+                level.used = true;
+                return Some(level.pixels.clone());
+            }
             Some(level) => mip.build(&level.pixels)?,
             None => mip.build(&mip.part(image)?)?,
         };
@@ -257,6 +261,7 @@ impl ShadeCache {
             image: image.clone(),
             mip,
             pixels: pixels.clone(),
+            used: true,
         });
         Some(pixels)
     }
@@ -264,6 +269,9 @@ impl ShadeCache {
     fn next_frame(mut self) -> ShadeCache {
         for entry in &mut self.entries {
             entry.used = false;
+        }
+        for level in &mut self.levels {
+            level.used = false;
         }
         self
     }
@@ -496,8 +504,9 @@ impl<'a> Raster<'a> {
         let mut shades = std::mem::take(&mut self.shades);
         shades.entries.retain(|e| e.used);
         shades.levels.retain(|l| {
+            let whole = l.mip.src[2..] == [l.image.width(), l.image.height()];
             let mut images = self.images.values();
-            images.any(|source| Arc::ptr_eq(&source.pixmap, &l.image))
+            (l.used || whole) && images.any(|source| Arc::ptr_eq(&source.pixmap, &l.image))
         });
         shades
     }
@@ -727,13 +736,13 @@ impl<'a> Raster<'a> {
                     ImageDataSource::Inline(image) => Some(image.clone()),
                 };
                 if let Some(image) = image {
+                    let (x, y) = (i64::from(to_int32(*dx)), i64::from(to_int32(*dy)));
+                    self.unflushed |= x <= 0
+                        && y <= 0
+                        && x + i64::from(image.width) >= i64::from(self.pixmap.width())
+                        && y + i64::from(image.height) >= i64::from(self.pixmap.height());
                     self.flush();
-                    pixels::write_rect(
-                        &mut self.pixmap,
-                        &image,
-                        i64::from(to_int32(*dx)),
-                        i64::from(to_int32(*dy)),
-                    );
+                    pixels::write_rect(&mut self.pixmap, &image, x, y);
                 }
             }
         }
@@ -1778,7 +1787,7 @@ impl<'a> Raster<'a> {
             Fill::Linear(_, stops) | Fill::Radial(_, stops) => gradient_luminance(stops),
         };
         let ctm = self.state.ctm;
-        if !finite(&[x, y]) || !self.invertible() {
+        if !finite(&[x, y]) || !self.invertible() || !ctm.is_finite() {
             return;
         }
         let (x, y) = (f64::from(clamp32(x)), f64::from(clamp32(y)));

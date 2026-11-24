@@ -216,10 +216,7 @@ impl Matrix {
         ]
         .map(|(x, y)| self.map_point(P { x, y }));
         let fold = |f: fn(f32, f32) -> f32, of: fn(&P) -> f32| {
-            corners[1..]
-                .iter()
-                .map(of)
-                .fold(of(&corners[0]), |a, b| f(a, b))
+            corners[1..].iter().map(of).fold(of(&corners[0]), f)
         };
         Rect {
             left: fold(f32::min, |p| p.x),
