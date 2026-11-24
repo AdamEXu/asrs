@@ -306,6 +306,16 @@ impl Page {
         }
     }
 
+    /// Waits for the connections and requests in flight, without starting others.
+    fn finish_requests(&mut self) {
+        let start = Instant::now();
+        while self.runtime_tasks() > 0 {
+            assert!(start.elapsed() < TIMEOUT, "a request never ends");
+            std::thread::sleep(Duration::from_millis(1));
+        }
+        self.cx.run_until_parked();
+    }
+
     /// Everything a live connection held is gone.
     fn assert_free(&mut self, server: &LiveServer) {
         assert_eq!(self.next_live_timer(), None, "timers of a stopped source");
@@ -396,6 +406,7 @@ fn source(case: &Case<'_>) {
     assert_eq!(page.take_titles(), [searching(ADDRESS)]);
     assert!(page.mode() != SelectionMode::Locked);
 
+    page.finish_requests();
     server.up();
     if !case.table.is_empty() {
         page.table(case.table);
@@ -419,6 +430,7 @@ fn source(case: &Case<'_>) {
         page.mode() != SelectionMode::Locked
     });
     assert_eq!(page.number(case.key), case.second_value, "the log is kept");
+    page.finish_requests();
     server.up();
     let again = match case.first {
         Some(_) => case.first_value,
