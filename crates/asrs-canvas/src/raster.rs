@@ -4,10 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use asrs_js::string::JsString;
-use tiny_skia::{
-    FilterQuality, GradientStop, LineCap, LineJoin, Paint, Pattern, Pixmap, Point, RadialGradient,
-    Rect, Shader, SpreadMode, Transform,
-};
+use tiny_skia::{LineCap, LineJoin, Pixmap};
 
 use crate::aaa;
 use crate::blit::Spans;
@@ -16,7 +13,9 @@ use crate::dash;
 use crate::display::{Call, Gradient, GradientShape, ImageData, ImageDataSource, Property, Style};
 use crate::gradient;
 use crate::hairline;
-use crate::mip::Mip;
+use crate::image;
+use crate::matrix::Matrix;
+use crate::mip::{Level, Mip};
 use crate::path::{Affine, Path, Pt, clamp32, sat32};
 use crate::pixels;
 use crate::raster_clip::RasterClip;
@@ -65,7 +64,10 @@ fn resolve(style: &Style) -> Option<Fill> {
 
 #[derive(Clone, Debug)]
 struct State {
+    /// Blink's matrix, which the current path and the invertibility checks follow.
     transform: Affine,
+    /// The matrix of the `SkCanvas` the calls are played back on.
+    ctm: Matrix,
     fill: Fill,
     stroke: Fill,
     line_width: f64,
@@ -86,6 +88,7 @@ impl Default for State {
     fn default() -> State {
         State {
             transform: Affine::IDENTITY,
+            ctm: Matrix::IDENTITY,
             fill: Fill::Color(Rgba::BLACK),
             stroke: Fill::Color(Rgba::BLACK),
             line_width: 1.0,
@@ -168,6 +171,7 @@ pub struct Raster<'a> {
     text: Option<TextRaster<'a>>,
     errors: Vec<(usize, CanvasError)>,
     calls: usize,
+    unflushed: bool,
     shades: ShadeCache,
 }
 
@@ -190,34 +194,32 @@ pub struct ShadeCache {
 struct Shade {
     image: Arc<Pixmap>,
     key: ShadeKey,
-    scratch: Arc<Pixmap>,
+    pixels: Arc<Vec<[u8; 4]>>,
     used: bool,
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, PartialEq)]
 struct ShadeKey {
-    transform: Affine,
-    quality: FilterQuality,
-    opacity: f32,
+    shader: image::Shader,
     mip: Option<Mip>,
-    bounds: [i32; 4],
+    runs: Vec<image::Run>,
 }
 
 impl ShadeCache {
-    fn get(&mut self, image: &Arc<Pixmap>, key: ShadeKey) -> Option<Arc<Pixmap>> {
+    fn get(&mut self, image: &Arc<Pixmap>, key: &ShadeKey) -> Option<Arc<Vec<[u8; 4]>>> {
         let entry = self
             .entries
             .iter_mut()
-            .find(|e| Arc::ptr_eq(&e.image, image) && e.key == key)?;
+            .find(|e| Arc::ptr_eq(&e.image, image) && e.key == *key)?;
         entry.used = true;
-        Some(entry.scratch.clone())
+        Some(entry.pixels.clone())
     }
 
-    fn insert(&mut self, image: &Arc<Pixmap>, key: ShadeKey, scratch: Arc<Pixmap>) {
+    fn insert(&mut self, image: &Arc<Pixmap>, key: ShadeKey, pixels: Arc<Vec<[u8; 4]>>) {
         self.entries.push(Shade {
             image: image.clone(),
             key,
-            scratch,
+            pixels,
             used: true,
         });
     }
@@ -253,15 +255,7 @@ const OUT_OF_MEMORY: CanvasError = CanvasError::Range("Out of memory at ImageDat
 
 enum Source {
     Solid([u8; 4]),
-    Shader(Shader<'static>),
-    Device(Pixmap),
-    Image {
-        pixmap: Arc<Pixmap>,
-        transform: Affine,
-        quality: FilterQuality,
-        opacity: f32,
-        mip: Option<Mip>,
-    },
+    Gradient(Box<gradient::Paint>),
 }
 
 /// A `CanvasPath` point argument pair, or `None` when Blink ignores the call.
@@ -449,6 +443,7 @@ impl<'a> Raster<'a> {
             text: None,
             errors: Vec::new(),
             calls: 0,
+            unflushed: false,
             shades: ShadeCache::default(),
         })
     }
@@ -532,33 +527,29 @@ impl<'a> Raster<'a> {
     }
 
     fn apply_call(&mut self, call: &Call) -> Result<(), CanvasError> {
+        self.unflushed |= matches!(
+            call,
+            Call::Fill
+                | Call::FillEvenOdd
+                | Call::Stroke
+                | Call::FillRect(..)
+                | Call::StrokeRect(..)
+                | Call::ClearRect(..)
+                | Call::FillText { .. }
+                | Call::DrawImage { .. }
+        );
         match call {
             Call::Set(p) => self.set(p),
             Call::Save => self.stack.push(self.state.clone()),
             Call::Restore => self.restore(),
-            &Call::Scale(x, y) => {
-                if finite(&[x, y]) {
-                    let (x, y) = (f64::from(clamp32(x)), f64::from(clamp32(y)));
-                    self.set_transform(self.state.transform.then(&Affine::scaling(x, y)));
-                }
-            }
-            &Call::Rotate(angle) => {
-                if angle.is_finite() {
-                    self.set_transform(self.state.transform.then(&Affine::rotation(angle)));
-                }
-            }
-            &Call::Translate(x, y) => {
-                if finite(&[x, y]) {
-                    let (x, y) = (f64::from(clamp32(x)), f64::from(clamp32(y)));
-                    self.set_transform(self.state.transform.then(&Affine::translation(x, y)));
-                }
-            }
-            Call::ResetTransform => self.set_transform(Affine::IDENTITY),
+            &Call::Scale(x, y) => self.scale(x, y),
+            &Call::Rotate(angle) => self.rotate(angle),
+            &Call::Translate(x, y) => self.translate(x, y),
+            Call::ResetTransform => self.reset_transform(),
             Call::SetTransform(m) => {
                 if finite(m) {
-                    self.set_transform(Affine::IDENTITY);
-                    let [a, b, c, d, e, f] = m.map(|v| f64::from(clamp32(v)));
-                    self.set_transform(Affine { a, b, c, d, e, f });
+                    self.reset_transform();
+                    self.apply_transform(m);
                 }
             }
             Call::Clip => self.clip_current_path(),
@@ -686,6 +677,7 @@ impl<'a> Raster<'a> {
                 ref register,
             } => {
                 let data = self.get_image_data(sx, sy, sw, sh)?;
+                self.flush();
                 self.registers.insert(register.clone(), data);
             }
             Call::PutImageData { data, dx, dy } => {
@@ -694,6 +686,7 @@ impl<'a> Raster<'a> {
                     ImageDataSource::Inline(image) => Some(image.clone()),
                 };
                 if let Some(image) = image {
+                    self.flush();
                     pixels::write_rect(
                         &mut self.pixmap,
                         &image,
@@ -816,21 +809,97 @@ impl<'a> Raster<'a> {
         self.state.transform.is_invertible()
     }
 
+    /// `RestoreMatrixClipStack`: once Blink has played a recording back, the next one starts from
+    /// matrices made of Blink's own instead of the steps that led to them.
+    fn flush(&mut self) {
+        if std::mem::take(&mut self.unflushed) {
+            for state in self.stack.iter_mut().chain([&mut self.state]) {
+                state.ctm = Matrix::from(&state.transform);
+            }
+        }
+    }
+
     /// Blink keeps the current path in the current user space: a transform change maps the
     /// path by the inverse of the change.
-    fn set_transform(&mut self, new: Affine) {
-        let old = self.state.transform;
-        if old == new {
+    fn map_path(&mut self, inverse: &Affine) {
+        if self.invertible() {
+            self.fast = Fast::None;
+            self.path.transform(inverse);
+        }
+    }
+
+    fn scale(&mut self, x: f64, y: f64) {
+        if !finite(&[x, y]) {
+            return;
+        }
+        let (sx, sy) = (clamp32(x), clamp32(y));
+        let (x, y) = (f64::from(sx), f64::from(sy));
+        let new = self.state.transform.then(&Affine::scaling(x, y));
+        if new == self.state.transform {
             return;
         }
         self.state.transform = new;
-        if new.is_invertible() {
-            self.fast = Fast::None;
+        self.state.ctm.m44_scale(sx, sy);
+        self.map_path(&Affine::scaling(1.0 / x, 1.0 / y));
+    }
+
+    fn rotate(&mut self, angle: f64) {
+        if !angle.is_finite() {
+            return;
         }
-        if let Some(inverse) = new.inverse()
-            && old.is_invertible()
-        {
-            self.path.transform(&inverse.then(&old));
+        let new = self.state.transform.then(&Affine::rotation(angle));
+        if new == self.state.transform {
+            return;
+        }
+        self.state.transform = new;
+        let degrees = clamp32(angle * (180.0 / f64::from(std::f32::consts::PI)));
+        let rotation = Matrix::rotation(degrees);
+        if !rotation.is_identity() {
+            self.state.ctm.m44_concat(&rotation);
+        }
+        self.map_path(&Affine::rotation(-angle));
+    }
+
+    fn translate(&mut self, x: f64, y: f64) {
+        if !self.invertible() || !finite(&[x, y]) {
+            return;
+        }
+        let (tx, ty) = (clamp32(x), clamp32(y));
+        let (x, y) = (f64::from(tx), f64::from(ty));
+        let new = self.state.transform.then(&Affine::translation(x, y));
+        if new == self.state.transform {
+            return;
+        }
+        self.state.transform = new;
+        self.state.ctm.m44_translate(tx, ty);
+        self.map_path(&Affine::translation(-x, -y));
+    }
+
+    fn reset_transform(&mut self) {
+        let old = self.state.transform;
+        if old == Affine::IDENTITY {
+            return;
+        }
+        let invertible = old.is_invertible();
+        self.state.transform = Affine::IDENTITY;
+        self.state.ctm = Matrix::IDENTITY;
+        if invertible {
+            self.map_path(&old);
+        }
+    }
+
+    /// Blink's `transform()`.
+    fn apply_transform(&mut self, m: &[f64; 6]) {
+        let [a, b, c, d, e, f] = m.map(|v| f64::from(clamp32(v)));
+        let change = Affine { a, b, c, d, e, f };
+        let new = self.state.transform.then(&change);
+        if new == self.state.transform {
+            return;
+        }
+        self.state.transform = new;
+        self.state.ctm.m44_concat(&Matrix::from(&change));
+        if let Some(inverse) = change.inverse() {
+            self.map_path(&inverse);
         }
     }
 
@@ -933,7 +1002,7 @@ impl<'a> Raster<'a> {
     /// way `SkDraw::drawPath` modulates a thin stroke drawn as a hairline.
     fn source(&self, fill: &Fill, coverage_scale: u32) -> Option<Source> {
         let alpha = self.state.alpha as f32;
-        let ctm = self.state.transform;
+        let ctm = &self.state.ctm;
         let modulate = |a: f32| {
             if coverage_scale >= 256 {
                 a
@@ -942,146 +1011,39 @@ impl<'a> Raster<'a> {
                 ((a8 * coverage_scale) >> 8) as f32 / 255.0
             }
         };
-        let stops = |stops: &[(f32, Rgba)]| -> Vec<GradientStop> {
-            let scale = modulate(1.0);
-            stops
-                .iter()
-                .map(|&(offset, c)| {
-                    let c = c.with_alpha_scaled(alpha * scale);
-                    Some(GradientStop::new(
-                        offset,
-                        tiny_skia::Color::from_rgba(c.r, c.g, c.b, c.a)?,
-                    ))
-                })
-                .collect::<Option<_>>()
-                .unwrap_or_default()
-        };
-        let point = |x: f64, y: f64| Point::from_xy(x as f32, y as f32);
         let clamped = |x: f64, y: f64| {
             let max = f32::MAX / 1e6;
             ((x as f32).clamp(-max, max), (y as f32).clamp(-max, max))
         };
-        match fill {
+        let (geometry, stops) = match fill {
             Fill::Color(c) => {
                 let a = modulate(c.a * alpha);
-                Some(Source::Solid(
+                return Some(Source::Solid(
                     [c.r, c.g, c.b, a].map(|v| (v * 255.0 + 0.5) as u8),
-                ))
+                ));
             }
-            Fill::Linear(_, s) | Fill::Radial(_, s) if s.is_empty() => None,
+            Fill::Linear(_, s) | Fill::Radial(_, s) if s.is_empty() => return None,
             Fill::Linear([x0, y0, x1, y1], s) => {
                 if x0 == x1 && y0 == y1 {
                     return None;
                 }
-                let geometry = gradient::Geometry::linear(
-                    ctm.to_skia(),
-                    clamped(*x0, *y0),
-                    clamped(*x1, *y1),
-                )?;
-                self.gradient_pixmap(&geometry, s, alpha * modulate(1.0))
+                let (p0, p1) = (clamped(*x0, *y0), clamped(*x1, *y1));
+                (gradient::Geometry::linear(ctm, p0, p1)?, s)
             }
             &Fill::Radial([x0, y0, r0, x1, y1, r1], ref s) => {
                 if r0 < 0.0 || r1 < 0.0 || (x0 == x1 && y0 == y1 && r0 == r1) {
                     return None;
                 }
                 let g = [x0, y0, r0, x1, y1, r1].map(|v| v as f32);
-                if gradient::shares_center(g) {
-                    let geometry = gradient::Geometry::radial(ctm.to_skia(), g)?;
-                    return self.gradient_pixmap(&geometry, s, alpha * modulate(1.0));
-                }
-                if r0 == 0.0 {
-                    return RadialGradient::new(
-                        point(x0, y0),
-                        point(x1, y1),
-                        r1 as f32,
-                        stops(s),
-                        SpreadMode::Pad,
-                        ctm.to_skia(),
-                    )
-                    .map(Source::Shader);
-                }
-                self.conical_pixmap([x0, y0, r0, x1, y1, r1], s, alpha * modulate(1.0))
-                    .map(Source::Device)
+                (gradient::Geometry::radial(ctm, g)?, s)
             }
-        }
-    }
-
-    fn gradient_pixmap(
-        &self,
-        geometry: &gradient::Geometry,
-        stops: &[(f32, Rgba)],
-        paint_alpha: f32,
-    ) -> Option<Source> {
+        };
         let colors = gradient::Colors::new(stops);
-        gradient::shade(
-            geometry,
-            &colors,
-            paint_alpha,
-            self.pixmap.width(),
-            self.pixmap.height(),
-        )
-        .map(Source::Device)
+        let paint = gradient::Paint::new(geometry, colors, modulate(alpha));
+        Some(Source::Gradient(Box::new(paint)))
     }
 
-    /// The canvas-spec two-point conical gradient evaluated at every device pixel centre, for
-    /// the start-radius cases tiny-skia's focal gradient cannot express.
-    fn conical_pixmap(
-        &self,
-        g: [f64; 6],
-        stops: &[(f32, Rgba)],
-        paint_alpha: f32,
-    ) -> Option<Pixmap> {
-        let inverse = self.state.transform.inverse()?;
-        let [x0, y0, r0, x1, y1, r1] = g;
-        let (cdx, cdy, dr) = (x1 - x0, y1 - y0, r1 - r0);
-        let a = cdx * cdx + cdy * cdy - dr * dr;
-        let colors = gradient::Colors::new(stops);
-        let (w, h) = (self.pixmap.width(), self.pixmap.height());
-        let mut out = Pixmap::new(w, h)?;
-        let data = out.data_mut();
-        for py in 0..h {
-            for px in 0..w {
-                let (dx, dy) = (f64::from(px) + 0.5, f64::from(py) + 0.5);
-                let ux = inverse.a * dx + inverse.c * dy + inverse.e - x0;
-                let uy = inverse.b * dx + inverse.d * dy + inverse.f - y0;
-                let b = ux * cdx + uy * cdy + r0 * dr;
-                let c = ux * ux + uy * uy - r0 * r0;
-                let t = if a.abs() < 1e-12 {
-                    if b == 0.0 {
-                        continue;
-                    }
-                    c / (2.0 * b)
-                } else {
-                    let disc = b * b - a * c;
-                    if disc < 0.0 {
-                        continue;
-                    }
-                    let root = disc.sqrt();
-                    let (t1, t2) = ((b + root) / a, (b - root) / a);
-                    let (hi, lo) = if t1 > t2 { (t1, t2) } else { (t2, t1) };
-                    if r0 + hi * dr >= 0.0 {
-                        hi
-                    } else if r0 + lo * dr >= 0.0 {
-                        lo
-                    } else {
-                        continue;
-                    }
-                };
-                let i = ((py * w + px) * 4) as usize;
-                data[i..i + 4].copy_from_slice(&gradient::shade_pixel(
-                    colors.at(t as f32),
-                    paint_alpha,
-                    px,
-                    py,
-                ));
-            }
-        }
-        Some(out)
-    }
-
-    /// Blends `source` through `spans` in blit order. Shaders are evaluated over the bounds of
-    /// the spans into a scratch pixmap first, then blended with the same 8-bit arithmetic as
-    /// solid colours.
+    /// Blends `source` through `spans` in blit order.
     fn paint_spans(&mut self, spans: &Spans, source: &Source) {
         let clipped;
         let spans = match &self.state.clip {
@@ -1091,70 +1053,10 @@ impl<'a> Raster<'a> {
                 &clipped
             }
         };
-        let scratch = match source {
-            Source::Solid(color) => {
-                scan::blit_spans_solid(&mut self.pixmap, spans, *color);
-                return;
-            }
-            Source::Device(pixmap) => {
-                let stride = pixmap.width() as usize;
-                let data = pixmap.data();
-                scan::blit_spans(&mut self.pixmap, spans, Blend::SourceOver, |x, y| {
-                    let i = (y * stride + x) * 4;
-                    [data[i], data[i + 1], data[i + 2], data[i + 3]]
-                });
-                return;
-            }
-            Source::Shader(shader) => spans
-                .bounds()
-                .and_then(|bounds| shade(bounds, shader.clone()))
-                .map(Arc::new),
-            Source::Image {
-                pixmap,
-                transform,
-                quality,
-                opacity,
-                mip,
-            } => spans.bounds().and_then(|bounds| {
-                let key = ShadeKey {
-                    transform: *transform,
-                    quality: *quality,
-                    opacity: *opacity,
-                    mip: *mip,
-                    bounds,
-                };
-                self.shades.get(pixmap, key).or_else(|| {
-                    let level = match mip {
-                        Some(mip) => Some((mip, mip.build(pixmap)?)),
-                        None => None,
-                    };
-                    let (source, transform) = match &level {
-                        Some((mip, level)) => (level.as_ref(), mip.placed(transform)),
-                        None => (pixmap.as_ref().as_ref(), *transform),
-                    };
-                    let pattern = Pattern::new(
-                        source,
-                        SpreadMode::Pad,
-                        *quality,
-                        *opacity,
-                        transform.to_skia(),
-                    );
-                    let scratch = Arc::new(shade(bounds, pattern)?);
-                    self.shades.insert(pixmap, key, scratch.clone());
-                    Some(scratch)
-                })
-            }),
-        };
-        let (Some(bounds), Some(scratch)) = (spans.bounds(), scratch) else {
-            return;
-        };
-        let stride = scratch.width() as usize;
-        let data = scratch.data();
-        let (ox, oy) = (bounds[0] as usize, bounds[1] as usize);
-        scan::blit_spans(&mut self.pixmap, spans, Blend::SourceOver, |x, y| {
-            let i = ((y - oy) * stride + (x - ox)) * 4;
-            [data[i], data[i + 1], data[i + 2], data[i + 3]]
-        });
+        match source {
+            Source::Solid(color) => scan::blit_spans_solid(&mut self.pixmap, spans, *color),
+            Source::Gradient(paint) => gradient::blit(&mut self.pixmap, spans, paint),
+        }
     }
 
     /// Fills a device path with Skia's analytic AA.
@@ -1204,7 +1106,7 @@ impl<'a> Raster<'a> {
             .and_then(|r| self.device_rect([r.left, r.top, r.right, r.bottom]));
         self.state.clip = Some(match device {
             Some(device) => clip.intersect_rect(ltrb(device)),
-            None => clip.intersect_path(&self.path.to_sk(Some(&self.state.transform))),
+            None => clip.intersect_path(&self.path.to_sk(Some(&self.state.ctm))),
         });
     }
 
@@ -1223,8 +1125,7 @@ impl<'a> Raster<'a> {
         if self.path_rejected(&self.path.to_sk(None), false) {
             return;
         }
-        let ctm = self.state.transform;
-        let device = self.path.to_sk(Some(&ctm));
+        let device = self.path.to_sk(Some(&self.state.ctm));
         let fill = self.state.fill.clone();
         self.fill_sk_rule(&device, &fill, even_odd);
     }
@@ -1232,7 +1133,7 @@ impl<'a> Raster<'a> {
     /// `SkDrawTreatAsHairline`: a stroke whose width maps to at most one device pixel on both
     /// axes is drawn one pixel wide with its alpha scaled by the mean mapped width.
     fn hairline_coverage(&self) -> Option<f32> {
-        let m = self.state.transform.to_skia();
+        let m = self.state.ctm;
         let w = self.state.line_width as f32;
         let fast_len = |x: f32, y: f32| {
             let (x, y) = (x.abs(), y.abs());
@@ -1248,8 +1149,10 @@ impl<'a> Raster<'a> {
         if !self.invertible() {
             return;
         }
-        let ctm = self.state.transform.to_skia();
-        let res_scale = tiny_skia::PathStroker::compute_resolution_scale(&ctm);
+        let m = self.state.ctm;
+        let res_scale = tiny_skia::PathStroker::compute_resolution_scale(
+            &tiny_skia::Transform::from_row(m.sx, m.ky, m.kx, m.sy, m.tx, m.ty),
+        );
         let user = path.to_sk(None);
         if self.path_rejected(&user, true) {
             return;
@@ -1282,7 +1185,7 @@ impl<'a> Raster<'a> {
             None => (user, false),
         };
         if let Some(coverage) = hairline {
-            let device = source.transformed(&self.state.transform);
+            let device = source.mapped(&self.state.ctm);
             if !dev_path_drawable(&device) {
                 return;
             }
@@ -1301,7 +1204,7 @@ impl<'a> Raster<'a> {
             return;
         }
         if filled {
-            let device = source.transformed(&self.state.transform);
+            let device = source.mapped(&self.state.ctm);
             self.fill_sk(&device, &stroke);
             return;
         }
@@ -1314,21 +1217,19 @@ impl<'a> Raster<'a> {
             res_scale,
         };
         let outline = stroke::stroke_path(&source, &style);
-        let device = outline.transformed(&self.state.transform);
+        let device = outline.mapped(&self.state.ctm);
         self.fill_sk(&device, &stroke);
     }
 
     /// `SkDraw::computeConservativeLocalClipBounds`: the canvas outset by a pixel, in user space.
     fn local_clip_bounds(&self) -> Option<crate::skpath::Rect> {
-        let inverse = self.state.transform.inverse()?;
         let (w, h) = (self.pixmap.width() as f32, self.pixmap.height() as f32);
-        let r = Rect::from_ltrb(-1.0, -1.0, w + 1.0, h + 1.0)?.transform(inverse.to_skia())?;
-        Some(crate::skpath::Rect {
-            left: r.left(),
-            top: r.top(),
-            right: r.right(),
-            bottom: r.bottom(),
-        })
+        Some(
+            self.state
+                .ctm
+                .invert()?
+                .map_rect(&ltrb([-1.0, -1.0, w + 1.0, h + 1.0])),
+        )
     }
 
     fn stroke_current_path(&mut self) {
@@ -1355,7 +1256,7 @@ impl<'a> Raster<'a> {
     /// `SkPathPriv::CreateDrawArcPath`.
     fn fill_arc(&mut self, arc: FastArc) {
         let path = arc.path(true);
-        let device = path.to_sk(Some(&self.state.transform));
+        let device = path.to_sk(Some(&self.state.ctm));
         let fill = self.state.fill.clone();
         self.fill_sk(&device, &fill);
     }
@@ -1379,7 +1280,7 @@ impl<'a> Raster<'a> {
             return false;
         };
         let stroke = self.state.stroke.clone();
-        let ctm = self.state.transform;
+        let ctm = self.state.ctm;
         for rect in [points.first, points.last].into_iter().flatten() {
             let mut path = Path::new();
             path.rect(
@@ -1428,10 +1329,7 @@ impl<'a> Raster<'a> {
         {
             return None;
         }
-        let m = s.transform.to_skia();
-        let rect_stays = (m.kx == 0.0 && m.ky == 0.0 && m.sx != 0.0 && m.sy != 0.0)
-            || (m.sx == 0.0 && m.sy == 0.0 && m.kx != 0.0 && m.ky != 0.0);
-        if !rect_stays {
+        if !s.ctm.rect_stays_rect() {
             return None;
         }
         let (initial_dash_length, initial_dash_index) =
@@ -1446,13 +1344,12 @@ impl<'a> Raster<'a> {
         if s.line_join == LineJoin::Miter {
             radius *= s.miter_limit as f32;
         }
-        let device = Rect::from_ltrb(
+        let bounds = s.ctm.invert()?.map_rect(&ltrb([
             -radius,
             -radius,
             self.pixmap.width() as f32 + radius,
             self.pixmap.height() as f32 + radius,
-        )?;
-        let bounds = device.transform(s.transform.inverse()?.to_skia())?;
+        ]));
         let chop = |lo: f32, hi: f32, min: f32, max: f32| -> Option<(f32, f32)> {
             if hi <= min || lo >= max {
                 return None;
@@ -1475,7 +1372,7 @@ impl<'a> Raster<'a> {
             } else {
                 (pts[0].x, pts[1].x)
             };
-            let (lo, hi) = chop(lo, hi, bounds.left(), bounds.right())?;
+            let (lo, hi) = chop(lo, hi, bounds.left, bounds.right)?;
             (pts[0].x, pts[1].x) = if dx < 0.0 { (hi, lo) } else { (lo, hi) };
         } else {
             let (lo, hi) = if dy < 0.0 {
@@ -1483,7 +1380,7 @@ impl<'a> Raster<'a> {
             } else {
                 (pts[0].y, pts[1].y)
             };
-            let (lo, hi) = chop(lo, hi, bounds.top(), bounds.bottom())?;
+            let (lo, hi) = chop(lo, hi, bounds.top, bounds.bottom)?;
             (pts[0].y, pts[1].y) = if dy < 0.0 { (hi, lo) } else { (lo, hi) };
         }
         let (tx, ty) = (pts[1].x - pts[0].x, pts[1].y - pts[0].y);
@@ -1585,13 +1482,13 @@ impl<'a> Raster<'a> {
     /// The device rect `SkDraw::drawRect` maps a sorted LTRB rect to, when the transform keeps
     /// rects axis-aligned.
     fn device_rect(&self, r: [f32; 4]) -> Option<[f32; 4]> {
-        let m = self.state.transform.to_skia();
-        if m.kx != 0.0 || m.ky != 0.0 {
+        let m = &self.state.ctm;
+        if !m.rect_stays_rect() {
             return None;
         }
-        let (x0, y0) = (r[0] * m.sx + m.tx, r[1] * m.sy + m.ty);
-        let (x1, y1) = (r[2] * m.sx + m.tx, r[3] * m.sy + m.ty);
-        Some([x0.min(x1), y0.min(y1), x0.max(x1), y0.max(y1)])
+        let a = m.map_point(hairline::P { x: r[0], y: r[1] });
+        let b = m.map_point(hairline::P { x: r[2], y: r[3] });
+        Some(sorted([a.x, a.y, b.x, b.y]))
     }
 
     fn rect_path(&self, r: [f32; 4]) -> Path {
@@ -1608,15 +1505,14 @@ impl<'a> Raster<'a> {
         }
         let r = [r[0] - outset, r[1] - outset, r[2] + outset, r[3] + outset];
         let corners = [(r[0], r[1]), (r[2], r[1]), (r[2], r[3]), (r[0], r[3])];
-        let mapped = corners
-            .map(|(x, y)| crate::skpath::map_point(&self.state.transform, hairline::P { x, y }));
+        let mapped = corners.map(|(x, y)| self.state.ctm.map_point(hairline::P { x, y }));
+        if !mapped.iter().all(|p| p.x.is_finite() && p.y.is_finite()) {
+            return true;
+        }
         let l = mapped.iter().map(|p| p.x).fold(f32::INFINITY, f32::min);
         let t = mapped.iter().map(|p| p.y).fold(f32::INFINITY, f32::min);
         let rr = mapped.iter().map(|p| p.x).fold(f32::NEG_INFINITY, f32::max);
         let b = mapped.iter().map(|p| p.y).fold(f32::NEG_INFINITY, f32::max);
-        if ![l, t, rr, b].iter().all(|v| v.is_finite()) {
-            return true;
-        }
         let (w, h) = (self.pixmap.width() as f32, self.pixmap.height() as f32);
         !(l.max(-1.0) < rr.min(w + 1.0) && t.max(-1.0) < b.min(h + 1.0))
     }
@@ -1640,7 +1536,7 @@ impl<'a> Raster<'a> {
                 return Some(scan::anti_fill_rect(r, w, h));
             }
         }
-        let device = self.rect_path(rect).to_sk(Some(&self.state.transform));
+        let device = self.rect_path(rect).to_sk(Some(&self.state.ctm));
         let mut spans = Spans::new(w, h);
         if dev_path_drawable(&device) {
             aaa::fill_path(&device, w, h, false, &mut spans);
@@ -1673,8 +1569,9 @@ impl<'a> Raster<'a> {
                 alpha: vec![255; cw * ch],
             });
         }
-        let ctm = self.state.transform;
-        let path = self.rect_path(rect).to_skia(Some(&ctm), CONIC_TOLERANCE)?;
+        let path = self
+            .rect_path(rect)
+            .to_skia(Some(&self.state.ctm), CONIC_TOLERANCE)?;
         let coverage = scan::rasterize(&path, w, h)?;
         if anti_alias {
             return Some(coverage);
@@ -1777,9 +1674,13 @@ impl<'a> Raster<'a> {
         let Some(device) = self.device_rect(rect) else {
             return false;
         };
-        let m = s.transform.to_skia();
+        let m = s.ctm;
         let lw = s.line_width as f32;
-        let size = ((lw * m.sx).abs(), (lw * m.sy).abs());
+        let size = if m.is_scale_translate() {
+            ((lw * m.sx).abs(), (lw * m.sy).abs())
+        } else {
+            ((lw * m.kx).abs(), (lw * m.ky).abs())
+        };
         let bbox = [
             device[0] - size.0 / 2.0,
             device[1] - size.1 / 2.0,
@@ -1831,8 +1732,8 @@ impl<'a> Raster<'a> {
             Fill::Color(color) => color.to_u8(),
             Fill::Linear(_, stops) | Fill::Radial(_, stops) => gradient_luminance(stops),
         };
-        let ctm = self.state.transform;
-        if !finite(&[x, y]) || !ctm.is_invertible() {
+        let ctm = self.state.ctm;
+        if !finite(&[x, y]) || !self.invertible() {
             return;
         }
         let (x, y) = (f64::from(clamp32(x)), f64::from(clamp32(y)));
@@ -1849,7 +1750,7 @@ impl<'a> Raster<'a> {
             x,
             y,
             max_width,
-            [ctm.a, ctm.b, ctm.c, ctm.d, ctm.e, ctm.f],
+            [ctm.sx, ctm.ky, ctm.kx, ctm.sy, ctm.tx, ctm.ty].map(f64::from),
         );
         let mut spans = Spans::new(self.pixmap.width(), self.pixmap.height());
         let mut color_glyphs = Vec::new();
@@ -1898,204 +1799,222 @@ impl<'a> Raster<'a> {
     }
 
     fn draw_image(&mut self, id: &str, args: &[f64]) {
-        let Some(ImageSource {
-            pixmap: image,
-            element,
-        }) = self.images.get(id)
-        else {
+        let Some(ImageSource { pixmap, element }) = self.images.get(id) else {
             return;
         };
-        let element = *element;
-        let (iw, ih) = (f64::from(image.width()), f64::from(image.height()));
+        let (pixmap, element) = (pixmap.clone(), *element);
+        let size = [f64::from(pixmap.width()), f64::from(pixmap.height())];
         let (src, dst) = match *args {
-            [dx, dy] => ([0.0, 0.0, iw, ih], [dx, dy, iw, ih]),
-            [dx, dy, dw, dh] => ([0.0, 0.0, iw, ih], [dx, dy, dw, dh]),
+            [dx, dy] => ([0.0, 0.0, size[0], size[1]], [dx, dy, size[0], size[1]]),
+            [dx, dy, dw, dh] => ([0.0, 0.0, size[0], size[1]], [dx, dy, dw, dh]),
             [sx, sy, sw, sh, dx, dy, dw, dh] => ([sx, sy, sw, sh], [dx, dy, dw, dh]),
             _ => return,
         };
         if !finite(&src) || !finite(&dst) || !self.invertible() {
             return;
         }
-        let normalize = |[x, y, w, h]: [f64; 4]| {
+        if [src[2], src[3], dst[2], dst[3]].contains(&0.0) {
+            return;
+        }
+        let normalized = |[x, y, w, h]: [f64; 4]| {
             let (x, w) = if w < 0.0 { (x + w, -w) } else { (x, w) };
             let (y, h) = if h < 0.0 { (y + h, -h) } else { (y, h) };
-            [x, y, w, h]
+            rect32([x, y, w, h])
         };
-        let (src, mut dst) = (normalize(src), normalize(dst));
-        if src[2] == 0.0 || src[3] == 0.0 || dst[2] == 0.0 || dst[3] == 0.0 {
+        let Some((src, dst)) = clip_to_image(normalized(src), normalized(dst), size) else {
             return;
-        }
-        let clipped = [
-            src[0].max(0.0),
-            src[1].max(0.0),
-            (src[0] + src[2]).min(iw),
-            (src[1] + src[3]).min(ih),
-        ];
-        if clipped[2] <= clipped[0] || clipped[3] <= clipped[1] {
-            return;
-        }
-        let (kx, ky) = (dst[2] / src[2], dst[3] / src[3]);
-        dst = [
-            dst[0] + (clipped[0] - src[0]) * kx,
-            dst[1] + (clipped[1] - src[1]) * ky,
-            (clipped[2] - clipped[0]) * kx,
-            (clipped[3] - clipped[1]) * ky,
-        ];
-        let src = [
-            clipped[0],
-            clipped[1],
-            clipped[2] - clipped[0],
-            clipped[3] - clipped[1],
-        ];
-        let ctm = self.state.transform;
-        let image_to_device = ctm
-            .then(&Affine::translation(dst[0], dst[1]))
-            .then(&Affine::scaling(dst[2] / src[2], dst[3] / src[3]))
-            .then(&Affine::translation(-src[0], -src[1]));
-        let quality = if self.state.smoothing {
-            FilterQuality::Bilinear
-        } else {
-            FilterQuality::Nearest
         };
-        let m = image_to_device;
-        let pure_translate = m.a == 1.0 && m.d == 1.0 && m.b == 0.0 && m.c == 0.0;
-        if quality == FilterQuality::Bilinear && pure_translate {
-            let image = image.clone();
-            let before = self.state.clip.is_some().then(|| self.pixmap.clone());
-            self.blit_decal_image(&image, src, m.e, m.f);
-            if let (Some(before), Some(clip)) = (before, &self.state.clip) {
-                let stride = before.width() as usize;
-                let (new, _) = self.pixmap.data_mut().as_chunks_mut::<4>();
-                let (old, _) = before.data().as_chunks::<4>();
-                for (i, (new, old)) in new.iter_mut().zip(old).enumerate() {
-                    let c = u32::from(clip.at((i % stride) as i32, (i / stride) as i32));
-                    for (n, &o) in new.iter_mut().zip(old) {
-                        *n = scan::div255(u32::from(*n) * c + u32::from(o) * (255 - c)) as u8;
-                    }
+        let ctm = self.state.ctm;
+        let anti_alias = !ctm.rect_stays_rect() || {
+            let (x, y) = if ctm.is_scale_translate() {
+                (ctm.sx, ctm.sy)
+            } else {
+                (ctm.ky, ctm.kx)
+            };
+            dst[2] * x.abs() < 1.0 || dst[3] * y.abs() < 1.0
+        };
+        let mut draw = ImageDraw {
+            pixmap,
+            mip: None,
+            src: ltrb(xywh(src)),
+            dst: ltrb(xywh(dst)),
+            linear: self.state.smoothing,
+            anti_alias,
+        };
+        if element {
+            let m = ctm.concat(&Matrix::rect_to_rect(&draw.src, &draw.dst));
+            let scale = [m.sx.hypot(m.ky), m.kx.hypot(m.sy)];
+            let image = [draw.pixmap.width(), draw.pixmap.height()];
+            match Mip::of(&draw.src, scale, image) {
+                Level::Nothing => return,
+                Level::Mip(mip) if draw.linear => {
+                    draw.src = mip.placed(&draw.src);
+                    draw.mip = Some(mip);
                 }
+                _ => {}
             }
-            return;
         }
-        let mip = if element && quality == FilterQuality::Bilinear {
-            let scale = [m.a.hypot(m.b), m.c.hypot(m.d)];
-            Mip::of(src, scale, [image.width(), image.height()])
-        } else {
-            None
-        };
-        let anti_alias = if ctm.is_scale_translate() {
-            dst[2] * ctm.a.abs() < 1.0 || dst[3] * ctm.d.abs() < 1.0
-        } else if ctm.a == 0.0 && ctm.d == 0.0 {
-            dst[2] * ctm.b.abs() < 1.0 || dst[3] * ctm.c.abs() < 1.0
-        } else {
-            true
-        };
-        let source = Source::Image {
-            pixmap: image.clone(),
-            transform: m,
-            quality,
-            opacity: self.state.alpha as f32,
-            mip,
-        };
-        let dst = [
-            dst[0] as f32,
-            dst[1] as f32,
-            (dst[0] + dst[2]) as f32,
-            (dst[1] + dst[3]) as f32,
-        ];
-        if let Some(spans) = self.rect_spans(sorted(dst), anti_alias) {
-            self.paint_spans(&spans, &source);
-        }
+        self.draw_image_rect(draw);
     }
 
-    /// Chromium's CPU-canvas `drawImage` for a pure translation. A dest pixel is covered when
-    /// its sample coordinate `s = p + 0.5 - d` lies in `(0, image]`. Both filter taps clamp to
-    /// the image border, the interpolation weight is the top 4 bits of the 16.16 fixed-point
-    /// fraction, and the premultiplied channels combine as one `sum(tap * wx * wy) >> 8` sum.
-    /// Source-over blends as `s + (d * (255 - s_a) + 127) / 255`. A paint alpha below 255
-    /// takes one of two legacy paths: at an integer offset Skia draws a sprite and blends with
-    /// `SkBlendARGB32` (`(v * (a8 + 1) + d * (256 - v_a * (a8 + 1) / 255)) >> 8`), at a fractional
-    /// one the image shader scales the filtered pixel to `v * (a8 + 1) >> 8` before source-over.
-    fn blit_decal_image(&mut self, image: &Pixmap, src: [f64; 4], e: f64, f: f64) {
-        let (il, it, ir, ib) = (src[0], src[1], src[0] + src[2], src[1] + src[3]);
-        let (e, f) = (e as f32 as f64, f as f32 as f64);
-        let (pw, ph) = (
-            i64::from(self.pixmap.width()),
-            i64::from(self.pixmap.height()),
-        );
-        let (x0, y0) = (
-            ((e + il - 0.5).floor() as i64 + 1).max(0),
-            ((f + it - 0.5).floor() as i64 + 1).max(0),
-        );
-        let (x1, y1) = (
-            ((e + ir - 0.5).floor() as i64).min(pw - 1),
-            ((f + ib - 0.5).floor() as i64).min(ph - 1),
-        );
-        if x0 > x1 || y0 > y1 {
+    /// `SkBitmapDevice::drawImageRect` with the fast constraint: a whole bitmap (and, without
+    /// filtering, a part of one) is drawn as a sprite where it covers its own pixels.
+    fn draw_image_rect(&mut self, draw: ImageDraw) {
+        let ImageDraw {
+            pixmap,
+            mip,
+            mut src,
+            mut dst,
+            linear,
+            anti_alias,
+        } = draw;
+        if self.quick_reject([dst.left, dst.top, dst.right, dst.bottom], 0.0) {
             return;
         }
-        let alpha8 = (self.state.alpha as f32 * 255.0 + 0.5).clamp(0.0, 255.0) as i64;
-        if alpha8 == 0 {
-            return;
+        let size = mip.map_or([pixmap.width(), pixmap.height()], |m| m.size);
+        let bounds = ltrb([0.0, 0.0, size[0] as f32, size[1] as f32]);
+        let mut matrix = Matrix::rect_to_rect(&src, &dst);
+        if !bounds.contains(&src) {
+            let Some(inside) = src.intersect(&bounds) else {
+                return;
+            };
+            src = inside;
+            dst = matrix.map_rect(&src);
         }
-        let sprite = e.fract() == 0.0 && f.fract() == 0.0;
-        let (il, it, ir, ib) = (il as i64, it as i64, ir as i64, ib as i64);
-        let iw = i64::from(image.width());
-        let data = image.data();
-        let tap =
-            |x: i64, y: i64, c: usize| -> i64 { i64::from(data[((y * iw + x) * 4) as usize + c]) };
-        let dst = self.pixmap.data_mut();
-        for y in y0..=y1 {
-            let v16 = ((y as f64 - f) * 65536.0).round() as i64;
-            let j0 = v16.div_euclid(65536);
-            let wy = v16.rem_euclid(65536) >> 12;
-            let (j0, j1) = (j0.clamp(it, ib - 1), (j0 + 1).clamp(it, ib - 1));
-            for x in x0..=x1 {
-                let u16 = ((x as f64 - e) * 65536.0).round() as i64;
-                let i0 = u16.div_euclid(65536);
-                let wx = u16.rem_euclid(65536) >> 12;
-                let (i0, i1) = (i0.clamp(il, ir - 1), (i0 + 1).clamp(il, ir - 1));
-                let mut pixel = [0u8; 4];
-                for (c, p) in pixel.iter_mut().enumerate() {
-                    let row = |j: i64| tap(i0, j, c) * (16 - wx) + tap(i1, j, c) * wx;
-                    *p = ((row(j0) * (16 - wy) + row(j1) * wy) >> 8).clamp(0, 255) as u8;
-                }
-                let k = ((y * pw + x) * 4) as usize;
-                if alpha8 < 255 && !sprite {
-                    pixel = pixel.map(|v| ((u32::from(v) * (alpha8 as u32 + 1)) >> 8) as u8);
-                }
-                if alpha8 == 255 || !sprite {
-                    let inv = 255 - u32::from(pixel[3]);
-                    for (d, s) in dst[k..k + 4].iter_mut().zip(pixel) {
-                        *d = (u32::from(s) + (u32::from(*d) * inv + 127) / 255).min(255) as u8;
-                    }
-                } else {
-                    let s16 = pixel.map(|v| u32::from(v) * (alpha8 as u32 + 1));
-                    let inv = 256 - s16[3] / 255;
-                    for (d, s) in dst[k..k + 4].iter_mut().zip(s16) {
-                        *d = ((s + u32::from(*d) * inv) >> 8).min(255) as u8;
-                    }
-                }
+        let subset = !src.contains(&bounds);
+        let mut part = [0, 0, size[0], size[1]];
+        if subset && !linear {
+            let [l, t, r, b] = src.round_out().map(|v| v as u32);
+            part = [l, t, r.min(size[0]) - l, b.min(size[1]) - t];
+            if l > 0 || t > 0 {
+                matrix = matrix.pre_translate(l as f32, t as f32);
             }
         }
+        let as_bitmap =
+            !subset || (!linear && src == ltrb([0.0, 0.0, part[2] as f32, part[3] as f32]));
+        let total = self.state.ctm.concat(&matrix);
+        let alpha = self.state.alpha as f32;
+        let (w, h) = (self.pixmap.width(), self.pixmap.height());
+        let level = || match mip {
+            Some(mip) => mip.build(&pixmap).map(Arc::new),
+            None => Some(pixmap.clone()),
+        };
+        if as_bitmap && let Some(at) = image::sprite(&total, part, linear, anti_alias) {
+            let sprite = [at.0, at.1, at.0 + part[2] as i32, at.1 + part[3] as i32];
+            let clip = self.state.clip.as_ref();
+            if clip.is_none_or(|c| c.handles_sprite(sprite)) {
+                let mut spans = Spans::new(w, h);
+                spans.rect(at.0, at.1, part[2] as i32, part[3] as i32);
+                if let Some(clip) = clip {
+                    spans = clip.apply(spans);
+                }
+                let runs = image::runs(&spans);
+                let alpha = image::alpha_u8(alpha);
+                if let Some(image) = level() {
+                    image::blit_sprite(&mut self.pixmap, &image, part, at, alpha, &runs);
+                }
+                return;
+            }
+        }
+        let Some(shader) = image::Shader::new(&total, part, linear, alpha) else {
+            return;
+        };
+        let spans = if as_bitmap && !self.state.ctm.rect_stays_rect() {
+            let path = self.rect_path([0.0, 0.0, part[2] as f32, part[3] as f32]);
+            let device = path.to_sk(Some(&total));
+            let mut spans = Spans::new(w, h);
+            if dev_path_drawable(&device) {
+                aaa::fill_path(&device, w, h, false, &mut spans);
+            }
+            Some(spans)
+        } else {
+            self.rect_spans([dst.left, dst.top, dst.right, dst.bottom], anti_alias)
+        };
+        let Some(mut spans) = spans else {
+            return;
+        };
+        if let Some(clip) = &self.state.clip {
+            spans = clip.apply(spans);
+        }
+        let runs = image::runs(&spans);
+        let shade = || level().map(|image| Arc::new(shader.shade(&image, &runs)));
+        let pixels = if shader.is_translate() {
+            shade()
+        } else {
+            let key = ShadeKey {
+                shader,
+                mip,
+                runs: runs.clone(),
+            };
+            self.shades.get(&pixmap, &key).or_else(|| {
+                let pixels = shade()?;
+                self.shades.insert(&pixmap, key, pixels.clone());
+                Some(pixels)
+            })
+        };
+        let Some(pixels) = pixels else {
+            return;
+        };
+        shader.blend(&mut self.pixmap, &runs, &pixels);
     }
 }
 
-/// Evaluates `shader` (device space) at the pixel centres of `bounds`.
-fn shade(bounds: [i32; 4], shader: Shader<'_>) -> Option<Pixmap> {
-    let (w, h) = (
-        (bounds[2] - bounds[0]) as u32,
-        (bounds[3] - bounds[1]) as u32,
-    );
-    let mut scratch = Pixmap::new(w, h)?;
-    let (x, y) = (bounds[0] as f32, bounds[1] as f32);
-    let rect = Rect::from_xywh(x, y, w as f32, h as f32)?;
-    let paint = Paint {
-        shader,
-        anti_alias: false,
-        ..Paint::default()
-    };
-    scratch.fill_rect(rect, &paint, Transform::from_translate(-x, -y), None);
-    Some(scratch)
+/// What cc hands Skia for a `drawImage`: part of an image, or of the mip level of it that the
+/// decode cache keeps, and the user rect it fills.
+struct ImageDraw {
+    pixmap: Arc<Pixmap>,
+    mip: Option<Mip>,
+    src: crate::skpath::Rect,
+    dst: crate::skpath::Rect,
+    linear: bool,
+    anti_alias: bool,
+}
+
+/// `gfx::RectFToSkRect`.
+fn xywh([x, y, w, h]: [f32; 4]) -> [f32; 4] {
+    [x, y, x + w, y + h]
+}
+
+/// Sizes a `gfx::SizeF` keeps.
+fn size32(v: f32) -> f32 {
+    if v > 8.0 * f32::EPSILON { v } else { 0.0 }
+}
+
+/// `gfx::RectF::Intersect`.
+fn intersect_xywh(a: [f32; 4], b: [f32; 4]) -> Option<[f32; 4]> {
+    let (a, b) = (xywh(a), xywh(b));
+    let r = [
+        a[0].max(b[0]),
+        a[1].max(b[1]),
+        a[2].min(b[2]),
+        a[3].min(b[3]),
+    ];
+    let (w, h) = (size32(r[2] - r[0]), size32(r[3] - r[1]));
+    (r[0] < r[2] && r[1] < r[3] && w > 0.0 && h > 0.0).then_some([r[0], r[1], w, h])
+}
+
+/// Blink's `ClipRectsToImageRect` and the clip `StaticBitmapImage::DrawHelper` repeats, in
+/// `[x, y, width, height]`: `None` where nothing is left to draw.
+fn clip_to_image(src: [f32; 4], dst: [f32; 4], size: [f64; 2]) -> Option<([f32; 4], [f32; 4])> {
+    let image = [0.0, 0.0, size[0] as f32, size[1] as f32];
+    let s = xywh(src);
+    let contained = s[0] >= 0.0 && s[1] >= 0.0 && s[2] <= image[2] && s[3] <= image[3];
+    let (mut src, mut dst) = (src, dst);
+    if !contained {
+        let (kx, ky) = (dst[2] / src[2], dst[3] / src[3]);
+        let offset = (dst[0] - src[0] * kx, dst[1] - src[1] * ky);
+        src = intersect_xywh(src, image)?;
+        dst = [
+            src[0] * kx + offset.0,
+            src[1] * ky + offset.1,
+            size32(src[2] * kx),
+            size32(src[3] * ky),
+        ];
+    }
+    if src[2] <= 0.0 || src[3] <= 0.0 || dst[2] <= 0.0 || dst[3] <= 0.0 {
+        return None;
+    }
+    Some((intersect_xywh(src, image)?, dst))
 }
 
 /// `SkGradientBaseShader::onAsLuminanceColor`, which text masks are gamma-corrected for: the
@@ -2462,9 +2381,9 @@ mod shade_tests {
             let image = image();
             let (_, shades) = draw(&frame(width, 5.0), &image, ShadeCache::default());
             assert_eq!(shades.len(), 1);
-            let sampled = Arc::as_ptr(&shades.entries[0].scratch);
+            let sampled = Arc::as_ptr(&shades.entries[0].pixels);
             let (cached, shades) = draw(&frame(width, 40.0), &image, shades);
-            assert_eq!(Arc::as_ptr(&shades.entries[0].scratch), sampled);
+            assert_eq!(Arc::as_ptr(&shades.entries[0].pixels), sampled);
             let (fresh, _) = draw(&frame(width, 40.0), &image, ShadeCache::default());
             assert!(cached.data() == fresh.data(), "{width}");
 

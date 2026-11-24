@@ -157,6 +157,23 @@ impl RasterClip {
         trimmed(bounds, &alpha)
     }
 
+    /// `clipHandlesSprite`.
+    pub fn handles_sprite(&self, sprite: IRect) -> bool {
+        match self {
+            RasterClip::Rect(_) => true,
+            RasterClip::Mask(mask) => {
+                contains(mask.bounds, sprite)
+                    && (sprite[1]..sprite[3]).all(|y| {
+                        let row = mask.row(y);
+                        row[(sprite[0] - mask.bounds[0]) as usize
+                            ..(sprite[2] - mask.bounds[0]) as usize]
+                            .iter()
+                            .all(|&a| a == 255)
+                    })
+            }
+        }
+    }
+
     /// `spans` through `SkRectClipBlitter` or `SkAAClipBlitter`, neither of which keeps the
     /// two-pixel blits.
     pub fn apply(&self, spans: Spans) -> Spans {
