@@ -31,7 +31,7 @@ use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
 use asrs_model::json_file;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
-use asrs_model::preferences::Field3dMode;
+use asrs_model::preferences::{Field3dMode, Preferences};
 use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
 use asrs_parity::json::Json;
@@ -151,7 +151,7 @@ fn message_box(options: &JsValue) -> MessageBoxOptions {
             .flatten()
             .map(|b| b.as_str().expect("a label").to_string_lossy())
             .collect(),
-        checkbox_label: label.map(|l| l.to_string_lossy()).unwrap_or_default(),
+        checkbox_label: label.map_or(String::new(), |l| l.to_string_lossy()),
         ..MessageBoxOptions::default()
     }
 }
@@ -423,6 +423,7 @@ impl AppUnderTest {
 struct Told {
     focused: Option<bool>,
     battery: Option<bool>,
+    preferences: Option<Preferences>,
 }
 
 #[test]
@@ -435,39 +436,41 @@ fn the_vectors() {
     let mut satellites: Vec<WindowId> = Vec::new();
     let mut told: HashMap<WindowId, Told> = HashMap::new();
     let first = app.only_hub();
-    let mut tally: HashMap<String, usize> = HashMap::new();
-    for record in records() {
+    let records = records();
+    let [config, start, records @ ..] = &records[..] else {
+        panic!("{} records", records.len());
+    };
+    assert_eq!(config.string("op").as_deref(), Some("config"));
+    assert_eq!(start.string("op").as_deref(), Some("start"));
+    std::fs::write(app.prefs_path(), bytes(&value(start, "prefs"))).expect("prefs");
+    let mut tally = [0; 6];
+    for record in records {
         let op = record.string("op").expect("op");
         let at = format!("line {} {op}", record.line);
-        *tally.entry(op.clone()).or_default() += 1;
-        match op.as_str() {
-            "config" => continue,
-            "start" => {
-                std::fs::write(app.prefs_path(), bytes(&value(&record, "prefs"))).expect("prefs");
-                continue;
-            }
-            "setPrefs" => {
-                let text = record.string("text").expect("text");
-                std::fs::write(app.prefs_path(), text).expect("prefs");
-                continue;
-            }
-            _ => {}
+        let kinds = ["open", "message", "focus", "power", "destroy", "setPrefs"];
+        let kind = kinds.iter().position(|kind| *kind == op);
+        tally[kind.unwrap_or_else(|| panic!("{at}"))] += 1;
+        if op == "setPrefs" {
+            let text = record.string("text").expect("text");
+            std::fs::write(app.prefs_path(), text).expect("prefs");
+            continue;
         }
-        for sent in list(value(&record, "sent")) {
+        for sent in list(value(record, "sent")) {
             let to = sent.get("to").and_then(JsValue::as_f64).expect("to") as WindowId;
             let message = sent.get("message").expect("message");
-            let data = message.get("data").and_then(JsValue::as_bool);
+            let data = message.get("data").expect("data");
             let told = told.entry(to).or_default();
             match text(message, "name").as_str() {
-                "set-focused" => told.focused = data,
-                "set-battery" => told.battery = data,
-                _ => {}
+                "set-focused" => told.focused = Some(data.as_bool().expect("a boolean")),
+                "set-battery" => told.battery = Some(data.as_bool().expect("a boolean")),
+                "set-preferences" => told.preferences = Some(Preferences::from_js(data)),
+                other => panic!("{at}: {other}"),
             }
         }
-        let window = id(&record, "window");
+        let window = id(record, "window");
         let mut replies = Vec::new();
         let mut expected = Vec::new();
-        for dialog in list(value(&record, "dialogs")) {
+        for dialog in list(value(record, "dialogs")) {
             let parent = dialog.get("window").and_then(JsValue::as_f64);
             let parent = windows[&(parent.expect("a parent") as WindowId)];
             let options = message_box(dialog.get("options").expect("options"));
@@ -508,8 +511,8 @@ fn the_vectors() {
                 let name = record.string("name").expect("name");
                 let name = HubToMain::from_name(&name).expect("a hub message");
                 let from = windows[&window.expect("window")];
-                app.send_main_message(from, NamedMessage::new(name, value(&record, "data")));
-                let during = value(&record, "during");
+                app.send_main_message(from, NamedMessage::new(name, value(record, "data")));
+                let during = value(record, "during");
                 if !during.is_null() {
                     let name = HubToMain::from_name(&text(&during, "name")).expect("a message");
                     let data = during.get("data").cloned().expect("data");
@@ -532,13 +535,13 @@ fn the_vectors() {
         app.settle();
 
         assert_eq!(app.shown(), expected, "{at}: dialogs");
-        let external: Vec<String> = list(value(&record, "external"))
+        let external: Vec<String> = list(value(record, "external"))
             .iter()
             .map(|url| url.as_str().expect("a URL").to_string_lossy())
             .collect();
         assert_eq!(app.opened_urls(), external, "{at}: links");
         let after = std::fs::read(app.prefs_path()).expect("prefs.json");
-        match value(&record, "prefs") {
+        match value(record, "prefs") {
             JsValue::Null => assert_eq!(after, before, "{at}: prefs.json"),
             written => assert_eq!(
                 String::from_utf8_lossy(&after),
@@ -549,19 +552,20 @@ fn the_vectors() {
         for (vector, open) in &windows {
             let told = &told[vector];
             let satellite = satellites.contains(open);
-            let battery = if satellite {
+            let read =
+                |page: &HubModel| (page.page().is_battery(), page.page().preferences().cloned());
+            let (battery, preferences) = if satellite {
                 let pages = app.cx.update(|cx| MainProcess::satellite_windows(cx));
                 let page = pages.into_iter().find(|(id, _)| id == open);
                 let (_, page) = page.expect("a satellite");
-                app.cx
-                    .update(|cx| page.read(cx).model().hub().page().is_battery())
+                app.cx.update(|cx| read(page.read(cx).model().hub()))
             } else {
-                app.page(*open, |hub| hub.page().is_battery())
+                app.page(*open, |hub| read(hub))
             };
             assert_eq!(
-                Some(battery),
-                told.battery,
-                "{at}: window {vector}'s battery"
+                (Some(battery), &preferences),
+                (told.battery, &told.preferences),
+                "{at}: window {vector}"
             );
             // Windows take the focus as they open here, which the recorded ones do not.
             if op == "focus" && !satellite {
@@ -574,8 +578,7 @@ fn the_vectors() {
             }
         }
     }
-    let count = |op: &str| tally.get(op).copied().unwrap_or_default();
-    assert!(count("message") >= 16 && count("focus") >= 6 && count("power") >= 4);
+    assert_eq!(tally, [4, 17, 6, 4, 2, 6]);
 }
 
 /// A 1 x 1 image.
