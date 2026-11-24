@@ -259,9 +259,8 @@ fn replay(platform: &str) -> usize {
     let mut compared = 0;
     let mut active = false;
     for record in &records {
-        let Some(number) = record.field("sequence").and_then(Json::as_f64) else {
-            continue;
-        };
+        let number = record.field("sequence").and_then(Json::as_f64);
+        let number = number.expect("a sequence");
         if sequence != Some(number) {
             sequence = Some(number);
             let cx = TestAppContext::single();

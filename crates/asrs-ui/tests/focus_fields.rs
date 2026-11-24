@@ -96,9 +96,7 @@ fn main() {
     let mut sequence = None;
     let mut active = false;
     for record in &records {
-        let Some(op) = record.field("op").and_then(Json::as_array) else {
-            continue;
-        };
+        let op = record.field("op").and_then(Json::as_array).expect("an op");
         let number = record.field("sequence").and_then(Json::as_f64);
         if number != sequence {
             sequence = number;
