@@ -304,6 +304,12 @@ app.on("browser-window-created", (_event, win) => {
   // A modal prompt's show() begins a sheet on its parent, which activates nothing;
   // showInactive() never shows it.
   if (!win.isModal()) win.show = () => win.showInactive();
+  // macOS can activate the app all the same, as it launches, and a focused page
+  // draws focus rings, which the port, captured inactive, does not.
+  if (process.platform === "darwin") {
+    win.setFocusable(false);
+    win.on("focus", () => errors.push(`a window took the focus during ${performing}`));
+  }
   win.setIgnoreMouseEvents(true);
   // macOS still hands the page a move from the physical cursor when the window appears under
   // it, so every mouse event the scenario did not send is dropped.
