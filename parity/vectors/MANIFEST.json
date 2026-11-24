@@ -386,6 +386,7 @@
     "hub/lifecycle-partial-export": {"cases":38,"content":"93c9f96d4b49d0d3","generator":"ef676a0b1e5b9af6","spec":"parity/specs/hub/lifecycle-partial-export.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-publish": {"cases":251,"content":"59546e504e26a41b","generator":"533c0aafae0eafb4","spec":"parity/specs/hub/lifecycle-publish.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-restored-older-layouts": {"cases":37,"content":"06332c34e0cc0a35","generator":"5b1118b539259e81","spec":"parity/specs/hub/lifecycle-restored-older-layouts.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "hub/lifecycle-restored-selected": {"cases":88,"content":"2c1160ed4cca7342","generator":"0e42205ddce006d9","spec":"parity/specs/hub/lifecycle-restored-selected.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-restored-sidebars": {"cases":215,"content":"fe7efd6fd77427fb","generator":"aa1e60f04ead44ab","spec":"parity/specs/hub/lifecycle-restored-sidebars.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-restored-sources": {"cases":106,"content":"6aa4e56539b4be4e","generator":"19ced394474ff21d","spec":"parity/specs/hub/lifecycle-restored-sources.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "hub/lifecycle-restored-sources-no-options": {"cases":9,"content":"0decd61e765ff1d2","generator":"57d7430dba5827af","spec":"parity/specs/hub/lifecycle-restored-sources-no-options.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
