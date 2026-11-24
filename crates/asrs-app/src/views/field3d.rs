@@ -29,6 +29,7 @@ use asrs_tabs::field3d::Field3dController;
 use asrs_tabs::form::{self, OptGroup, SelectOption};
 use asrs_ui::canvas_view::geometry::{client_size, device_snap, mouse_client};
 use asrs_ui::canvas_view::{CanvasMetrics, CanvasState, FramePresenter, canvas_view};
+use asrs_ui::focus::{self, FocusRing};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Bounds, ClickEvent, Context, Corners, Entity, Global,
     InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent, MouseButton, MouseDownEvent,
@@ -42,7 +43,7 @@ use asrs_ui::parity::probed;
 use asrs_ui::platform;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
-use asrs_ui::theme::{Appearance, FONT_FAMILY, chains};
+use asrs_ui::theme::{Appearance, FOCUS_RING_WIDTH, FONT_FAMILY, chains};
 
 use super::frame::{FrameHost, HubFrame};
 use super::select::FormSelect;
@@ -1346,8 +1347,19 @@ impl<H: FrameHost> HubFrame<H> {
         } else {
             (0xeeeeee, 0xaaaaaa)
         };
+        let focus = FocusRing::of("xr-button-focus", None, window, cx);
+        let radius = px(10.0);
+        let click = move |frame: &mut HubFrame<H>, cx: &mut Context<'_, HubFrame<H>>| {
+            frame.host_mut().input(cx, |hub| {
+                with_controller(hub, index, |controller, uuid, page| {
+                    controller.xr_click(page, uuid)
+                })
+            });
+            cx.notify();
+        };
         let mut xr = div()
             .id("xr-button")
+            .track_focus(&focus.handle)
             .absolute()
             .left(px(button[0] as f32))
             .top(px(button[1] as f32))
@@ -1356,14 +1368,17 @@ impl<H: FrameHost> HubFrame<H> {
             .bg(rgb(bg))
             .border_1()
             .border_color(rgb(border))
-            .rounded(px(10.0))
-            .on_click(cx.listener(move |frame, _: &ClickEvent, _, cx| {
-                frame.host_mut().input(cx, |hub| {
-                    with_controller(hub, index, |controller, uuid, page| {
-                        controller.xr_click(page, uuid)
-                    })
-                });
-                cx.notify();
+            .rounded(radius)
+            .on_click(cx.listener(move |frame, event: &ClickEvent, _, cx| {
+                // GPUI clicks a focused element on key up, `setupKeyboardControls` on `keydown`.
+                if !matches!(event, ClickEvent::Keyboard(_)) {
+                    click(frame, cx);
+                }
+            }))
+            .on_key_down(cx.listener(move |frame, event: &KeyDownEvent, _, cx| {
+                if matches!(event.keystroke.key.as_str(), "enter" | "space") {
+                    click(frame, cx);
+                }
             }));
         if let Some(icon) = xr_icon() {
             xr = xr.child(
@@ -1376,6 +1391,12 @@ impl<H: FrameHost> HubFrame<H> {
                     .child(Icon::new(icon, chains::XR_BUTTON).fit(IconFit::Natural)),
             );
         }
+
+        xr = xr.children(focus.visible.then(|| {
+            focus::outline(appearance)
+                .inset(px(-FOCUS_RING_WIDTH - 1.0))
+                .rounded(radius + px(FOCUS_RING_WIDTH))
+        }));
 
         let select_el = div()
             .absolute()

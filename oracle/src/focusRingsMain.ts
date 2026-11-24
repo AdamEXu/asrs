@@ -38,7 +38,7 @@ function mulberry32(seed: number) {
 
 const COUNT = `(() => {
   window.__seen = {};
-  for (const type of ["keydown", "keyup", "mousedown", "mouseup", "mousemove"]) {
+  for (const type of ["keydown", "keyup", "mousedown", "mouseup"]) {
     window.__seen[type] = 0;
     window.addEventListener(type, () => window.__seen[type]++, true);
   }
@@ -112,7 +112,7 @@ app
         if (kind !== "down") await until("keyup", () => key("keyUp", keyCode, held));
       } else if (kind === "press" || kind === "move") {
         const [x, y] = (await centre(name)).map(Math.round);
-        if (kind === "move") await until("mousemove", () => win.webContents.sendInputEvent({ type: "mouseMove", x, y, movementX: 1 } as any));
+        if (kind === "move") win.webContents.sendInputEvent({ type: "mouseMove", x, y });
         else {
           const button = extra ?? "left";
           await until("mousedown", () => win.webContents.sendInputEvent({ type: "mouseDown", x, y, button, clickCount: 1 }));
@@ -140,10 +140,15 @@ app
       fs.writeFileSync(request.page, html);
       await win.loadFile(request.page);
       await evaluate(COUNT);
+      let focused: string | null = null;
       for (const op of ops) {
+        // Off macOS Enter opens a select's popup, which takes the keys after it.
+        if (op[0] === "key" && op[1] === "Enter" && focused === "s") continue;
         await perform(op);
         await settle();
-        lines.push(JSON.stringify({ sequence, op, ...(await evaluate(READ)) }));
+        const record = { sequence, op, ...(await evaluate(READ)) };
+        focused = record.active;
+        lines.push(JSON.stringify(record));
       }
     }
     process.stdout.write(lines.map((l) => l + "\n").join(""), () => app.exit(0));

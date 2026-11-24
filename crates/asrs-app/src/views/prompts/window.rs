@@ -6,7 +6,7 @@ use asrs_js::value::JsValue;
 use asrs_tabs::form::NumberInput;
 use asrs_tabs::prompts::{Control, ControlValue, PromptEvent, PromptPage, TableRow};
 use asrs_ui::button::IconButton;
-use asrs_ui::focus;
+use asrs_ui::focus::{self, LINK_OUTLINE_OFFSET, TransformedOutline};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Bounds, ClickEvent, Context, Div, Entity, EventEmitter,
     FocusHandle, Focusable, InteractiveElement, IntoElement, KeyboardButton, ParentElement, Pixels,
@@ -496,7 +496,14 @@ impl PromptWindow {
                     .probe("a"),
             );
         if focus::focus_visible(&self.help, window, cx) {
-            link = link.child(focus::outline(appearance));
+            let outline = TransformedOutline {
+                size: [w, h],
+                offset: LINK_OUTLINE_OFFSET,
+                subpixel: [x, y].map(|v| f64::from(snap_remainder(v as f32, scale))),
+                translate: [-w / 2.0, -h / 2.0],
+                appearance,
+            };
+            link = link.child(outline.element());
         }
         let boxed = div()
             .absolute()

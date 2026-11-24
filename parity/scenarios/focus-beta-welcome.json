@@ -1,0 +1,152 @@
+{
+  "about": "Focus rings (#355) in the active beta welcome window: the Continue button reached with Tab and pressed, the checkboxes, which take none, and the window inactive",
+  "userData": {
+    "beta-2027.json": {
+      "surveyStatus": false,
+      "extra": [
+        1,
+        "x"
+      ]
+    }
+  },
+  "actions": [
+    {
+      "idle": true
+    },
+    {
+      "prompt": "betaWelcome"
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 46,
+      "y": 220
+    },
+    {
+      "mouse": "down",
+      "x": 46,
+      "y": 220
+    },
+    {
+      "mouse": "up",
+      "x": 46,
+      "y": 220
+    },
+    {
+      "mouse": "move",
+      "x": 225,
+      "y": 445
+    },
+    {
+      "mouse": "click",
+      "x": 225,
+      "y": 445
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Space"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Space"
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "enabled",
+      "probes": [
+        "input",
+        "button"
+      ]
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "capture": "focused",
+      "probes": [
+        "input",
+        "button"
+      ]
+    },
+    {
+      "focus": false
+    },
+    {
+      "capture": "inactive",
+      "probes": [
+        "input",
+        "button"
+      ]
+    },
+    {
+      "focus": true
+    },
+    {
+      "key": "Tab",
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "capture": "checkbox",
+      "probes": [
+        "input",
+        "button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 225,
+      "y": 445
+    },
+    {
+      "mouse": "down",
+      "x": 225,
+      "y": 445
+    },
+    {
+      "wait": 400
+    },
+    {
+      "capture": "pressed",
+      "probes": [
+        "input",
+        "button"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "capture": "command",
+      "probes": [
+        "input",
+        "button"
+      ]
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "capture": "key",
+      "probes": [
+        "input",
+        "button"
+      ]
+    }
+  ]
+}

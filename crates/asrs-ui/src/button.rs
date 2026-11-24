@@ -3,7 +3,7 @@ use gpui_kit::{
     ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window, div, px, rgb,
 };
 
-use crate::focus::FocusRing;
+use crate::focus::{FocusRing, TransformedOutline};
 use crate::icon::{Icon, IconFit, IconSource};
 use crate::theme::{Appearance, BUTTON_RADIUS, FOCUS_RING_RADIUS, IconTint};
 
@@ -175,9 +175,20 @@ impl RenderOnce for IconButton {
             button = button.bg(rgb(rest));
         }
         if let Some(focus) = &focus {
-            button = button
-                .track_focus(&focus.handle)
-                .children(focus.outline(appearance));
+            button = button.track_focus(&focus.handle);
+            if self.translate != [0.0, 0.0] && focus.visible {
+                let size = [f64::from(self.width), f64::from(self.height)];
+                let outline = TransformedOutline {
+                    size: self.box_size.unwrap_or(size),
+                    offset: 0.0,
+                    subpixel: self.subpixel,
+                    translate: self.translate,
+                    appearance,
+                };
+                button = button.child(outline.element());
+            } else {
+                button = button.children(focus.outline(appearance));
+            }
         }
         if !self.disabled {
             button = button

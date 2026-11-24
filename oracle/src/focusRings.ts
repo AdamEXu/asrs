@@ -24,7 +24,9 @@ try {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
   env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
-  run = spawnSync(process.execPath, ["--lang=en-US", "--log-level=3", path.join(here, "focusRingsMain.mjs"), requestPath], {
+  // A page in a window that is not shown needs no display.
+  const platform = process.platform === "linux" ? ["--ozone-platform=headless"] : [];
+  run = spawnSync(process.execPath, [...platform, "--lang=en-US", "--log-level=3", path.join(here, "focusRingsMain.mjs"), requestPath], {
     env,
     encoding: "utf8",
     maxBuffer: 1 << 30,
