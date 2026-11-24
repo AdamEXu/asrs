@@ -803,10 +803,12 @@ app.whenReady().then(() => {
             sleep(cx, 1000).await;
             let mut list = Vec::new();
             for maximized in [false, true] {
+                // WARP takes over a second for a maximized frame in a debug build.
+                let settle = if maximized { 4000 } else { 900 };
                 if maximized {
                     let [_, client] = probe::rects(window).expect("rects");
                     click(cx, (f64::from(client[2] - 70), f64::from(client[1] + 32))).await;
-                    sleep(cx, 1500).await;
+                    sleep(cx, 4000).await;
                 }
                 let [_, client] = probe::rects(window).expect("rects");
                 let at = |dx: i32, y: i32| (f64::from(client[2] - dx), f64::from(client[1] + y));
@@ -819,30 +821,34 @@ app.whenReady().then(() => {
                 ] {
                     if dx == 0 {
                         probe::post_mouse(MouseAction::Drag, away.0, away.1);
-                        sleep(cx, 900).await;
+                        sleep(cx, settle).await;
                         list.push((format!("{name}, maximized {maximized}"), strip(window)));
                         continue;
                     }
                     let (x, y) = at(dx, 32);
                     probe::post_mouse(MouseAction::Drag, x, y);
-                    sleep(cx, 900).await;
+                    sleep(cx, settle).await;
                     list.push((
                         format!("{name} hovered, maximized {maximized}"),
                         strip(window),
                     ));
                     probe::post_mouse(MouseAction::Down, x, y);
-                    sleep(cx, 700).await;
+                    sleep(cx, settle).await;
                     list.push((
                         format!("{name} pressed, maximized {maximized}"),
                         strip(window),
                     ));
                     probe::post_mouse(MouseAction::Drag, away.0, away.1);
-                    sleep(cx, 700).await;
+                    sleep(cx, settle).await;
                     let dragged = format!("{name} dragged off, maximized {maximized}");
                     list.push((dragged, strip(window)));
                     probe::post_mouse(MouseAction::Up, away.0, away.1);
                     sleep(cx, 400).await;
                 }
+            }
+            if mine {
+                with_window(cx, handle, |w| w.minimize_window());
+                sleep(cx, 1500).await;
             }
             shots.push(list);
         }
@@ -865,10 +871,10 @@ app.whenReady().then(() => {
             };
             report.check(&format!("caption buttons, {name}"), ok, detail);
         }
+        with_window(cx, handle, |w| w.activate_window());
+        sleep(cx, 4000).await;
         let [_, client] = probe::rects(ours).expect("rects");
         let at = |dx: i32| (f64::from(client[2] - dx), f64::from(client[1] + 32));
-        with_window(cx, handle, |w| w.activate_window());
-        sleep(cx, 800).await;
         let maximized = with_window(cx, handle, |w| w.is_maximized());
         report.check("the maximize button maximizes", maximized, "");
         click(cx, at(70)).await;
