@@ -379,11 +379,11 @@ fn ops_spec() -> (Spec, Spec) {
         for source in MEMBERS {
             spec.call(source, vec![v.clone()]);
         }
+    }
+    // `ToPrimitive` does not call an object's own `toString` (issue 87).
+    let keys = js_vals().into_iter().chain(member_vals());
+    for v in keys.filter(|v| v.get("toString").is_none()) {
         for len in [0.0, 3.0] {
-            // `ToPrimitive` does not call an object's own `toString` (issue 87).
-            if v.get("toString").is_some() {
-                continue;
-            }
             spec.call(INDEX, vec![v.clone(), n(len)]);
             if !matches!(v, Value::BigInt(_)) {
                 spec.call(SPLICE, vec![v.clone(), n(len)]);

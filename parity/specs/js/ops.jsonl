@@ -356,410 +356,410 @@
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"u":null}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"u":null}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"u":null}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"u":null},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"u":null},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"u":null},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"u":null},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",null]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",null]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",null]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",null,{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",null,{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",null,{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",null,{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",true]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",true]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",true]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",true,{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",true,{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",true,{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",true,{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",false]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",false]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",false]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",false,{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",false,{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",false,{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",false,{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"n":"0000000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"n":"0000000000000000"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"0000000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"0000000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"0000000000000000"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"0000000000000000"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"n":"8000000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"n":"8000000000000000"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"n":"8000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"8000000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"8000000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"8000000000000000"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"8000000000000000"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"n":"3ff0000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"n":"3ff0000000000000"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"n":"3ff0000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"3ff0000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"3ff0000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"3ff0000000000000"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"3ff0000000000000"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"n":"bff8000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"n":"bff8000000000000"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"n":"bff8000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"bff8000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"bff8000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"bff8000000000000"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"bff8000000000000"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"n":"3fe0000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"n":"3fe0000000000000"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"n":"3fe0000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"3fe0000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"3fe0000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"3fe0000000000000"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"3fe0000000000000"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"n":"4000000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"n":"4000000000000000"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"n":"4000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"4000000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"4000000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"4000000000000000"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"4000000000000000"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"n":"444b1ae4d6e2ef50"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"n":"444b1ae4d6e2ef50"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"n":"444b1ae4d6e2ef50"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"444b1ae4d6e2ef50"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"444b1ae4d6e2ef50"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"444b1ae4d6e2ef50"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"444b1ae4d6e2ef50"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"n":"7ff8000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"n":"7ff8000000000000"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"n":"7ff8000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"7ff8000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"7ff8000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"7ff8000000000000"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"7ff8000000000000"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"n":"7ff0000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"n":"7ff0000000000000"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"n":"7ff0000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"7ff0000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"7ff0000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"7ff0000000000000"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"7ff0000000000000"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"n":"fff0000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"n":"fff0000000000000"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"n":"fff0000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"fff0000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"fff0000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"fff0000000000000"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"fff0000000000000"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"n":"433ff973cafa8000"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"n":"433ff973cafa8000"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"n":"433ff973cafa8000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"433ff973cafa8000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"433ff973cafa8000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"433ff973cafa8000"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"433ff973cafa8000"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"n":"0000000000000001"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"n":"0000000000000001"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"n":"0000000000000001"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"0000000000000001"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"0000000000000001"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"0000000000000001"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"0000000000000001"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",""]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",""]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",""]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","0"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","0"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","0"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","0",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","0",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","0",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","0",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","1"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","1"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","1"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","1",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","1",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","1",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","1",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","01"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","01"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","01"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","01",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","01",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","01",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","01",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","-0"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","-0"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","-0"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","-0",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","-0",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","-0",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","-0",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","-1.5"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","-1.5"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","-1.5"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","-1.5",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","-1.5",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","-1.5",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","-1.5",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)"," 12 "]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)"," 12 "]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })"," 12 "]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]"," 12 ",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }"," 12 ",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]"," 12 ",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }"," 12 ",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)"," 5﻿"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)"," 5﻿"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })"," 5﻿"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]"," 5﻿",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }"," 5﻿",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]"," 5﻿",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }"," 5﻿",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","0x10"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","0x10"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","0x10"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","0x10",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","0x10",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","0x10",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","0x10",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","-0x10"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","-0x10"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","-0x10"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","-0x10",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","-0x10",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","-0x10",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","-0x10",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","1e3"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","1e3"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","1e3"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","1e3",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","1e3",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","1e3",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","1e3",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","1_0"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","1_0"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","1_0"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","1_0",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","1_0",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","1_0",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","1_0",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","a"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","a"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","a"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","a",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","a",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","a",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","a",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","abc"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","abc"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","abc"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","abc",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","abc",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","abc",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","abc",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","Infinity"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","Infinity"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","Infinity"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","Infinity",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","Infinity",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","Infinity",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","Infinity",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","NaN"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","NaN"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","NaN"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","NaN",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","NaN",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","NaN",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","NaN",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","null"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","null"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","null"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","null",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","null",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","null",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","null",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","😀"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","😀"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","😀"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","😀",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","😀",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","😀",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","😀",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","￿"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","￿"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","￿"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","￿",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","￿",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","￿",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","￿",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","\ud83d"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","\ud83d"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","\ud83d"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","\ud83d",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","\ud83d",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","\ud83d",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","\ud83d",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"bi":"0"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"bi":"0"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"bi":"0"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"0"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"0"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"bi":"5"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"bi":"5"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"bi":"5"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"5"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"5"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"bi":"-5"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"bi":"-5"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"bi":"-5"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"-5"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"-5"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"bi":"16"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"bi":"16"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"bi":"16"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"16"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"16"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"bi":"9007199254740993"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"bi":"9007199254740993"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"bi":"9007199254740993"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"9007199254740993"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"9007199254740993"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"bi":"123456789012345678901234567890"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"bi":"123456789012345678901234567890"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"bi":"123456789012345678901234567890"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"123456789012345678901234567890"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"123456789012345678901234567890"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",[]]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",[]]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",[]]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[],{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[],{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[],{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[],{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",[{"n":"3ff0000000000000"}]]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",[{"n":"3ff0000000000000"}]]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",[{"n":"3ff0000000000000"}]]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[{"n":"3ff0000000000000"}],{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[{"n":"3ff0000000000000"}],{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[{"n":"3ff0000000000000"}],{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[{"n":"3ff0000000000000"}],{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",[{"n":"3ff0000000000000"},{"n":"4000000000000000"}]]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",[{"n":"3ff0000000000000"},{"n":"4000000000000000"}]]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",[{"n":"3ff0000000000000"},{"n":"4000000000000000"}]]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[{"n":"3ff0000000000000"},{"n":"4000000000000000"}],{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[{"n":"3ff0000000000000"},{"n":"4000000000000000"}],{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[{"n":"3ff0000000000000"},{"n":"4000000000000000"}],{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[{"n":"3ff0000000000000"},{"n":"4000000000000000"}],{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",["a",null,{"u":null}]]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",["a",null,{"u":null}]]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",["a",null,{"u":null}]]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",["a",null,{"u":null}],{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",["a",null,{"u":null}],{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",["a",null,{"u":null}],{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",["a",null,{"u":null}],{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",[[["5"]]]]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",[[["5"]]]]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",[[["5"]]]]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[[["5"]]],{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[[["5"]]],{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[[["5"]]],{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[[["5"]]],{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",[{"o":[]}]]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",[{"o":[]}]]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",[{"o":[]}]]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[{"o":[]}],{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[{"o":[]}],{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[{"o":[]}],{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[{"o":[]}],{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"o":[]}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"o":[]}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"o":[]}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[]},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[]},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[]},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[]},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"o":[["x",{"n":"3ff0000000000000"}],["length",{"n":"4022000000000000"}]]}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"o":[["x",{"n":"3ff0000000000000"}],["length",{"n":"4022000000000000"}]]}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"o":[["x",{"n":"3ff0000000000000"}],["length",{"n":"4022000000000000"}]]}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[["x",{"n":"3ff0000000000000"}],["length",{"n":"4022000000000000"}]]},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[["x",{"n":"3ff0000000000000"}],["length",{"n":"4022000000000000"}]]},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[["x",{"n":"3ff0000000000000"}],["length",{"n":"4022000000000000"}]]},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[["x",{"n":"3ff0000000000000"}],["length",{"n":"4022000000000000"}]]},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"o":[["y",{"n":"3ff0000000000000"}],["2","two"]]}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"o":[["y",{"n":"3ff0000000000000"}],["2","two"]]}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"o":[["y",{"n":"3ff0000000000000"}],["2","two"]]}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[["y",{"n":"3ff0000000000000"}],["2","two"]]},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[["y",{"n":"3ff0000000000000"}],["2","two"]]},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[["y",{"n":"3ff0000000000000"}],["2","two"]]},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[["y",{"n":"3ff0000000000000"}],["2","two"]]},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"b":""}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"b":""}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"b":""}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"b":""},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"b":""},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"b":""},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"b":""},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"b":"07"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"b":"07"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"b":"07"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"b":"07"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"b":"07"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"b":"07"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"b":"07"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"b":"0102ff"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"b":"0102ff"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"b":"0102ff"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"b":"0102ff"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"b":"0102ff"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"b":"0102ff"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"b":"0102ff"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"d":"7ff8000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"d":"7ff8000000000000"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"d":"7ff8000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"d":"7ff8000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"d":"7ff8000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"d":"7ff8000000000000"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"d":"7ff8000000000000"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"n":"3ff8000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"n":"3ff8000000000000"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"n":"3ff8000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"3ff8000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"3ff8000000000000"},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"3ff8000000000000"},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"3ff8000000000000"},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)","ab"]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)","ab"]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })","ab"]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","ab",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","ab",{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","ab",{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","ab",{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",["a","b","c"]]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",["a","b","c"]]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",["a","b","c"]]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",["a","b","c"],{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",["a","b","c"],{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",["a","b","c"],{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",["a","b","c"],{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"o":[["x",{"n":"3ff0000000000000"}],["0","zero"],["length",{"n":"4022000000000000"}]]}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"o":[["x",{"n":"3ff0000000000000"}],["0","zero"],["length",{"n":"4022000000000000"}]]}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"o":[["x",{"n":"3ff0000000000000"}],["0","zero"],["length",{"n":"4022000000000000"}]]}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[["x",{"n":"3ff0000000000000"}],["0","zero"],["length",{"n":"4022000000000000"}]]},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[["x",{"n":"3ff0000000000000"}],["0","zero"],["length",{"n":"4022000000000000"}]]},{"n":"0000000000000000"}]}
-{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[["x",{"n":"3ff0000000000000"}],["0","zero"],["length",{"n":"4022000000000000"}]]},{"n":"4008000000000000"}]}
-{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[["x",{"n":"3ff0000000000000"}],["0","zero"],["length",{"n":"4022000000000000"}]]},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"o":[["toString",{"n":"3ff0000000000000"}],["constructor",null]]}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"o":[["toString",{"n":"3ff0000000000000"}],["constructor",null]]}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"o":[["toString",{"n":"3ff0000000000000"}],["constructor",null]]}]}
 {"fn":"oracle:call","args":["(v) => Object.keys(v)",{"d":"0000000000000000"}]}
 {"fn":"oracle:call","args":["(v) => Object.getOwnPropertyNames(v)",{"d":"0000000000000000"}]}
 {"fn":"oracle:call","args":["(v) => ({ ...v })",{"d":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"u":null},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"u":null},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"u":null},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"u":null},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",null,{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",null,{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",null,{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",null,{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",true,{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",true,{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",true,{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",true,{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",false,{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",false,{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",false,{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",false,{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"0000000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"0000000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"0000000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"0000000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"8000000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"8000000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"8000000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"8000000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"3ff0000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"3ff0000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"3ff0000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"3ff0000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"bff8000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"bff8000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"bff8000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"bff8000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"3fe0000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"3fe0000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"3fe0000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"3fe0000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"4000000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"4000000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"4000000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"4000000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"444b1ae4d6e2ef50"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"444b1ae4d6e2ef50"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"444b1ae4d6e2ef50"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"444b1ae4d6e2ef50"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"7ff8000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"7ff8000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"7ff8000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"7ff8000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"7ff0000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"7ff0000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"7ff0000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"7ff0000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"fff0000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"fff0000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"fff0000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"fff0000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"433ff973cafa8000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"433ff973cafa8000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"433ff973cafa8000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"433ff973cafa8000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"0000000000000001"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"0000000000000001"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"0000000000000001"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"0000000000000001"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","0",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","0",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","0",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","0",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","1",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","1",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","1",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","1",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","01",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","01",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","01",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","01",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","-0",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","-0",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","-0",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","-0",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","-1.5",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","-1.5",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","-1.5",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","-1.5",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]"," 12 ",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }"," 12 ",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]"," 12 ",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }"," 12 ",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]"," 5﻿",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }"," 5﻿",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]"," 5﻿",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }"," 5﻿",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","0x10",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","0x10",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","0x10",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","0x10",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","-0x10",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","-0x10",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","-0x10",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","-0x10",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","1e3",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","1e3",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","1e3",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","1e3",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","1_0",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","1_0",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","1_0",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","1_0",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","a",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","a",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","a",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","a",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","abc",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","abc",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","abc",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","abc",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","Infinity",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","Infinity",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","Infinity",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","Infinity",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","NaN",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","NaN",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","NaN",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","NaN",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","null",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","null",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","null",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","null",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","😀",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","😀",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","😀",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","😀",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","￿",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","￿",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","￿",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","￿",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","\ud83d",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","\ud83d",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","\ud83d",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","\ud83d",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"0"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"0"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"5"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"5"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"-5"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"-5"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"16"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"16"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"9007199254740993"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"9007199254740993"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"123456789012345678901234567890"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"bi":"123456789012345678901234567890"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[],{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[],{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[],{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[],{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[{"n":"3ff0000000000000"}],{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[{"n":"3ff0000000000000"}],{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[{"n":"3ff0000000000000"}],{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[{"n":"3ff0000000000000"}],{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[{"n":"3ff0000000000000"},{"n":"4000000000000000"}],{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[{"n":"3ff0000000000000"},{"n":"4000000000000000"}],{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[{"n":"3ff0000000000000"},{"n":"4000000000000000"}],{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[{"n":"3ff0000000000000"},{"n":"4000000000000000"}],{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",["a",null,{"u":null}],{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",["a",null,{"u":null}],{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",["a",null,{"u":null}],{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",["a",null,{"u":null}],{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[[["5"]]],{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[[["5"]]],{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[[["5"]]],{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[[["5"]]],{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[{"o":[]}],{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[{"o":[]}],{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",[{"o":[]}],{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",[{"o":[]}],{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[]},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[]},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[]},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[]},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[["x",{"n":"3ff0000000000000"}],["length",{"n":"4022000000000000"}]]},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[["x",{"n":"3ff0000000000000"}],["length",{"n":"4022000000000000"}]]},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[["x",{"n":"3ff0000000000000"}],["length",{"n":"4022000000000000"}]]},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[["x",{"n":"3ff0000000000000"}],["length",{"n":"4022000000000000"}]]},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[["y",{"n":"3ff0000000000000"}],["2","two"]]},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[["y",{"n":"3ff0000000000000"}],["2","two"]]},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[["y",{"n":"3ff0000000000000"}],["2","two"]]},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[["y",{"n":"3ff0000000000000"}],["2","two"]]},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"b":""},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"b":""},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"b":""},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"b":""},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"b":"07"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"b":"07"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"b":"07"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"b":"07"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"b":"0102ff"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"b":"0102ff"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"b":"0102ff"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"b":"0102ff"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"d":"7ff8000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"d":"7ff8000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"d":"7ff8000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"d":"7ff8000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"3ff8000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"3ff8000000000000"},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"n":"3ff8000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"n":"3ff8000000000000"},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","ab",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","ab",{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]","ab",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }","ab",{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",["a","b","c"],{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",["a","b","c"],{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",["a","b","c"],{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",["a","b","c"],{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[["x",{"n":"3ff0000000000000"}],["0","zero"],["length",{"n":"4022000000000000"}]]},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[["x",{"n":"3ff0000000000000"}],["0","zero"],["length",{"n":"4022000000000000"}]]},{"n":"0000000000000000"}]}
+{"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"o":[["x",{"n":"3ff0000000000000"}],["0","zero"],["length",{"n":"4022000000000000"}]]},{"n":"4008000000000000"}]}
+{"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"o":[["x",{"n":"3ff0000000000000"}],["0","zero"],["length",{"n":"4022000000000000"}]]},{"n":"4008000000000000"}]}
 {"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"d":"0000000000000000"},{"n":"0000000000000000"}]}
 {"fn":"oracle:call","args":["(s, n) => { const l = Array.from({ length: n }, () => 0); l.splice(s, 0, 1); return l.indexOf(1); }",{"d":"0000000000000000"},{"n":"0000000000000000"}]}
 {"fn":"oracle:call","args":["(k, n) => Array.from({ length: n }, (_, i) => i)[k]",{"d":"0000000000000000"},{"n":"4008000000000000"}]}
