@@ -34,6 +34,8 @@ const START_TIMEOUT: Duration = Duration::from_secs(90);
 const POLL: Duration = Duration::from_millis(250);
 /// How long a started program must go on running without an error.
 const SETTLE: Duration = Duration::from_secs(5);
+/// Keeps asrs from downloading assets.
+const OFFLINE: (&str, &str) = ("ASRS_NO_ASSET_DOWNLOADS", "1");
 const LOG: &str = "parity/scenarios/inputs/drive.wpilog";
 const LIBRARY_SOURCE: &str = "asrs-libm-lgpl";
 
@@ -399,6 +401,10 @@ impl Smoke {
         app.wait(|app| app.titled(&title))?;
         thread::sleep(SETTLE);
         app.check()?;
+        let assets = app.user_data.join("autoAssets");
+        if fs::read_dir(&assets).map_err(at(&assets))?.next().is_some() {
+            return Err("it downloaded assets".to_owned());
+        }
         eprintln!("     window {state}");
         Ok(())
     }
@@ -458,6 +464,8 @@ impl Smoke {
                 .arg(&self.program)
                 .arg("--env")
                 .arg(format!("HOME={}", home.display()))
+                .arg("--env")
+                .arg(format!("{}={}", OFFLINE.0, OFFLINE.1))
                 .arg(workspace_root().join(LOG)),
         )?;
         let deadline = Instant::now() + START_TIMEOUT;
@@ -834,6 +842,7 @@ impl App {
         let child = Command::new(exe)
             .args(files)
             .env(variable, home)
+            .env(OFFLINE.0, OFFLINE.1)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(file)
