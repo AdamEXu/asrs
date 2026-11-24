@@ -11,7 +11,7 @@ use asrs_js::value::JsValue;
 use asrs_live::nt4::{
     NT4_PORTS_DEFAULT, Nt4Client, Nt4Context, Nt4Handler, Nt4Topic, TokioTransport,
 };
-use asrs_live::{LiveRuntime, MonotonicClock, Thrown, TimerQueue};
+use asrs_live::{LiveRuntime, MonotonicClock, NetOptions, Thrown, TimerQueue};
 use asrs_log::msgpack::{self, KeyCache};
 use asrs_log::realm::JsRealm;
 use futures_util::{SinkExt, StreamExt};
@@ -145,7 +145,7 @@ fn connects_syncs_and_receives_over_real_sockets() {
     assert!(!NT4_PORTS_DEFAULT.contains(&port));
 
     let mut timers = TimerQueue::new(Rc::new(MonotonicClock::new()));
-    let mut net = TokioTransport::new(runtime.handle().clone());
+    let mut net = TokioTransport::new(NetOptions::new(runtime.handle().clone()));
     let mut realm = JsRealm::new(Box::new(V8MathRandom::from_seed(7)));
     let clock = SystemClock;
     let mut seen = Seen::default();

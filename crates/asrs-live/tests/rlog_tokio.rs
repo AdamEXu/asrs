@@ -6,7 +6,7 @@ use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::time::{Duration, Instant};
 
-use asrs_live::LiveRuntime;
+use asrs_live::{LiveRuntime, NetOptions};
 use asrs_live::rlog::{RlogNetEvent, RlogTransport, TcpId, TokioRlogTransport};
 
 fn collect(
@@ -54,7 +54,7 @@ fn follows_node_socket_rules_over_real_sockets() {
         (held, rest)
     });
 
-    let mut net = TokioRlogTransport::new(runtime.handle().clone());
+    let mut net = TokioRlogTransport::new(NetOptions::new(runtime.handle().clone()));
     let id = net.tcp_connect("127.0.0.1", f64::from(port));
     net.tcp_write(id, &[6, 3, 2, 8]);
     net.tcp_set_timeout(id, 200.0);
@@ -93,7 +93,7 @@ fn an_empty_host_falls_back_across_families_like_node() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let server = std::thread::spawn(move || listener.accept().map(|_| ()));
-    let mut net = TokioRlogTransport::new(runtime.handle().clone());
+    let mut net = TokioRlogTransport::new(NetOptions::new(runtime.handle().clone()));
     let id = net.tcp_connect("", f64::from(port));
     net.tcp_set_timeout(id, 1000.0);
     let mut events = Vec::new();
@@ -110,7 +110,7 @@ fn a_refused_connection_reports_error_then_close() {
         .local_addr()
         .unwrap()
         .port();
-    let mut net = TokioRlogTransport::new(runtime.handle().clone());
+    let mut net = TokioRlogTransport::new(NetOptions::new(runtime.handle().clone()));
     let id = net.tcp_connect("127.0.0.1", f64::from(port));
     net.tcp_write(id, b"held");
     let mut events = Vec::new();

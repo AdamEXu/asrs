@@ -68,6 +68,51 @@ pub enum MainCall {
     Stop,
 }
 
+impl MainCall {
+    pub const START: &str = "live-rlog-start";
+    pub const STOP: &str = "live-rlog-stop";
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::Start { .. } => Self::START,
+            Self::Stop => Self::STOP,
+        }
+    }
+
+    /// The message's data, keys in the order `RLOGServerSource` builds them.
+    pub fn into_data(self) -> JsValue {
+        match self {
+            Self::Start {
+                uuid,
+                address,
+                port,
+            } => JsValue::Object(JsObject::from_iter([
+                (js("uuid"), JsValue::String(JsString::from(uuid))),
+                (js("address"), JsValue::String(JsString::from(address))),
+                (js("port"), JsValue::Number(port)),
+            ])),
+            Self::Stop => JsValue::Undefined,
+        }
+    }
+
+    /// The call main receives as `name` with `data`.
+    pub fn parse(name: &str, data: &JsValue) -> Option<Self> {
+        let text = |key| {
+            let value = data.get(key).and_then(JsValue::as_str);
+            value.map(JsString::to_string_lossy)
+        };
+        match name {
+            Self::START => Some(Self::Start {
+                uuid: text("uuid")?,
+                address: text("address")?,
+                port: data.get("port").and_then(JsValue::as_f64)?,
+            }),
+            Self::STOP => Some(Self::Stop),
+            _ => None,
+        }
+    }
+}
+
 /// What `handle` may touch: the network, and the main process's timer queue for the data
 /// watchdog.
 pub struct MainContext<'a> {
@@ -106,6 +151,12 @@ impl RlogMain {
             heartbeat: timers.set_interval(RLOG_HEARTBEAT_DELAY_MS),
             outbox: VecDeque::new(),
         }
+    }
+
+    /// Whether `rlogSockets[windowId]` is a live socket. Without one, the heartbeat and the
+    /// watchdog do nothing.
+    pub fn has_socket(&self) -> bool {
+        self.socket.is_some()
     }
 
     /// `sendMessage` returns whether the IPC send worked; ours always does.

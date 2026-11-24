@@ -224,6 +224,11 @@ impl Nt4Source {
             .handle_timer(id, window.preferences.as_ref())
     }
 
+    /// Whether handling timer `id` reads [`Nt4Window`]'s active fields.
+    pub fn reads_fields(&self, id: TimerId) -> bool {
+        self.idle_timer == Some(id) && self.client.is_some()
+    }
+
     fn client_mut(&self) -> RefMut<'_, Nt4Client> {
         self.client
             .as_ref()
@@ -818,7 +823,7 @@ impl Nt4Tuner {
     /// return.
     pub fn publish(
         &self,
-        window_log: &LiveLog,
+        window_log: &RefCell<Log>,
         key: &JsString,
         value: TunedValue,
         cx: &mut Nt4Context<'_>,

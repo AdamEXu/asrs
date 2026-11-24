@@ -7,7 +7,16 @@ use tokio::runtime::{Builder, Handle, Runtime};
 use tokio::task::JoinHandle;
 
 pub struct LiveRuntime {
-    runtime: Runtime,
+    runtime: Option<Runtime>,
+}
+
+/// A name lookup runs on a blocking thread, and dropping the runtime would wait for it.
+impl Drop for LiveRuntime {
+    fn drop(&mut self) {
+        if let Some(runtime) = self.runtime.take() {
+            runtime.shutdown_background();
+        }
+    }
 }
 
 impl LiveRuntime {
@@ -20,18 +29,24 @@ impl LiveRuntime {
             .enable_io()
             .enable_time()
             .build()?;
-        Ok(Self { runtime })
+        Ok(Self {
+            runtime: Some(runtime),
+        })
+    }
+
+    fn runtime(&self) -> &Runtime {
+        self.runtime.as_ref().expect("only taken on drop")
     }
 
     pub fn handle(&self) -> &Handle {
-        self.runtime.handle()
+        self.runtime().handle()
     }
 
     pub fn spawn<F>(&self, future: F) -> LiveTask
     where
         F: Future<Output = ()> + Send + 'static,
     {
-        LiveTask(self.runtime.spawn(future))
+        LiveTask(self.runtime().spawn(future))
     }
 }
 
