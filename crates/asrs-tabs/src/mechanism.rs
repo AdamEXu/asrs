@@ -12,7 +12,7 @@ use asrs_model::source_list::{ListInput, ListOutput, SourceList};
 use asrs_model::tab_controller::{Command, TabController};
 
 use crate::cx::TabCx;
-use crate::list_cx::{self, SourceListCx, js_error, source_state, with_env};
+use crate::list_cx::{self, SourceListCx, js_error, with_env};
 
 pub struct MechanismController {
     source_list: SourceList,
@@ -77,8 +77,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for MechanismController {
     }
 
     fn restore_state(&mut self, cx: &mut Cx, state: &JsValue) -> Result<(), JsError> {
-        let items = source_state(state)?;
-        with_env(cx, |env| self.source_list.set_state(env, items)).map_err(js_error)
+        list_cx::set_source_state(&mut self.source_list, cx, state)
     }
 
     fn refresh(&mut self, cx: &mut Cx) -> Result<(), JsError> {
@@ -116,7 +115,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for MechanismController {
         let time = time.unwrap_or_else(|| log.get_timestamp_range()[1]);
 
         let mut states = Vec::new();
-        for item in self.source_list.displayed_state(&log) {
+        for item in self.source_list.drawn_state(&log).map_err(js_error)? {
             if let Some(state) = get_mechanism_state(&log, &item.log_key, time) {
                 states.push(state);
             }

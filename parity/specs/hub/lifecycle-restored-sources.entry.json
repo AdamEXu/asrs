@@ -1,0 +1,2158 @@
+{
+  "entry": "hubSession",
+  "inputs": [
+    "logs/match.csv"
+  ],
+  "fixture": {
+    "seed": 4242,
+    "steps": [
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/match.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "type": "reference",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "reference"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      },
+                      "logType": "Number",
+                      "logKey": "/Drive/Velocity",
+                      "type": "independent",
+                      "extra": {
+                        "a": [
+                          1
+                        ]
+                      }
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "reordered"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": "yes",
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "visible-text"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "no-visible"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "type": "gone",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "unknown-type"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "no-type"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": 5,
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "logkey-number"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "type": "independent",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "logkey-missing"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    5,
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "number-item"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    "abc",
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "text-item"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    [],
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "array-item"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": "/Missing",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": null
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "missing-field"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": false,
+                      "options": null
+                    },
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "hidden"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": null,
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "sources-null"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": {},
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "sources-object"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": 5,
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "sources-number"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": "abc",
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "sources-string"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": false,
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "sources-bool"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "X",
+                "controller": {
+                  "leftSources": [
+                    {
+                      "type": "stepped",
+                      "logKey": "/Missing",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": null
+                    }
+                  ]
+                },
+                "controllerUUID": "x",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "type-1-{\"leftSources\": [{\"type\": \"stepped\", \"lo"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "X",
+                "controller": {
+                  "discreteSources": [
+                    5
+                  ]
+                },
+                "controllerUUID": "x",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "type-1-{\"discreteSources\": [5]}"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "X",
+                "controller": {
+                  "rightSources": "abc"
+                },
+                "controllerUUID": "x",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "type-1-{\"rightSources\": \"abc\"}"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 2,
+                "title": "X",
+                "controller": {
+                  "sources": [
+                    5
+                  ]
+                },
+                "controllerUUID": "x",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "type-2-{\"sources\": [5]}"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 3,
+                "title": "X",
+                "controller": {
+                  "sources": 5
+                },
+                "controllerUUID": "x",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "type-3-{\"sources\": 5}"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 9,
+                "title": "X",
+                "controller": {
+                  "sources": [
+                    5
+                  ]
+                },
+                "controllerUUID": "x",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "type-9-{\"sources\": [5]}"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 10,
+                "title": "X",
+                "controller": null,
+                "controllerUUID": "x",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "type-10-null"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 10,
+                "title": "X",
+                "controller": {},
+                "controllerUUID": "x",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "type-10-{}"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 10,
+                "title": "X",
+                "controller": "abc",
+                "controllerUUID": "x",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "type-10-\"abc\""
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 10,
+                "title": "X",
+                "controller": [
+                  {
+                    "type": "mechanism",
+                    "logKey": "/Drive/Velocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b"
+                    }
+                  }
+                ],
+                "controllerUUID": "x",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "type-10-[{\"type\": \"mechanism\", \"logKey\": \"/Drive"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 11,
+                "title": "X",
+                "controller": {
+                  "sources": {}
+                },
+                "controllerUUID": "x",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "type-11-{\"sources\": {}}"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 11,
+                "title": "X",
+                "controller": {
+                  "sources": [
+                    {}
+                  ]
+                },
+                "controllerUUID": "x",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "type-11-{\"sources\": [{}]}"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    },
+                    null,
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "null-item"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "advance": 1000
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 6,
+                "title": "S",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "st",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "after",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "last"
+      },
+      {
+        "advance": 40
+      }
+    ],
+    "ignoreMain": [
+      "save-state",
+      "update-touch-bar-slider",
+      "save-type-memory"
+    ]
+  }
+}

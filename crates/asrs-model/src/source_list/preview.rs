@@ -84,6 +84,7 @@ fn pose_strings(
     time: f64,
     uuid: &str,
 ) -> Result<Vec<String>, SourceListError> {
+    let has_units = state.has_option("units")?;
     match preview {
         PreviewType::ModuleVelocities => {
             geometry::grab_module_velocities(log, &state.log_key, time, None, Some(uuid))
@@ -118,7 +119,7 @@ fn pose_strings(
             )])
         }
         _ => {
-            let units = match state.options.get("units") {
+            let units = match state.options.get("units").filter(|_| has_units) {
                 Some(u) if eq_str(u, "degrees") => RotationUnits::Degrees,
                 _ => RotationUnits::Radians,
             };

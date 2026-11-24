@@ -1,0 +1,74 @@
+{
+  "entry": "hubSession",
+  "inputs": [
+    "logs/match.csv"
+  ],
+  "fixture": {
+    "seed": 4242,
+    "steps": [
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/match.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 10,
+                "title": "X",
+                "controller": [
+                  null
+                ],
+                "controllerUUID": "x",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "null-mechanism"
+      },
+      {
+        "advance": 40
+      },
+      {
+        "advance": 600
+      }
+    ],
+    "ignoreMain": [
+      "save-state",
+      "update-touch-bar-slider"
+    ]
+  }
+}

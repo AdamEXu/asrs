@@ -1,7 +1,8 @@
 //! `src/shared/SourceListConfig.ts`. The configs are static per tab; the item states and the
 //! type memory are persisted (in `HubState` controller state and type-memory.json).
 
-use asrs_js::string::JsString;
+use asrs_js::ops;
+use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsObject, JsValue, ToJs};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -108,10 +109,16 @@ pub struct SourceListItemState {
     pub log_type: JsString,
     pub visible: bool,
     pub options: JsObject<JsString>,
+    /// The value upstream holds, when [`SourceListItemState::restored`] read one the other
+    /// members do not give back.
+    pub raw: Option<Box<JsValue>>,
 }
 
 impl ToJs for SourceListItemState {
     fn to_js(&self) -> JsValue {
+        if let Some(raw) = &self.raw {
+            return (**raw).clone();
+        }
         let mut o = JsObject::new();
         o.insert("type", self.item_type.to_js());
         o.insert("logKey", self.log_key.to_js());
@@ -131,35 +138,119 @@ impl SourceListItemState {
             log_type: o.get("logType")?.as_str()?.clone(),
             visible: o.get("visible")?.as_bool()?,
             options: string_map(o.get("options")?)?,
+            raw: None,
         })
     }
-}
 
-/// Memory id, then log key, then the remembered entry.
-pub type SourceListTypeMemory = JsObject<JsObject<SourceListTypeMemoryEntry>>;
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct SourceListTypeMemoryEntry {
-    pub entry_type: JsString,
-    pub options: JsObject<JsString>,
-}
-
-impl ToJs for SourceListTypeMemoryEntry {
-    fn to_js(&self) -> JsValue {
-        let mut o = JsObject::new();
-        o.insert("type", self.entry_type.to_js());
-        o.insert("options", self.options.to_js());
-        JsValue::Object(o)
+    /// Whatever a layout or a type response holds in an item's place. Members of another type
+    /// read as no match: an empty type, no options.
+    pub fn restored(value: &JsValue) -> SourceListItemState {
+        let member = |key| ops::get(value, key).unwrap_or_default();
+        let text = |key| member(key).as_str().cloned().unwrap_or_default();
+        let mut options = JsObject::new();
+        if let JsValue::Object(o) = &member("options") {
+            for (key, value) in o.iter() {
+                if let JsValue::String(value) = value {
+                    options.insert(key.clone(), value.clone());
+                }
+            }
+        }
+        let mut item = SourceListItemState {
+            item_type: text("type"),
+            log_key: ops::to_string(&member("logKey")),
+            log_type: text("logType"),
+            visible: ops::to_boolean(&member("visible")),
+            options,
+            raw: None,
+        };
+        if item.to_js() != *value {
+            item.raw = Some(Box::new(value.clone()));
+        }
+        item
     }
-}
 
-impl SourceListTypeMemoryEntry {
-    pub fn from_js(value: &JsValue) -> Option<SourceListTypeMemoryEntry> {
-        let o = value.as_object()?;
-        Some(SourceListTypeMemoryEntry {
-            entry_type: o.get("type")?.as_str()?.clone(),
-            options: string_map(o.get("options")?)?,
+    /// `item[key]`.
+    pub fn member(&self, key: &str) -> Result<JsValue, JsError> {
+        if let Some(raw) = &self.raw {
+            return ops::get(raw, key);
+        }
+        Ok(match key {
+            "type" => self.item_type.to_js(),
+            "logKey" => self.log_key.to_js(),
+            "logType" => self.log_type.to_js(),
+            "visible" => self.visible.to_js(),
+            "options" => self.options.to_js(),
+            _ => JsValue::Undefined,
         })
+    }
+
+    /// What reading `item[key]` throws.
+    pub fn require(&self, key: &str) -> Result<(), JsError> {
+        match self.raw.as_deref() {
+            Some(raw @ (JsValue::Null | JsValue::Undefined)) => Err(ops::cannot_read(raw, key)),
+            _ => Ok(()),
+        }
+    }
+
+    /// `item.options[key]`.
+    pub fn option(&self, key: &str) -> Result<JsValue, JsError> {
+        match &self.raw {
+            Some(raw) => ops::get(&ops::get(raw, "options")?, key),
+            None => Ok(self
+                .options
+                .get(key)
+                .map_or(JsValue::Undefined, ToJs::to_js)),
+        }
+    }
+
+    /// `key in item.options`.
+    pub fn has_option(&self, key: &str) -> Result<bool, JsError> {
+        match &self.raw {
+            Some(raw) => ops::has(&ops::get(raw, "options")?, key),
+            None => Ok(self.options.contains_key(key)),
+        }
+    }
+
+    /// `item.options[key] = value`.
+    pub fn set_option(&mut self, key: &str, value: &str) -> Result<(), JsError> {
+        if let Some(raw) = &mut self.raw {
+            let mut options = ops::get(raw, "options")?;
+            ops::set_key(&mut options, &JsString::from(key), JsValue::string(value))?;
+            if let JsValue::Object(o) = &mut **raw {
+                o.insert("options", options);
+            }
+        }
+        self.options.insert(key, JsString::from(value));
+        Ok(())
+    }
+
+    /// `item.visible = visible`.
+    pub fn set_visible(&mut self, visible: bool) {
+        self.visible = visible;
+        if let Some(raw) = &mut self.raw
+            && let JsValue::Object(o) = &mut **raw
+        {
+            o.insert("visible", JsValue::Bool(visible));
+        }
+    }
+
+    /// Whether reading any member throws: `null` or `undefined` in the item's place.
+    pub fn is_nullish(&self) -> bool {
+        matches!(
+            self.raw.as_deref(),
+            Some(JsValue::Null | JsValue::Undefined)
+        )
+    }
+
+    /// Whether `options` holds exactly what upstream's does.
+    pub fn options_are_strings(&self) -> bool {
+        match self.raw.as_deref() {
+            None => true,
+            Some(raw) => ops::get(raw, "options")
+                .ok()
+                .and_then(|options| string_map(&options))
+                .is_some(),
+        }
     }
 }
 
@@ -357,21 +448,6 @@ impl ToJs for SourceListOptionValueConfig {
         o.insert("key", self.key.to_js());
         o.insert("display", self.display.to_js());
         JsValue::Object(o)
-    }
-}
-
-impl SourceListTypeMemoryEntry {
-    pub fn memory_from_js(value: &JsValue) -> Option<SourceListTypeMemory> {
-        let o = value.as_object()?;
-        let mut out = JsObject::new();
-        for (id, entries) in o.iter() {
-            let mut inner = JsObject::new();
-            for (key, entry) in entries.as_object()?.iter() {
-                inner.insert(key.clone(), SourceListTypeMemoryEntry::from_js(entry)?);
-            }
-            out.insert(id.clone(), inner);
-        }
-        Some(out)
     }
 }
 
