@@ -648,6 +648,45 @@
     ]
    },
    {
+    "name": "page600",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:600px;overflow:auto;background:#fff'><div style='width:100px;height:4000px'></div></div>",
+    "ops": [
+     [
+      "click",
+      100,
+      60,
+      "quick"
+     ],
+     [
+      "eval",
+      "a.scrollTop=700;a.scrollLeft=50",
+      "quick"
+     ],
+     [
+      "key",
+      "PageDown"
+     ],
+     [
+      "eval",
+      "a.scrollTop=700;a.scrollLeft=50",
+      "quick"
+     ],
+     [
+      "key",
+      "PageUp"
+     ],
+     [
+      "eval",
+      "a.scrollTop=700;a.scrollLeft=50",
+      "quick"
+     ],
+     [
+      "key",
+      "ArrowDown"
+     ]
+    ]
+   },
+   {
     "name": "page612",
     "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:612px;overflow:auto;background:#fff'><div style='width:100px;height:4000px'></div></div>",
     "ops": [

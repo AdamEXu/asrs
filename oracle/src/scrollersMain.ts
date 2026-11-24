@@ -98,7 +98,7 @@ app
             const [key, code, text] = KEYS[op[1]] ?? fail(`unknown key ${op[1]}`);
             const modifiers = (op[2] ?? []).reduce((sum: number, m: string) => sum | MODIFIERS[m], 0);
             const event = { key, code: op[1], windowsVirtualKeyCode: code, nativeVirtualKeyCode: code, modifiers };
-            await send("Input.dispatchKeyEvent", { type: text === undefined ? "rawKeyDown" : "keyDown", text, commands: op[3] ?? [], ...event });
+            await send("Input.dispatchKeyEvent", { type: text === undefined ? "rawKeyDown" : "keyDown", text, commands: process.platform === "darwin" ? op[3] ?? [] : [], ...event });
             await send("Input.dispatchKeyEvent", { type: "keyUp", ...event });
           } else if (kind === "wheel") await send("Input.dispatchMouseEvent", { type: "mouseWheel", x: op[1], y: op[2], deltaX: op[3], deltaY: op[4] });
           else if (kind === "move") await mouse("mouseMoved", op[1], op[2]);
