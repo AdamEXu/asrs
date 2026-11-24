@@ -284,19 +284,27 @@ pub struct SidebarEnv<'a> {
 }
 
 impl SidebarEnv<'_> {
+    /// `window.tuner !== null && window.tuner.hasTunableFields()`.
+    pub fn has_tunable_fields(&self) -> bool {
+        self.tuner
+            .is_some_and(|t| t.has_tunable_fields(&self.log.borrow()))
+    }
+
     fn is_tunable(&self, key: &JsString) -> bool {
         self.tuner
             .is_some_and(|t| t.is_tunable(&self.log.borrow(), key))
     }
 
-    fn publish(&mut self, key: &JsString, value: TunedValue) -> Result<(), Thrown> {
+    /// `window.tuner?.publish(key, value)`.
+    pub fn publish(&mut self, key: &JsString, value: TunedValue) -> Result<(), Thrown> {
         match self.tuner {
             Some(tuner) => tuner.publish(&mut self.tuner_window(), key, value),
             None => Ok(()),
         }
     }
 
-    fn unpublish(&mut self, key: &JsString) -> Result<(), Thrown> {
+    /// `window.tuner?.unpublish(key)`.
+    pub fn unpublish(&mut self, key: &JsString) -> Result<(), Thrown> {
         match self.tuner {
             Some(tuner) => tuner.unpublish(&mut self.tuner_window(), key),
             None => Ok(()),
@@ -1306,9 +1314,7 @@ impl Sidebar {
     }
 
     fn update_tuning_button(&mut self, env: &mut SidebarEnv<'_>) {
-        let tuner_available = env
-            .tuner
-            .is_some_and(|t| t.has_tunable_fields(&env.log.borrow()));
+        let tuner_available = env.has_tunable_fields();
         if self.tuning_button_hidden == tuner_available {
             self.tuning_button_hidden = !tuner_available;
             if !tuner_available {

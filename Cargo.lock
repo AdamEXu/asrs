@@ -449,6 +449,7 @@ dependencies = [
  "asrs-parity",
  "asrs-tabs",
  "indexmap",
+ "url",
 ]
 
 [[package]]
