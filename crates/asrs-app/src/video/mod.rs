@@ -15,7 +15,7 @@ use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{Rng, V8MathRandom};
 use asrs_js::value::JsValue;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
-use asrs_ocr::{OcrError, TimerError, TimerReader};
+use asrs_ocr::{TimerError, TimerReader};
 use asrs_services::lifecycle::AppPaths;
 use asrs_services::video::{
     Handle, LogArg, LogLevel, MessageBox, OpenDialog, VideoConfig, VideoEvent, VideoHost,

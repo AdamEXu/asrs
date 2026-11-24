@@ -31,9 +31,7 @@ pub mod js_json;
 
 #[path = "../../../asrs-cli/src/log_dump.rs"]
 #[allow(dead_code)]
-mod log_dump;
-
-pub use log_dump::dump;
+pub mod log_dump;
 
 #[derive(Clone, Default)]
 pub struct Trace(Rc<RefCell<Vec<String>>>);

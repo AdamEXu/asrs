@@ -157,7 +157,7 @@ impl RlogDriver {
             "dump",
             Some(&Value::Array(vec![
                 log_id(&self.log_ids, Some(&log)),
-                support::dump(&log.borrow()),
+                support::log_dump::dump(&log.borrow()),
             ])),
         );
     }
