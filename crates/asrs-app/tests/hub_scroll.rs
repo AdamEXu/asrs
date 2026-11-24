@@ -80,6 +80,16 @@ impl Page<'_> {
         });
     }
 
+    /// Whether a text field has the focus.
+    fn typing(&mut self) -> bool {
+        self.headless
+            .context()
+            .update_window(self.window.into(), |_, window, _| {
+                asrs_ui::input::focused(window)
+            })
+            .expect("window")
+    }
+
     fn press(&mut self, key: &'static str) {
         let keystroke = Keystroke::parse(key).expect("a keystroke");
         self.dispatch(PlatformInput::KeyDown(KeyDownEvent {
@@ -318,6 +328,32 @@ fn scrollbar(headless: &mut HeadlessCapture, scale: f32) {
     page.close();
 }
 
+/// Keys go to the scroller that holds what Tab focused, not to the one clicked last.
+fn focus(headless: &mut HeadlessCapture, scale: f32) {
+    let mut page = open(headless, scale);
+    let fields = JsValue::Array(vec![JsValue::string("/Value")]);
+    page.open_tab(TabType::Table, &fields);
+    page.frames(4);
+    let [x, y, w, _] = page.rect("div.side-bar");
+    page.click([x + w - 20.0, y + 200.0]);
+    for _ in 0..40 {
+        page.press("tab");
+        let before = page.tops();
+        if page.typing() {
+            continue;
+        }
+        page.press("down");
+        let after = page.tops();
+        if moved(&before, &after, "+") == 0.0 {
+            continue;
+        }
+        assert_eq!(moved(&before, &after, "Field"), 0.0, "the side bar");
+        page.close();
+        return;
+    }
+    panic!("no focused element scrolls the table");
+}
+
 /// Classic scrollbars take their width off what is laid out next to them.
 fn classic(headless: &mut HeadlessCapture, scale: f32) {
     let width = |headless: &mut HeadlessCapture, style: Style| {
@@ -358,6 +394,7 @@ fn main() {
         source_list(&mut headless, scale);
         scrollbar(&mut headless, scale);
         classic(&mut headless, scale);
+        focus(&mut headless, scale);
     }
     println!("hub_scroll: ok");
 }

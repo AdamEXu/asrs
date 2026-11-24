@@ -1,8 +1,9 @@
 #![allow(clippy::disallowed_methods)]
 
 //! Replays `scroll/*`: what trusted keys, wheel events and scrollbar presses do to a scroller in
-//! Blink, on a box with the hub's scrollbars, in a headless window. Every offset, every recorded
-//! strip of pixels and the fade times must equal the recording.
+//! Blink, on a box with the hub's scrollbars, in a headless window. The offsets keys
+//! scroll to must equal the recording, those of a scrollbar be 1 px off at most and more while a
+//! press is held, pixels be within antialiasing and fades within 125 ms.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -42,6 +43,7 @@ struct Scroller {
     pressed: bool,
     now: f64,
     scale: f64,
+    renders: usize,
 }
 
 impl Scroller {
@@ -90,6 +92,7 @@ impl Render for Scroller {
             self.offset = to;
         }
         self.scale = f64::from(window.scale_factor());
+        self.renders += 1;
         let style = scroll::style(cx);
         let extent = Extent {
             content: self.content,
@@ -200,6 +203,7 @@ impl Page<'_> {
                     pressed: false,
                     now: 0.0,
                     scale: f64::from(scale),
+                    renders: 0,
                 })
             })
             .expect("window");
@@ -531,10 +535,10 @@ fn replay(headless: &mut HeadlessCapture, id: &str) -> [usize; 3] {
                     };
                     let page_px = page
                         .update(|view, style| scroll::page_step(view.client(style)[1], view.scale));
-                    let tolerance = if held {
-                        1.0 + page_px * HELD_PAGES
-                    } else {
-                        1.0
+                    let tolerance = match id {
+                        "scroll/keys" => 0.01,
+                        _ if held => 1.0 + page_px * HELD_PAGES,
+                        _ => 1.0,
                     };
                     for axis in 0..2 {
                         let off = (got[axis] - want[axis]).abs();
@@ -557,6 +561,39 @@ fn replay(headless: &mut HeadlessCapture, id: &str) -> [usize; 3] {
     counts
 }
 
+/// An overlay scrollbar draws frames while it fades and none after.
+fn fades_end(headless: &mut HeadlessCapture) {
+    headless
+        .context()
+        .update(|cx| scroll::set_style(Style::Overlay, false, cx));
+    let markup = "<div style='left:50px;top:40px;width:200px;height:150px;background:#fff'>\
+                  <div style='width:100px;height:1000px'></div></div>";
+    let mut page = Page::open(headless, markup, 1.0);
+    page.mouse("move", 100.0, 100.0);
+    page.input(PlatformInput::Scroll(ScrollEvent {
+        position: point(px(100.0), px(100.0)),
+        delta: ScrollDelta::Pixels(point(px(0.0), px(-60.0))),
+        ..Default::default()
+    }));
+    let mut idle = |frames: usize| {
+        let cx = page.headless.context();
+        for _ in 0..frames {
+            cx.advance_clock(FRAME);
+            cx.update_window(page.window.into(), |_, window, cx| {
+                window.simulate_next_frame(cx);
+            })
+            .expect("window");
+            cx.run_until_parked();
+        }
+        page.window
+            .update(cx, |view, _, _| view.renders)
+            .expect("window")
+    };
+    let [shown, faded, after] = [10, 100, 100].map(&mut idle);
+    assert!(shown < faded, "no frames for the fade");
+    assert_eq!(faded, after, "frames after the fade");
+}
+
 fn main() {
     if !cfg!(any(target_os = "macos", target_os = "linux")) {
         println!("scroll vectors: skipped, no headless renderer on this platform");
@@ -577,6 +614,9 @@ fn main() {
         let [offsets, strips, fades] = replay(&mut headless, id);
         assert!(offsets + fades > 0, "{id}: nothing compared");
         println!("{id}: {offsets} offsets, {strips} strips, {fades} fades");
+    }
+    if mac {
+        fades_end(&mut headless);
     }
     println!("scroll_vectors: ok");
 }

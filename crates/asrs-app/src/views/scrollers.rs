@@ -284,11 +284,6 @@ impl<H: FrameHost> HubFrame<H> {
         let Some(area) = area else {
             return;
         };
-        // A button takes Space, and a scroller that has the focus does not.
-        let scroller = matches!(area, Area::Statistics(_));
-        if event.keystroke.key == "space" && focused.is_some() && !scroller {
-            return;
-        }
         if let Some([client, max]) = self.area_range(&area, cx) {
             let by = step.delta(client, max, f64::from(window.scale_factor()));
             self.area_smooth(&area, by, cx);
