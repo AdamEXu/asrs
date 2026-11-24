@@ -3,6 +3,7 @@ use std::sync::Arc;
 use asrs_js::string::JsString;
 use asrs_log::log::{
     LogField, LogValue, LogValueSet, LogValueSetAny, LogValues, LoggableType, SerializedLogField,
+    StructuredType,
 };
 use asrs_parity::{Response, Utf16String, Value};
 
@@ -56,6 +57,21 @@ pub fn type_string(v: &Value) -> Result<Option<JsString>, String> {
     match v {
         Value::Null => Ok(None),
         other => js_string(other).map(Some),
+    }
+}
+
+pub fn structured_type(v: &Value) -> Result<StructuredType, String> {
+    match v {
+        Value::Undefined => Ok(StructuredType::Undefined),
+        _ => type_string(v).map(StructuredType::from),
+    }
+}
+
+pub fn structured_type_value(t: &StructuredType) -> Value {
+    match t {
+        StructuredType::Null => Value::Null,
+        StructuredType::Undefined => Value::Undefined,
+        StructuredType::Named(s) => string_value(s),
     }
 }
 
@@ -194,7 +210,7 @@ pub fn serialized_value(s: &SerializedLogField) -> Value {
         ("type", Value::number(f64::from(s.get_type() as u8))),
         ("timestamps", numbers(&s.timestamps)),
         ("values", values_value(&s.values)),
-        ("structuredType", optional_string(&s.structured_type)),
+        ("structuredType", structured_type_value(&s.structured_type)),
         ("wpilibType", optional_string(&s.wpilib_type)),
         ("metadataString", string_value(&s.metadata_string)),
         ("stripingReference", Value::Bool(s.striping_reference)),
@@ -263,7 +279,7 @@ fn run(args: &[Value]) -> Result<Value, String> {
             "clear" => field.clear_before_time(number(&functions::arg(op, 1))?),
             "meta" => {
                 field.wpilib_type = type_string(&functions::arg(op, 1))?;
-                field.structured_type = type_string(&functions::arg(op, 2))?;
+                field.structured_type = structured_type(&functions::arg(op, 2))?;
                 field.metadata_string = js_string(&functions::arg(op, 3))?;
             }
             "reload" => field = LogField::from_serialized(field.to_serialized()),
