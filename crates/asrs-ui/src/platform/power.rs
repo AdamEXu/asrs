@@ -60,12 +60,12 @@ pub fn on_battery_power_change(cx: &mut App, listener: impl Fn(bool, &mut App) +
 }
 
 #[cfg(target_os = "macos")]
-mod source {
+pub(super) mod source {
     use std::ffi::{c_char, c_void};
     use std::ptr;
 
     use objc2_core_foundation::{
-        CFBoolean, CFDictionary, CFMutableDictionary, CFNumber, CFRetained, CFString, CFType,
+        CFBoolean, CFDictionary, CFMutableDictionary, CFRetained, CFString, CFType,
     };
 
     #[repr(C)]
@@ -114,19 +114,18 @@ mod source {
     }
 
     fn state(properties: &CFDictionary<CFString, CFType>) -> Option<bool> {
-        let get = |key: &'static str| properties.get(&CFString::from_static_str(key));
-        let boolean = |key| Some(get(key)?.downcast_ref::<CFBoolean>()?.as_bool());
+        let boolean = |key: &'static str| {
+            let value = properties.get(&CFString::from_static_str(key))?;
+            Some(value.downcast_ref::<CFBoolean>()?.as_bool())
+        };
         if !boolean("BatteryInstalled")? {
             return Some(false);
         }
-        let external = boolean("ExternalConnected")?;
-        for key in ["AppleRawCurrentCapacity", "AppleRawMaxCapacity", "Voltage"] {
-            get(key)?.downcast_ref::<CFNumber>()?;
-        }
-        Some(!external)
+        Some(!boolean("ExternalConnected")?)
     }
 
-    /// `BatteryLevelProviderMac`.
+    /// `BatteryLevelProviderMac`, except that Chromium also wants the battery's raw capacities.
+    /// macOS 27 no longer has those at the top level, so there Chromium 142 never knows.
     pub fn battery_power() -> Option<bool> {
         let service = service();
         if service == 0 {
@@ -172,7 +171,7 @@ mod source {
 }
 
 #[cfg(windows)]
-mod source {
+pub(super) mod source {
     use std::ffi::c_void;
 
     #[repr(C)]
@@ -254,7 +253,7 @@ mod source {
 }
 
 #[cfg(not(any(target_os = "macos", windows)))]
-mod source {
+pub(super) mod source {
     pub fn battery_power() -> Option<bool> {
         Some(false)
     }

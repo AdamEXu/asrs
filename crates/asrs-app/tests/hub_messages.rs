@@ -724,7 +724,7 @@ fn put_field(app: &mut AppUnderTest, hub: WindowId, conflict: bool) {
             let key = JsString::from("/Field");
             log.put_number(&key, 0.0, 1.0);
             if conflict {
-                log.put_string(&key, 1.0, &JsString::from("text"));
+                log.put_string(&key, 1.0, JsString::from("text"));
             }
         }
         hub.with_sidebar(|s, env| s.refresh(env, true))
