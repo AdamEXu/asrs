@@ -62,11 +62,11 @@ fn wait(page: &mut Page<'_>, what: &str, mut done: impl FnMut(&mut Page<'_>) -> 
     }
 }
 
-fn preferences(page: &mut Page<'_>, mode: LiveMode) {
+fn preferences(page: &mut Page<'_>, mode: LiveMode, subscribe: LiveSubscribeMode) {
     let preferences = Preferences {
         robot_address: JsString::from("10.63.28.2"),
         live_mode: mode,
-        live_subscribe_mode: LiveSubscribeMode::Logging,
+        live_subscribe_mode: subscribe,
         ..Preferences::default()
     };
     page.main(MainToHub::SetPreferences, preferences.to_js());
@@ -143,6 +143,8 @@ struct Wire {
     /// `(topic, uid)` of each `publish`, and uids of each `unpublish`.
     published: Vec<(String, f64)>,
     unpublished: Vec<f64>,
+    /// Topics of each `subscribe` that asks for values.
+    subscribed: Vec<String>,
     values: Vec<(f64, Unpacked)>,
 }
 
@@ -190,6 +192,14 @@ impl Wire {
             self.published.push((name.to_string_lossy(), uid));
         } else if method.eq_str("unpublish") {
             self.unpublished.push(uid.expect("a uid"));
+        } else if method.eq_str("subscribe") {
+            let options = params.get("options").expect("options");
+            let topics = params.get("topics").and_then(Json::as_array);
+            let topics = topics.expect("topics").iter();
+            let topics = topics.map(|t| t.as_str().expect("a topic").to_string_lossy());
+            if options.get("topicsonly") == Some(&Json::Bool(false)) {
+                self.subscribed.extend(topics);
+            }
         }
     }
 
@@ -211,7 +221,7 @@ fn set_dial(headless: &mut HeadlessCapture, server: &LiveServer) {
 
 fn tuning(page: &mut Page<'_>, server: &LiveServer) {
     let mut wire = Wire::default();
-    preferences(page, LiveMode::Nt4);
+    preferences(page, LiveMode::Nt4, LiveSubscribeMode::Logging);
     page.main(MainToHub::StartLive, JsValue::string("robot"));
     expand(page, "Tune");
     wait(page, "the tuning button", |page| {
@@ -264,8 +274,20 @@ fn tuning(page: &mut Page<'_>, server: &LiveServer) {
     });
 }
 
+fn sidebar_fields(page: &mut Page<'_>, server: &LiveServer) {
+    let mut wire = Wire::default();
+    preferences(page, LiveMode::Nt4, LiveSubscribeMode::LowBandwidth);
+    page.main(MainToHub::StartLive, JsValue::string("robot"));
+    expand(page, "Tune");
+    wait(page, "the row", |page| row(page, "kP").is_some());
+    wait(page, "a subscription to the row's field", |_| {
+        wire.read(server);
+        wire.subscribed.iter().any(|topic| topic == "/Tune/kP")
+    });
+}
+
 fn rlog(page: &mut Page<'_>, server: &LiveServer) {
-    preferences(page, LiveMode::Rlog);
+    preferences(page, LiveMode::Rlog, LiveSubscribeMode::Logging);
     page.main(MainToHub::StartLive, JsValue::string("robot"));
     wait(page, "the RLOG connection", |_| server.opened() > 0);
     server.step(RLOG_FRAME);
@@ -290,6 +312,10 @@ fn main() {
     set_dial(&mut headless, &nt4);
     let mut page = Page::open(&mut headless, 1.0);
     tuning(&mut page, &nt4);
+    page.close();
+    nt4.take_seen();
+    let mut page = Page::open(&mut headless, 1.0);
+    sidebar_fields(&mut page, &nt4);
     page.close();
     set_dial(&mut headless, &rlog_server);
     let mut page = Page::open(&mut headless, 1.0);
