@@ -169,7 +169,10 @@ impl Replay {
     }
 
     fn copied(&self) -> String {
-        let text = self.state.text(&self.page).unwrap_or_default();
+        // Nothing selected leaves the emptied clipboard empty.
+        let Some(text) = self.state.text(&self.page) else {
+            return String::new();
+        };
         let text = clipboard_text(&text).replace("\r\n", "\n");
         if self.behavior == Behavior::Windows {
             text.replace('\n', "\r\n")
