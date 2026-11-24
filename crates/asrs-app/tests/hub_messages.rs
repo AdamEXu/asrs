@@ -25,8 +25,6 @@ use std::sync::Arc;
 use asrs_app::hub::{Hub, HubEvent};
 use asrs_app::main_process::{self, BetaTime, MainProcess};
 use asrs_app::views::field3d::Field3dTab;
-use asrs_app::views::frame::HubFrame;
-use asrs_app::views::hub_host::HubEntityHost;
 use asrs_app::windows::{self, MessageBoxOptions, MessageBoxType, WindowId, Windows};
 use asrs_hub::hub::HubModel;
 use asrs_js::string::JsString;
@@ -304,6 +302,17 @@ impl AppUnderTest {
         self.settle();
     }
 
+    /// The computer's power changes, seen from inside an update of `window`, which tells the app.
+    fn set_power(&mut self, window: WindowId, on_battery: bool) {
+        let handle = self.handle(window);
+        self.cx
+            .update_window(handle, |_, _, cx| {
+                cx.set_global(ScriptedPower { on_battery });
+            })
+            .expect("open");
+        self.settle();
+    }
+
     fn dispatch(&mut self, window: WindowId, inputs: Vec<PlatformInput>) {
         let handle = self.handle(window);
         self.cx
@@ -355,8 +364,8 @@ impl AppUnderTest {
         );
     }
 
-    /// The box of the text `text` as the window paints it.
-    fn text_box(&mut self, window: WindowId, text: &str) -> [f64; 4] {
+    /// The boxes of the text `text` in the order the window paints them.
+    fn text_boxes(&mut self, window: WindowId, text: &str) -> Vec<[f64; 4]> {
         self.cx.update(|cx| cx.set_global(Recorder::default()));
         let handle = self.handle(window);
         self.cx
@@ -364,23 +373,22 @@ impl AppUnderTest {
             .expect("open");
         self.settle();
         let recorder = self.cx.update(|cx| cx.remove_global::<Recorder>());
-        let run = recorder.texts.iter().find(|run| run.text == text);
-        let run = run.unwrap_or_else(|| panic!("no {text:?} in {:?}", recorder.texts));
-        run.rects[0]
+        let runs = recorder.texts.iter().filter(|run| run.text == text);
+        runs.map(|run| run.rects[0]).collect()
     }
 
-    /// Where `#dragItem` is, while it shows.
-    fn drag(&mut self, window: WindowId) -> Option<(f64, f64)> {
-        let handle = self.handle(window);
-        self.cx
-            .update_window(handle, |root, _, cx| {
-                let frame = root.downcast::<HubFrame<HubEntityHost>>().expect("a hub");
-                frame.update(cx, |frame, _| {
-                    let drag = frame.shell_mut().drag();
-                    drag.item_position().filter(|_| !drag.item_hidden())
-                })
-            })
-            .expect("open")
+    fn text_box(&mut self, window: WindowId, text: &str) -> [f64; 4] {
+        let boxes = self.text_boxes(window, text);
+        let [found] = boxes[..] else {
+            panic!("{text:?}: {boxes:?}");
+        };
+        found
+    }
+
+    /// Where `#dragItem` shows the field `text`, over its label.
+    fn drag(&mut self, window: WindowId, text: &str) -> Option<[f64; 2]> {
+        let boxes = self.text_boxes(window, text);
+        boxes.get(1).map(|[x, y, _, _]| [*x, *y])
     }
 
     fn reply(&mut self, replies: &[Reply]) {
@@ -511,8 +519,7 @@ fn the_vectors() {
             "focus" => app.focus(windows[&window.expect("window")]),
             "power" => {
                 let on_battery = record.string("name").as_deref() == Some("on-battery");
-                app.cx
-                    .update(|cx| cx.set_global(ScriptedPower { on_battery }));
+                app.set_power(first, on_battery);
             }
             "destroy" => {
                 let vector = window.expect("window");
@@ -707,9 +714,7 @@ fn field_3d() {
         (true, Field3dMode::LowPower),
         (false, Field3dMode::Standard),
     ] {
-        app.cx
-            .update(|cx| cx.set_global(ScriptedPower { on_battery }));
-        app.settle();
+        app.set_power(hub, on_battery);
         app.frames(hub, 2);
         let drawn = app.page(hub, |hub| field_3d_mode(hub));
         assert_eq!(drawn, Some(mode), "on battery: {on_battery}");
@@ -766,16 +771,12 @@ fn touch_drag() {
     let [x, y, width, height] = app.text_box(hub, "Field");
     let start = [x + width / 2.0, y + height / 2.0];
     app.touch(hub, TouchPhase::Started, start[0], start[1]);
-    let drag = app.drag(hub).expect("a drag from the first touch");
+    let drag = app.drag(hub, "Field").expect("a drag from the first touch");
     // `touch.clientX - label.getBoundingClientRect().x`, off the touch again: the label's corner.
-    assert_eq!(drag.0, x);
-    assert!(
-        (drag.1 - y).abs() <= 1.0,
-        "{drag:?} for the label at {x}, {y}"
-    );
+    assert_eq!(drag, [x, y]);
     app.touch(hub, TouchPhase::Moved, start[0] + 40.0, start[1] + 30.0);
-    let moved = app.drag(hub).expect("the drag");
-    assert_eq!(moved, (drag.0 + 40.0, drag.1 + 30.0));
+    let moved = app.drag(hub, "Field").expect("the drag");
+    assert_eq!(moved, [x + 40.0, y + 30.0]);
 
     let items = |hub: &mut HubModel| {
         let tab = hub.tabs().tab(1).expect("the line graph");
@@ -788,6 +789,6 @@ fn touch_drag() {
     let list = [300.0 + (bounds.width - 300.0) / 6.0, bounds.height - 60.0];
     app.touch(hub, TouchPhase::Moved, list[0], list[1]);
     app.touch(hub, TouchPhase::Ended, list[0], list[1]);
-    assert_eq!(app.drag(hub), None);
+    assert_eq!(app.drag(hub, "Field"), None);
     assert_eq!(app.page(hub, items), 1, "dropped into the list");
 }
