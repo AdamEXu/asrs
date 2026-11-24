@@ -12,6 +12,12 @@ pub(super) fn numpad_enter() -> bool {
     false
 }
 
+pub(super) fn set_tooltip(_window: &Window, _text: &str) {}
+
+pub(super) fn is_key_window(_window: &Window) -> bool {
+    true
+}
+
 pub(super) fn install_sidebar_vibrancy(_window: &Window) -> bool {
     false
 }
@@ -373,6 +379,10 @@ pub(super) mod probe {
 
     pub fn screen_height() -> f64 {
         0.0
+    }
+
+    pub fn tooltip_roundtrip(_texts: &[&str]) -> Vec<(Option<String>, bool)> {
+        Vec::new()
     }
 
     pub fn is_tagged_srgb(_window: &Window) -> Option<bool> {

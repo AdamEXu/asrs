@@ -39,7 +39,10 @@ use super::{
 };
 
 pub(super) mod dialog;
+mod tooltip;
 pub(super) mod window;
+
+pub(super) use tooltip::set_tooltip;
 
 pub(super) fn add_recent_document(path: &Path) {
     if let Some(mtm) = MainThreadMarker::new()
@@ -79,6 +82,11 @@ fn ns_view(window: &Window) -> Option<Retained<NSView>> {
 
 fn ns_window(window: &Window) -> Option<Retained<NSWindow>> {
     ns_view(window)?.window()
+}
+
+/// A headless window, which has no native one, counts as key.
+pub(super) fn is_key_window(window: &Window) -> bool {
+    ns_window(window).is_none_or(|window| window.isKeyWindow())
 }
 
 pub(super) fn install_sidebar_vibrancy(window: &Window) -> bool {
@@ -1666,6 +1674,10 @@ pub(super) mod probe {
 
     pub fn screen_height() -> f64 {
         primary_screen_height()
+    }
+
+    pub fn tooltip_roundtrip(texts: &[&str]) -> Vec<(Option<String>, bool)> {
+        super::tooltip::roundtrip(texts)
     }
 
     pub fn is_tagged_srgb(window: &Window) -> Option<bool> {
