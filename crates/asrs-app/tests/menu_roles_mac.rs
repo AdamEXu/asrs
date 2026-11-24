@@ -35,6 +35,8 @@ const EDIT_ROLES: [&str; 8] = [
     "selectall",
 ];
 
+const COMMAND: u32 = 1 << 20;
+
 const TIMEOUT: Duration = Duration::from_secs(60);
 
 type Log = Rc<RefCell<Vec<&'static str>>>;
@@ -181,6 +183,9 @@ async fn edit_roles(check: &Check, cx: &mut AsyncApp) {
 
     for role in EDIT_ROLES {
         probe::perform_menu_role_without_window(role).expect("a delegate");
+    }
+    for key in ["x", "c", "v", "a"] {
+        assert!(probe::perform_key_equivalent(key, COMMAND), "{key}");
     }
 }
 
