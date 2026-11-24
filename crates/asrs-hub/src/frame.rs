@@ -282,6 +282,13 @@ impl FrameElement {
     }
 }
 
+/// The default `<body>` margin, where a box with `left: auto` starts.
+const BODY_MARGIN: f64 = 8.0;
+/// What `width: auto` gives the boxes sized by their text, with the default title and no log.
+const AUTO_TITLE_WIDTH: f64 = 129.03125;
+const AUTO_MENU_WIDTH: f64 = 203.234375;
+const AUTO_SIDE_BAR_WIDTH: f64 = 243.84375;
+
 /// A `getBoundingClientRect()` in CSS px: `[x, y, width, height]`.
 pub type ClientRect = [f64; 4];
 
@@ -389,7 +396,10 @@ impl FrameLayout {
         };
         let c = inputs.classes;
         let flag = |v: Option<bool>| if v.unwrap_or(false) { 1.0 } else { 0.0 };
-        let sw = inputs.side_bar_width;
+        // `NaNpx` is no length, so every declaration that reads the variable falls back to its
+        // initial value, `auto`.
+        let sw = Some(inputs.side_bar_width).filter(|w| !w.is_nan());
+        let from_sw = |f: &dyn Fn(f64) -> f64| sw.map(f);
         let show_side_bar = if inputs.show_side_bar { 1.0 } else { 0.0 };
         let controls_height = inputs.tab_controls_height.unwrap_or(200.0);
         let show_controls = if inputs.show_tab_controls.unwrap_or(true) {
@@ -459,16 +469,17 @@ impl FrameLayout {
         let buttons_right = 154.0 + lock * 28.0 + update * 38.0 + feedback * 38.0;
         let title_text = title_bar.map(|bar| {
             let (left, right) = if c.title_bar_win {
-                (sw + 20.0, 140.0)
+                (20.0, 140.0)
             } else if c.title_bar_lite {
-                (sw + 20.0, buttons_right - 33.0)
+                (20.0, buttons_right - 33.0)
             } else {
-                (sw + 20.0 + (1.0 - show_side_bar) * 60.0, buttons_right)
+                (20.0 + (1.0 - show_side_bar) * 60.0, buttons_right)
             };
+            let width = sw.is_none().then_some(AUTO_TITLE_WIDTH);
             abs(
-                Some(left),
+                from_sw(&|sw| sw + left),
                 Some(right),
-                None,
+                width,
                 Some(0.0),
                 Some(0.0),
                 None,
@@ -480,10 +491,11 @@ impl FrameLayout {
         let menu_shown = c.title_bar_win || c.title_bar_linux || c.title_bar_lite;
         let menu = menu_shown.then(|| {
             let max_width = if c.title_bar_lite { 180.0 } else { 250.0 };
-            let width = m.px(sw - 20.0).min(m.px(max_width)).max(m.px(4.0) * 2);
+            let width = sw.map_or(AUTO_MENU_WIDTH, |sw| sw - 20.0);
+            let width = m.px(width).min(m.px(max_width)).max(m.px(4.0) * 2);
             let b = place(
                 Edges {
-                    left: Some(m.px(sw * 0.5)),
+                    left: Some(m.px(sw.map_or(BODY_MARGIN, |sw| sw * 0.5))),
                     right: None,
                     width: Some(width),
                     top: Some(m.px(19.0)),
@@ -569,7 +581,7 @@ impl FrameLayout {
             abs(
                 Some(0.0),
                 None,
-                Some(sw),
+                sw,
                 Some(0.0),
                 Some(0.0),
                 None,
@@ -585,7 +597,7 @@ impl FrameLayout {
             abs(
                 Some(0.0),
                 None,
-                Some(sw),
+                sw,
                 Some(0.0),
                 None,
                 Some(TITLE_BAR_HEIGHT),
@@ -596,7 +608,7 @@ impl FrameLayout {
         push(
             FrameElement::ViewerBackground,
             Some(abs(
-                Some(sw),
+                sw,
                 Some(0.0),
                 None,
                 Some(0.0),
@@ -609,7 +621,7 @@ impl FrameLayout {
         push(
             FrameElement::SideBarHandle,
             Some(abs(
-                Some(sw - 5.0),
+                from_sw(&|sw| sw - 5.0).or(Some(BODY_MARGIN)),
                 None,
                 Some(20.0 - show_side_bar * 10.0),
                 Some(0.0),
@@ -626,7 +638,7 @@ impl FrameLayout {
             .map_or(1.0, |p| number::to_number(p.units()));
         // Blink's calc simplification distributes the product over the sum, so this evaluates
         // as `p * 100% - p * sw`: a float pixels and percent pair, not `(W - sw) * p`.
-        let glow_width = if progress.is_finite() {
+        let glow_width = if let Some(sw) = sw.filter(|_| progress.is_finite()) {
             let pixels = (-(sw * progress) * m.zoom) as f32;
             let percent = (progress * 100.0) as f32;
             let device = pixels + percent / 100.0 * (viewport.w as f32 / 64.0);
@@ -636,7 +648,7 @@ impl FrameLayout {
         };
         let glow_box = place(
             Edges {
-                left: Some(m.px(sw)),
+                left: Some(m.px(sw.unwrap_or(BODY_MARGIN))),
                 right: None,
                 width: glow_width,
                 top: Some(0),
@@ -662,7 +674,7 @@ impl FrameLayout {
             Some(abs(
                 Some(0.0),
                 None,
-                Some(sw),
+                sw.or(Some(AUTO_SIDE_BAR_WIDTH)),
                 Some(side_bar_top),
                 Some(0.0),
                 None,
@@ -671,7 +683,7 @@ impl FrameLayout {
             (0.0, 0.0),
         );
         let viewer = abs(
-            Some(sw),
+            sw,
             Some(0.0),
             None,
             Some(viewer_top(c)),

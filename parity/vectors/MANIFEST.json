@@ -91,6 +91,7 @@
     "dom/hub-frame/mac": {"cases":85,"content":"60ee984943580fc1","generator":"1a772606b01f3736","spec":"parity/specs/dom/hub-frame/mac.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/hub-frame/odd-window": {"cases":77,"content":"6e3773efad9dc3ad","generator":"46c13b3baac07461","spec":"parity/specs/dom/hub-frame/odd-window.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/hub-frame/platforms": {"cases":35,"content":"3d94a11fb20514ed","generator":"2d44231e1ab9caec","spec":"parity/specs/dom/hub-frame/platforms.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
+    "dom/hub-frame/restored-widths": {"cases":35,"content":"84b69f807b57e666","generator":"c4f09c9aaeee06b3","spec":"parity/specs/dom/hub-frame/restored-widths.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/hub/selection-sidebar": {"cases":22,"content":"e3f86abecc21333b","generator":"364a73121f04aa66","spec":"parity/specs/dom/hub/selection-sidebar.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/joysticks/controller": {"cases":368,"content":"f50c222c79490788","generator":"add6c88915152814","spec":"parity/specs/dom/joysticks/controller.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "dom/joysticks/dpr15": {"cases":105,"content":"8f5a509a6b1eeac3","generator":"824f0b8810d6f91f","spec":"parity/specs/dom/joysticks/dpr15.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
