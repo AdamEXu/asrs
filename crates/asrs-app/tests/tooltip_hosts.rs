@@ -231,7 +231,7 @@ fn aura(headless: &mut HeadlessCapture) {
     let at = page.show(&play);
     page.dispatch(PlatformInput::MouseExited(MouseExitEvent::default()));
     assert_eq!(page.shown(), None, "leaving the window hides it");
-    page.hover(at);
+    page.hover(at + point(px(1.0), px(0.0)));
     page.pass(SHOW_DELAY - MS);
     assert_eq!(page.shown(), None, "coming back waits again");
     page.pass(MS);
