@@ -332,12 +332,12 @@ fn parity_in_a_fresh_home() {
     let Some(mut app) = AppUnderTest::start() else {
         return;
     };
-    assert!(!asset_download::ENABLED);
+    const { assert!(!asset_download::ENABLED) };
     app.cx.advance_clock(Duration::from_secs(20));
     app.cx.run_until_parked();
     assert_eq!(app.status(), INITIAL_STATUS);
     assert_eq!(app.shown_status(), INITIAL_STATUS);
-    assert!(app.cx.update(|cx| asset_download::stop(cx)).is_none());
+    assert!(app.cx.update(asset_download::stop).is_none());
     assert_eq!(app.listing(), [""; 0]);
 }
 
@@ -772,7 +772,7 @@ fn stop_in_a_fresh_home() {
     for case in cases {
         let mut app = AppUnderTest::start().expect("an app");
         case(&mut app);
-        let worker = app.cx.update(|cx| asset_download::stop(cx));
+        let worker = app.cx.update(asset_download::stop);
         let AppUnderTest {
             cx, server, auto, ..
         } = app;

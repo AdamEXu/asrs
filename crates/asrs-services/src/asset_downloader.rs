@@ -176,6 +176,8 @@ struct AssetInfo {
     optional: bool,
 }
 
+type Headers = Vec<(String, String)>;
+
 struct Download {
     url: LegacyUrl,
     protocol: String,
@@ -188,7 +190,7 @@ struct Download {
     settled: bool,
     /// The response got gave `download`, and what arrived of its body before the connection
     /// failed.
-    cut: Option<(Vec<(String, String)>, Vec<u8>)>,
+    cut: Option<(Headers, Vec<u8>)>,
 }
 
 enum TimerKind {

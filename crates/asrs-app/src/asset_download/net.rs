@@ -378,7 +378,7 @@ mod tests {
 
     #[test]
     fn a_large_body_is_read_whole() {
-        let body: Vec<u8> = (0..24u32 << 20).map(|i| (i * 31 >> 7) as u8).collect();
+        let body: Vec<u8> = (0..24u32 << 20).map(|i| ((i * 31) >> 7) as u8).collect();
         let sent = body.clone();
         let (outcome, _) = get(move |stream| {
             send(
