@@ -1,6 +1,6 @@
 use asrs_ui::platform::probe::{
-    native_menu_roundtrip, numpad_enter_for, read_wheel_sample, select_menu_roundtrip,
-    tooltip_roundtrip, wheel_gesture_samples,
+    battery_power, native_menu_roundtrip, numpad_enter_for, read_wheel_sample,
+    select_menu_roundtrip, tooltip_roundtrip, wheel_gesture_samples,
 };
 use asrs_ui::platform::{
     PopupEntry, PopupItem, PopupMenu, SelectMenu, SelectMenuItem, SelectMenuItemKind, WheelDelta,
@@ -17,16 +17,31 @@ fn main() {
         select_menu();
         wheel_gesture();
         tooltip();
+        battery();
         assert_eq!(
             [0x24, 0x4C].map(numpad_enter_for),
             [Some(false), Some(true)]
         );
         println!(
-            "platform mac: labels, menu tree, select menu, wheel gesture, tooltip and numpad Enter ok"
+            "platform mac: labels, menu tree, select menu, wheel gesture, tooltip, battery power and numpad Enter ok"
         );
     } else {
         println!("platform mac: skipped on this platform");
     }
+}
+
+/// `pmset` says what the system runs on now.
+fn battery() {
+    let batt = std::process::Command::new("/usr/bin/pmset")
+        .args(["-g", "batt"])
+        .output()
+        .expect("pmset");
+    let batt = String::from_utf8_lossy(&batt.stdout);
+    assert_eq!(
+        battery_power(),
+        Some(batt.contains("'Battery Power'")),
+        "{batt}"
+    );
 }
 
 fn tooltip() {

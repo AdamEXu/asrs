@@ -11,12 +11,13 @@ asrs-formats = { path = "../asrs-formats" }
 asrs-js = { path = "../asrs-js" }
 asrs-log = { path = "../asrs-log" }
 futures-util = { version = "=0.3.34", default-features = false, features = ["sink", "std"] }
+idna = "=1.1.0"
 tokio = { version = "=1.54.1", default-features = false, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
 tokio-tungstenite = { version = "=0.30.0", default-features = false, features = ["handshake"] }
+url = "=2.5.8"
 
 [dev-dependencies]
 asrs-parity = { path = "../asrs-parity" }
-url = "=2.5.8"
 
 [lints]
 workspace = true

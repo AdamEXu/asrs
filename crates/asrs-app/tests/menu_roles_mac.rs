@@ -4,7 +4,8 @@
 //! through it to windows that are never shown: every edit role must be taken by the view, as
 //! `RenderWidgetHostViewCocoa` takes it, and act on the field or page in it once; Toggle Full
 //! Screen must reach `toggleFullScreen:`, which is intercepted; full screen notifications must
-//! reach the window's observer; and quitting must ask when it may not, and quit when it may.
+//! reach the window's observer, and main window ones the focus observer; and quitting must ask
+//! when it may not, and quit when it may.
 //!
 //! The general pasteboard is the user's: the clipboard actions are caught in the page, and
 //! `edit_roles` checks what they do.
@@ -259,6 +260,37 @@ async fn full_screen(check: &Check, cx: &mut AsyncApp) {
     assert_eq!(*seen.borrow(), [true, false], "after it is stopped");
 }
 
+/// `windowDidBecomeMain:` and `windowDidResignMain:`, which a panel on the window leaves alone.
+async fn focus(check: &Check, cx: &mut AsyncApp) {
+    let seen = Rc::new(RefCell::new(Vec::new()));
+    let sink = seen.clone();
+    let observer = check.update(cx, |_, window, cx| {
+        platform::observe_focus(window, cx, move |focused, _| {
+            sink.borrow_mut().push(focused);
+        })
+    });
+    let observer = observer.expect("an observer");
+    let steps: [(&str, &[bool]); 4] = [
+        ("NSWindowDidResignKeyNotification", &[]),
+        ("NSWindowDidResignMainNotification", &[false]),
+        ("NSWindowDidBecomeKeyNotification", &[false]),
+        ("NSWindowDidBecomeMainNotification", &[false, true]),
+    ];
+    for (name, changes) in steps {
+        check.update(cx, |_, window, _| {
+            probe::post_window_notification(window, name);
+        });
+        settle(cx).await;
+        assert_eq!(*seen.borrow(), changes, "{name}");
+    }
+    observer.stop();
+    check.update(cx, |_, window, _| {
+        probe::post_window_notification(window, steps[1].0);
+    });
+    settle(cx).await;
+    assert_eq!(*seen.borrow(), [false, true], "after it is stopped");
+}
+
 async fn quitting(check: &Check, cx: &mut AsyncApp) {
     let may_quit = Rc::new(Cell::new(false));
     let asked = Rc::new(Cell::new(0));
@@ -305,6 +337,7 @@ fn main() {
         cx.spawn(async move |cx| {
             edit_roles(&check, cx).await;
             full_screen(&check, cx).await;
+            focus(&check, cx).await;
             assert_eq!(probe::app_is_active(), Some(false));
             quitting(&check, cx).await;
             settle(cx).await;

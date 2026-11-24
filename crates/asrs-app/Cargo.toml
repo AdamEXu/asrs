@@ -154,6 +154,10 @@ name = "menu_dispatch"
 required-features = ["parity"]
 
 [[test]]
+name = "hub_messages"
+required-features = ["parity"]
+
+[[test]]
 name = "app_menu_mac"
 harness = false
 

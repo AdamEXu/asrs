@@ -9,6 +9,7 @@ use std::collections::{HashMap, VecDeque};
 use asrs_js::string::JsString;
 use asrs_js::value::{JsObject, JsValue};
 
+use crate::thrown::Thrown;
 use crate::timers::{TimerId, TimerQueue};
 
 use super::transport::{RlogNetEvent, RlogTransport, TcpId};
@@ -120,14 +121,22 @@ pub struct MainContext<'a> {
     pub net: &'a mut dyn RlogTransport,
 }
 
+struct Socket {
+    uuid: String,
+    open: bool,
+    /// `socket.setTimeout(ms, callback)`'s timer, until it fires or the socket closes. The
+    /// callback is a `once` listener, so a second fire would do nothing.
+    idle: Option<TimerId>,
+}
+
 /// `RLOGMain` for one hub window (upstream keys its maps by `windowId`; the emulation's one
 /// window is id 1, so the fields are the maps' single entries).
 pub struct RlogMain {
     /// `rlogSockets[windowId]`.
     socket: Option<TcpId>,
-    /// Every socket's uuid; a destroyed socket still owes its `close` message the uuid its
-    /// `live-rlog-start` carried.
-    uuids: HashMap<TcpId, String>,
+    /// Every socket that has not reported `close`; a destroyed one still owes that message the
+    /// uuid its `live-rlog-start` carried.
+    sockets: HashMap<TcpId, Socket>,
     /// `rlogSocketTimeouts[windowId]`: the no-data watchdog. Not cleared on a restart —
     /// upstream's map entry keeps the old timer id, so a watchdog armed under a dead socket
     /// can still destroy its replacement.
@@ -145,7 +154,7 @@ impl RlogMain {
     pub fn new(timers: &mut TimerQueue) -> Self {
         Self {
             socket: None,
-            uuids: HashMap::new(),
+            sockets: HashMap::new(),
             data_timeout: None,
             data_array: Vec::new(),
             heartbeat: timers.set_interval(RLOG_HEARTBEAT_DELAY_MS),
@@ -165,8 +174,38 @@ impl RlogMain {
         true
     }
 
-    /// `rlogMain.handle(name, data)`; false for messages it does not handle.
-    pub fn handle(&mut self, call: &MainCall, cx: &mut MainContext<'_>) -> bool {
+    fn uuid(&self, id: TcpId) -> String {
+        self.sockets
+            .get(&id)
+            .map(|s| s.uuid.clone())
+            .unwrap_or_default()
+    }
+
+    fn clear_idle(&mut self, id: TcpId, cx: &mut MainContext<'_>) {
+        if let Some(timer) = self.sockets.get_mut(&id).and_then(|s| s.idle.take()) {
+            cx.timers.clear(timer);
+        }
+    }
+
+    /// Connecting, reads and writes re-arm the idle timer of an open socket.
+    fn touch(&mut self, id: TcpId, cx: &mut MainContext<'_>) {
+        if let Some(socket) = self.sockets.get_mut(&id)
+            && socket.open
+            && let Some(timer) = socket.idle
+        {
+            cx.timers.clear(timer);
+            socket.idle = Some(cx.timers.set_timeout(RLOG_CONNECT_TIMEOUT_MS));
+        }
+    }
+
+    fn destroy(&mut self, id: TcpId, cx: &mut MainContext<'_>) {
+        self.clear_idle(id, cx);
+        cx.net.tcp_destroy(id);
+    }
+
+    /// `rlogMain.handle(name, data)`. Node throws on an invalid port after the old socket is
+    /// destroyed: the hub gets no `live-data` for this start.
+    pub fn handle(&mut self, call: &MainCall, cx: &mut MainContext<'_>) -> Result<(), Thrown> {
         match call {
             MainCall::Start {
                 uuid,
@@ -174,21 +213,27 @@ impl RlogMain {
                 port,
             } => {
                 if let Some(socket) = self.socket.take() {
-                    cx.net.tcp_destroy(socket);
+                    self.destroy(socket, cx);
                 }
-                let socket = cx.net.tcp_connect(address, *port);
-                self.uuids.insert(socket, uuid.clone());
-                cx.net.tcp_set_timeout(socket, RLOG_CONNECT_TIMEOUT_MS);
+                let socket = cx.net.tcp_connect(address, *port)?;
+                self.sockets.insert(
+                    socket,
+                    Socket {
+                        uuid: uuid.clone(),
+                        open: false,
+                        idle: Some(cx.timers.set_timeout(RLOG_CONNECT_TIMEOUT_MS)),
+                    },
+                );
                 self.socket = Some(socket);
                 self.data_array = Vec::new();
             }
             MainCall::Stop => {
                 if let Some(socket) = self.socket.take() {
-                    cx.net.tcp_destroy(socket);
+                    self.destroy(socket, cx);
                 }
             }
         }
-        true
+        Ok(())
     }
 
     /// A socket event. Events for ids the transport no longer tracks are dropped before
@@ -196,6 +241,7 @@ impl RlogMain {
     pub fn handle_net_event(&mut self, event: &RlogNetEvent, cx: &mut MainContext<'_>) {
         match event {
             RlogNetEvent::Data(id, chunk) => {
+                self.touch(*id, cx);
                 self.data_array.extend_from_slice(chunk);
                 if let Some(timer) = self.data_timeout.take() {
                     cx.timers.clear(timer);
@@ -225,7 +271,7 @@ impl RlogMain {
                     // good. This loop runs on the foreground thread, so the connection is dropped.
                     if end == 0 {
                         self.data_array.clear();
-                        cx.net.tcp_destroy(*id);
+                        self.destroy(*id, cx);
                         break;
                     }
                     let payload = if begin > end {
@@ -235,45 +281,54 @@ impl RlogMain {
                     };
                     self.data_array = self.data_array[clamp(expected)..].to_vec();
                     if !payload.is_empty() {
-                        let uuid = self.uuids.get(id).cloned().unwrap_or_default();
+                        let uuid = self.uuid(*id);
                         let ok = self.send(MainMessage::Data { uuid, raw: payload });
                         if !ok {
-                            cx.net.tcp_destroy(*id);
+                            self.destroy(*id, cx);
                         }
                     }
                 }
             }
             RlogNetEvent::Error(id) => {
-                let uuid = self.uuids.get(id).cloned().unwrap_or_default();
+                self.clear_idle(*id, cx);
+                let uuid = self.uuid(*id);
                 self.send(MainMessage::Failed { uuid });
             }
             RlogNetEvent::Close(id) => {
-                let uuid = self.uuids.remove(id).unwrap_or_default();
+                self.clear_idle(*id, cx);
+                let uuid = self.sockets.remove(id).map(|s| s.uuid).unwrap_or_default();
                 if self.socket == Some(*id) {
                     self.socket = None;
                 }
                 self.send(MainMessage::Failed { uuid });
             }
-            RlogNetEvent::Timeout(id) => {
-                let uuid = self.uuids.get(id).cloned().unwrap_or_default();
-                self.send(MainMessage::IdleTimeout { uuid });
+            RlogNetEvent::Connect(id) => {
+                if let Some(socket) = self.sockets.get_mut(id) {
+                    socket.open = true;
+                }
+                self.touch(*id, cx);
             }
-            RlogNetEvent::Connect(_) => {}
         }
     }
 
-    /// The heartbeat interval and the data watchdog share the timer queue with the renderer.
+    /// The heartbeat interval, the data watchdog and the sockets' idle timers.
     pub fn handle_timer(&mut self, id: TimerId, cx: &mut MainContext<'_>) -> bool {
         if id == self.heartbeat {
             if let Some(socket) = self.socket {
                 cx.net.tcp_write(socket, &RLOG_HEARTBEAT_DATA);
+                self.touch(socket, cx);
             }
             true
         } else if self.data_timeout == Some(id) {
             self.data_timeout = None;
             if let Some(socket) = self.socket {
-                cx.net.tcp_destroy(socket);
+                self.destroy(socket, cx);
             }
+            true
+        } else if let Some(socket) = self.sockets.values_mut().find(|s| s.idle == Some(id)) {
+            socket.idle = None;
+            let uuid = socket.uuid.clone();
+            self.send(MainMessage::IdleTimeout { uuid });
             true
         } else {
             false
@@ -291,12 +346,11 @@ mod tests {
     struct NoNet;
 
     impl RlogTransport for NoNet {
-        fn tcp_connect(&mut self, _host: &str, _port: f64) -> TcpId {
-            TcpId(1)
+        fn tcp_connect(&mut self, _host: &str, _port: f64) -> Result<TcpId, Thrown> {
+            Ok(TcpId(1))
         }
         fn tcp_write(&mut self, _id: TcpId, _data: &[u8]) {}
         fn tcp_destroy(&mut self, _id: TcpId) {}
-        fn tcp_set_timeout(&mut self, _id: TcpId, _ms: f64) {}
     }
 
     fn payloads(chunks: &[&[u8]]) -> Vec<Vec<u8>> {
@@ -312,7 +366,7 @@ mod tests {
             address: "a".to_owned(),
             port: 5800.0,
         };
-        main.handle(&start, &mut cx);
+        main.handle(&start, &mut cx).unwrap();
         for chunk in chunks {
             main.handle_net_event(&RlogNetEvent::Data(TcpId(1), chunk.to_vec()), &mut cx);
         }

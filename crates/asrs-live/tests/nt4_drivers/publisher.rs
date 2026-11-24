@@ -118,7 +118,7 @@ impl Driver for PublisherDriver {
                     "dump",
                     Some(&Value::Array(vec![
                         Value::number(0.0),
-                        support::dump(&self.log.borrow()),
+                        support::log_dump::dump(&self.log.borrow()),
                     ])),
                 );
             }
@@ -156,7 +156,7 @@ impl Driver for PublisherDriver {
             "dump",
             Some(&Value::Array(vec![
                 Value::number(0.0),
-                support::dump(&self.log.borrow()),
+                support::log_dump::dump(&self.log.borrow()),
             ])),
         );
     }

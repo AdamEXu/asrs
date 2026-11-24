@@ -309,6 +309,7 @@
     "src/fakes/mainFs.ts",
     "src/files/assetLoader.ts",
     "src/files/historicalStart.ts",
+    "src/files/hubMessages.ts",
     "src/files/routing.ts",
     "src/genFiles.ts"
   ],
@@ -366,6 +367,15 @@
     "src/liveBaseRun.ts",
     "src/logRun.ts",
     "src/shims.ts"
+  ],
+  "genLiveNet": [
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/genLiveNet.ts",
+    "src/shims.ts"
+  ],
+  "genLiveNetMain": [
+    "src/genLiveNetMain.ts"
   ],
   "genLog": [
     "src/corpus/bytes.ts",

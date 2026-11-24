@@ -4,20 +4,22 @@ interface Timer {
   id: number;
   due: number;
   repeat: number | null;
+  precise: boolean;
   callback: Callback;
   args: unknown[];
 }
 
 const g = globalThis as any;
 const MIN_REPEAT_MS = 4;
+const PRECISE_DELAY_MS = 32;
 
 /**
  * A scripted clock behind `Date.now`, `setTimeout` and `setInterval` that follows Blink's timer
  * rules, as measured in Electron 39's renderer (the live sources run there, not under Node):
  *
  * - delays are WebIDL `long`s, so `1000 / 60` runs every 16 ms and negative delays are 0;
- * - timers due at the same time run in creation order, and an interval keeps the position of
- *   its `setInterval` call on every repeat;
+ * - at the same due time, timers with a delay from 1 to 31 ms run before the others, each group in
+ *   creation order, and an interval keeps the position of its `setInterval` call on every repeat;
  * - an interval is rescheduled before its callback runs, drift free: a late interval fires
  *   once and returns to its grid;
  * - intervals repeat no faster than every 4 ms (Blink's nesting clamp, reduced to one rule).
@@ -62,6 +64,7 @@ export class ScriptedClock {
       id,
       due: this.now + wait,
       repeat: repeat ? Math.max(MIN_REPEAT_MS, wait) : null,
+      precise: wait > 0 && wait < PRECISE_DELAY_MS,
       callback,
       args
     });
@@ -75,9 +78,13 @@ export class ScriptedClock {
   private earliest(): Timer | undefined {
     let best: Timer | undefined = undefined;
     for (const t of this.timers) {
-      if (best === undefined || t.due < best.due || (t.due === best.due && t.id < best.id)) best = t;
+      if (best === undefined || t.due < best.due || (t.due === best.due && this.runsBefore(t, best))) best = t;
     }
     return best;
+  }
+
+  private runsBefore(a: Timer, b: Timer): boolean {
+    return a.precise === b.precise ? a.id < b.id : a.precise;
   }
 
   /** Moves the clock forward by `ms`, running every timer that falls due on the way at its due time. */

@@ -639,7 +639,8 @@ impl Runner {
                 live.rlog(|main, cx| main.handle_net_event(&event, cx));
             }
             SessionEvent::Ipc(Ipc::ToMain(call)) => {
-                live.rlog(|main, cx| main.handle(&call, cx));
+                live.rlog(|main, cx| main.handle(&call, cx))
+                    .expect("a port Node takes");
             }
             SessionEvent::Ipc(Ipc::ToSource(data)) => {
                 let message = NamedMessage::new(MainToHub::LiveData, data);
