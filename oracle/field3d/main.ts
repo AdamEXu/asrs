@@ -1,7 +1,7 @@
 import { app, BrowserWindow } from "electron";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { encodePng } from "../src/canvas/png";
 
 const USAGE = "usage: electron field3dMain.mjs <scenes dir> <out dir> [<scene>...]";
@@ -15,11 +15,13 @@ if (scenesDir === undefined || outDir === undefined) {
   process.exit(2);
 }
 const here = path.dirname(fileURLToPath(import.meta.url));
-const upstream = process.env.ORACLE_UPSTREAM_DIR;
-if (upstream === undefined) {
+const upstreamDir = process.env.ORACLE_UPSTREAM_DIR;
+if (upstreamDir === undefined) {
   console.error("ORACLE_UPSTREAM_DIR is not set");
   process.exit(2);
 }
+// With slashes and from the root on Windows too: /C:/...
+const upstream = decodeURIComponent(pathToFileURL(upstreamDir).pathname);
 
 app.commandLine.appendSwitch("lang", "en-US");
 
