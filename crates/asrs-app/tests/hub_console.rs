@@ -209,6 +209,21 @@ impl Page<'_> {
         self.frames(1);
     }
 
+    fn plain_key(&mut self, key: &str) {
+        let keystroke = Keystroke {
+            modifiers: Modifiers::default(),
+            key: key.to_owned(),
+            key_char: (key.len() == 1).then(|| key.to_owned()),
+        };
+        let window = self.window.into();
+        (self.headless.context())
+            .update_window(window, |_, window, cx| {
+                window.dispatch_keystroke(keystroke, cx);
+            })
+            .expect("window");
+        self.frames(1);
+    }
+
     /// The window as it is drawn now.
     fn shot(&mut self) -> Vec<[u8; 4]> {
         let window = self.window.into();
@@ -328,6 +343,37 @@ fn selecting_all_survives_a_rebuilt_table(headless: &mut HeadlessCapture, scale:
     page.close();
 }
 
+fn keys_with_text_selected(headless: &mut HeadlessCapture, scale: f32) {
+    let mut page = Page::open(headless, scale);
+    page.lines(0..20);
+    page.open_console();
+    page.frames(4);
+    let container = page.layout(|layout, _| layout.container_rect());
+    page.press(container.x + 105.0, container.y + 40.0);
+    page.drag_to(container.x + container.width - 20.0, container.y + 40.0);
+    page.release(container.x + container.width - 20.0, container.y + 40.0);
+    page.frames(1);
+    assert_eq!(page.copied(), "line 0", "{scale}x");
+    assert_eq!(page.mode(), SelectionMode::Static);
+    page.plain_key("space");
+    assert_eq!(page.mode(), SelectionMode::Playback, "{scale}x: space");
+    page.plain_key("space");
+    let time = page.selection(|selection| selection.get_selected_time());
+    page.plain_key("right");
+    let stepped = page.selection(|selection| selection.get_selected_time());
+    assert_ne!(stepped, time, "{scale}x: right");
+    assert_eq!(page.copied(), "line 0", "{scale}x: after the keys");
+    let input = [container.x + container.width - 60.0, container.y + 15.0];
+    page.press(input[0], input[1]);
+    page.release(input[0], input[1]);
+    page.frames(2);
+    assert_eq!(page.copied(), "", "{scale}x: the input's caret");
+    page.plain_key("1");
+    page.key("a");
+    assert_eq!(page.copied(), "1", "{scale}x: the input's text");
+    page.close();
+}
+
 fn main() {
     if !cfg!(any(target_os = "macos", target_os = "linux")) {
         println!("hub console: skipped, no headless renderer on this platform");
@@ -342,6 +388,7 @@ fn main() {
         dragging_a_field_in_fills_the_console(&mut headless, scale);
         selected_text_survives_new_lines(&mut headless, scale);
         selecting_all_survives_a_rebuilt_table(&mut headless, scale);
+        keys_with_text_selected(&mut headless, scale);
     }
     println!("hub_console: ok");
 }
