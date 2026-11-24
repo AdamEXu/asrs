@@ -15,7 +15,7 @@ use asrs_js::sort::{array_sort, code_unit_cmp};
 use asrs_js::string::JsString;
 use asrs_js::value::{JsObject, JsValue};
 use asrs_log::log::log_util::{TYPE_KEY, get_value_at};
-use asrs_log::log::{Log, LogFieldTree, LoggableType, search_fields};
+use asrs_log::log::{Log, LogFieldTree, LoggableType, StructuredType, search_fields};
 use asrs_log::util::arrays_equal;
 use asrs_model::hub_state::SidebarState;
 use asrs_model::selection::{Selection, SelectionMode};
@@ -1564,13 +1564,14 @@ impl Sidebar {
                 let mut is_active = false;
                 let log = env.log.borrow();
                 let r#type = log.get_type(&full_key);
-                let structured_type = log.get_structured_type(&full_key);
+                let structured_type = log.structured_type(&full_key);
                 let wpilib_type = log.get_wpilib_type(&full_key);
                 if expanded
                     && (r#type == Some(LoggableType::BooleanArray)
                         || r#type == Some(LoggableType::NumberArray)
                         || r#type == Some(LoggableType::StringArray)
-                        || (r#type != Some(LoggableType::Empty) && structured_type.is_some())
+                        || (r#type != Some(LoggableType::Empty)
+                            && *structured_type != StructuredType::Null)
                         || (r#type == Some(LoggableType::Raw)
                             && wpilib_type.is_some_and(custom_schemas::has)))
                 {

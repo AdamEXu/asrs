@@ -285,7 +285,7 @@ fn query(log: &Log, key: &JsString) -> Value {
         ),
         (
             "structuredType",
-            structured_type_value(&log.get_structured_type_value(key)),
+            structured_type_value(log.structured_type(key)),
         ),
         ("wpilibType", optional_js(log.get_wpilib_type(key))),
         (
@@ -423,9 +423,7 @@ pub(crate) fn apply(
         "deleteField" => log.delete_field(&key()?),
         "clearBeforeTime" => log.clear_before_time(number(&arg(op, 1))?, boolean(&arg(op, 2))?),
         "updateRangeWithTimestamp" => log.update_range_with_timestamp(number(&arg(op, 1))?),
-        "setStructuredType" => {
-            log.set_structured_type_value(&key()?, structured_type(&arg(op, 2))?)
-        }
+        "setStructuredType" => log.set_structured_type(&key()?, structured_type(&arg(op, 2))?),
         "setWpilibType" => log.set_wpilib_type(&key()?, js_string(&arg(op, 2))?),
         "setMetadataString" => log.set_metadata_string(&key()?, js_string(&arg(op, 2))?),
         "setGeneratedParent" => log.set_generated_parent(&key()?),

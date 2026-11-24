@@ -60,24 +60,18 @@ pub fn type_string(v: &Value) -> Result<Option<JsString>, String> {
     }
 }
 
-/// A `structuredType` member value: `string | null` normally, but `putPhotonStruct` and a
-/// serialized field can carry `undefined` or anything else verbatim.
 pub fn structured_type(v: &Value) -> Result<StructuredType, String> {
     match v {
-        Value::Null => Ok(StructuredType::Null),
         Value::Undefined => Ok(StructuredType::Undefined),
-        Value::String(_) => js_string(v).map(StructuredType::Named),
-        other => crate::js_json::to_js(other).map(StructuredType::Other),
+        _ => type_string(v).map(StructuredType::from),
     }
 }
 
-/// `field.structuredType` as the CVE-1 value: `undefined` encodes as `{"u":null}`.
 pub fn structured_type_value(t: &StructuredType) -> Value {
     match t {
         StructuredType::Null => Value::Null,
         StructuredType::Undefined => Value::Undefined,
         StructuredType::Named(s) => string_value(s),
-        StructuredType::Other(v) => crate::js_json::from_js(v),
     }
 }
 

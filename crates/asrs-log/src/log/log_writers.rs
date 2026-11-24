@@ -122,16 +122,14 @@ impl Log {
         key: &JsString,
         timestamp: f64,
         data: &JsValue,
-        schema_types: impl Iterator<Item = (&'a JsString, JsValue)>,
+        schema_types: impl Iterator<Item = (&'a JsString, StructuredType)>,
     ) -> Result<(), LogError> {
         self.put_unknown_struct(key, timestamp, data, false)?;
         for (child, schema_type) in schema_types {
             let full_child_key = child_key_js(key, child);
             self.create_blank_field(&full_child_key, LoggableType::Empty);
             self.process_timestamp(&full_child_key, timestamp);
-            // `setStructuredType(fullChildKey, decodedData.schemaTypes[child])`, verbatim:
-            // a photonstruct field without a type token stores `undefined`.
-            self.set_structured_type_value(&full_child_key, StructuredType::from_js(&schema_type));
+            self.set_structured_type(&full_child_key, schema_type);
         }
         Ok(())
     }
@@ -176,7 +174,7 @@ impl Log {
                 decoded
                     .schema_types
                     .iter()
-                    .map(|(k, v)| (k, JsValue::String(v.clone()))),
+                    .map(|(k, v)| (k, StructuredType::Named(v.clone()))),
             ),
             Err(DecodeError::NeverCompletes) => Err(LogError::NeverCompletes),
             Err(_) => {
@@ -216,7 +214,13 @@ impl Log {
                 key,
                 timestamp,
                 &decoded.data,
-                decoded.schema_types.iter().map(|(k, v)| (k, v.clone())),
+                decoded.schema_types.iter().map(|(k, v)| {
+                    let ty = match v {
+                        JsValue::String(ty) => StructuredType::Named(ty.clone()),
+                        _ => StructuredType::Undefined,
+                    };
+                    (k, ty)
+                }),
             ),
             Err(_) => {
                 self.queued_structs.push(QueuedStructure {
@@ -272,7 +276,7 @@ impl Log {
                 decoded
                     .schema_types
                     .iter()
-                    .map(|(k, v)| (k, JsValue::String(v.clone()))),
+                    .map(|(k, v)| (k, StructuredType::Named(v.clone()))),
             ),
             Err(ProtoError::Unmodeled(what)) => Err(LogError::Unmodeled(what)),
             Err(_) => {
@@ -324,20 +328,20 @@ impl Log {
     }
 
     fn get_unit_uncached(&self, key: &JsString) -> Option<&'static str> {
-        let mut struct_type: Option<&JsString> = None;
+        let mut struct_type = &StructuredType::Null;
         let mut struct_child_key = JsString::new();
         let mut parent_length = 0;
         for parent_key in self.field_keys() {
             if parent_key.len() > parent_length
                 && key.starts_with(parent_key, None)
-                && let Some(ty) = self.get_structured_type(parent_key)
+                && *self.structured_type(parent_key) != StructuredType::Null
             {
-                struct_type = Some(ty);
+                struct_type = self.structured_type(parent_key);
                 struct_child_key = key.slice((parent_key.len() + 1) as f64, None);
                 parent_length = parent_key.len();
             }
         }
-        if let Some(ty) = struct_type
+        if let Some(ty) = struct_type.as_named()
             && let Some(unit) =
                 units::struct_unit(&ty.to_string_lossy(), &struct_child_key.to_string_lossy())
         {

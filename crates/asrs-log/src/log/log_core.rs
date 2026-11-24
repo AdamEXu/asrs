@@ -488,27 +488,23 @@ impl Log {
             .is_some_and(LogField::get_striping_reference)
     }
 
-    pub fn get_structured_type(&self, key: &JsString) -> Option<&JsString> {
-        self.fields.get_key(key)?.structured_type.as_named()
-    }
-
-    /// `getStructuredType` verbatim: the stored value, `null` when the key is not a field.
-    pub fn get_structured_type_value(&self, key: &JsString) -> StructuredType {
+    /// `getStructuredType`.
+    pub fn structured_type(&self, key: &JsString) -> &StructuredType {
         self.fields
             .get_key(key)
-            .map_or(StructuredType::Null, |f| f.structured_type.clone())
+            .map_or(&StructuredType::Null, |f| &f.structured_type)
     }
 
-    /// `setStructuredType(key, type)` verbatim; `putPhotonStruct` stores `undefined`.
-    pub fn set_structured_type_value(&mut self, key: &JsString, ty: StructuredType) {
+    /// `getStructuredType` for callers to which `null` and `undefined` are the same.
+    pub fn get_structured_type(&self, key: &JsString) -> Option<&JsString> {
+        self.structured_type(key).as_named()
+    }
+
+    pub fn set_structured_type(&mut self, key: &JsString, ty: impl Into<StructuredType>) {
         if let Some(field) = self.fields.get_units_mut(key.units()) {
-            field.structured_type = ty;
+            field.structured_type = ty.into();
             self.changed_fields.insert(key.clone());
         }
-    }
-
-    pub fn set_structured_type(&mut self, key: &JsString, ty: Option<JsString>) {
-        self.set_structured_type_value(key, StructuredType::from_named(ty));
     }
 
     pub fn get_wpilib_type(&self, key: &JsString) -> Option<&JsString> {

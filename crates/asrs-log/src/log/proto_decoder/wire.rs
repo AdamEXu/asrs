@@ -6,11 +6,13 @@
 use asrs_js::number;
 use asrs_js::sort::array_sort;
 use asrs_js::string::JsString;
-use asrs_js::value::{JsObject, JsValue, array_index};
+use asrs_js::value::{JsObject, JsValue};
 
 use super::error::{ProtoError, SyntaxKind};
-use super::reflect::{FieldId, Kind, NodeId, Reflection, is_object_prototype_name, js, js_eq};
-use super::value::{Foreign, JsDefault, Long, Message, Val, long_key_to_string};
+use super::reflect::{
+    FieldId, Kind, NodeId, OneofId, Reflection, is_object_prototype_name, js, js_eq,
+};
+use super::value::{JsDefault, Long, Message, Target, Val, long_key_to_string};
 use super::{child_key, friendly_schema_type as friendly};
 
 const RECURSION_LIMIT: u32 = 100;
@@ -231,11 +233,10 @@ impl<'a> Reader<'a> {
         Ok(utf8_read(self.buf, start as usize, end as usize))
     }
 
-    /// `r.raw(s, r.pos)`: the exact wire bytes of a skipped unknown field.
-    fn slice(&self, start: u64, end: u64) -> Vec<u8> {
-        self.buf
-            .get(start as usize..end as usize)
-            .map_or_else(Vec::new, |b| b.to_vec())
+    /// `r.raw(start, r.pos)`.
+    fn raw_from(&self, start: u64) -> Vec<u8> {
+        let end = self.pos.min(self.len()) as usize;
+        self.buf.get(start as usize..end).unwrap_or(&[]).to_vec()
     }
 
     fn skip(&mut self, length: Option<u64>) -> Result<(), ProtoError> {
@@ -467,74 +468,50 @@ enum Case {
     Continue,
 }
 
-/// What `m.x` evaluates to: an own value, a prototype `defaultValue`, or a member the
-/// runtime resolves without a stored value (oneof getter, `$type`, prototype functions,
-/// boxed-primitive members).
+const UNKNOWNS: &str = "$unknowns";
+const TYPE: &str = "$type";
+const HAS_OWN_PROPERTY: &str = "hasOwnProperty";
+
+/// The value of a property read such as `m.x`.
 enum Prop<'m> {
     Val(&'m Val),
-    Default(JsDefault),
-    /// `ctor.prototype.$type`: the message's `Type` object.
-    TypeObj(NodeId),
-    /// A function on a prototype chain; the string is the member name (also the
-    /// function's `.name`).
-    Function(JsString),
-    Str(JsString),
-    Num(f64),
-    Bool(bool),
+    Default(&'m JsDefault),
+    /// A oneof getter's result.
+    Member(JsString),
+    Type(NodeId),
+    Method,
     Undefined,
 }
 
-fn val_truthy(v: &Val) -> bool {
-    match v {
-        Val::Num(x) => *x != 0.0 && !x.is_nan(),
-        Val::Bool(b) => *b,
-        Val::Str(s) => !s.units().is_empty(),
-        Val::Undefined => false,
-        _ => true,
+impl Prop<'_> {
+    fn is_truthy(&self) -> bool {
+        match self {
+            Prop::Val(v) => v.is_truthy(),
+            Prop::Default(d) => d.is_truthy(),
+            Prop::Member(s) => !s.is_empty(),
+            Prop::Type(_) | Prop::Method => true,
+            Prop::Undefined => false,
+        }
     }
 }
 
-fn prop_truthy(p: &Prop<'_>) -> bool {
-    match p {
-        Prop::Val(v) => val_truthy(v),
-        Prop::Default(d) => d.is_truthy(),
-        Prop::TypeObj(_) | Prop::Function(_) => true,
-        Prop::Str(s) => !s.units().is_empty(),
-        Prop::Num(x) => *x != 0.0 && !x.is_nan(),
-        Prop::Bool(b) => *b,
-        Prop::Undefined => false,
-    }
-}
-
-fn prop_nullish(p: &Prop<'_>) -> bool {
-    match p {
-        Prop::Undefined | Prop::Val(Val::Undefined) => true,
-        Prop::Default(d) => d.is_nullish(),
-        _ => false,
-    }
-}
-
-/// `util.safeProp(name)`: `.name` for identifiers, `["name"]` otherwise.
-fn safe_prop(name: &JsString) -> JsString {
-    let u = name.units();
-    let first_ok = |c: u16| {
-        c == u16::from(b'$')
-            || c == u16::from(b'_')
-            || u8::try_from(c).is_ok_and(|c| c.is_ascii_alphabetic())
-    };
-    let ident = |c: u16| first_ok(c) || u8::try_from(c).is_ok_and(|c| c.is_ascii_digit());
-    let is_ident = !u.is_empty() && first_ok(u[0]) && u.iter().all(|&c| ident(c));
-    if is_ident {
-        js(&format!(".{}", name.to_string_lossy()))
-    } else {
-        js(&format!("[\"{}\"]", name.to_string_lossy()))
-    }
-}
-
-const ARRAY_MEMBERS: &[&str] = &[
+/// Members arrays, typed arrays and boxed primitives have besides `Object.prototype`'s.
+const BUILT_IN_MEMBERS: &[&str] = &[
     "at",
+    "anchor",
+    "big",
+    "blink",
+    "bold",
+    "buffer",
+    "byteLength",
+    "byteOffset",
+    "BYTES_PER_ELEMENT",
+    "charAt",
+    "charCodeAt",
+    "codePointAt",
     "concat",
     "copyWithin",
+    "endsWith",
     "entries",
     "every",
     "fill",
@@ -543,286 +520,98 @@ const ARRAY_MEMBERS: &[&str] = &[
     "findIndex",
     "findLast",
     "findLastIndex",
+    "fixed",
     "flat",
     "flatMap",
+    "fontcolor",
+    "fontsize",
     "forEach",
     "includes",
     "indexOf",
+    "isWellFormed",
+    "italics",
     "join",
     "keys",
     "lastIndexOf",
+    "length",
+    "link",
+    "localeCompare",
     "map",
+    "match",
+    "matchAll",
+    "normalize",
+    "padEnd",
+    "padStart",
     "pop",
     "push",
     "reduce",
     "reduceRight",
+    "repeat",
+    "replace",
+    "replaceAll",
     "reverse",
+    "search",
+    "set",
+    "setFromBase64",
+    "setFromHex",
     "shift",
     "slice",
+    "small",
     "some",
     "sort",
     "splice",
-    "toLocaleString",
+    "split",
+    "startsWith",
+    "strike",
+    "sub",
+    "subarray",
+    "substr",
+    "substring",
+    "sup",
+    "toBase64",
+    "toExponential",
+    "toFixed",
+    "toHex",
+    "toLocaleLowerCase",
+    "toLocaleUpperCase",
+    "toLowerCase",
+    "toPrecision",
     "toReversed",
     "toSorted",
     "toSpliced",
-    "toString",
+    "toUpperCase",
+    "toWellFormed",
+    "trim",
+    "trimEnd",
+    "trimLeft",
+    "trimRight",
+    "trimStart",
     "unshift",
     "values",
-    "valueOf",
     "with",
 ];
 
-fn is_array_member(name: &JsString) -> bool {
-    ARRAY_MEMBERS.iter().any(|m| js_eq(name, m)) || is_object_prototype_name(name)
+/// `Object.prototype` functions without parameters: their `length` is 0, so a repeated field
+/// reads them as empty.
+const ZERO_LENGTH_METHODS: [&str; 3] = ["toString", "toLocaleString", "valueOf"];
+
+fn is_built_in_member(name: &JsString) -> bool {
+    is_object_prototype_name(name) || BUILT_IN_MEMBERS.iter().any(|m| js_eq(name, m))
 }
 
-fn is_fn_member(name: &JsString) -> bool {
-    matches!(name.to_string_lossy().as_str(), "call" | "apply" | "bind")
-        || is_object_prototype_name(name)
-}
-
-/// `fn.length` (the declared parameter count) for the prototype functions modeled here.
-fn arity(name: &JsString) -> f64 {
-    match name.to_string_lossy().as_str() {
-        "isPrototypeOf"
-        | "propertyIsEnumerable"
-        | "hasOwnProperty"
-        | "constructor"
-        | "__lookupGetter__"
-        | "__lookupSetter__"
-        | "call"
-        | "bind"
-        | "push"
-        | "concat"
-        | "join"
-        | "indexOf"
-        | "lastIndexOf"
-        | "forEach"
-        | "map"
-        | "filter"
-        | "every"
-        | "some"
-        | "find"
-        | "findIndex"
-        | "findLast"
-        | "findLastIndex"
-        | "includes"
-        | "at"
-        | "flat"
-        | "flatMap"
-        | "unshift"
-        | "fill"
-        | "toSpliced" => 1.0,
-        "__defineGetter__" | "__defineSetter__" | "apply" | "slice" | "reduce" | "reduceRight"
-        | "splice" | "sort" | "with" | "copyWithin" => 2.0,
-        _ => 0.0,
+fn own_slot<'m>(m: &'m mut Message, name: &JsString) -> Option<&'m mut Val> {
+    if let Some(v) = m.own.get_units_mut(name.units()) {
+        return Some(v);
+    }
+    match &mut m.odd {
+        Some(odd) if js_eq(name, UNKNOWNS) => odd.unknowns.as_mut(),
+        _ => None,
     }
 }
 
-/// `array.length`: one past the greatest index prop.
-fn array_len(m: &Message) -> u32 {
-    m.own
-        .iter()
-        .filter_map(|(k, _)| array_index(k.units()))
-        .max()
-        .map_or(0, |i| i + 1)
-}
-
-/// `hasOwnProperty` truth on the modeled object.
 fn has_own(m: &Message, name: &JsString) -> bool {
     m.own.get_key(name).is_some()
-        || (js_eq(name, "$unknowns") && m.hidden.is_some())
-        || (matches!(m.foreign, Some(Foreign::Array)) && js_eq(name, "length"))
-        || (matches!(m.foreign, Some(Foreign::Function { .. }))
-            && (js_eq(name, "name") || js_eq(name, "length")))
-}
-
-/// `delete m.<name>`: removes the own prop, including the `$unknowns` slot.
-fn delete_prop(m: &mut Message, name: &JsString) {
-    m.own.remove_key(name);
-    if js_eq(name, "$unknowns") {
-        m.hidden = None;
-    }
-}
-
-/// The `<type> '<value>'` tail of `Cannot create property 'x' on <type> '<value>'`.
-fn scalar_desc(v: &Val) -> JsString {
-    let (kind, text) = match v {
-        Val::Num(x) => ("number", number::to_string(*x)),
-        Val::Str(s) => ("string", s.to_string_lossy()),
-        Val::Bool(b) => ("boolean", if *b { "true".into() } else { "false".into() }),
-        _ => ("object", String::new()),
-    };
-    js(&format!("{kind} '{text}'"))
-}
-
-fn prop_scalar_desc(p: &Prop<'_>) -> JsString {
-    scalar_desc(&match p {
-        Prop::Val(v) => (*v).clone(),
-        Prop::Str(s) => Val::Str(s.clone()),
-        Prop::Num(x) => Val::Num(*x),
-        Prop::Bool(b) => Val::Bool(*b),
-        Prop::Default(d) => default_val(d),
-        _ => Val::Undefined,
-    })
-}
-
-/// A truthy `JsDefault` as the merge-target value `decode` receives.
-fn default_val(d: &JsDefault) -> Val {
-    match d {
-        JsDefault::Undefined | JsDefault::Null => Val::Undefined,
-        JsDefault::Bool(b) => Val::Bool(*b),
-        JsDefault::Number(x) => Val::Num(*x),
-        JsDefault::String(s) => Val::Str(s.clone()),
-        JsDefault::Bytes(b) => Val::Bytes(b.clone()),
-        JsDefault::EmptyArray => Val::Array(Vec::new()),
-        JsDefault::EmptyObject => Val::Map(JsObject::new()),
-        JsDefault::Long(l) => Val::Long(*l),
-        JsDefault::Function(_) => Val::Undefined,
-        JsDefault::Object(o) => {
-            let mut map = JsObject::new();
-            for (k, v) in o.iter() {
-                map.insert(k.clone(), Val::Str(v.clone()));
-            }
-            Val::Map(map)
-        }
-    }
-}
-
-/// The `Message` `decode` merges into when the target `m.x` resolves to a truthy
-/// non-message value: enumerable own props go to `own`, the prototype to `foreign`.
-fn foreign_message(ty: NodeId, v: Val) -> Message {
-    let (own, foreign) = match v {
-        Val::Array(items) => {
-            let mut own = JsObject::new();
-            for (i, item) in items.into_iter().enumerate() {
-                own.insert(js(&number::to_string(i as f64)), item);
-            }
-            (own, Foreign::Array)
-        }
-        Val::Bytes(b) => {
-            let mut own = JsObject::new();
-            for (i, byte) in b.iter().enumerate() {
-                own.insert(js(&number::to_string(i as f64)), Val::Num(f64::from(*byte)));
-            }
-            (own, Foreign::Bytes)
-        }
-        Val::Long(l) => {
-            let mut own = JsObject::new();
-            own.insert(js("low"), Val::Num(f64::from(l.low)));
-            own.insert(js("high"), Val::Num(f64::from(l.high)));
-            own.insert(js("unsigned"), Val::Bool(l.unsigned));
-            (own, Foreign::Long)
-        }
-        Val::Map(map) => (map, Foreign::Object),
-        Val::Msg(_) => unreachable!("messages merge into messages"),
-        scalar @ (Val::Num(_) | Val::Bool(_) | Val::Str(_) | Val::Undefined) => {
-            (JsObject::new(), Foreign::Scalar(scalar))
-        }
-    };
-    Message {
-        ty,
-        own,
-        hidden: None,
-        foreign: Some(foreign),
-    }
-}
-
-/// `v.<name>` on a decoded value: own props first (maps carry entries, foreign props are
-/// in `own`), then the boxing prototype.
-fn str_prop(s: &JsString, name: &JsString) -> Prop<'static> {
-    if js_eq(name, "length") {
-        Prop::Num(s.len() as f64)
-    } else if let Some(i) = array_index(name.units()) {
-        s.units().get(i as usize).map_or(Prop::Undefined, |&u| {
-            Prop::Str(JsString::from_units(vec![u]))
-        })
-    } else if is_object_prototype_name(name) {
-        Prop::Function(name.clone())
-    } else {
-        Prop::Undefined
-    }
-}
-
-fn boxed_prop(name: &JsString) -> Prop<'static> {
-    if is_object_prototype_name(name) {
-        Prop::Function(name.clone())
-    } else {
-        Prop::Undefined
-    }
-}
-
-/// `d.<name>` on a prototype `defaultValue`.
-fn default_prop(d: &JsDefault, name: &JsString) -> Prop<'static> {
-    match d {
-        JsDefault::Undefined | JsDefault::Null => Prop::Undefined,
-        JsDefault::Bool(_) | JsDefault::Number(_) => boxed_prop(name),
-        JsDefault::String(s) => str_prop(s, name),
-        JsDefault::Bytes(b) => {
-            if js_eq(name, "length") {
-                Prop::Num(b.len() as f64)
-            } else if let Some(i) = array_index(name.units()) {
-                b.get(i as usize)
-                    .map_or(Prop::Undefined, |&x| Prop::Num(f64::from(x)))
-            } else {
-                boxed_prop(name)
-            }
-        }
-        JsDefault::EmptyArray => {
-            if js_eq(name, "length") {
-                Prop::Num(0.0)
-            } else if is_array_member(name) {
-                Prop::Function(name.clone())
-            } else {
-                Prop::Undefined
-            }
-        }
-        JsDefault::EmptyObject => boxed_prop(name),
-        JsDefault::Long(l) => {
-            if js_eq(name, "low") {
-                Prop::Num(f64::from(l.low))
-            } else if js_eq(name, "high") {
-                Prop::Num(f64::from(l.high))
-            } else if js_eq(name, "unsigned") {
-                Prop::Bool(l.unsigned)
-            } else {
-                boxed_prop(name)
-            }
-        }
-        JsDefault::Function(n) => {
-            if js_eq(name, "name") {
-                Prop::Str(n.clone())
-            } else if js_eq(name, "length") {
-                Prop::Num(arity(n))
-            } else if is_fn_member(name) {
-                Prop::Function(name.clone())
-            } else {
-                Prop::Undefined
-            }
-        }
-        JsDefault::Object(o) => o
-            .get_key(name)
-            .map_or_else(|| boxed_prop(name), |v| Prop::Str(v.clone())),
-    }
-}
-
-/// `Object.keys(p)` for `m.x` values: enumerable own props only.
-fn js_keys(p: &Prop<'_>) -> Vec<JsString> {
-    let index_keys = |n: usize| (0..n).map(|i| js(&number::to_string(i as f64))).collect();
-    match p {
-        Prop::Val(Val::Map(map)) => map.keys().cloned().collect(),
-        Prop::Val(Val::Msg(m)) => m.own.keys().cloned().collect(),
-        Prop::Val(Val::Array(items)) => index_keys(items.len()),
-        Prop::Val(Val::Bytes(b)) => index_keys(b.len()),
-        Prop::Val(Val::Str(s)) | Prop::Str(s) => index_keys(s.len()),
-        Prop::Val(Val::Long(_)) => vec![js("low"), js("high"), js("unsigned")],
-        Prop::Default(JsDefault::String(s)) => index_keys(s.len()),
-        Prop::Default(JsDefault::Bytes(b)) => index_keys(b.len()),
-        Prop::Default(JsDefault::Long(_)) => vec![js("low"), js("high"), js("unsigned")],
-        Prop::Default(JsDefault::Object(o)) => o.keys().cloned().collect(),
-        _ => Vec::new(),
-    }
+        || (js_eq(name, UNKNOWNS) && m.odd.as_ref().is_some_and(|o| o.unknowns.is_some()))
 }
 
 impl Reflection {
@@ -843,310 +632,6 @@ impl Reflection {
         let mut sorted = fields.to_vec();
         array_sort(&mut sorted, |&a, &b| self.fields[a].id - self.fields[b].id);
         sorted
-    }
-
-    /// `m.<name>`: own enumerable props, then the non-enumerable `$unknowns` slot, then
-    /// the prototype of whatever `m` stands in for.
-    fn prop<'m>(&self, m: &'m Message, name: &JsString) -> Prop<'m> {
-        if let Some(v) = m.own.get_key(name) {
-            return Prop::Val(v);
-        }
-        if js_eq(name, "$unknowns")
-            && let Some(v) = &m.hidden
-        {
-            return Prop::Val(v);
-        }
-        match &m.foreign {
-            Some(foreign) => foreign_prop(m, foreign, name),
-            None => self.proto_prop(m.ty, name, m),
-        }
-    }
-
-    /// `ctor.prototype.<name>`: the oneof accessor, the field's data-property default,
-    /// `$type`, then `Object.prototype` members.
-    fn proto_prop<'m>(&self, ty: NodeId, name: &JsString, m: &'m Message) -> Prop<'m> {
-        let data = self.type_data(ty);
-        if let Some(oneofs) = &data.oneofs
-            && let Some(&o) = oneofs.get_key(name)
-        {
-            return match self.oneof_get(m, o) {
-                Some(member) => Prop::Str(member),
-                None => Prop::Undefined,
-            };
-        }
-        if let Some(&f) = data.fields.get_key(name) {
-            return Prop::Default(self.fields[f].default_value.clone());
-        }
-        if js_eq(name, "$type") {
-            return Prop::TypeObj(ty);
-        }
-        if is_object_prototype_name(name) {
-            return Prop::Function(name.clone());
-        }
-        Prop::Undefined
-    }
-
-    /// The oneof getter: the last member in `keys` order still present and not
-    /// `undefined`.
-    fn oneof_get(&self, m: &Message, o: usize) -> Option<JsString> {
-        let members = self.oneofs[o].oneof.clone();
-        m.own
-            .keys()
-            .rev()
-            .find(|k| {
-                members.iter().any(|n| n == *k) && !matches!(m.own.get_key(k), Some(Val::Undefined))
-            })
-            .cloned()
-    }
-
-    /// `v.<name>` on a decoded value.
-    fn v_prop<'m>(&self, v: &'m Val, name: &JsString) -> Prop<'m> {
-        match v {
-            Val::Msg(mm) => self.prop(mm, name),
-            Val::Map(map) => map.get_key(name).map_or(Prop::Undefined, Prop::Val),
-            Val::Array(items) => {
-                if js_eq(name, "length") {
-                    Prop::Num(items.len() as f64)
-                } else if let Some(i) = array_index(name.units()) {
-                    items.get(i as usize).map_or(Prop::Undefined, Prop::Val)
-                } else if is_array_member(name) {
-                    Prop::Function(name.clone())
-                } else {
-                    Prop::Undefined
-                }
-            }
-            Val::Bytes(b) => {
-                if js_eq(name, "length") {
-                    Prop::Num(b.len() as f64)
-                } else if let Some(i) = array_index(name.units()) {
-                    b.get(i as usize)
-                        .map_or(Prop::Undefined, |&x| Prop::Num(f64::from(x)))
-                } else {
-                    boxed_prop(name)
-                }
-            }
-            Val::Long(l) => {
-                if js_eq(name, "low") {
-                    Prop::Num(f64::from(l.low))
-                } else if js_eq(name, "high") {
-                    Prop::Num(f64::from(l.high))
-                } else if js_eq(name, "unsigned") {
-                    Prop::Bool(l.unsigned)
-                } else {
-                    boxed_prop(name)
-                }
-            }
-            Val::Str(s) => str_prop(s, name),
-            Val::Num(_) | Val::Bool(_) | Val::Undefined => boxed_prop(name),
-        }
-    }
-
-    /// `p.<name>` for a resolved `m.x`.
-    fn prop_member<'m>(&self, p: &Prop<'m>, name: &JsString) -> Prop<'m> {
-        match p {
-            Prop::Val(v) => self.v_prop(v, name),
-            Prop::Str(s) => str_prop(s, name),
-            Prop::Num(_) | Prop::Bool(_) => boxed_prop(name),
-            Prop::Function(n) => {
-                if js_eq(name, "name") {
-                    Prop::Str(n.clone())
-                } else if js_eq(name, "length") {
-                    Prop::Num(arity(n))
-                } else if is_fn_member(name) {
-                    Prop::Function(name.clone())
-                } else {
-                    Prop::Undefined
-                }
-            }
-            Prop::Default(d) => default_prop(d, name),
-            Prop::TypeObj(ty) => {
-                if js_eq(name, "name") {
-                    Prop::Str(self.nodes[*ty].name.clone())
-                } else {
-                    Prop::Undefined
-                }
-            }
-            Prop::Undefined => Prop::Undefined,
-        }
-    }
-
-    /// `m.<name> = v`: own and hidden props shadow the prototype; the oneof setter runs
-    /// only for an accessor name; writes onto a primitive throw.
-    fn write_prop(&mut self, m: &mut Message, name: &JsString, v: Val) -> Result<(), ProtoError> {
-        if m.own.get_key(name).is_some() {
-            m.own.insert(name.clone(), v);
-            return Ok(());
-        }
-        if js_eq(name, "$unknowns") && m.hidden.is_some() {
-            m.hidden = Some(v);
-            return Ok(());
-        }
-        match &m.foreign {
-            Some(Foreign::Scalar(scalar)) => {
-                return Err(ProtoError::CannotCreate {
-                    name: name.clone(),
-                    on: scalar_desc(scalar),
-                });
-            }
-            Some(_) => {}
-            None => {
-                let accessor = self
-                    .type_data(m.ty)
-                    .oneofs
-                    .as_ref()
-                    .and_then(|oneofs| oneofs.get_key(name).copied());
-                if let Some(o) = accessor {
-                    // `util.oneOfSetter`: `delete this[member]` for every member but the
-                    // assigned name.
-                    let keep = match &v {
-                        Val::Str(s) => Some(s.clone()),
-                        _ => None,
-                    };
-                    for member in self.oneofs[o].oneof.clone() {
-                        if Some(&member) != keep.as_ref() {
-                            delete_prop(m, &member);
-                        }
-                    }
-                    return Ok(());
-                }
-            }
-        }
-        m.own.insert(name.clone(), v);
-        Ok(())
-    }
-
-    /// `m.hasOwnProperty(name)`: resolves the member itself, which an own or prototype
-    /// value can shadow with a non-function.
-    fn call_has_own(&self, m: &Message, name: &JsString) -> Result<bool, ProtoError> {
-        match self.prop(m, &js("hasOwnProperty")) {
-            Prop::Function(_) | Prop::Default(JsDefault::Function(_)) => Ok(has_own(m, name)),
-            _ => Err(ProtoError::DynNotAFunction(js("m.hasOwnProperty"))),
-        }
-    }
-
-    /// `m.<name>.push(v)`, re-reading `m.<name>` like generated code does.
-    fn push(&mut self, m: &mut Message, name: &JsString, v: Val) -> Result<(), ProtoError> {
-        let v = match v {
-            Val::Num(x) if x.is_nan() => {
-                Val::Num(f64::from_bits(x.to_bits() | 0x0008_0000_0000_0000))
-            }
-            other => other,
-        };
-        let arr_msg = |mm: &Message| matches!(mm.foreign, Some(Foreign::Array));
-        let in_own = m.own.get_key(name);
-        let in_hidden = if js_eq(name, "$unknowns") {
-            m.hidden.as_ref()
-        } else {
-            None
-        };
-        let pushable = matches!(in_own, Some(Val::Array(_)))
-            || matches!(in_hidden, Some(Val::Array(_)))
-            || matches!(in_own, Some(Val::Msg(mm)) if arr_msg(mm))
-            || matches!(in_hidden, Some(Val::Msg(mm)) if arr_msg(mm));
-        if pushable {
-            if let Some(Val::Array(items)) = m.own.get_units_mut(name.units()) {
-                items.push(v);
-                return Ok(());
-            }
-            if js_eq(name, "$unknowns")
-                && let Some(Val::Array(items)) = m.hidden.as_mut()
-            {
-                items.push(v);
-                return Ok(());
-            }
-            let slot = m.own.get_units_mut(name.units()).or_else(|| {
-                if js_eq(name, "$unknowns") {
-                    m.hidden.as_mut()
-                } else {
-                    None
-                }
-            });
-            if let Some(Val::Msg(mm)) = slot {
-                let len = array_len(mm);
-                mm.own.insert(js(&number::to_string(f64::from(len))), v);
-            }
-            return Ok(());
-        }
-        let p = self.prop(m, name);
-        match p {
-            Prop::Undefined | Prop::Val(Val::Undefined) => Err(ProtoError::ReadProp {
-                nullish: "undefined",
-                name: js("push"),
-            }),
-            Prop::Default(JsDefault::Null) => Err(ProtoError::ReadProp {
-                nullish: "null",
-                name: js("push"),
-            }),
-            _ => {
-                let mut expr = js("m");
-                expr.push_str(&safe_prop(name));
-                expr.push_str(&js(".push"));
-                Err(ProtoError::DynNotAFunction(expr))
-            }
-        }
-    }
-
-    /// The tail of an unknown-field `case`: `r.skipType` already ran, so this is
-    /// `util.makeProp(m, "$unknowns", false)` followed by
-    /// `(m.$unknowns || (m.$unknowns = [])).push(r.raw(s, r.pos))`.
-    fn push_unknown(&mut self, m: &mut Message, r: &Reader<'_>, s: u64) -> Result<(), ProtoError> {
-        let name = js("$unknowns");
-        if !has_own(m, &name) {
-            if matches!(m.foreign, Some(Foreign::Scalar(_))) {
-                return Err(ProtoError::DefinePrimitive);
-            }
-            m.hidden = Some(Val::Undefined);
-        }
-        let raw = Val::Bytes(r.slice(s, r.pos));
-        enum T {
-            OwnArray,
-            HiddenArray,
-            MsgArray,
-            Falsy,
-            NoPush,
-        }
-        let target = match self.prop(m, &name) {
-            Prop::Val(Val::Array(_)) => {
-                if m.own.get_key(&name).is_some() {
-                    T::OwnArray
-                } else {
-                    T::HiddenArray
-                }
-            }
-            Prop::Val(Val::Msg(mm)) if matches!(mm.foreign, Some(Foreign::Array)) => T::MsgArray,
-            Prop::Val(v) if val_truthy(v) => T::NoPush,
-            Prop::Val(_) => T::Falsy,
-            p if prop_truthy(&p) => T::NoPush,
-            _ => T::Falsy,
-        };
-        match target {
-            T::OwnArray => {
-                if let Some(Val::Array(items)) = m.own.get_units_mut(name.units()) {
-                    items.push(raw);
-                }
-            }
-            T::HiddenArray => {
-                if let Some(Val::Array(items)) = m.hidden.as_mut() {
-                    items.push(raw);
-                }
-            }
-            T::MsgArray => {
-                let slot = m.own.get_units_mut(name.units()).or_else(|| {
-                    if js_eq(&name, "$unknowns") {
-                        m.hidden.as_mut()
-                    } else {
-                        None
-                    }
-                });
-                if let Some(Val::Msg(mm)) = slot {
-                    let len = array_len(mm);
-                    mm.own.insert(js(&number::to_string(f64::from(len))), raw);
-                }
-            }
-            T::NoPush => return Err(ProtoError::DynNotAFunction(js("m.$unknowns.push"))),
-            T::Falsy => self.write_prop(m, &name, Val::Array(vec![raw]))?,
-        }
-        Ok(())
     }
 
     /// The `Type#ctor` getter: builds the generated constructor once.
@@ -1192,7 +677,10 @@ impl Reflection {
                 return Err(ProtoError::Syntax(kind));
             }
         }
-        self.type_data_mut(ty).decode_ready = true;
+        let odd = self.is_odd(ty);
+        let data = self.type_data_mut(ty);
+        data.odd = odd;
+        data.decode_ready = true;
         for f in self.sorted_by_id(&fields) {
             let field = &self.fields[f];
             if field.part_of.is_some()
@@ -1216,6 +704,176 @@ impl Reflection {
         Ok(())
     }
 
+    fn is_odd(&self, ty: NodeId) -> bool {
+        let data = self.type_data(ty);
+        let shadows = |name: &JsString| {
+            [UNKNOWNS, TYPE, HAS_OWN_PROPERTY]
+                .iter()
+                .any(|n| js_eq(name, n))
+        };
+        data.fields.keys().any(shadows)
+            || data.oneofs.iter().flat_map(JsObject::keys).any(shadows)
+            || data
+                .fields
+                .values()
+                .any(|&f| self.message_type(f).is_some() && self.has_truthy_scalar_default(f))
+    }
+
+    fn has_truthy_scalar_default(&self, f: FieldId) -> bool {
+        let field = &self.fields[f];
+        !field.repeated && field.map_key.is_none() && field.default_value.is_truthy()
+    }
+
+    fn accessor(&self, ty: NodeId, name: &JsString) -> Option<OneofId> {
+        let oneofs = self.type_data(ty).oneofs.as_ref()?;
+        oneofs.get_key(name).copied()
+    }
+
+    /// `m.<name>`.
+    fn read_prop<'m>(&'m self, m: &'m Message, name: &JsString) -> Result<Prop<'m>, ProtoError> {
+        if let Some(v) = m.own.get_key(name) {
+            return Ok(Prop::Val(v));
+        }
+        if let Some(odd) = &m.odd {
+            if let Some(v) = &odd.unknowns
+                && js_eq(name, UNKNOWNS)
+            {
+                return Ok(Prop::Val(v));
+            }
+            if odd.target != Target::Message {
+                if is_built_in_member(name) {
+                    return Err(ProtoError::Unmodeled(
+                        "a field named like a built-in member read from a non-message value",
+                    ));
+                }
+                return Ok(Prop::Undefined);
+            }
+        }
+        if let Some(o) = self.accessor(m.ty, name) {
+            let members = &self.oneofs[o].oneof;
+            let set = m.own.keys().rev().find(|k| members.contains(k));
+            return Ok(set.map_or(Prop::Undefined, |k| Prop::Member(k.clone())));
+        }
+        if let Some(&f) = self.type_data(m.ty).fields.get_key(name) {
+            return Ok(Prop::Default(&self.fields[f].default_value));
+        }
+        Ok(if js_eq(name, TYPE) {
+            Prop::Type(m.ty)
+        } else if is_object_prototype_name(name) {
+            Prop::Method
+        } else {
+            Prop::Undefined
+        })
+    }
+
+    /// `m.<name> = v` in sloppy mode, where a write to a primitive does nothing.
+    fn write_prop(&self, m: &mut Message, name: &JsString, v: Val) -> Result<(), ProtoError> {
+        if let Some(slot) = own_slot(m, name) {
+            *slot = v;
+            return Ok(());
+        }
+        match m.target() {
+            Target::Primitive => return Ok(()),
+            Target::Array(_) if js_eq(name, "length") => {
+                return Err(ProtoError::Unmodeled("a write to an array's length"));
+            }
+            Target::Array(_) => {}
+            Target::Message => {
+                if let Some(o) = self.accessor(m.ty, name) {
+                    for member in &self.oneofs[o].oneof {
+                        if !matches!(&v, Val::Str(s) if s == member) {
+                            m.own.remove_key(member);
+                            if js_eq(member, UNKNOWNS)
+                                && let Some(odd) = &mut m.odd
+                            {
+                                odd.unknowns = None;
+                            }
+                        }
+                    }
+                    return Ok(());
+                }
+            }
+        }
+        m.own.insert(name.clone(), v);
+        Ok(())
+    }
+
+    /// `m.hasOwnProperty(name)`.
+    fn call_has_own_property(&self, m: &Message, name: &JsString) -> Result<bool, ProtoError> {
+        let method = js(HAS_OWN_PROPERTY);
+        if m.target() != Target::Message && m.own.get_key(&method).is_none() {
+            if js_eq(name, "length") {
+                return Err(ProtoError::Unmodeled("a required field named length"));
+            }
+            return Ok(has_own(m, name));
+        }
+        match self.read_prop(m, &method)? {
+            Prop::Method => Ok(has_own(m, name)),
+            Prop::Default(JsDefault::Function(f)) if js_eq(f, HAS_OWN_PROPERTY) => {
+                Ok(has_own(m, name))
+            }
+            Prop::Default(JsDefault::Function(_)) => Err(ProtoError::Unmodeled(
+                "another Object.prototype function as hasOwnProperty",
+            )),
+            _ => Err(ProtoError::NotAFunction("m.hasOwnProperty")),
+        }
+    }
+
+    /// `util.makeProp(m,"$unknowns",false);(m.$unknowns||(m.$unknowns=[])).push(raw)`.
+    fn push_unknown(&self, m: &mut Message, raw: Vec<u8>) -> Result<(), ProtoError> {
+        if m.target() == Target::Primitive {
+            return Err(ProtoError::DefineOnPrimitive);
+        }
+        let Some(slot) = own_slot(m, &js(UNKNOWNS)) else {
+            m.odd.get_or_insert_default().unknowns = Some(Val::Array(vec![Val::Bytes(raw)]));
+            return Ok(());
+        };
+        match slot {
+            Val::Array(items) => items.push(Val::Bytes(raw)),
+            Val::Msg(array)
+                if matches!(array.target(), Target::Array(_))
+                    && array.own.get("push").is_none() =>
+            {
+                let odd = array.odd.get_or_insert_default();
+                if let Target::Array(length) = &mut odd.target {
+                    array.own.insert(js(&length.to_string()), Val::Bytes(raw));
+                    *length += 1;
+                }
+            }
+            Val::Msg(message)
+                if matches!(
+                    self.read_prop(message, &js("push"))?,
+                    Prop::Default(JsDefault::Function(_))
+                ) =>
+            {
+                return Err(ProtoError::Unmodeled(
+                    "an Object.prototype function as a push method",
+                ));
+            }
+            v if v.is_truthy() => {
+                return Err(ProtoError::NotAFunction(
+                    "(m.$unknowns || m.$unknowns).push",
+                ));
+            }
+            falsy => *falsy = Val::Array(vec![Val::Bytes(raw)]),
+        }
+        Ok(())
+    }
+
+    /// `if(!(m.x&&m.x.length))m.x=[]`.
+    fn ensure_array(&self, m: &mut Message, name: &JsString) -> Result<(), ProtoError> {
+        match self.read_prop(m, name)? {
+            Prop::Val(Val::Array(items)) if !items.is_empty() => return Ok(()),
+            Prop::Val(Val::Array(_)) | Prop::Default(JsDefault::EmptyArray) | Prop::Undefined => {}
+            _ => {
+                return Err(ProtoError::Unmodeled(
+                    "a repeated field holding a non-array value",
+                ));
+            }
+        }
+        self.write_prop(m, name, Val::Array(Vec::new()))
+    }
+
     fn new_instance(&mut self, ty: NodeId) -> Result<Message, ProtoError> {
         self.ensure_ctor(ty)?;
         let mut own = JsObject::new();
@@ -1228,12 +886,7 @@ impl Reflection {
             };
             own.insert(field.name.clone(), value);
         }
-        Ok(Message {
-            ty,
-            own,
-            hidden: None,
-            foreign: None,
-        })
+        Ok(Message::new(ty, own))
     }
 
     /// `Type#decode(reader, length, undefined, depth, target)`.
@@ -1256,15 +909,16 @@ impl Reflection {
             Some(m) => m,
             None => self.new_instance(ty)?,
         };
+        let odd = m.odd.is_some() || self.type_data(ty).odd;
         let fields = self.fields_array(ty);
         while r.pos < end {
-            let s = r.pos;
+            let start = r.pos;
             let tag = r.tag()?;
             if fields.is_empty() {
-                // `r.skipType(t&7, q, t)`: no `switch` ran, so `fieldNumber` is the
-                // whole tag: `fieldNumber === 0` only for a literal zero byte.
                 r.skip_type(tag & 7, depth, Some(tag))?;
-                self.push_unknown(&mut m, r, s)?;
+                if odd {
+                    self.push_unknown(&mut m, r.raw_from(start))?;
+                }
                 continue;
             }
             let wire = tag & 7;
@@ -1274,24 +928,43 @@ impl Reflection {
                 .copied()
                 .find(|&f| self.fields[f].id == f64::from(number));
             let case = match field {
-                Some(f) => self.decode_field(f, &mut m, r, wire, depth)?,
+                Some(f) => self.decode_field(f, &mut m, r, wire, depth, odd)?,
                 None => Case::Break,
             };
-            if case == Case::Break {
+            if case != Case::Break {
+                if let (Case::Set, Some(f), Some(o)) =
+                    (case, field, field.and_then(|f| self.fields[f].part_of))
+                {
+                    let keep = self.fields[f].name.clone();
+                    if odd {
+                        let accessor = self.oneofs[o].name.clone();
+                        self.write_prop(&mut m, &accessor, Val::Str(keep))?;
+                    } else {
+                        for name in self.oneofs[o].oneof.clone() {
+                            if name != keep {
+                                m.own.remove_key(&name);
+                            }
+                        }
+                    }
+                }
+            } else {
                 r.skip_type(wire, depth, Some(number))?;
-                self.push_unknown(&mut m, r, s)?;
-            } else if let (Case::Set, Some(f), Some(o)) =
-                (case, field, field.and_then(|f| self.fields[f].part_of))
-            {
-                // `m.<accessor> = "<member>"`: the oneof setter deletes sibling members.
-                let accessor = self.oneofs[o].name.clone();
-                let member = self.fields[f].name.clone();
-                self.write_prop(&mut m, &accessor, Val::Str(member))?;
+                if odd {
+                    self.push_unknown(&mut m, r.raw_from(start))?;
+                }
             }
         }
         for f in fields {
             let field = &self.fields[f];
-            if field.required && !has_own(&m, &field.name) {
+            if !field.required {
+                continue;
+            }
+            let present = if odd {
+                self.call_has_own_property(&m, &field.name)?
+            } else {
+                m.own.get_key(&field.name).is_some()
+            };
+            if !present {
                 return Err(ProtoError::MissingRequired(field.name.clone()));
             }
         }
@@ -1306,6 +979,7 @@ impl Reflection {
         r: &mut Reader<'_>,
         wire: u32,
         depth: u32,
+        odd: bool,
     ) -> Result<Case, ProtoError> {
         let ty = self.field_ty_name(f);
         let name = self.fields[f].name.clone();
@@ -1314,11 +988,12 @@ impl Reflection {
             if wire != 2 {
                 return Ok(Case::Break);
             }
-            // `if (m.x === util.emptyObject) m.x = {}`: only the shared prototype
-            // default gets replaced; `m.x[k] = v` then writes onto whatever `m.x` is.
-            let reset = matches!(self.prop(m, &name), Prop::Default(JsDefault::EmptyObject));
-            if reset {
-                self.write_prop(m, &name, Val::Map(JsObject::new()))?;
+            if odd {
+                if let Prop::Default(JsDefault::EmptyObject) = self.read_prop(m, &name)? {
+                    self.write_prop(m, &name, Val::Map(JsObject::new()))?;
+                }
+            } else if !matches!(m.own.get_key(&name), Some(Val::Map(_))) {
+                m.own.insert(name.clone(), Val::Map(JsObject::new()));
             }
             let key_ty = key_ty.to_string_lossy();
             let end = u64::from(r.uint32()?) + r.pos;
@@ -1369,92 +1044,42 @@ impl Reflection {
                     Val::Msg(Box::new(self.new_instance(vt)?))
                 }
             };
-            // `if (k === "__proto__") util.makeProp(m.x, k)` runs first for string-key
-            // maps: on a primitive `m.x`, defineProperty throws before `m.x[k] = v`.
-            let proto_key = js_eq(&key, "__proto__") && key_ty == "string";
-            // `m.x[k] = v`: writes onto objects, throws on nullish and primitives.
-            enum Entry {
-                InPlace,
-                Seed(JsObject<Val>),
-                Scalar(JsString),
-            }
-            let entry = {
-                let p = self.prop(m, &name);
-                match &p {
-                    Prop::Val(Val::Map(_)) => Entry::InPlace,
-                    Prop::Undefined | Prop::Val(Val::Undefined) => {
-                        if proto_key {
-                            return Err(ProtoError::DefinePrimitive);
-                        }
-                        return Err(ProtoError::CannotSet {
-                            on: "undefined",
-                            name: key,
-                        });
-                    }
-                    Prop::Default(JsDefault::Null) => {
-                        if proto_key {
-                            return Err(ProtoError::DefinePrimitive);
-                        }
-                        return Err(ProtoError::CannotSet {
-                            on: "null",
-                            name: key,
-                        });
-                    }
-                    _ => match seed_object(&p) {
-                        Some(map) => Entry::Seed(map),
-                        None => {
-                            if proto_key {
-                                return Err(ProtoError::DefinePrimitive);
-                            }
-                            Entry::Scalar(prop_scalar_desc(&p))
-                        }
-                    },
-                }
-            };
-            match entry {
-                Entry::InPlace => {
-                    let slot = m.own.get_units_mut(name.units()).or_else(|| {
-                        if js_eq(&name, "$unknowns") {
-                            m.hidden.as_mut()
-                        } else {
-                            None
-                        }
-                    });
-                    if let Some(Val::Map(map)) = slot {
-                        map.insert(key, value);
-                    }
-                }
-                Entry::Seed(mut map) => {
+            match own_slot(m, &name) {
+                Some(Val::Map(map)) => {
                     map.insert(key, value);
-                    m.own.insert(name, Val::Map(map));
                 }
-                Entry::Scalar(on) => return Err(ProtoError::CannotCreate { name: key, on }),
+                Some(_) => {
+                    return Err(ProtoError::Unmodeled("a map field holding a non-map value"));
+                }
+                None if js_eq(&key, "__proto__") => return Err(ProtoError::CannotConvertToObject),
+                None => return Err(ProtoError::SetOnUndefined(key)),
             }
             return Ok(Case::Set);
         }
         if self.fields[f].repeated {
-            // `if (!(m.x && m.x.length)) m.x = []`, then `m.x.push(v)` per element.
-            let keep = {
-                let p = self.prop(m, &name);
-                prop_truthy(&p) && prop_truthy(&self.prop_member(&p, &js("length")))
+            let reset = |m: &mut Message| {
+                if odd {
+                    return self.ensure_array(m, &name);
+                }
+                if !matches!(m.own.get_key(&name), Some(Val::Array(a)) if !a.is_empty()) {
+                    m.own.insert(name.clone(), Val::Array(Vec::new()));
+                }
+                Ok(())
             };
             if is_packable(&ty) && wire == 2 {
-                if !keep {
-                    self.write_prop(m, &name, Val::Array(Vec::new()))?;
-                }
+                reset(m)?;
                 let end = u64::from(r.uint32()?) + r.pos;
                 while r.pos < end {
-                    let v = r.read(&ty)?;
-                    self.push(m, &name, v)?;
+                    let items = elements(m, &name)?;
+                    items.push(element(r.read(&ty)?));
                 }
                 return Ok(Case::Continue);
             }
             if wire != basic.unwrap_or(2) {
                 return Ok(Case::Break);
             }
-            if !keep {
-                self.write_prop(m, &name, Val::Array(Vec::new()))?;
-            }
+            reset(m)?;
+            elements(m, &name)?;
             let v = match basic {
                 Some(_) => r.read(&ty)?,
                 None => {
@@ -1463,7 +1088,7 @@ impl Reflection {
                     Val::Msg(Box::new(self.decode(vt, r, Some(len), depth + 1, None)?))
                 }
             };
-            self.push(m, &name, v)?;
+            elements(m, &name)?.push(element(v));
             return Ok(Case::Set);
         }
         match basic {
@@ -1473,79 +1098,67 @@ impl Reflection {
                 }
                 let vt = self.message_type(f).ok_or(ProtoError::ReadNull("decode"))?;
                 let len = u64::from(r.uint32()?);
-                // `m.x = types[i].decode(r, len, d+1, m.x)`: a truthy `m.x` is the merge
-                // target, whatever kind of value it is.
-                enum Merge {
-                    Msg,
-                    Val(Val),
-                    Fn(JsString),
-                }
-                let target = {
-                    let p = self.prop(m, &name);
-                    if !prop_truthy(&p) {
-                        None
-                    } else {
-                        Some(match p {
-                            Prop::Val(Val::Msg(_)) => Merge::Msg,
-                            Prop::Val(v) => Merge::Val(v.clone()),
-                            Prop::Default(JsDefault::Function(n)) => Merge::Fn(n),
-                            Prop::Default(d) => Merge::Val(default_val(&d)),
-                            Prop::Function(n) => Merge::Fn(n),
-                            Prop::Str(s) => Merge::Val(Val::Str(s)),
-                            Prop::Num(x) => Merge::Val(Val::Num(x)),
-                            Prop::Bool(b) => Merge::Val(Val::Bool(b)),
-                            Prop::TypeObj(_) | Prop::Undefined => {
-                                unreachable!("merge targets are truthy field-name reads")
-                            }
-                        })
-                    }
-                };
-                let target = match target {
-                    Some(Merge::Msg) => {
-                        let slot = m.own.get_units_mut(name.units()).or_else(|| {
-                            if js_eq(&name, "$unknowns") {
-                                m.hidden.as_mut()
-                            } else {
-                                None
-                            }
-                        });
-                        match slot {
-                            Some(Val::Msg(existing)) => Some(std::mem::replace(
-                                existing.as_mut(),
-                                Message {
-                                    ty: vt,
-                                    own: JsObject::new(),
-                                    hidden: None,
-                                    foreign: None,
-                                },
-                            )),
-                            _ => None,
+                let mut primitive = None;
+                let target = match own_slot(m, &name) {
+                    Some(Val::Msg(existing)) => Some(std::mem::replace(
+                        existing.as_mut(),
+                        Message::new(vt, JsObject::new()),
+                    )),
+                    Some(v) if !v.is_truthy() => None,
+                    Some(Val::Array(items)) => {
+                        let target = Target::Array(items.len());
+                        let mut array = Message::onto(vt, JsObject::new(), target);
+                        for (i, v) in items.drain(..).enumerate() {
+                            array.own.insert(js(&i.to_string()), v);
                         }
+                        Some(array)
                     }
-                    Some(Merge::Val(v)) => Some(foreign_message(vt, v)),
-                    Some(Merge::Fn(n)) => Some(Message {
-                        ty: vt,
-                        own: JsObject::new(),
-                        hidden: None,
-                        foreign: Some(Foreign::Function {
-                            arity: arity(&n),
-                            name: n,
-                        }),
-                    }),
+                    Some(v @ (Val::Str(_) | Val::Num(_) | Val::Bool(_))) => {
+                        primitive = Some(v.clone());
+                        Some(Message::onto(vt, JsObject::new(), Target::Primitive))
+                    }
+                    Some(_) => {
+                        return Err(ProtoError::Unmodeled("merging into a non-message value"));
+                    }
+                    None if odd => match self.read_prop(m, &name)? {
+                        Prop::Default(d) if d.is_truthy() => {
+                            primitive = Some(match d {
+                                JsDefault::String(s) => Val::Str(s.clone()),
+                                JsDefault::Number(x) => Val::Num(*x),
+                                JsDefault::Bool(b) => Val::Bool(*b),
+                                _ => {
+                                    return Err(ProtoError::Unmodeled(
+                                        "merging into a non-message value",
+                                    ));
+                                }
+                            });
+                            Some(Message::onto(vt, JsObject::new(), Target::Primitive))
+                        }
+                        _ => None,
+                    },
                     None => None,
                 };
                 let decoded = self.decode(vt, r, Some(len), depth + 1, target)?;
-                self.write_prop(m, &name, Val::Msg(Box::new(decoded)))?;
+                let value = primitive.unwrap_or_else(|| Val::Msg(Box::new(decoded)));
+                self.store(m, &name, value, odd)?;
             }
             Some(w) => {
                 if wire != w {
                     return Ok(Case::Break);
                 }
                 let v = r.read(&ty)?;
-                self.write_prop(m, &name, v)?;
+                self.store(m, &name, v, odd)?;
             }
         }
         Ok(Case::Set)
+    }
+
+    fn store(&self, m: &mut Message, name: &JsString, v: Val, odd: bool) -> Result<(), ProtoError> {
+        if odd {
+            return self.write_prop(m, name, v);
+        }
+        m.own.insert(name.clone(), v);
+        Ok(())
     }
 
     /// `Type#toObject(message, {defaults: true})`.
@@ -1586,7 +1199,7 @@ impl Reflection {
             }
             let value = if field.resolved_type.is_some_and(|t| self.is_enum(t)) {
                 field.type_default.json_literal()
-            } else if let JsDefault::Long(l) = field.type_default.clone() {
+            } else if let JsDefault::Long(l) = field.type_default {
                 l.to_js()
             } else if field.is_bytes() {
                 match &field.type_default {
@@ -1598,156 +1211,97 @@ impl Reflection {
             };
             d.insert(field.name.clone(), value);
         }
+        let odd = m.odd.is_some() || self.type_data(ty).odd;
         for &f in &sorted {
             let name = self.fields[f].name.clone();
-            let p = self.prop(m, &name);
-            if self.fields[f].map_key.is_some() {
-                // `if (m.x && (ks2 = Object.keys(m.x)).length) { d.x = {}; for k:
-                // d.x[k] = convert(m.x[k]) }`
-                if !prop_truthy(&p) {
-                    continue;
+            let own = if odd {
+                if m.target() != Target::Message && self.reads_built_in(m, f) {
+                    return Err(ProtoError::Unmodeled(
+                        "a field named like a built-in member read from a non-message value",
+                    ));
                 }
-                let keys = js_keys(&p);
-                if keys.is_empty() {
-                    continue;
-                }
-                let key_ty = self.fields[f].map_key.clone().expect("map");
-                let long_key = super::reflect::is_long_type(&key_ty);
-                let unsigned = js_eq(&key_ty, "uint64") || js_eq(&key_ty, "fixed64");
-                let mut out = JsObject::new();
-                for k in keys {
-                    let member = self.prop_member(&p, &k);
-                    let converted = self.convert(f, &member)?;
-                    let key = if long_key {
-                        long_key_to_string(&k, unsigned)
-                    } else {
-                        k
-                    };
-                    out.insert(key, converted);
-                }
-                d.insert(name, JsValue::Object(out));
-            } else if self.fields[f].repeated {
-                // `if (m.x && m.x.length) { d.x = []; for j: d.x[j] = convert(m.x[j]) }`
-                if !prop_truthy(&p) {
-                    continue;
-                }
-                let Prop::Num(len) = self.prop_member(&p, &js("length")) else {
-                    continue;
-                };
-                if !(len > 0.0 && len.is_finite()) {
-                    continue;
-                }
-                let mut out = Vec::with_capacity(len as usize);
-                for j in 0..len as usize {
-                    let item = self.prop_member(&p, &js(&number::to_string(j as f64)));
-                    out.push(self.convert(f, &item)?);
-                }
-                d.insert(name, JsValue::Array(out));
+                own_value(m, &name)
             } else {
-                if prop_nullish(&p) {
-                    continue;
+                m.own.get_key(&name)
+            };
+            if self.fields[f].map_key.is_some() {
+                if !matches!(own, None | Some(Val::Map(_))) {
+                    return Err(ProtoError::Unmodeled("a map field holding a non-map value"));
                 }
-                if !self.call_has_own(m, &name)? {
-                    continue;
+                if let Some(Val::Map(map)) = own
+                    && !map.is_empty()
+                {
+                    let key_ty = self.fields[f].map_key.clone().expect("map");
+                    let long_key = super::reflect::is_long_type(&key_ty);
+                    let unsigned = js_eq(&key_ty, "uint64") || js_eq(&key_ty, "fixed64");
+                    let mut out = JsObject::new();
+                    for (k, v) in map.iter() {
+                        let key = if long_key {
+                            long_key_to_string(k, unsigned)
+                        } else {
+                            k.clone()
+                        };
+                        let converted = self.convert(f, v)?;
+                        out.insert(key, converted);
+                    }
+                    d.insert(name, JsValue::Object(out));
                 }
-                let converted = self.convert(f, &p)?;
-                d.insert(name, converted);
+            } else if self.fields[f].repeated {
+                if !matches!(own, None | Some(Val::Array(_))) {
+                    return Err(ProtoError::Unmodeled(
+                        "a repeated field holding a non-array value",
+                    ));
+                }
+                if let Some(Val::Array(items)) = own
+                    && !items.is_empty()
+                {
+                    let mut out = Vec::with_capacity(items.len());
+                    for item in items {
+                        out.push(self.convert(f, item)?);
+                    }
+                    d.insert(name, JsValue::Array(out));
+                }
+            } else {
+                if odd {
+                    let default = &self.fields[f].default_value;
+                    let nullish =
+                        own.is_none() && (m.target() != Target::Message || default.is_nullish());
+                    if nullish || !self.call_has_own_property(m, &name)? {
+                        continue;
+                    }
+                }
+                if let Some(v) = own {
+                    let converted = self.convert(f, v)?;
+                    d.insert(name, converted);
+                }
             }
         }
         Ok(JsValue::Object(d))
     }
 
-    /// `genValuePartial_toObject`: `types[i].toObject(m.x, o)` for message fields,
-    /// `d.x = m.x` for everything else (`o.enums`/`o.longs`/`o.bytes`/`o.json` are unset).
-    fn convert(&mut self, f: FieldId, p: &Prop<'_>) -> Result<JsValue, ProtoError> {
-        if let Some(vt) = self.message_type(f) {
-            let em = match p {
-                Prop::Val(Val::Msg(msg)) => return self.message_to_object(vt, msg),
-                Prop::Val(v) => foreign_message(vt, (*v).clone()),
-                Prop::Default(JsDefault::Undefined) => {
-                    return Err(self.nullish_to_object_error(vt, false));
-                }
-                Prop::Default(JsDefault::Null) => {
-                    return Err(self.nullish_to_object_error(vt, true));
-                }
-                Prop::Default(d) => foreign_message(vt, default_val(d)),
-                Prop::Str(s) => {
-                    let mut own = JsObject::new();
-                    for (i, &u) in s.units().iter().enumerate() {
-                        own.insert(
-                            js(&number::to_string(i as f64)),
-                            Val::Str(JsString::from_units(vec![u])),
-                        );
-                    }
-                    Message {
-                        ty: vt,
-                        own,
-                        hidden: None,
-                        foreign: Some(Foreign::Scalar(Val::Str(s.clone()))),
-                    }
-                }
-                Prop::Num(x) => Message {
-                    ty: vt,
-                    own: JsObject::new(),
-                    hidden: None,
-                    foreign: Some(Foreign::Scalar(Val::Num(*x))),
-                },
-                Prop::Bool(b) => Message {
-                    ty: vt,
-                    own: JsObject::new(),
-                    hidden: None,
-                    foreign: Some(Foreign::Scalar(Val::Bool(*b))),
-                },
-                Prop::Function(n) => Message {
-                    ty: vt,
-                    own: JsObject::new(),
-                    hidden: None,
-                    foreign: Some(Foreign::Function {
-                        name: n.clone(),
-                        arity: arity(n),
-                    }),
-                },
-                Prop::TypeObj(_) => Message {
-                    ty: vt,
-                    own: JsObject::new(),
-                    hidden: None,
-                    foreign: Some(Foreign::Object),
-                },
-                Prop::Undefined => return Err(self.nullish_to_object_error(vt, false)),
-            };
-            return self.message_to_object(vt, &em);
+    /// Whether `toObject` reading field `f` from a non-message `m` can observe a built-in
+    /// member: a repeated field reads a method's `length`, and `length` itself can be own.
+    fn reads_built_in(&self, m: &Message, f: FieldId) -> bool {
+        let field = &self.fields[f];
+        if own_value(m, &field.name).is_some() || !is_built_in_member(&field.name) {
+            return false;
         }
-        // `d.x = m.x`: the raw value.
-        Ok(match p {
-            Prop::Val(v) => val_to_js(v)?,
-            Prop::Default(d) => default_to_js(d),
-            Prop::Str(s) => JsValue::String(s.clone()),
-            Prop::Num(x) => JsValue::Number(*x),
-            Prop::Bool(b) => JsValue::Bool(*b),
-            Prop::Undefined => JsValue::Undefined,
-            Prop::Function(_) => {
-                return Err(ProtoError::Unmodeled("a function as a field value"));
-            }
-            Prop::TypeObj(_) => {
-                return Err(ProtoError::Unmodeled("a Type object as a field value"));
-            }
-        })
+        (field.repeated && !ZERO_LENGTH_METHODS.iter().any(|n| js_eq(&field.name, n)))
+            || js_eq(&field.name, "length")
     }
 
-    /// `types[i].toObject(undefined)` / `toObject(null)`: `d.x` literals emit first, then
-    /// the first field's `m.x` read throws on the nullish receiver.
-    fn nullish_to_object_error(&mut self, vt: NodeId, null: bool) -> ProtoError {
-        if self.type_data(vt).to_object.is_none() {
-            let _ = self.setup(vt);
+    /// `genValuePartial_toObject`.
+    fn convert(&mut self, f: FieldId, v: &Val) -> Result<JsValue, ProtoError> {
+        if let Some(vt) = self.message_type(f) {
+            return match v {
+                Val::Msg(msg) => self.message_to_object(vt, msg),
+                _ => {
+                    let m = Message::onto(vt, JsObject::new(), Target::Primitive);
+                    self.message_to_object(vt, &m)
+                }
+            };
         }
-        let fields = self.type_data(vt).to_object.clone().unwrap_or_default();
-        let sorted = self.sorted_by_id(&fields);
-        ProtoError::ReadProp {
-            nullish: if null { "null" } else { "undefined" },
-            name: sorted
-                .first()
-                .map_or_else(JsString::new, |&f| self.fields[f].name.clone()),
-        }
+        raw_value(v)
     }
 
     /// `ProtoDecoder.decode`'s `findSchemaTypes` walk over the decoded message's own keys.
@@ -1759,92 +1313,42 @@ impl Reflection {
         Ok(out)
     }
 
-    /// `v.$type`: the prop read `root.$type` and `item.$type` perform.
-    fn type_prop<'m>(&'m self, v: &'m Val) -> Prop<'m> {
-        self.v_prop(v, &js("$type"))
-    }
-
-    /// `p.name`, resolved the way `friendly(root.$type.name)` reads it.
-    fn name_of<'m>(&'m self, p: &Prop<'m>) -> Result<JsString, ProtoError> {
-        let name = match p {
-            Prop::TypeObj(ty) => return Ok(self.nodes[*ty].name.clone()),
-            Prop::Function(n) => return Ok(n.clone()),
-            Prop::Val(v) => self.v_prop(v, &js("name")),
-            Prop::Str(_) | Prop::Num(_) | Prop::Bool(_) => Prop::Undefined,
-            Prop::Default(d) => default_prop(d, &js("name")),
-            Prop::Undefined => {
-                return Err(ProtoError::ReadProp {
-                    nullish: "undefined",
-                    name: js("name"),
-                });
-            }
-        };
-        match name {
-            Prop::Val(Val::Str(s)) => Ok(s.clone()),
-            Prop::Str(s) | Prop::Default(JsDefault::String(s)) => Ok(s),
-            Prop::Undefined => Err(ProtoError::ReadProp {
-                nullish: "undefined",
-                name: js("includes"),
-            }),
-            _ => Err(ProtoError::DynNotAFunction(js("schemaType.includes"))),
-        }
-    }
-
     fn find_schema_types(
         &self,
         value: &Val,
         key: JsString,
         out: &mut JsObject<JsString>,
     ) -> Result<(), ProtoError> {
-        // `typeof root === "object"`: `Array.isArray` first, then `root.$type`.
-        let items: Option<Vec<&Val>> = match value {
-            Val::Array(items) => Some(items.iter().collect()),
-            Val::Msg(mm) if matches!(mm.foreign, Some(Foreign::Array)) => Some(
-                mm.own
-                    .iter()
-                    .filter(|(k, _)| array_index(k.units()).is_some())
-                    .map(|(_, v)| v)
-                    .collect(),
-            ),
-            _ => None,
-        };
-        if let Some(items) = items {
-            let mut types: Vec<JsString> = Vec::new();
-            for (i, item) in items.iter().enumerate() {
-                self.find_schema_types(
-                    item,
-                    child_key(&key, &js(&number::to_string(i as f64))),
-                    out,
-                )?;
-                if prop_truthy(&self.type_prop(item)) {
-                    // `friendly(root[0].$type.name)`: the first element's name.
-                    let name = self.name_of(&self.type_prop(items[0]))?;
-                    let t = friendly(&name);
-                    if !types.iter().any(|s| s == &t) {
-                        types.push(t);
+        match value {
+            Val::Array(items) => {
+                let mut array_type = None;
+                for (i, item) in items.iter().enumerate() {
+                    if !matches!(item, Val::Msg(_) | Val::Array(_)) {
+                        continue;
+                    }
+                    self.find_schema_types(item, child_key(&key, &js(&format!("{i}"))), out)?;
+                    if self.type_property(item)?.is_truthy() {
+                        let first = self.type_property(&items[0])?;
+                        array_type = Some(self.friendly_name(&first)?);
                     }
                 }
-            }
-            if types.len() == 1 {
-                let mut t = types.pop().expect("len checked");
-                t.push_str(&js("[]"));
-                out.insert(key, t);
-            }
-            return Ok(());
-        }
-        let tp = self.type_prop(value);
-        if !prop_truthy(&tp) {
-            return Ok(());
-        }
-        out.insert(key.clone(), friendly(&self.name_of(&tp)?));
-        match value {
-            Val::Msg(mm) => {
-                for (child, v) in mm.own.iter() {
-                    self.find_schema_types(v, child_key(&key, child), out)?;
+                if let Some(mut t) = array_type {
+                    t.push_str(&js("[]"));
+                    out.insert(key, t);
                 }
             }
-            Val::Map(map) => {
-                for (child, v) in map.iter() {
+            Val::Msg(_) | Val::Map(_) => {
+                let ty = self.type_property(value)?;
+                if !ty.is_truthy() {
+                    return Ok(());
+                }
+                out.insert(key.clone(), self.friendly_name(&ty)?);
+                let own = match value {
+                    Val::Msg(m) => &m.own,
+                    Val::Map(map) => map,
+                    _ => unreachable!(),
+                };
+                for (child, v) in own.iter() {
                     self.find_schema_types(v, child_key(&key, child), out)?;
                 }
             }
@@ -1853,120 +1357,62 @@ impl Reflection {
         Ok(())
     }
 
+    /// `v.$type`.
+    fn type_property<'m>(&'m self, v: &'m Val) -> Result<Prop<'m>, ProtoError> {
+        match v {
+            Val::Msg(m) if m.odd.is_none() && !self.type_data(m.ty).odd => Ok(Prop::Type(m.ty)),
+            Val::Msg(m) => self.read_prop(m, &js(TYPE)),
+            Val::Map(map) => Ok(map.get(TYPE).map_or(Prop::Undefined, Prop::Val)),
+            _ => Ok(Prop::Undefined),
+        }
+    }
+
+    /// `ProtoDecoder.getFriendlySchemaType(ty.name)`.
+    fn friendly_name(&self, ty: &Prop<'_>) -> Result<JsString, ProtoError> {
+        let name = match ty {
+            Prop::Type(t) => return Ok(friendly(&self.nodes[*t].name)),
+            Prop::Default(JsDefault::Function(name)) => return Ok(friendly(name)),
+            Prop::Undefined => return Err(ProtoError::ReadUndefined("name")),
+            Prop::Default(JsDefault::Undefined) => return Err(ProtoError::ReadUndefined("name")),
+            Prop::Default(JsDefault::Null) => return Err(ProtoError::ReadNull("name")),
+            Prop::Val(Val::Msg(m)) => self.read_prop(m, &js("name"))?,
+            Prop::Val(Val::Map(map)) => map.get("name").map_or(Prop::Undefined, Prop::Val),
+            Prop::Val(_) | Prop::Default(_) | Prop::Member(_) | Prop::Method => Prop::Undefined,
+        };
+        match name {
+            Prop::Val(Val::Str(s)) | Prop::Default(JsDefault::String(s)) => Ok(friendly(s)),
+            Prop::Member(s) => Ok(friendly(&s)),
+            Prop::Val(Val::Array(items))
+                if items
+                    .iter()
+                    .any(|v| matches!(v, Val::Str(s) if js_eq(s, "."))) =>
+            {
+                Err(ProtoError::NotAFunction("schemaType.split"))
+            }
+            Prop::Val(Val::Array(_) | Val::Bytes(_))
+            | Prop::Default(JsDefault::EmptyArray | JsDefault::Bytes(_)) => {
+                Err(ProtoError::NotAFunction("result.startsWith"))
+            }
+            Prop::Undefined | Prop::Default(JsDefault::Undefined) => {
+                Err(ProtoError::ReadUndefined("includes"))
+            }
+            Prop::Default(JsDefault::Null) => Err(ProtoError::ReadNull("includes")),
+            Prop::Val(Val::Msg(m))
+                if matches!(
+                    self.read_prop(m, &js("includes"))?,
+                    Prop::Default(JsDefault::Function(_))
+                ) =>
+            {
+                Err(ProtoError::Unmodeled(
+                    "an Object.prototype function as an includes method",
+                ))
+            }
+            _ => Err(ProtoError::NotAFunction("schemaType.includes")),
+        }
+    }
+
     pub(super) fn type_kind_is_root(&self, node: NodeId) -> bool {
         matches!(self.nodes[node].kind, Kind::Root)
-    }
-}
-
-/// `v[k] = x` writes onto an object: the enumerable own props `m.x` starts with, or
-/// `None` when `m.x` is a primitive (which throws `Cannot create property` instead).
-fn seed_object(p: &Prop<'_>) -> Option<JsObject<Val>> {
-    let mut out = JsObject::new();
-    match p {
-        Prop::Val(Val::Array(items)) => {
-            for (i, v) in items.iter().enumerate() {
-                out.insert(js(&number::to_string(i as f64)), v.clone());
-            }
-        }
-        Prop::Val(Val::Bytes(b)) | Prop::Default(JsDefault::Bytes(b)) => {
-            for (i, &x) in b.iter().enumerate() {
-                out.insert(js(&number::to_string(i as f64)), Val::Num(f64::from(x)));
-            }
-        }
-        Prop::Val(Val::Long(l)) | Prop::Default(JsDefault::Long(l)) => {
-            out.insert(js("low"), Val::Num(f64::from(l.low)));
-            out.insert(js("high"), Val::Num(f64::from(l.high)));
-            out.insert(js("unsigned"), Val::Bool(l.unsigned));
-        }
-        Prop::Val(Val::Msg(m)) => out = m.own.clone(),
-        Prop::Val(Val::Map(map)) => out = map.clone(),
-        Prop::Default(JsDefault::Object(o)) => {
-            for (k, v) in o.iter() {
-                out.insert(k.clone(), Val::Str(v.clone()));
-            }
-        }
-        Prop::Default(JsDefault::EmptyArray | JsDefault::EmptyObject | JsDefault::Function(_))
-        | Prop::Function(_)
-        | Prop::TypeObj(_) => {}
-        _ => return None,
-    }
-    Some(out)
-}
-
-/// `d.x = m.x` where `m.x` is a decoded value.
-fn val_to_js(v: &Val) -> Result<JsValue, ProtoError> {
-    Ok(match v {
-        Val::Undefined => JsValue::Undefined,
-        Val::Num(x) => JsValue::Number(*x),
-        Val::Bool(b) => JsValue::Bool(*b),
-        Val::Str(s) => JsValue::String(s.clone()),
-        Val::Bytes(b) => JsValue::Bytes(b.clone()),
-        Val::Long(l) => l.to_js(),
-        Val::Array(items) => JsValue::Array(items.iter().map(val_to_js).collect::<Result<_, _>>()?),
-        Val::Map(map) => {
-            let mut out = JsObject::new();
-            for (k, v) in map.iter() {
-                out.insert(k.clone(), val_to_js(v)?);
-            }
-            JsValue::Object(out)
-        }
-        Val::Msg(_) => {
-            return Err(ProtoError::Unmodeled(
-                "a message instance as a raw field value",
-            ));
-        }
-    })
-}
-
-/// `d.x = m.x` where `m.x` is a prototype `defaultValue`.
-fn default_to_js(d: &JsDefault) -> JsValue {
-    match d {
-        JsDefault::Undefined | JsDefault::Function(_) => JsValue::Undefined,
-        JsDefault::Null => JsValue::Null,
-        JsDefault::Bool(b) => JsValue::Bool(*b),
-        JsDefault::Number(x) => JsValue::Number(*x),
-        JsDefault::String(s) => JsValue::String(s.clone()),
-        JsDefault::Bytes(b) => JsValue::Bytes(b.clone()),
-        JsDefault::EmptyArray => JsValue::Array(Vec::new()),
-        JsDefault::EmptyObject => JsValue::Object(JsObject::new()),
-        JsDefault::Long(l) => l.to_js(),
-        JsDefault::Object(o) => {
-            let mut out = JsObject::new();
-            for (k, v) in o.iter() {
-                out.insert(k.clone(), JsValue::String(v.clone()));
-            }
-            JsValue::Object(out)
-        }
-    }
-}
-
-/// `v.<name>` where `v` stands in for a non-message `m` under `decode`.
-fn foreign_prop<'m>(m: &'m Message, foreign: &'m Foreign, name: &JsString) -> Prop<'m> {
-    match foreign {
-        Foreign::Array => {
-            if js_eq(name, "length") {
-                Prop::Num(f64::from(array_len(m)))
-            } else if is_array_member(name) {
-                Prop::Function(name.clone())
-            } else {
-                Prop::Undefined
-            }
-        }
-        Foreign::Function {
-            name: fn_name,
-            arity,
-        } => {
-            if js_eq(name, "name") {
-                Prop::Str(fn_name.clone())
-            } else if js_eq(name, "length") {
-                Prop::Num(*arity)
-            } else if is_fn_member(name) {
-                Prop::Function(name.clone())
-            } else {
-                Prop::Undefined
-            }
-        }
-        _ => boxed_prop(name),
     }
 }
 
@@ -1978,4 +1424,45 @@ fn widen(bits: u32) -> f64 {
         return f64::from_bits(sign | 0x7ff8_0000_0000_0000 | payload);
     }
     f64::from(f32::from_bits(bits))
+}
+
+/// `array.push(value)`. V8 quiets a signalling NaN stored as an array element; whether it
+/// also canonicalises the payload depends on inline-cache and tiering state, which no vector
+/// pins, so only the quieting is reproduced.
+fn element(v: Val) -> Val {
+    match v {
+        Val::Num(x) if x.is_nan() => Val::Num(f64::from_bits(x.to_bits() | 0x0008_0000_0000_0000)),
+        other => other,
+    }
+}
+
+/// `m.x` as the receiver of `.push`.
+fn elements<'m>(m: &'m mut Message, name: &JsString) -> Result<&'m mut Vec<Val>, ProtoError> {
+    match own_slot(m, name) {
+        Some(Val::Array(items)) => Ok(items),
+        _ => Err(ProtoError::ReadUndefined("push")),
+    }
+}
+
+fn own_value<'m>(m: &'m Message, name: &JsString) -> Option<&'m Val> {
+    m.own.get_key(name).or_else(|| match &m.odd {
+        Some(odd) if js_eq(name, UNKNOWNS) => odd.unknowns.as_ref(),
+        _ => None,
+    })
+}
+
+fn raw_value(v: &Val) -> Result<JsValue, ProtoError> {
+    Ok(match v {
+        Val::Num(x) => JsValue::Number(*x),
+        Val::Bool(b) => JsValue::Bool(*b),
+        Val::Str(s) => JsValue::String(s.clone()),
+        Val::Bytes(b) => JsValue::Bytes(b.clone()),
+        Val::Long(l) => l.to_js(),
+        Val::Array(items) => JsValue::Array(items.iter().map(raw_value).collect::<Result<_, _>>()?),
+        Val::Msg(_) | Val::Map(_) => {
+            return Err(ProtoError::Unmodeled(
+                "a message value in a non-message field",
+            ));
+        }
+    })
 }

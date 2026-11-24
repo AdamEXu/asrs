@@ -950,7 +950,6 @@ fn structured_type_value(t: &asrs_log::log::StructuredType) -> Value {
         Null => Value::Null,
         Undefined => Value::Undefined,
         Named(s) => string_value(s),
-        Other(_) => Value::Undefined,
     }
 }
 

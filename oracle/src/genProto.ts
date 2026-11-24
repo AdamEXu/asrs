@@ -18,6 +18,9 @@ import { Rng } from "./corpus/rng";
 //     Generated descriptors and messages through the same session logic.
 //   genProto fuzz <seed>
 //     Seeded random descriptors and messages built from them, some mutated.
+//   genProto shadow <seed>
+//     Fields and oneofs named like the properties protobufjs itself puts on messages ($type,
+//     $unknowns, hasOwnProperty), message fields with scalar defaults, and fuzz over both.
 // Records, in call order:
 //   {"case":id,"s":{"b":hex},"ok":[hex...]}            addDescriptor, then toSerialized()
 //   {"case":id,"s":{"b":hex},"throw":<error>}
@@ -1281,7 +1284,11 @@ type FuzzType = { name: string; fields: FuzzField[] };
 const FUZZ_NAMES = ["a", "b", "x", "y", "value", "ControlWord", "id", "a_b", "Name", "data", "kids", "m", "length", "constructor", "toString", "z9"];
 const FUZZ_DEFAULTS = ["0", "1", "-1", "2.5", "true", "abc", "1e3", "AAEC", "inf", "B", "9007199254740993"];
 
-function fuzzSchema(r: Rng, n: number): { file: Uint8Array; pkg: string; types: FuzzType[]; enums: string[] } {
+const SHADOW_NAMES = ["$type", "$unknowns", "hasOwnProperty", "a", "b", "name", "__proto__", "kids"];
+const SHADOW_DEFAULTS = ["x", "", "true", "false", "0", "5", "-1", "abc", "0x10", "1e3"];
+const SHADOW_ENUM_NAMES = ["toString", "hasOwnProperty", "valueOf", "constructor", "__proto__"];
+
+function fuzzSchema(r: Rng, n: number, shadow = false): { file: Uint8Array; pkg: string; types: FuzzType[]; enums: string[] } {
   const pkg = r.pick(["fz", "fz.a", "", "fz.b.c", "mrc.proto"]);
   const prefix = pkg ? `.${pkg}.` : ".";
   const typeNames = Array.from({ length: 1 + r.below(4) }, (_, i) =>
@@ -1295,9 +1302,13 @@ function fuzzSchema(r: Rng, n: number): { file: Uint8Array; pkg: string; types: 
     const descriptorFields: object[] = [];
     const nested: object[] = [];
     const oneofs = r.below(3) === 0 ? [{ name: r.below(12) === 0 ? "1" : r.pick(["o", "choice"]) }] : [];
+    if (shadow && oneofs.length && r.bool()) oneofs[0].name = r.pick(["$type", "$unknowns", "hasOwnProperty", "name", "__proto__"]);
     for (let i = r.below(9); i > 0; i--) {
-      const name =
-        r.below(40) === 0 ? r.pick(["0", "7", "1e2", "2x"]) : r.below(8) === 0 ? r.pick(FUZZ_NAMES) : `${r.pick(FUZZ_NAMES)}${i}`;
+      const name = shadow
+        ? r.below(3) === 0
+          ? r.pick(SHADOW_NAMES)
+          : `${r.pick(["a", "b", "value", "ControlWord"])}${i}`
+        : r.below(40) === 0 ? r.pick(["0", "7", "1e2", "2x"]) : r.below(8) === 0 ? r.pick(FUZZ_NAMES) : `${r.pick(FUZZ_NAMES)}${i}`;
       const number = r.below(25) === 0 ? r.range(0, 3) : r.below(20) === 0 ? 1 + r.below(20) : i + 20 * r.below(2);
       const kind = r.below(10);
       let type: number;
@@ -1327,6 +1338,8 @@ function fuzzSchema(r: Rng, n: number): { file: Uint8Array; pkg: string; types: 
       if (oneofs.length && label === 1 && r.below(3) === 0) opts.oneofIndex = 0;
       if (label === 3 && r.below(3) === 0) opts.packed = r.bool();
       if (label !== 3 && type !== T.MESSAGE && r.below(6) === 0) opts.defaultValue = r.pick(FUZZ_DEFAULTS);
+      if (shadow && label !== 3 && type === T.MESSAGE && r.below(4) === 0) opts.defaultValue = r.pick(SHADOW_DEFAULTS);
+      if (shadow && label !== 3 && type === T.ENUM && name !== "hasOwnProperty" && r.below(3) === 0) opts.defaultValue = r.pick(SHADOW_ENUM_NAMES);
       descriptorFields.push(f(name, number, type, opts));
       fields.push({ name, number, type, label, typeName, map });
     }
@@ -1408,6 +1421,346 @@ function fuzz(seed: number) {
   }
 }
 
+function shadow(seed: number) {
+  const run = (id: string, body: (s: Session) => void) => body(new Session(`shadow/${id}`));
+  const FULL = T.MESSAGE;
+  const kinds: [string, (name: string, pkg: string) => ReturnType<typeof f>, (m: Pb) => Pb][] = [
+    ["int32", (n) => f(n, 1, T.INT32), (m) => m.vint(1, 5)],
+    ["int32-zero", (n) => f(n, 1, T.INT32), (m) => m.vint(1, 0)],
+    ["int32-default", (n) => f(n, 1, T.INT32, { defaultValue: "7" }), (m) => m.vint(1, 0)],
+    ["double", (n) => f(n, 1, T.DOUBLE), (m) => m.f64(1, NaN)],
+    ["bool", (n) => f(n, 1, T.BOOL), (m) => m.vint(1, 1)],
+    ["bool-default", (n) => f(n, 1, T.BOOL, { defaultValue: "true" }), (m) => m.vint(1, 0)],
+    ["string", (n) => f(n, 1, T.STRING), (m) => m.len(1, "text")],
+    ["string-empty", (n) => f(n, 1, T.STRING), (m) => m.len(1, "")],
+    ["string-default", (n) => f(n, 1, T.STRING, { defaultValue: "dflt" }), (m) => m.len(1, "")],
+    ["bytes", (n) => f(n, 1, T.BYTES), (m) => m.len(1, [1, 2])],
+    ["bytes-default", (n) => f(n, 1, T.BYTES, { defaultValue: "AAEC" }), (m) => m.len(1, [])],
+    ["int64", (n) => f(n, 1, T.INT64), (m) => m.vint(1, 5)],
+    ["int64-proto3-optional", (n) => f(n, 1, T.INT64, { proto3Optional: true }), (m) => m.vint(1, 0)],
+    ["enum", (n, p) => f(n, 1, T.ENUM, { typeName: `.${p}.En` }), (m) => m.vint(1, 2)],
+    ["enum-toString", (n, p) => f(n, 1, T.ENUM, { typeName: `.${p}.En`, defaultValue: "toString" }), (m) => m.vint(1, 2)],
+    ["enum-hasOwnProperty", (n, p) => f(n, 1, T.ENUM, { typeName: `.${p}.En`, defaultValue: "hasOwnProperty" }), (m) => m.vint(1, 2)],
+    ["enum-proto", (n, p) => f(n, 1, T.ENUM, { typeName: `.${p}.En`, defaultValue: "__proto__" }), (m) => m.vint(1, 2)],
+    ["message", (n, p) => msg(n, 1, `.${p}.Sub`), (m) => m.len(1, pb().vint(1, 3).len(2, "nm"))],
+    ["message-empty", (n, p) => msg(n, 1, `.${p}.Sub`), (m) => m.len(1, pb())],
+    ["message-unnamed", (n, p) => msg(n, 1, `.${p}.Anon`), (m) => m.len(1, pb().vint(1, 3))],
+    ["message-dotted", (n, p) => msg(n, 1, `.${p}.Sub`), (m) => m.len(1, pb().len(2, "pkg.ProtobufThing"))],
+    ["message-name-bytes", (n, p) => msg(n, 1, `.${p}.NameBytes`), (m) => m.len(1, pb().len(2, [46]))],
+    ["message-name-strings", (n, p) => msg(n, 1, `.${p}.NameStrings`), (m) => m.len(1, pb().len(2, "q"))],
+    ["message-name-dots", (n, p) => msg(n, 1, `.${p}.NameStrings`), (m) => m.len(1, pb().len(2, "."))],
+    ["message-name-int", (n, p) => msg(n, 1, `.${p}.NameInt`), (m) => m.len(1, pb().vint(2, 4))],
+    ["message-name-message", (n, p) => msg(n, 1, `.${p}.NameMessage`), (m) => m.len(1, pb())],
+    ["message-name-set", (n, p) => msg(n, 1, `.${p}.NameMessage`), (m) => m.len(1, pb().len(2, pb()))],
+    ["message-default", (n, p) => msg(n, 1, `.${p}.Sub`, { defaultValue: "x" }), (m) => m.len(1, pb().vint(1, 3))],
+    ["message-default-zero", (n, p) => msg(n, 1, `.${p}.Sub`, { defaultValue: "0" }), (m) => m.len(1, pb().vint(1, 3))],
+    ["repeated-int32", (n) => rep(n, 1, T.INT32), (m) => m.vint(1, 5).vint(1, 6)],
+    ["repeated-packed", (n) => rep(n, 1, T.INT32), (m) => m.packed(1, pb().raw([5, 6]))],
+    ["repeated-string", (n) => rep(n, 1, T.STRING), (m) => m.len(1, "p").len(1, "q")],
+    ["repeated-message", (n, p) => rep(n, 1, FULL, { typeName: `.${p}.Sub` }), (m) => m.len(1, pb().vint(1, 3)).len(1, pb().len(2, "nm"))],
+    ["map-int32", () => f("", 0, 0), (m) => m.len(1, pb().len(1, "k").vint(2, 4))],
+    ["map-message", () => f("", 0, 0), (m) => m.len(1, pb().len(1, "k").len(2, pb().vint(1, 4)))],
+    ["required", (n) => f(n, 1, T.INT32, { label: 2 }), (m) => m.vint(1, 5)],
+    ["required-message", (n, p) => msg(n, 1, `.${p}.Sub`, { label: 2 }), (m) => m.len(1, pb().vint(1, 5))]
+  ];
+  const support = (p: string) => [
+    { name: "Sub", field: [f("a", 1, T.INT32), f("name", 2, T.STRING), rep("r", 3, T.INT32), rep("s", 4, T.STRING), msg("sub", 5, `.${p}.Sub`)] },
+    { name: "Anon", field: [f("a", 1, T.INT32)] },
+    { name: "NameBytes", field: [f("name", 2, T.BYTES)] },
+    { name: "NameStrings", field: [rep("name", 2, T.STRING)] },
+    { name: "NameInt", field: [f("name", 2, T.INT32)] },
+    { name: "NameMessage", field: [msg("name", 2, `.${p}.Anon`)] }
+  ];
+  const enums = [{ name: "En", value: [{ name: "A", number: 0 }, { name: "B", number: 2 }] }];
+  const unknown = (m: Pb) => m.vint(30, 9);
+  for (const name of ["$type", "$unknowns", "hasOwnProperty", "constructor", "toString", "__proto__", "name"]) {
+    for (const oneof of [false, true]) {
+      for (const [kind, make, fill] of kinds) {
+        if (oneof && kind.startsWith("required")) continue;
+        // asrs does not model an Object.prototype function standing in for m.hasOwnProperty, or
+        // a map field holding the $unknowns array.
+        if (name === "hasOwnProperty" && kind === "enum-toString") continue;
+        if (name === "$unknowns" && oneof && kind.startsWith("map-")) continue;
+        run(`${name}/${kind}${oneof ? "/oneof" : ""}`, (s) => {
+          const p = `sh`;
+          const map = kind.startsWith("map-");
+          const base = map
+            ? rep(name, 1, FULL, { typeName: "E" })
+            : make(name, p);
+          const nested = map
+            ? [{ name: "E", options: { mapEntry: true }, field: [f("key", 1, T.STRING), kind === "map-int32" ? f("value", 2, T.INT32) : msg("value", 2, `.${p}.Sub`)] }]
+            : [];
+          const shadowed = oneof && name !== "__proto__" ? { ...base, oneofIndex: 0 } : base;
+          const type = {
+            name: "Odd",
+            nestedType: nested,
+            oneofDecl: oneof ? [{ name: "choice" }] : [],
+            field: [shadowed, f("other", 2, T.INT32, oneof ? { oneofIndex: 0 } : {}), f("last", 3, T.STRING)]
+          };
+          s.schema(
+            file({
+              name: "sh.proto",
+              package: p,
+              messageType: [
+                type,
+                {
+                  name: "Holder",
+                  nestedType: [{ name: "E", options: { mapEntry: true }, field: [f("key", 1, T.STRING), msg("value", 2, `.${p}.Odd`)] }],
+                  field: [msg("one", 1, `.${p}.Odd`), rep("many", 2, FULL, { typeName: `.${p}.Odd` }), rep("byKey", 3, FULL, { typeName: "E" })]
+                },
+                ...support(p)
+              ],
+              enumType: enums
+            })
+          );
+          const payloads = [
+            pb(),
+            fill(pb()),
+            unknown(pb()),
+            fill(unknown(pb())),
+            unknown(fill(pb())),
+            unknown(fill(unknown(pb()))),
+            fill(unknown(unknown(fill(pb())))),
+            fill(fill(pb())).vint(2, 1).len(3, "z"),
+            fill(pb().vint(2, 1)),
+            unknown(fill(unknown(pb().vint(2, 1).len(3, "z")))).vint(2, 4),
+            pb().tag(1, 5).raw([1, 2, 3, 4]),
+            unknown(unknown(pb()).vint(2, 1)),
+            pb().len(1, pb().vint(1, 1).vint(30, 1)),
+            pb().len(1, pb().len(2, "nm").packed(3, pb().raw([1])).len(4, "s").len(5, pb().vint(1, 1)))
+          ];
+          for (const payload of payloads) {
+            s.data(`${p}.Odd`, payload.finish());
+            s.data(`${p}.Holder`, pb().len(1, payload).finish());
+          }
+          for (const payload of payloads.slice(0, 7)) {
+            s.data(`${p}.Holder`, pb().len(1, payload).len(1, payloads[1]).finish());
+            s.data(`${p}.Holder`, pb().len(2, pb()).len(2, payload).len(2, payloads[1]).finish());
+            s.data(`${p}.Holder`, pb().len(3, pb().len(1, "k").len(2, payload)).finish());
+          }
+        });
+      }
+    }
+  }
+
+  for (const accessor of ["$type", "$unknowns", "hasOwnProperty", "constructor", "toString", "__proto__", "name"]) {
+    run(`accessor/${accessor}`, (s) => {
+      s.schema(
+        file({
+          name: "acc.proto",
+          package: "acc",
+          messageType: [
+            {
+              name: "Odd",
+              oneofDecl: [{ name: accessor }],
+              field: accessor === "__proto__"
+                ? [f("a", 1, T.INT32), f("b", 2, T.STRING), f("c", 3, T.INT32), rep("r", 4, T.INT32)]
+                : [f("a", 1, T.INT32, { oneofIndex: 0 }), f("b", 2, T.STRING, { oneofIndex: 0 }), f("c", 3, T.INT32), rep("r", 4, T.INT32)]
+            },
+            { name: "Req", oneofDecl: [{ name: accessor }], field: [f("q", 1, T.INT32, { label: 2 }), ...(accessor === "__proto__" ? [] : [f("a", 2, T.INT32, { oneofIndex: 0 })])] },
+            { name: "Holder", field: [msg("one", 1, ".acc.Odd"), rep("many", 2, FULL, { typeName: ".acc.Odd" })] }
+          ]
+        })
+      );
+      const payloads = [
+        pb(),
+        pb().vint(1, 1),
+        pb().len(2, "b"),
+        pb().vint(1, 1).len(2, "b"),
+        pb().vint(3, 1).packed(4, pb().raw([1, 2])),
+        unknown(pb()),
+        unknown(pb().vint(1, 1)),
+        unknown(pb()).vint(1, 1),
+        unknown(pb()).vint(1, 1).len(2, "b"),
+        unknown(unknown(pb()).vint(1, 1)),
+        unknown(pb().vint(1, 1).len(2, "b")).vint(3, 4)
+      ];
+      for (const payload of payloads) {
+        s.data("acc.Odd", payload.finish());
+        s.data("acc.Req", payload.finish());
+        s.data("acc.Holder", pb().len(1, payload).finish());
+        s.data("acc.Holder", pb().len(2, pb()).len(2, payload).finish());
+        s.data("acc.Holder", pb().len(1, payload).len(1, pb().len(2, "c")).finish());
+      }
+    });
+  }
+
+  for (const defaultValue of SHADOW_DEFAULTS) {
+    for (const placement of ["plain", "oneof", "required"]) {
+      run(`default/${placement}/${defaultValue}`, (s) => {
+        const o = { defaultValue, ...(placement === "oneof" ? { oneofIndex: 0 } : placement === "required" ? { label: 2 } : {}) };
+        s.schema(
+          file({
+            name: "dm.proto",
+            package: "dm",
+            messageType: [
+              {
+                name: "T",
+                oneofDecl: [{ name: "choice" }],
+                field: ["Scalars", "List", "Map", "Deep", "Req", "Empty", "Choice"].map((t, i) =>
+                  msg(`m${i + 1}`, i + 1, `.dm.${t}`, placement === "required" && i > 0 ? { defaultValue } : o)
+                )
+              },
+              { name: "Scalars", field: [f("a", 1, T.INT32), f("b", 2, T.STRING), f("c", 3, T.BYTES), f("ControlWord", 4, T.INT64)] },
+              { name: "List", field: [rep("r", 1, T.INT32), rep("s", 2, T.STRING), rep("ms", 3, FULL, { typeName: ".dm.Scalars" })] },
+              {
+                name: "Map",
+                nestedType: [
+                  { name: "E", options: { mapEntry: true }, field: [f("key", 1, T.STRING), f("value", 2, T.INT32)] },
+                  { name: "L", options: { mapEntry: true }, field: [f("key", 1, T.INT64), msg("value", 2, ".dm.Scalars")] }
+                ],
+                field: [rep("e", 1, FULL, { typeName: "E" }), rep("l", 2, FULL, { typeName: "L" })]
+              },
+              { name: "Deep", field: [msg("d", 1, ".dm.Deep"), msg("p", 2, ".dm.Scalars", { defaultValue: "inner" })] },
+              { name: "Req", field: [f("q", 1, T.INT32, { label: 2 })] },
+              { name: "Empty" },
+              { name: "Choice", oneofDecl: [{ name: "o" }], field: [f("a", 1, T.INT32, { oneofIndex: 0 }), f("b", 2, T.STRING, { oneofIndex: 0 })] }
+            ]
+          })
+        );
+        const subs = [
+          pb(),
+          pb().vint(1, 5),
+          pb().len(1, "k"),
+          pb().len(2, "v"),
+          pb().vint(1, 5).len(2, "v").vint(4, 9),
+          pb().packed(1, pb().raw([1, 2])),
+          pb().len(3, pb().vint(1, 1)),
+          pb().len(1, pb().len(1, "k").vint(2, 4)),
+          pb().len(1, pb().len(1, "__proto__").vint(2, 4)),
+          pb().len(2, pb().vint(1, 4).len(2, pb().vint(1, 1))),
+          pb().len(2, pb().vint(1, 4)),
+          pb().len(1, pb().len(2, pb().vint(1, 1))),
+          pb().len(2, pb()),
+          unknown(pb()),
+          pb().raw([0]),
+          pb().raw([8])
+        ];
+        s.data("dm.T", pb().finish());
+        for (let no = 1; no <= 7; no++) {
+          for (const sub of subs) s.data("dm.T", pb().len(no, sub).finish());
+          s.data("dm.T", pb().len(no, pb()).len(no, pb()).finish());
+          s.data("dm.T", pb().vint(no, 1).finish());
+          s.data("dm.T", pb().len(no, pb()).len((no % 7) + 1, pb()).finish());
+        }
+      });
+    }
+  }
+
+  run("map-keys", (s) => {
+    const values: [string, ReturnType<typeof f>, (m: Pb) => Pb][] = [
+      ["i", f("value", 2, T.INT32), (m) => m.vint(2, 4)],
+      ["z", f("value", 2, T.INT32), (m) => m.vint(2, 0)],
+      ["s", f("value", 2, T.STRING), (m) => m.len(2, "v")],
+      ["y", f("value", 2, T.BYTES), (m) => m.len(2, [1])],
+      ["l", f("value", 2, T.INT64), (m) => m.vint(2, 4)],
+      ["m", msg("value", 2, ".mk.Named"), (m) => m.len(2, pb().len(1, "some.ProtobufType"))],
+      ["u", msg("value", 2, ".mk.Plain"), (m) => m.len(2, pb().vint(1, 1))],
+      ["t", msg("value", 2, ".mk.Typed"), (m) => m.len(2, pb().len(1, pb().len(1, "n")))]
+    ];
+    s.schema(
+      file({
+        name: "mk.proto",
+        package: "mk",
+        messageType: [
+          ...values.map(([id, v]) => ({
+            name: `M${id}`,
+            nestedType: [{ name: "E", options: { mapEntry: true }, field: [f("key", 1, T.STRING), v] }],
+            field: [rep("e", 1, FULL, { typeName: "E" }), f("x", 2, T.INT32)]
+          })),
+          { name: "Named", field: [f("name", 1, T.STRING)] },
+          { name: "Plain", field: [f("a", 1, T.INT32)] },
+          { name: "Typed", field: [msg("$type", 1, ".mk.Named")] },
+          { name: "Holder", field: values.map(([id], i) => msg(`h${id}`, i + 1, `.mk.M${id}`)) }
+        ]
+      })
+    );
+    values.forEach(([id, , fill], i) => {
+      for (const key of ["$type", "name", "__proto__", "hasOwnProperty", "constructor", "toString", "", "0", "a/b"]) {
+        const entry = fill(pb().len(1, key));
+        s.data(`mk.M${id}`, pb().len(1, entry).finish());
+        s.data(`mk.Holder`, pb().len(i + 1, pb().len(1, entry)).finish());
+        s.data(`mk.M${id}`, pb().len(1, entry).len(1, fill(pb().len(1, "$type"))).len(1, fill(pb().len(1, "1"))).finish());
+      }
+    });
+  });
+
+  run("groups", (s) => {
+    s.schema(
+      file({
+        name: "gr.proto",
+        package: "gr",
+        syntax: "proto2",
+        messageType: [
+          { name: "G", field: [f("x", 1, T.INT32), f("$unknowns", 2, T.INT32)] },
+          {
+            name: "Odd",
+            field: [f("g", 1, T.GROUP, { typeName: ".gr.G" }), rep("$unknowns", 2, T.STRING), rep("gs", 3, T.GROUP, { typeName: ".gr.G" })]
+          },
+          { name: "Plain", field: [f("g", 1, T.GROUP, { typeName: ".gr.G" }), rep("gs", 3, T.GROUP, { typeName: ".gr.G" })] }
+        ]
+      })
+    );
+    const group = (no: number, body: Pb, end = no) => pb().tag(no, 3).raw(body.finish()).tag(end, 4);
+    const payloads = [
+      group(1, pb().vint(1, 5)),
+      group(3, pb().vint(1, 5)),
+      pb().raw(group(3, pb().vint(1, 5)).finish()).len(2, "s").raw(group(3, pb()).finish()),
+      group(1, pb(), 2),
+      pb().tag(1, 4),
+      pb().tag(1, 3),
+      group(9, group(8, pb().vint(7, 1))),
+      group(9, group(8, pb().vint(7, 1), 9)),
+      group(9, pb().vint(0, 1)),
+      pb().len(1, pb().vint(1, 5).vint(2, 6)),
+      pb().len(1, group(1, pb())).len(3, pb().vint(5, 1)),
+      pb().len(2, "s").raw(group(1, pb().vint(1, 5)).finish()).len(2, "t")
+    ];
+    let deep = pb();
+    for (let i = 0; i < 101; i++) deep = group(9, deep);
+    payloads.push(deep, group(9, deep));
+    for (const payload of payloads) {
+      s.data("gr.Odd", payload.finish());
+      s.data("gr.Plain", payload.finish());
+    }
+  });
+
+  run("depth", (s) => {
+    s.schema(
+      file({
+        name: "dp.proto",
+        package: "dp",
+        messageType: [{ name: "Odd", field: [msg("$unknowns", 1, ".dp.Odd"), msg("$type", 2, ".dp.Odd"), f("name", 3, T.STRING)] }]
+      })
+    );
+    for (const no of [1, 2]) {
+      for (const levels of [1, 2, 99, 100, 101, 102]) {
+        for (const tail of [pb(), pb().len(3, "n"), unknown(pb()), unknown(pb().len(3, "n")).len(1, pb())]) {
+          let payload = tail;
+          for (let i = 0; i < levels; i++) payload = pb().len(no, payload);
+          s.data("dp.Odd", payload.finish());
+        }
+      }
+    }
+    s.data("dp.Odd", unknown(pb()).len(1, unknown(unknown(pb()).len(3, "n")).len(1, unknown(pb()).len(3, "m"))).len(1, unknown(pb())).finish());
+  });
+
+  const rng = new Rng(seed, "proto/shadow");
+  for (let n = 0; n < 160; n++) {
+    const s = new Session(`shadow/fuzz/${n}`);
+    const schemas = [fuzzSchema(rng, n, true)];
+    const names = schemas.flatMap((sc) => sc.types.map((t) => [sc, t] as const));
+    for (const sc of schemas) s.schema(sc.file);
+    for (let k = 0; k < 18; k++) {
+      const [sc, t] = rng.pick(names);
+      const name = sc.pkg ? `${sc.pkg}.${t.name}` : t.name;
+      const m = fuzzMessage(rng, sc.types, t, 0);
+      if (rng.below(5) === 0) m.tag(40, 3).vint(3, 1).tag(rng.below(5) === 0 ? 41 : 40, 4).raw(fuzzMessage(rng, sc.types, t, 0).finish());
+      s.data(name, mutate(rng, m.finish()));
+    }
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
 
 function replay(seed: number) {
@@ -1433,4 +1786,5 @@ const [mode, a1] = process.argv.slice(2);
 if (mode === "replay") replay(Number(a1));
 else if (mode === "matrix") matrix(Number(a1));
 else if (mode === "fuzz") fuzz(Number(a1));
-else throw new Error("usage: genProto replay <seed> | matrix <seed> | fuzz <seed>");
+else if (mode === "shadow") shadow(Number(a1));
+else throw new Error("usage: genProto replay <seed> | matrix <seed> | fuzz <seed> | shadow <seed>");

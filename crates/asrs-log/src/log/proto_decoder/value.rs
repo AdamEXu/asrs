@@ -24,8 +24,8 @@ pub(super) enum JsDefault {
     /// `util.emptyObject`.
     EmptyObject,
     Long(Long),
-    /// A function reached through `Object.prototype` (an enum default named `toString`);
-    /// the string is the member name, which is also the function's `.name`.
+    /// A function reached through `Object.prototype` (an enum default named `toString`), with
+    /// its `name`.
     Function(JsString),
     /// An enum's `valuesById`, reached as `values.__proto__`.
     Object(JsObject<JsString>),
@@ -226,7 +226,6 @@ fn is_decimal_key(u: &[u16]) -> bool {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Val {
-    Undefined,
     Num(f64),
     Bool(bool),
     Str(JsString),
@@ -237,37 +236,63 @@ pub(super) enum Val {
     Map(JsObject<Val>),
 }
 
-/// The non-message value `decode` is writing fields onto when the merge target `m.x`
-/// resolves to a truthy non-message value: `own` holds the props written so far plus the
-/// value's enumerable own props, and these variants keep the value's prototype reads
-/// (`Array.isArray`, `.length`, `push`, the `Array`/`Object` prototype members).
-#[derive(Clone, Debug, PartialEq)]
-pub(super) enum Foreign {
-    /// A JS array: elements are `own`'s index-keyed props.
-    Array,
-    /// A `Long` instance (`low`, `high`, `unsigned` are `own` props).
-    Long,
-    /// A plain object (its entries are `own` props).
-    Object,
-    /// A `Uint8Array` (elements are `own` index props).
-    Bytes,
-    /// A function: `.name` and `.length` resolve to its name and arity.
-    Function { name: JsString, arity: f64 },
-    /// A primitive: property reads box to the wrapper prototype, property writes throw.
-    Scalar(Val),
+impl Val {
+    pub fn is_truthy(&self) -> bool {
+        match self {
+            Val::Num(x) => *x != 0.0 && !x.is_nan(),
+            Val::Bool(b) => *b,
+            Val::Str(s) => !s.is_empty(),
+            _ => true,
+        }
+    }
 }
 
-/// A decoded message: its type, its own enumerable properties in JS order, the own
-/// non-enumerable `$unknowns` property `util.makeProp` defines, and the non-message
-/// object it stands in for when `decode` merges into a truthy `m.x`.
+/// A decoded message: its type and its own enumerable properties in JS order.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Message {
     pub ty: NodeId,
     pub own: JsObject<Val>,
-    /// `util.makeProp(m, "$unknowns", false)`: own and writable but invisible to
-    /// `Object.keys`. `Some` once `makeProp` has run; `Val::Undefined` until assigned.
-    pub hidden: Option<Val>,
-    pub foreign: Option<Foreign>,
+    pub odd: Option<Box<Odd>>,
+}
+
+impl Message {
+    pub fn new(ty: NodeId, own: JsObject<Val>) -> Self {
+        Message { ty, own, odd: None }
+    }
+
+    /// The `m` a decoder handed a truthy non-message merge target writes to.
+    pub fn onto(ty: NodeId, own: JsObject<Val>, target: Target) -> Self {
+        Message {
+            ty,
+            own,
+            odd: Some(Box::new(Odd {
+                unknowns: None,
+                target,
+            })),
+        }
+    }
+
+    pub fn target(&self) -> Target {
+        self.odd.as_ref().map_or(Target::Message, |o| o.target)
+    }
+}
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub(super) struct Odd {
+    /// The own non-enumerable `$unknowns` property `util.makeProp` defines.
+    pub unknowns: Option<Val>,
+    pub target: Target,
+}
+
+/// What `m` is: a message instance, or the truthy non-message value the decoder merges into.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(super) enum Target {
+    #[default]
+    Message,
+    /// A `$unknowns` array of this length; `own` holds its elements under their index keys.
+    Array(usize),
+    /// A string, number or boolean, on which property writes do nothing.
+    Primitive,
 }
 
 /// A `bytes` field's string default: base64 when it looks like base64, UTF-8 otherwise.
