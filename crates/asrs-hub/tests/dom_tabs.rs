@@ -4,8 +4,8 @@
 //! through the production `asrs_hub::factory::HubTabFactory`, so every tab runs its real
 //! controller and, where ported, its real renderer; the oracle's `field3dStub.ts` stands in for
 //! `Field3dRenderer` on both sides. Emitted records are compared with the committed
-//! `dom/tabs/<case>` vector, line for line. `dom`, `canvas`, `measure` and `sourceLists` capture
-//! kinds belong to other layers and are skipped while comparing.
+//! `dom/tabs/<case>` vector, line for line; `NOT_COMPARED` lists the records whose payload is
+//! not.
 //!
 //! The table fixtures (`TABLE_FIXTURES`) ran on Blink with real geometry: the tab's layout reads
 //! and scroll writes are answered from and checked against the recorded ones, which the port's
@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use asrs_canvas::text::{FixedAdvance, FontSpec, measure_text};
+use asrs_canvas::Canvas2d;
 use asrs_hub::factory::{HubTabFactory, RendererHook};
 use asrs_hub::hub::assets_alert;
 use asrs_hub::tabs::{Tabs, TabsHost};
@@ -44,7 +44,7 @@ use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
 use asrs_parity::geometry::{GeometryRecord, ScriptedReads};
 use asrs_parity::json::{self, Json};
-use asrs_parity::tally::Tally;
+use asrs_parity::tally::{Fields, Tally};
 use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::{self, Record};
 use asrs_tabs::console::controller::{
@@ -374,6 +374,7 @@ enum DomKind {
 struct Recorder {
     inner: Box<dyn TabRenderer<Host>>,
     slot: Rc<RefCell<Option<JsValue>>>,
+    drawing: Rc<RefCell<Option<Drawing>>>,
 }
 
 impl TabRenderer<Host> for Recorder {
@@ -391,7 +392,18 @@ impl TabRenderer<Host> for Recorder {
 
     fn render(&mut self, cx: &mut Host, command: &dyn TabCommand) -> Result<(), JsError> {
         *self.slot.borrow_mut() = Some(command.to_js());
-        self.inner.render(cx, command)
+        let result = self.inner.render(cx, command);
+        if let Some((class, canvas)) = take_painted(&mut *self.inner) {
+            let mut drawing = self.drawing.borrow_mut();
+            let frames = drawing.as_ref().map_or(0, |d| d.frames) + 1;
+            *drawing = Some(Drawing {
+                class,
+                frames,
+                canvas,
+                drawn_since_capture: true,
+            });
+        }
+        result
     }
 
     fn renderer_uuid(&self) -> Option<&JsString> {
@@ -463,6 +475,7 @@ impl RendererHook<Host> for Hook {
         Box::new(Recorder {
             inner,
             slot: Rc::new(RefCell::new(None)),
+            drawing: Rc::new(RefCell::new(None)),
         })
     }
 }
@@ -658,86 +671,43 @@ impl TabsHost for Host {
     }
 }
 
-struct Emit {
-    values: Vec<(&'static str, Value)>,
-    /// First-key kinds of records the same capture wrote that other replay layers own;
-    /// `compare` consumes them where upstream wrote them, right after this record.
-    skipped: &'static [&'static str],
+enum Emit {
+    Record {
+        values: Vec<(&'static str, Value)>,
+    },
+    /// One `canvas` capture: what the port's painters drew since the last one.
+    Canvases(Vec<Drawing>),
+}
+
+/// A `RecordingContext`: the last frame on a canvas, the number of frames so far and whether
+/// the next capture records it.
+#[derive(Clone)]
+struct Drawing {
+    class: &'static str,
+    frames: usize,
+    canvas: Canvas2d,
+    drawn_since_capture: bool,
+}
+
+const COMPARED_CANVASES: [&str; 3] = ["swerve-canvas", "joysticks-canvas", "field-2d-canvas"];
+
+fn take_painted(renderer: &mut dyn TabRenderer<Host>) -> Option<(&'static str, Canvas2d)> {
+    let (class, painted) = if let Some(r) = renderer.downcast_mut::<SwerveRenderer>() {
+        ("swerve-canvas", r.dom().borrow_mut().painted.take())
+    } else if let Some(r) = renderer.downcast_mut::<JoysticksRenderer>() {
+        ("joysticks-canvas", r.dom().borrow_mut().painted.take())
+    } else if let Some(r) = renderer.downcast_mut::<Field2dRenderer>() {
+        ("field-2d-canvas", r.dom().borrow_mut().painted.take())
+    } else {
+        return None;
+    };
+    painted.map(|canvas| (class, canvas))
 }
 
 fn pair_value(pair: Option<[f64; 2]>) -> Value {
     pair.map_or(Value::Null, |[a, b]| {
         Value::Array(vec![Value::number(a), Value::number(b)])
     })
-}
-
-/// The `measure` field the oracle writes per `texts` entry, its `??` defaults applied.
-fn measure_spec(kind: &Json, text: &Json) -> Result<Value, String> {
-    let str_or = |key: &str, default: &str| {
-        kind.get(key)
-            .and_then(Json::as_str)
-            .map(|s| s.to_string_lossy())
-            .unwrap_or_else(|| default.to_owned())
-    };
-    Ok(Value::object([
-        (
-            "font",
-            Value::from_json_lenient(kind.get("font").unwrap_or(&Json::Null)),
-        ),
-        ("align", cve_str(&str_or("align", "start"))),
-        ("baseline", cve_str(&str_or("baseline", "alphabetic"))),
-        ("text", Value::from_json_lenient(text)),
-    ]))
-}
-
-/// `measureFixed`, or `null` when the font's size does not parse.
-fn measure_metrics(spec: &Value) -> Result<Value, String> {
-    let str_at = |key: &str| {
-        spec.get(key)
-            .and_then(Value::as_str)
-            .map(|s| s.to_string_lossy())
-            .ok_or_else(|| format!("measure spec has no {key}"))
-    };
-    let Some(font) = FontSpec::parse(&str_at("font")?) else {
-        return Ok(Value::Null);
-    };
-    let m = measure_text(
-        &mut FixedAdvance,
-        &font,
-        &str_at("align")?,
-        &str_at("baseline")?,
-        &str_at("text")?,
-    );
-    Ok(Value::object([
-        ("width", Value::number(m.width)),
-        (
-            "actualBoundingBoxLeft",
-            Value::number(m.actual_bounding_box_left),
-        ),
-        (
-            "actualBoundingBoxRight",
-            Value::number(m.actual_bounding_box_right),
-        ),
-        (
-            "actualBoundingBoxAscent",
-            Value::number(m.actual_bounding_box_ascent),
-        ),
-        (
-            "actualBoundingBoxDescent",
-            Value::number(m.actual_bounding_box_descent),
-        ),
-        (
-            "fontBoundingBoxAscent",
-            Value::number(m.font_bounding_box_ascent),
-        ),
-        (
-            "fontBoundingBoxDescent",
-            Value::number(m.font_bounding_box_descent),
-        ),
-        ("hangingBaseline", Value::number(m.hanging_baseline)),
-        ("alphabeticBaseline", Value::number(m.alphabetic_baseline)),
-        ("ideographicBaseline", Value::number(m.ideographic_baseline)),
-    ]))
 }
 
 fn selection_value(sel: &mut SelectionImpl) -> Value {
@@ -812,19 +782,17 @@ impl Runner {
         if self.ignored.iter().any(|i| i == name) {
             return;
         }
-        self.emitted.push(Emit {
+        self.emitted.push(Emit::Record {
             values: vec![("main", cve_str(name)), ("data", data)],
-            skipped: &[],
         });
     }
 
     fn exception(&mut self, where_: String, error: impl Into<String>) {
-        self.emitted.push(Emit {
+        self.emitted.push(Emit::Record {
             values: vec![
                 ("exception", cve_str(&where_)),
                 ("error", cve_str(&error.into())),
             ],
-            skipped: &[],
         });
     }
 
@@ -1026,14 +994,13 @@ impl Runner {
     /// then every controller's handler runs in registration order.
     fn dispatch_drag(&mut self, detail: &JsValue) {
         let get = |key: &str| ops::get(detail, key).unwrap_or(JsValue::Undefined);
-        self.emitted.push(Emit {
+        self.emitted.push(Emit::Record {
             values: vec![
                 ("drag", js_json::from_js(&get("data"))),
                 ("end", js_json::from_js(&get("end"))),
                 ("x", js_json::from_js(&get("x"))),
                 ("y", js_json::from_js(&get("y"))),
             ],
-            skipped: &[],
         });
         for i in 0..self.tabs.len() {
             let index = JsValue::Number(i as f64);
@@ -1512,49 +1479,48 @@ fn tab_source_list(controller: &mut dyn TabController<Host>) -> Option<&mut Sour
         .map(PointsController::source_list_mut)
 }
 
-/// `event.target`'s element kind for the keydown guards in `SelectionImpl` and
-/// `VideoController`: the tag the last compound spells, or the tag `hub.html` and
-/// the controller templates give the classes it names. `select`, `window` and
-/// `document` are `Other`: the guards check only `HTMLInputElement`,
-/// `HTMLTextAreaElement` and `isContentEditable`.
-fn key_target_of(target: &str) -> KeyTarget {
-    let element = target
-        .rsplit(' ')
-        .next()
-        .expect("rsplit always yields a part");
+/// The classes `www/hub.html` gives an `<input>`, and gives nothing else.
+const INPUT_CLASSES: [&str; 13] = [
+    "console-table-jump-input",
+    "data-table-jump-input",
+    "dimensions-height",
+    "dimensions-width",
+    "filter",
+    "max-speed",
+    "range-max",
+    "range-min",
+    "side-bar-search",
+    "size-x",
+    "size-y",
+    "step-size",
+    "video-timeline-slider",
+];
+
+/// What the keydown guards in `SelectionImpl` and `VideoController` ask of `event.target`: its
+/// tag as the selector's last compound spells it, or as `www/hub.html` gives its class. A class
+/// this does not know fails.
+fn key_target_of(target: &str) -> Result<KeyTarget, String> {
+    let element = target.rsplit(' ').next().expect("rsplit yields a part");
     let mut parts = element.split(['.', '#', '[', ':']);
-    let tag = parts.next().expect("split always yields a part");
-    if !tag.is_empty() {
-        return match tag {
-            "input" => KeyTarget::Input,
-            "textarea" => KeyTarget::TextArea,
-            _ => KeyTarget::Other,
-        };
-    }
-    const INPUT_CLASSES: [&str; 13] = [
-        "console-table-jump-input",
-        "data-table-jump-input",
-        "dimensions-height",
-        "dimensions-width",
-        "filter",
-        "max-speed",
-        "range-max",
-        "range-min",
-        "side-bar-search",
-        "size-x",
-        "size-y",
-        "step-size",
-        "video-timeline-slider",
-    ];
-    for part in parts {
-        if INPUT_CLASSES.contains(&part) {
-            return KeyTarget::Input;
+    let tag = parts.next().expect("split yields a part");
+    match tag {
+        "input" => return Ok(KeyTarget::Input),
+        "textarea" => return Ok(KeyTarget::TextArea),
+        "window" | "document" | "body" | "div" | "select" | "button" => {
+            return Ok(KeyTarget::Other);
         }
-        if part.starts_with("contenteditable") {
-            return KeyTarget::ContentEditable;
+        "" => {}
+        _ => return Err(err(format!("keydown on a {tag} is not modeled"))),
+    }
+    for class in parts {
+        if INPUT_CLASSES.contains(&class) {
+            return Ok(KeyTarget::Input);
+        }
+        if class == "xr-button" {
+            return Ok(KeyTarget::Other);
         }
     }
-    KeyTarget::Other
+    Err(err(format!("keydown on {target}: spell the element's tag")))
 }
 
 /// `setupKeyboardControls`: `event.key` is `undefined` unless the event is a `KeyboardEvent`
@@ -1825,24 +1791,34 @@ fn json_to_layout(fixture: &Json) -> Result<Layout, String> {
     Ok(Layout { rules })
 }
 
-/// Records other replay layers own, so they can appear anywhere in the stream: the
-/// scripted geometry the fake DOM answered (`read`/`write`), the tuner protocol
-/// (`tuner`), and the real-geometry Table fixture's row layout (`tr`). Capture-side
-/// records (`dom`, `canvas`, `sl`, `measure`) are not here: the walk consumes them
-/// where the capture wrote them.
-fn other_layers(record: &Record) -> bool {
-    record.field("read").is_some()
-        || record.field("write").is_some()
-        || record.field("tuner").is_some()
-        || record.field("tr").is_some()
+/// A record's kind for the tally: its first key, with the canvas a `canvas` record is for and
+/// whether a geometry access is on the tab's own table container.
+fn kind_of(record: &Record) -> String {
+    let key = match &record.json {
+        Json::Object(pairs) if !pairs.is_empty() => pairs[0].0.to_string_lossy(),
+        _ => panic!("line {}: the record has no first key", record.line),
+    };
+    match key.as_str() {
+        "canvas" => format!("canvas:{}", canvas_class(record)),
+        "read" | "write" if on_tab_table(record) => TAB_GEOMETRY.to_owned(),
+        "read" | "write" => HUB_GEOMETRY.to_owned(),
+        _ => key,
+    }
 }
 
-/// A record's kind for the tally: its first key, as the dom harness writes it.
-fn kind_of(record: &Record) -> String {
-    match &record.json {
-        Json::Object(pairs) if !pairs.is_empty() => pairs[0].0.to_string_lossy(),
-        _ => format!("line {}", record.line),
-    }
+const TAB_GEOMETRY: &str = "tab geometry";
+const HUB_GEOMETRY: &str = "hub geometry";
+
+fn canvas_class(record: &Record) -> String {
+    let id = record.string("canvas").expect("a canvas record has an id");
+    let (class, _) = id.split_once('#').expect("a canvas id is class#n");
+    class.to_owned()
+}
+
+fn on_tab_table(record: &Record) -> bool {
+    record.string("el").is_some_and(|el| {
+        el.contains("div.data-table-container:") || el.contains("div.console-table-container:")
+    })
 }
 
 /// The recording's accesses to Console containers and rows. A real-geometry run also records
@@ -2516,6 +2492,16 @@ impl Runner {
             (t, "click") if t.contains(".source-list .list .item button.remove") => {
                 self.source_item_click(index, true, scoped)?
             }
+            // None of these has a keydown listener that acts on what the fixtures type; the
+            // event bubbles to the window's.
+            (
+                ".max-speed" | ".size-y" | ".dimensions-width" | ".side-bar-search" | ".filter"
+                | "select.origin",
+                "keydown",
+            ) if init
+                .get("code")
+                .and_then(Json::as_str)
+                .is_some_and(|c| c.to_string_lossy() == "Space") => {}
             // Video controls: `index` is the querySelectorAll position inside the
             // selected tab's controls (`div.controls-content > :not([hidden])`).
             (t, "click") if t.contains(".video-source button") => self.video_source_click(index)?,
@@ -2538,7 +2524,7 @@ impl Runner {
                 .and_then(Json::as_str)
                 .map(|c| c.to_string_lossy())
                 .unwrap_or_default();
-            let key_target = key_target_of(&target);
+            let key_target = key_target_of(&target)?;
             // `window.tabs` reads that SelectionImpl resolves per keydown upstream:
             // `getSelectedTabType()` and `isUnlockedVideoSelected()`.
             {
@@ -2737,6 +2723,20 @@ impl Runner {
             .ok_or_else(|| err(format!("tab {tab} is not a {}", std::any::type_name::<T>())))
     }
 
+    /// The tabs whose controls a selector reaches, in document order: the selected one when the
+    /// selector starts at `div.controls-content > :not([hidden])`, every one otherwise.
+    fn controls_tabs(&mut self, scoped: bool) -> Vec<usize> {
+        if scoped {
+            return self.tabs.selected_index().into_iter().collect();
+        }
+        self.sync_controls_order(false);
+        let ids = self.tab_ids();
+        self.controls_order
+            .iter()
+            .filter_map(|id| ids.iter().position(|i| i == id))
+            .collect()
+    }
+
     /// `div.controls-content > :not([hidden])` scopes a selector to the selected tab's
     /// controls; without it, matches span every tab's controls in `controls_order`
     /// (`count` of them per `kinds` tab), then `templates` more in the `#controllerN`
@@ -2751,19 +2751,7 @@ impl Runner {
         templates: usize,
         what: &str,
     ) -> Result<Option<(usize, usize)>, String> {
-        if scoped {
-            return match self.tabs.selected_index() {
-                Some(i) => Ok(Some((i, index))),
-                None => Err(err("no tab is selected")),
-            };
-        }
-        self.sync_controls_order(false);
-        let ids = self.tab_ids();
-        let order: Vec<usize> = self
-            .controls_order
-            .iter()
-            .filter_map(|id| ids.iter().position(|i| i == id))
-            .collect();
+        let order = self.controls_tabs(scoped);
         let mut at = index;
         for i in order {
             let Some(tab) = self.tabs.tab(i) else {
@@ -2778,7 +2766,7 @@ impl Runner {
             }
             at -= n;
         }
-        if at < templates {
+        if !scoped && at < templates {
             return Ok(None);
         }
         Err(err(format!("no {what} match {index}")))
@@ -3013,16 +3001,7 @@ impl Runner {
         remove: bool,
         scoped: bool,
     ) -> Result<(), String> {
-        self.sync_controls_order(false);
-        let ids = self.tab_ids();
-        let order: Vec<usize> = if scoped {
-            self.tabs.selected_index().into_iter().collect()
-        } else {
-            self.controls_order
-                .iter()
-                .filter_map(|id| ids.iter().position(|i| i == id))
-                .collect()
-        };
+        let order = self.controls_tabs(scoped);
         let mut at = index;
         for i in order {
             let Some(tab) = self.tabs.tab(i) else {
@@ -3169,13 +3148,33 @@ impl Runner {
         Ok(())
     }
 
+    /// The canvases drawn since the last capture, in context creation order.
+    fn take_drawings(&mut self) -> Vec<Drawing> {
+        self.sync_controls_order(false);
+        let ids = self.tab_ids();
+        let mut out = Vec::new();
+        for id in &self.controls_order {
+            let recorder = ids
+                .iter()
+                .position(|i| i == id)
+                .and_then(|i| self.tabs.tab(i))
+                .and_then(|tab| tab.renderer().downcast_ref::<Recorder>());
+            if let Some(recorder) = recorder
+                && let Some(drawing) = recorder.drawing.borrow_mut().as_mut()
+                && std::mem::take(&mut drawing.drawn_since_capture)
+            {
+                out.push(drawing.clone());
+            }
+        }
+        out
+    }
+
     fn capture(&mut self, spec: &Json, label: Option<String>) -> Result<(), String> {
-        self.emitted.push(Emit {
+        self.emitted.push(Emit::Record {
             values: vec![
                 ("capture", cve_str(&label.unwrap_or_default())),
                 ("time", Value::number(self.now - self.start)),
             ],
-            skipped: &[],
         });
         let kinds: Vec<&Json> = match spec.as_array() {
             Some(list) => list.iter().collect(),
@@ -3219,9 +3218,8 @@ impl Runner {
                             ("title", js_json::from_js(tab.title())),
                             ("uuid", js_json::from_js(&JsValue::String(js(&uuid)))),
                         ]);
-                        self.emitted.push(Emit {
+                        self.emitted.push(Emit::Record {
                             values: vec![("command", meta), ("value", js_json::from_js(&command))],
-                            skipped: &[],
                         });
                     }
                 }
@@ -3242,16 +3240,14 @@ impl Runner {
                         ("sidebar", sidebar),
                         ("tabs", js_json::from_js(&self.tabs.save_state(&self.host))),
                     ]);
-                    self.emitted.push(Emit {
+                    self.emitted.push(Emit::Record {
                         values: vec![("state", state)],
-                        skipped: &[],
                     });
                 }
                 "selection" => {
                     let value = selection_value(&mut self.host.selection);
-                    self.emitted.push(Emit {
+                    self.emitted.push(Emit::Record {
                         values: vec![("selection", value)],
-                        skipped: &[],
                     });
                 }
                 "eval" => {
@@ -3261,56 +3257,33 @@ impl Runner {
                         .map(|s| s.to_string_lossy())
                         .unwrap_or_default();
                     match run_eval(self, &expr) {
-                        Ok(value) => self.emitted.push(Emit {
+                        Ok(value) => self.emitted.push(Emit::Record {
                             values: vec![
                                 ("eval", cve_str(&expr)),
                                 ("value", js_json::from_js(&value)),
                             ],
-                            skipped: &[],
                         }),
-                        Err(e) => self.emitted.push(Emit {
+                        Err(e) => self.emitted.push(Emit::Record {
                             values: vec![("eval", cve_str(&expr)), ("throw", cve_str(&e))],
-                            skipped: &[],
                         }),
                     }
                 }
-                // `nodes` stays unmodeled until U24; the selector still pairs the record.
                 "dom" => {
                     let selector = kind
                         .get("selector")
                         .and_then(Json::as_str)
                         .map(|s| s.to_string_lossy())
                         .ok_or_else(|| err("dom capture has no selector"))?;
-                    self.emitted.push(Emit {
+                    self.emitted.push(Emit::Record {
                         values: vec![("dom", cve_str(&selector))],
-                        skipped: &[],
                     });
                 }
-                // The canvas suite compares `calls`; the count and position belong here.
-                "canvas" => self.emitted.push(Emit {
-                    values: Vec::new(),
-                    skipped: &["canvas"],
-                }),
-                // The source-list suites compare the dumps; the count belongs here.
-                "sourceLists" => self.emitted.push(Emit {
-                    values: Vec::new(),
-                    skipped: &["sl", "slTypeMemory", "slLog", "slMemory"],
-                }),
-                "measure" => {
-                    let texts = kind
-                        .get("texts")
-                        .and_then(Json::as_array)
-                        .ok_or_else(|| err("measure capture has no texts"))?;
-                    for text in texts {
-                        let spec = measure_spec(kind, text)?;
-                        self.emitted.push(Emit {
-                            values: vec![
-                                ("measure", spec.clone()),
-                                ("metrics", measure_metrics(&spec)?),
-                            ],
-                            skipped: &[],
-                        });
+                "canvas" => {
+                    if kind.get("selector").is_some() {
+                        return Err(err("a canvas capture with a selector is not modeled"));
                     }
+                    let drawings = self.take_drawings();
+                    self.emitted.push(Emit::Canvases(drawings));
                 }
                 other => return Err(err(format!("capture kind {other} is not modeled"))),
             }
@@ -3362,78 +3335,158 @@ fn compare(spec: &Path, vector_id: &str) -> Result<usize, String> {
         .then(|| console_reads(&records))
         .transpose()?;
     let emitted = replay(spec, table.clone(), reads.clone())?;
-    if let Some(table) = table {
-        let mut t = table.0.borrow_mut();
-        if let Some(mismatch) = t.mismatches.first() {
-            return Err(format!("{} mismatches, {mismatch}", t.mismatches.len()));
-        }
-        let compared = std::mem::take(&mut t.reads).finish()?;
-        if compared < 20 || t.checked < 20 {
-            return Err(format!("only {compared} geometry records compared"));
-        }
-    }
-    if let Some(RecordedConsole(reads)) = reads {
-        reads.take().finish()?;
-    }
-    let mut tally = Tally::by_first_key(vector_id, &records);
-    for (kind, by) in [
-        ("read", "the scripted-geometry harnesses that replay them"),
-        ("write", "the scripted-geometry harnesses that replay them"),
-        ("tuner", "the tuner suites"),
-        ("tr", "asrs-tabs's table_real_dom"),
-    ] {
-        if records.iter().any(|r| r.field(kind).is_some()) {
-            tally.covered_elsewhere(kind, by);
-        }
-    }
-    let mut expected = records.iter().peekable();
-    let result = (|| -> Result<(), String> {
-        for emit in &emitted {
-            while expected.peek().is_some_and(|r| other_layers(r)) {
-                expected.next();
+    let mut tally = Tally::new(vector_id, &records, kind_of);
+    let checked = (|| -> Result<(), String> {
+        if let Some(table) = table {
+            let mut t = table.0.borrow_mut();
+            if let Some(mismatch) = t.mismatches.first() {
+                return Err(format!("{} mismatches, {mismatch}", t.mismatches.len()));
             }
-            // An empty `values` is a marker: it consumes only the records `skipped` names.
-            if !emit.values.is_empty() {
-                let record = expected
-                    .next()
-                    .ok_or_else(|| err("port emitted more records than the vector has"))?;
-                for (key, value) in &emit.values {
-                    let expected_value = record.value(key).map_err(|e| {
-                        format!(
-                            "line {} missing {key}: {e}; the port emitted {value:?}",
-                            record.line
-                        )
-                    })?;
-                    if let Some(report) = asrs_parity::diff::report(&expected_value, value) {
-                        return Err(format!("line {} ({key}): {report}", record.line));
-                    }
-                }
-                tally.compared(&kind_of(record));
+            let compared = std::mem::take(&mut t.reads).finish()?;
+            if compared < 20 || t.checked < 20 {
+                return Err(format!("only {compared} geometry records compared"));
             }
-            for &kind in emit.skipped {
-                while expected.peek().is_some_and(|r| r.field(kind).is_some()) {
-                    expected.next();
-                    tally.compared(kind);
-                }
-            }
+            (0..compared).for_each(|_| tally.compared(TAB_GEOMETRY));
         }
-        if let Some(record) = expected.find(|r| !other_layers(r)) {
-            return Err(format!(
-                "line {}: the port emitted nothing for this record",
-                record.line
-            ));
+        if let Some(RecordedConsole(reads)) = reads {
+            let compared = reads.take().finish()?;
+            (0..compared).for_each(|_| tally.compared(TAB_GEOMETRY));
         }
-        Ok(())
+        compare_emitted(&records, &emitted, &mut tally)
     })();
-    if let Err(e) = result {
+    if let Err(e) = checked {
         std::mem::forget(tally);
         return Err(e);
     }
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| tally.finish())).map_err(|p| {
-        p.downcast::<String>()
-            .map(|s| *s)
-            .unwrap_or_else(|_| "tally failed".to_owned())
-    })
+    for (kind, by) in NOT_COMPARED {
+        if records.iter().any(|r| kind_of(r) == kind) {
+            tally.covered_elsewhere(kind, by);
+        }
+    }
+    Ok(tally.finish())
+}
+
+/// Kinds whose payload no replay compares for these vectors (#397), with the suites that compare
+/// the same production code on their own.
+const NOT_COMPARED: [(&str, &str); 6] = [
+    ("dom", "asrs-tabs's dom_tab_views, in part"),
+    (HUB_GEOMETRY, "tabs_dom and sidebar_dom, in part"),
+    ("canvas:timeline-canvas", "timeline_traces"),
+    ("canvas:line-graph-canvas", "asrs-tabs's line_graph_dom"),
+    ("canvas:heatmap-canvas", "asrs-tabs's heatmap_vectors"),
+    (
+        "canvas:canvas",
+        "asrs-tabs's histogram_dom and heatmap_vectors",
+    ),
+];
+
+fn compare_emitted(records: &[Record], emitted: &[Emit], tally: &mut Tally) -> Result<(), String> {
+    let mut expected = records
+        .iter()
+        .filter(|r| ![TAB_GEOMETRY, HUB_GEOMETRY].contains(&kind_of(r).as_str()))
+        .peekable();
+    for emit in emitted {
+        let values = match emit {
+            Emit::Record { values } => values,
+            Emit::Canvases(drawings) => {
+                let mut drawings = drawings.iter();
+                while let Some(record) = expected.next_if(|r| r.field("canvas").is_some()) {
+                    let class = canvas_class(record);
+                    if !COMPARED_CANVASES.contains(&class.as_str()) {
+                        continue;
+                    }
+                    let drawing = drawings
+                        .next()
+                        .ok_or_else(|| format!("line {}: the port drew no {class}", record.line))?;
+                    tally.compare(&kind_of(record), record, |fields| {
+                        compare_canvas(fields, drawing)
+                    })?;
+                }
+                if let Some(drawing) = drawings.next() {
+                    return Err(format!(
+                        "the port drew a {}, upstream did not",
+                        drawing.class
+                    ));
+                }
+                continue;
+            }
+        };
+        let record = expected
+            .next()
+            .ok_or_else(|| err("port emitted more records than the vector has"))?;
+        let compare_values = |fields: &Fields<'_>| -> Result<(), String> {
+            for (key, value) in values {
+                let expected_value = fields.value(key).map_err(|e| {
+                    format!(
+                        "line {} missing {key}: {e}; the port emitted {value:?}",
+                        record.line
+                    )
+                })?;
+                if let Some(report) = asrs_parity::diff::report(&expected_value, value) {
+                    return Err(format!("line {} ({key}): {report}", record.line));
+                }
+            }
+            Ok(())
+        };
+        let kind = kind_of(record);
+        if kind == "dom" {
+            compare_values(&Fields::new(record))?;
+        } else {
+            tally.compare(&kind, record, compare_values)?;
+        }
+    }
+    match expected.next() {
+        Some(record) => Err(format!(
+            "line {}: the port emitted nothing for this record",
+            record.line
+        )),
+        None => Ok(()),
+    }
+}
+
+/// The oracle names a canvas passed to `drawImage` by its id, the port the heatmap's `@heatmap`.
+fn name_heatmap(value: Value) -> Value {
+    match value {
+        Value::Array(items) => Value::Array(items.into_iter().map(name_heatmap).collect()),
+        Value::String(s) if s.to_string_lossy().starts_with("@canvas:heatmap-canvas#") => {
+            Value::string("@heatmap")
+        }
+        other => other,
+    }
+}
+
+/// Assigning `CANVAS.width` and then `CANVAS.height` resets the context twice a frame.
+const RESETS_PER_FRAME: usize = 2;
+
+fn compare_canvas(fields: &Fields<'_>, drawing: &Drawing) -> Result<(), String> {
+    let id = fields.string("canvas")?;
+    if id.split('#').next() != Some(drawing.class) {
+        return Err(format!("{id}: the port drew a {}", drawing.class));
+    }
+    let calls = asrs_canvas::trace::encode(&drawing.canvas.calls)
+        .lines()
+        .map(|line| {
+            json::parse(line)
+                .map_err(|e| format!("port trace line {line}: {e:?}"))
+                .and_then(|json| Value::from_json(&json).map_err(|e| e.0))
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    for (key, value) in [
+        (
+            "frame",
+            Value::number((drawing.frames * RESETS_PER_FRAME) as f64),
+        ),
+        ("width", Value::number(f64::from(drawing.canvas.width))),
+        ("height", Value::number(f64::from(drawing.canvas.height))),
+        ("calls", Value::Array(calls)),
+    ] {
+        let recorded = fields.value(key).map_err(|e| e.0)?;
+        let recorded = name_heatmap(recorded);
+        if let Some(report) = asrs_parity::diff::report(&recorded, &value) {
+            return Err(format!("line {} {id} {key}: {report}", fields.line()));
+        }
+    }
+    Ok(())
 }
 
 fn spec_files() -> Vec<(PathBuf, String)> {

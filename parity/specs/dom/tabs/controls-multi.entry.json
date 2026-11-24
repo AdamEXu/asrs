@@ -1,0 +1,735 @@
+{
+  "entry": "dom",
+  "inputs": [
+    "../assets/c05.json",
+    "../logs/c05.json"
+  ],
+  "fixture": {
+    "seed": 1171,
+    "assets": "../assets/c05.json",
+    "steps": [
+      {
+        "log": "../logs/c05.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 9
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/ModuleStates\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/Velocities\")"
+      },
+      {
+        "main": "new-tab",
+        "data": 9
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/ChassisSpeeds\")"
+      },
+      {
+        "main": "new-tab",
+        "data": 11
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Vision/Translations\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Vision/Corner\")"
+      },
+      {
+        "main": "new-tab",
+        "data": 11
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Vision/Targets\")"
+      },
+      {
+        "main": "new-tab",
+        "data": 8
+      },
+      {
+        "main": "new-tab",
+        "data": 8
+      },
+      {
+        "main": "new-tab",
+        "data": 2
+      },
+      {
+        "main": "shift-tab",
+        "data": -1
+      },
+      {
+        "eval": "window.tabs.setSelected(2)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "created"
+      },
+      {
+        "event": {
+          "target": "input.max-speed",
+          "index": 0,
+          "type": "change",
+          "props": {
+            "value": "6"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "input.size-x",
+          "index": 0,
+          "type": "change",
+          "props": {
+            "value": "0.1"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "input.size-y",
+          "index": 0,
+          "type": "change",
+          "props": {
+            "value": "1.1"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "input.dimensions-width",
+          "index": 0,
+          "type": "change",
+          "props": {
+            "value": "100"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "input.dimensions-height",
+          "index": 0,
+          "type": "change",
+          "props": {
+            "value": "200"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "select.orientation",
+          "index": 0,
+          "type": "change",
+          "props": {
+            "value": "xr,yu"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "select.origin",
+          "index": 0,
+          "type": "change",
+          "props": {
+            "value": "ur"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "input.max-speed",
+          "index": 1,
+          "type": "change",
+          "props": {
+            "value": "7"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "input.size-x",
+          "index": 1,
+          "type": "change",
+          "props": {
+            "value": "0.2"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "input.size-y",
+          "index": 1,
+          "type": "change",
+          "props": {
+            "value": "1.2"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "input.dimensions-width",
+          "index": 1,
+          "type": "change",
+          "props": {
+            "value": "101"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "input.dimensions-height",
+          "index": 1,
+          "type": "change",
+          "props": {
+            "value": "201"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "select.orientation",
+          "index": 1,
+          "type": "change",
+          "props": {
+            "value": "xu,yl"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "select.origin",
+          "index": 1,
+          "type": "change",
+          "props": {
+            "value": "c"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "input.max-speed",
+          "index": 2,
+          "type": "change",
+          "props": {
+            "value": "8"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "input.size-x",
+          "index": 2,
+          "type": "change",
+          "props": {
+            "value": "0.3"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "input.size-y",
+          "index": 2,
+          "type": "change",
+          "props": {
+            "value": "1.3"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "input.dimensions-width",
+          "index": 2,
+          "type": "change",
+          "props": {
+            "value": "102"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "input.dimensions-height",
+          "index": 2,
+          "type": "change",
+          "props": {
+            "value": "202"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "select.orientation",
+          "index": 2,
+          "type": "change",
+          "props": {
+            "value": "xr,yu"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "select.origin",
+          "index": 2,
+          "type": "change",
+          "props": {
+            "value": "ll"
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "inputs"
+      },
+      {
+        "event": {
+          "target": "table.joystick-selector select",
+          "index": 0,
+          "type": "change",
+          "props": {
+            "value": "Generic Joystick"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "table.joystick-selector select",
+          "index": 5,
+          "type": "change",
+          "props": {
+            "value": "Xbox Controller"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "table.joystick-selector select",
+          "index": 6,
+          "type": "change",
+          "props": {
+            "value": "PS5 Controller"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "table.joystick-selector select",
+          "index": 11,
+          "type": "change",
+          "props": {
+            "value": "Generic Joystick"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "table.joystick-selector select",
+          "index": 12,
+          "type": "change",
+          "props": {
+            "value": "Xbox Controller"
+          }
+        }
+      },
+      {
+        "event": {
+          "target": "table.joystick-selector select",
+          "index": 17,
+          "type": "change",
+          "props": {
+            "value": "Xbox Controller"
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "joysticks"
+      },
+      {
+        "event": {
+          "target": ".orientation-switcher > div",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": ".orientation-switcher > div",
+          "index": 3,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": ".orientation-switcher > div",
+          "index": 3,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": ".orientation-switcher > div",
+          "index": 3,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": ".orientation-switcher > div",
+          "index": 4,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": ".orientation-switcher > div",
+          "index": 5,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": ".orientation-switcher > div",
+          "index": 5,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": ".orientation-switcher > div",
+          "index": 6,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": ".orientation-switcher > div",
+          "index": 9,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": ".orientation-switcher > div",
+          "index": 2,
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "key": "Enter",
+            "code": "Enter"
+          }
+        }
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "orientation"
+      },
+      {
+        "event": {
+          "target": ".source-list .list .item button.hide",
+          "index": 1,
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "hide-1"
+      },
+      {
+        "event": {
+          "target": ".source-list .list .item button.hide",
+          "index": 2,
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "hide-2"
+      },
+      {
+        "event": {
+          "target": ".source-list .list .item button.remove",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "remove-0"
+      },
+      {
+        "event": {
+          "target": ".source-list .list .item button.hide",
+          "index": 3,
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "hide-3"
+      },
+      {
+        "event": {
+          "target": ".source-list .list .item button.remove",
+          "index": 2,
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "remove-2"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/Rotation\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/ModuleStates\")"
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .source-list .list .item button.remove",
+          "index": 0,
+          "type": "click"
+        }
+      },
+      {
+        "event": {
+          "target": "div.controls-content > :not([hidden]) .orientation-switcher > div",
+          "index": 1,
+          "type": "click"
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "scoped"
+      },
+      {
+        "eval": "window.selection.setSelectedTime(2.5)"
+      },
+      {
+        "frames": 1
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "time"
+      },
+      {
+        "event": {
+          "target": ".max-speed",
+          "index": 0,
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "key": " ",
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "space .max-speed"
+      },
+      {
+        "event": {
+          "target": ".size-y",
+          "index": 0,
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "key": " ",
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "space .size-y"
+      },
+      {
+        "event": {
+          "target": ".dimensions-width",
+          "index": 0,
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "key": " ",
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "space .dimensions-width"
+      },
+      {
+        "event": {
+          "target": ".side-bar-search",
+          "index": 0,
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "key": " ",
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "space .side-bar-search"
+      },
+      {
+        "event": {
+          "target": ".data-table-jump-input",
+          "index": 0,
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "key": " ",
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "space .data-table-jump-input"
+      },
+      {
+        "event": {
+          "target": ".filter",
+          "index": 0,
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "key": " ",
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "space .filter"
+      },
+      {
+        "event": {
+          "target": "select.origin",
+          "index": 0,
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "key": " ",
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "space select.origin"
+      },
+      {
+        "event": {
+          "target": "select.origin",
+          "index": 0,
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "key": " ",
+            "code": "Space"
+          }
+        }
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "selection"
+        ],
+        "label": "space again select.origin"
+      }
+    ]
+  }
+}
