@@ -1403,6 +1403,8 @@ fn importing_other_shapes() {
     the_beta_welcome_is_acknowledged(&mut app, hub);
     app.focus(hub);
     let defaults = app.hub(hub, HubModel::save_state);
+    let user_data = lifecycle::user_data_dir(Platform::current(), |name| std::env::var(name).ok());
+    let state_file = Path::new(&user_data.expect("a user-data directory")).join("state-dev.json");
 
     let mut compared = 0;
     for session in [
@@ -1425,6 +1427,13 @@ fn importing_other_shapes() {
                 [&actual, expected].map(|state| comparable(state, !sidebar_threw));
             assert_eq!(actual, expected, "{what}");
             compared += 1;
+
+            app.cx.advance_clock(Duration::from_secs(2));
+            app.settle();
+            let saved = app.hub(restored, HubModel::save_state);
+            let saved = asrs_js::json::stringify(&saved).expect("JSON");
+            let written = std::fs::read_to_string(&state_file).expect("state");
+            assert!(written.contains(&saved.expect("a state")), "{what}");
         }
     }
     assert!(compared > 70, "{compared} layouts compared");
