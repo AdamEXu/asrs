@@ -164,8 +164,8 @@
     ]
    },
    {
-    "name": "200x40/400x1000",
-    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:40px;overflow:auto;background:#fff'><div style='width:400px;height:1000px'></div></div>",
+    "name": "200x44/400x1000",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:44px;overflow:auto;background:#fff'><div style='width:400px;height:1000px'></div></div>",
     "ops": [
      [
       "move",
@@ -206,7 +206,7 @@
        233,
        40,
        17,
-       40
+       44
       ]
      ]
     ]
