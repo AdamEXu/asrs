@@ -8,7 +8,7 @@ use std::sync::Arc;
 use gpui_kit::{
     Bounds, DevicePixels, Empty, GraphicalEnvironment, Platform, PlatformAtlas,
     PlatformHeadlessRenderer, PlatformWindow, Result, Scene, Size, WindowBackgroundAppearance,
-    WindowHandle, WindowId, WindowKind, WindowParams, point, px, size,
+    WindowHandle, WindowId, WindowKind, WindowParams, WindowingRequest, point, px, size,
 };
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use windows::Win32::Foundation::HWND;
