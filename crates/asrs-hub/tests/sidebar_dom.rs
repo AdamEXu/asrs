@@ -22,13 +22,15 @@ use std::rc::Rc;
 use asrs_hub::drag::{Drag, DragPayload};
 use asrs_hub::sidebar::{
     EventOutcome, INDENT_SIZE_PX, RowRect, RowRef, RowValue, Sidebar, SidebarEnv, SidebarGeometry,
-    Tuner,
+    Tuner, TunerWindow,
 };
 use asrs_js::number;
 use asrs_js::string::JsString;
-use asrs_js::time::Clock;
+use asrs_js::time::{Clock, SetRng};
 use asrs_js::value::{JsValue, ToJs};
+use asrs_live::{Thrown, TunedValue};
 use asrs_log::log::{Log, LoggableType, RawValue};
+use asrs_log::realm::JsRealm;
 use asrs_model::hub_state::SidebarState;
 use asrs_model::selection::Selection;
 use asrs_model::selection_impl::SelectionImpl;
@@ -103,31 +105,42 @@ struct StubTuner {
 }
 
 impl Tuner for StubTuner {
-    fn has_tunable_fields(&self) -> bool {
+    fn has_tunable_fields(&self, _log: &Log) -> bool {
         !self.keys.is_empty()
     }
-    fn is_tunable(&self, key: &JsString) -> bool {
+    fn is_tunable(&self, _log: &Log, key: &JsString) -> bool {
         self.keys.contains(key)
     }
-    fn publish(&self, key: &JsString, value: &JsValue) {
+    fn publish(
+        &self,
+        _window: &mut TunerWindow<'_>,
+        key: &JsString,
+        value: TunedValue,
+    ) -> Result<(), Thrown> {
+        let value = match value {
+            TunedValue::Number(n) => JsValue::Number(n),
+            TunedValue::Boolean(b) => JsValue::Bool(b),
+        };
         self.events.borrow_mut().push(Emit {
             values: vec![(
                 "tuner",
                 Value::Array(vec![
                     cve_string(&js("publish")),
                     cve_string(key),
-                    js_json::from_js(value),
+                    js_json::from_js(&value),
                 ]),
             )],
         });
+        Ok(())
     }
-    fn unpublish(&self, key: &JsString) {
+    fn unpublish(&self, _window: &mut TunerWindow<'_>, key: &JsString) -> Result<(), Thrown> {
         self.events.borrow_mut().push(Emit {
             values: vec![(
                 "tuner",
                 Value::Array(vec![cve_string(&js("unpublish")), cve_string(key)]),
             )],
         });
+        Ok(())
     }
 }
 
@@ -854,6 +867,8 @@ macro_rules! senv {
             log: $runner.ctx.log,
             selection: &mut *$runner.ctx.selection.borrow_mut(),
             tuner: $runner.ctx.tuner.borrow().as_ref().map(|t| t as &dyn Tuner),
+            realm: &mut $runner.realm,
+            clock: $runner.ctx.clock,
             dark_theme: $runner.ctx.dark_theme,
             inner_height: $runner.ctx.inner_height,
             loading_fields: &$runner.ctx.loading_fields,
@@ -866,6 +881,7 @@ struct Ctx<'a> {
     log: &'a Rc<RefCell<Log>>,
     selection: &'a RefCell<SelectionImpl>,
     tuner: &'a RefCell<Option<StubTuner>>,
+    clock: &'a dyn Clock,
     loading_fields: &'a HashSet<JsString>,
     dark_theme: bool,
     inner_height: f64,
@@ -873,6 +889,7 @@ struct Ctx<'a> {
 
 struct Runner<'a> {
     ctx: Ctx<'a>,
+    realm: JsRealm,
     sidebar: &'a mut Sidebar,
     drag: Drag,
     geometry: Recorded,
@@ -1242,16 +1259,19 @@ fn replay(
     let filenames: Vec<JsString> = Vec::new();
     let mut sidebar = Sidebar::new(start, move || filenames.clone());
     let loading_fields: HashSet<JsString> = HashSet::new();
+    let scripted = ScriptedClock(now_cell.clone());
 
     let mut runner = Runner {
         ctx: Ctx {
             log: &log,
             selection: &selection,
             tuner: &tuner,
+            clock: &scripted,
             loading_fields: &loading_fields,
             dark_theme,
             inner_height,
         },
+        realm: JsRealm::new(Box::new(SetRng::new(Vec::new()))),
         sidebar: &mut sidebar,
         drag: Drag::default(),
         geometry: Recorded {
