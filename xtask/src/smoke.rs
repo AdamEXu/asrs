@@ -87,7 +87,7 @@ pub fn run(args: &[String]) -> Result {
             ));
         }
     }
-    let dir = workspace_root().join("target/smoke");
+    let dir = workspace_root().join("target").join("smoke");
     if dir.exists() {
         fs::remove_dir_all(&dir).map_err(at(&dir))?;
     }
@@ -546,17 +546,21 @@ impl Smoke {
         if !registered.contains(&expected) || !registered.contains("AdamXu.asrs") {
             return Err(format!("registered {registered:?}, expected {expected}"));
         }
-        run_tool(Command::new(installed.join("unins000.exe")).args([
+        let uninstaller = installed.join("unins000.exe");
+        run_tool(Command::new(&uninstaller).args([
             "/VERYSILENT",
             "/SUPPRESSMSGBOXES",
             "/NORESTART",
         ]))?;
         let deadline = Instant::now() + START_TIMEOUT;
-        while exe.exists() {
+        while uninstaller.exists() {
             if Instant::now() > deadline {
-                return Err("the uninstaller left asrs.exe".to_owned());
+                return Err("the uninstaller did not finish".to_owned());
             }
             thread::sleep(POLL);
+        }
+        if exe.exists() {
+            return Err("the uninstaller left asrs.exe".to_owned());
         }
         powershell(
             "if (Test-Path 'HKCU:\\Software\\Classes\\asrs.wpilog') { throw 'left asrs.wpilog' }
