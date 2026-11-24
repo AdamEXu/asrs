@@ -79,7 +79,11 @@ function serve(sftp: any) {
   sftp.on("CLOSE", (id: number) => sftp.status(id, STATUS_CODE.OK));
 }
 
-const { private: hostKey } = utils.generateKeyPairSync("ed25519");
+// ssh2 sometimes returns a private key its own parseKey rejects; retry until one parses.
+let hostKey: string;
+do {
+  hostKey = utils.generateKeyPairSync("ed25519").private;
+} while (utils.parseKey(hostKey) instanceof Error);
 const server = new Server({ hostKeys: [hostKey] }, (client: any) => {
   client.on("error", () => undefined);
   client.on("authentication", (ctx: any) => {
