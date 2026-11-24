@@ -889,10 +889,12 @@ pub fn rasterize(
     backend.set_device_scale(scale);
     let origin = fraction as f32 / 64.0;
     let mut placed: Vec<(i32, Arc<Mask>)> = Vec::with_capacity(glyphs.len());
+    let subpixel = backend.subpixel_positioning();
+    let bias = if subpixel { 0.125 } else { 0.5 };
     for g in glyphs {
-        let biased = origin + scale * g.x + 0.125;
+        let biased = origin + scale * g.x + bias;
         let ix = biased.floor();
-        let phase = (((biased - ix) * 4.0).floor() as u8).min(3);
+        let phase = (((biased - ix) * 4.0).floor() as u8).min(3) * u8::from(subpixel);
         if let Some(mask) = backend.raw_mask(g.glyph, f64::from(scale), 1.0, phase)
             && mask.width > 0
             && mask.height > 0

@@ -2,6 +2,11 @@
 
 use icu_properties::CodePointSetData;
 use icu_properties::props::EmojiPresentation;
+#[cfg(any(target_os = "linux", windows))]
+use icu_properties::props::Script;
+
+#[cfg(any(target_os = "linux", windows))]
+use super::FontSpec;
 
 /// The clusters of `text`, which starts at UTF-16 offset `from`, each with whether Blink's
 /// `FontFallbackPriority` makes it emoji presentation: an `Emoji_Presentation` base, or a
@@ -34,6 +39,47 @@ pub(crate) fn emoji_clusters(text: &str, from: isize) -> Vec<(isize, isize, bool
     clusters
 }
 
+/// The byte ranges of `text` that `ScriptRunIterator` keeps together: characters of one script
+/// and the common ones after, or before the first.
+#[cfg(any(target_os = "linux", windows))]
+pub(crate) fn script_runs(text: &str) -> Vec<(usize, usize)> {
+    use icu_properties::script::ScriptWithExtensions;
+    let scripts = ScriptWithExtensions::new();
+    let mut runs: Vec<(usize, usize)> = Vec::new();
+    let mut current: Option<Vec<Script>> = None;
+    for (at, c) in text.char_indices() {
+        let end = at + c.len_utf8();
+        let of: Vec<Script> = scripts
+            .get_script_extensions_val(c)
+            .iter()
+            .map(|s| {
+                if s == Script::Katakana {
+                    Script::Hiragana
+                } else {
+                    s
+                }
+            })
+            .collect();
+        let neutral = of
+            .iter()
+            .any(|&s| s == Script::Common || s == Script::Inherited);
+        let shared: Vec<Script> = match &current {
+            Some(scripts) if !neutral => {
+                scripts.iter().copied().filter(|s| of.contains(s)).collect()
+            }
+            _ => Vec::new(),
+        };
+        match runs.last_mut() {
+            Some(run) if neutral || current.is_none() || !shared.is_empty() => run.1 = end,
+            _ => runs.push((at, end)),
+        }
+        if !neutral {
+            current = Some(if shared.is_empty() { of } else { shared });
+        }
+    }
+    runs
+}
+
 /// Blink's `CachingWordShapeIterator` for space-normalized text: every space is a word of its
 /// own and shapes apart from its neighbours.
 pub(crate) fn words(text: &str) -> impl Iterator<Item = &str> {
@@ -64,4 +110,39 @@ pub(crate) fn hb_scale(units: i64, upem: u32, size: f32) -> i32 {
 /// Skia's `SkScalarRoundToScalar`.
 pub(crate) fn round(v: f32) -> f32 {
     (v + 0.5).floor()
+}
+
+/// `FontDescription::EffectiveFontSize`: Blink floors a font's zoomed size to 1/100 px.
+#[cfg(any(target_os = "linux", windows))]
+pub(crate) fn effective(spec: &FontSpec, zoom: f32) -> FontSpec {
+    let zoomed = spec.size * zoom;
+    let floored = (zoomed * 100.0).floor() / 100.0;
+    if floored == zoomed {
+        return *spec;
+    }
+    FontSpec {
+        size: floored / zoom,
+        ..*spec
+    }
+}
+
+#[cfg(all(test, any(target_os = "linux", windows)))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn scripts_split_and_common_characters_stay() {
+        let runs = |text: &str| -> Vec<String> {
+            script_runs(text)
+                .into_iter()
+                .map(|(from, to)| text[from..to].to_owned())
+                .collect()
+        };
+        assert_eq!(runs("漢字かな交じり"), ["漢字", "かな", "交", "じり"]);
+        assert_eq!(runs("カーかー"), ["カーかー"]);
+        assert_eq!(runs("+4.37s"), ["+4.37s"]);
+        assert_eq!(runs("Δt=5"), ["Δ", "t=5"]);
+        assert_eq!(runs("café"), ["café"]);
+        assert!(runs("").is_empty());
+    }
 }

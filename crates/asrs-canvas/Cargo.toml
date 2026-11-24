@@ -24,10 +24,24 @@ rustybuzz = "=0.20.1"
 skrifa = "=0.37.0"
 yeslogic-fontconfig-sys = "=6.0.1"
 
+[target.'cfg(windows)'.dependencies]
+icu_properties = "=2.4.0"
+rustybuzz = "=0.20.1"
+windows = { version = "=0.62.2", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct2D_Common",
+    "Win32_Graphics_DirectWrite",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Registry",
+    "Win32_UI_WindowsAndMessaging",
+] }
+windows-core = "=0.62.2"
+windows-numerics = "=0.3.1"
+
 [dev-dependencies]
 asrs-parity = { path = "../asrs-parity" }
 
-[target.'cfg(target_os = "linux")'.dev-dependencies]
+[target.'cfg(any(target_os = "linux", windows))'.dev-dependencies]
 sha2 = "=0.10.9"
 
 [lints]
