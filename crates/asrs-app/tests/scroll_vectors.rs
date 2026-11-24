@@ -19,7 +19,8 @@ use asrs_ui::gpui::{
 use asrs_ui::scroll::{self, Extent, Request, Scrollbars, Style};
 
 const FRAME: Duration = Duration::from_millis(10);
-const SETTLE: u32 = 120;
+/// How long the recorder waits for offsets to stay the same.
+const SETTLE: u32 = 27;
 /// A held press goes on by a frame's worth more or less.
 const HELD_TOLERANCE: f64 = 46.0;
 const LEVELS: i32 = 12;
@@ -216,6 +217,17 @@ impl Page<'_> {
                 })
                 .expect("window");
             cx.run_until_parked();
+        }
+    }
+
+    fn settle(&mut self) {
+        let mut last = self.update(|view, style| view.top(style));
+        let mut same = 0;
+        while same < SETTLE {
+            self.frames(1);
+            let top = self.update(|view, style| view.top(style));
+            same = if top == last { same + 1 } else { 0 };
+            last = top;
         }
     }
 
@@ -486,7 +498,7 @@ fn replay(headless: &mut HeadlessCapture, id: &str) -> [usize; 3] {
                     if quick || kind == "wait" {
                         continue;
                     }
-                    page.frames(SETTLE);
+                    page.settle();
                     let record = records.next().expect("a record");
                     assert_eq!(record.field("op").expect("op"), op, "{at}");
                     let want = &items(record.field("scroll").expect("scroll"))[1];

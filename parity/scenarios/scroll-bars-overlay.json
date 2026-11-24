@@ -1,0 +1,354 @@
+{
+  "about": "Interaction (#268): overlay scrollbars of the table, hovered and pressed, and a statistics table that scrolls",
+  "scrollbars": "overlay",
+  "platforms": [
+    "darwin"
+  ],
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table",
+              "controller": [
+                "/Drive/LeftVelocity",
+                "/Drive/ModuleSpeeds",
+                "/DriverStation/Enabled",
+                "/Missing/Field/WithALongName",
+                "/Odometry/Robot3d/rotation/q/w"
+              ],
+              "controllerUUID": "table000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 1200
+    },
+    {
+      "wheel": {
+        "x": 640,
+        "y": 400,
+        "deltaX": -120,
+        "deltaY": -700,
+        "precise": true
+      }
+    },
+    {
+      "mouse": "move",
+      "x": 1093,
+      "y": 400
+    },
+    {
+      "mouse": "move",
+      "x": 1094,
+      "y": 400
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "table-vertical",
+      "probes": [
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th"
+      ]
+    },
+    {
+      "mouse": "down",
+      "x": 1094,
+      "y": 560
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "up",
+      "x": 1094,
+      "y": 560
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "table-paged",
+      "probes": [
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "wheel": {
+        "x": 640,
+        "y": 400,
+        "deltaX": -60,
+        "deltaY": 0,
+        "precise": true
+      }
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 642
+    },
+    {
+      "mouse": "move",
+      "x": 641,
+      "y": 643
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "table-horizontal",
+      "probes": [
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "table-rest",
+      "probes": [
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 6,
+              "title": "Stats",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "reference",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2"
+                    }
+                  },
+                  {
+                    "type": "relativeError",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b"
+                    }
+                  },
+                  {
+                    "type": "absoluteError",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#af2437"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Odometry/Robot/translation/x",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Odometry/Robot/translation/y",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#858584"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#5f4528"
+                    }
+                  }
+                ],
+                "timeRange": "visible",
+                "rangeMin": -2,
+                "rangeMax": 12.5,
+                "stepSize": 0.5
+              },
+              "controllerUUID": "statistics0000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "wheel": {
+        "x": 400,
+        "y": 200,
+        "deltaX": 0,
+        "deltaY": -120,
+        "precise": true
+      }
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 200
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "statistics",
+      "probes": [
+        ".stats-values-container",
+        "table.stats-values",
+        ".renderer-content"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Graph",
+              "controller": {
+                "leftSources": [],
+                "rightSources": [],
+                "discreteSources": [],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "line-graph",
+      "probes": [
+        ".controls-content"
+      ]
+    }
+  ]
+}
