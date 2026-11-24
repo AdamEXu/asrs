@@ -7,8 +7,8 @@ use std::time::Instant;
 
 use gpui_kit::{
     App, Bounds, Corners, DispatchPhase, Global, Hitbox, HitboxBehavior, IntoElement, MouseButton,
-    MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, Pixels, Styled, Window, canvas,
-    fill, point, px, rgba, size,
+    MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, Pixels, Point, Styled, Window,
+    canvas, fill, point, px, rgba, size,
 };
 
 use super::keys::page_step;
@@ -206,11 +206,27 @@ struct State {
     axes: [Activity; 2],
     drag: Option<Drag>,
     held: Option<Held>,
+    /// Where the bars that show are.
+    shown: [Option<Bounds<Pixels>>; 2],
+    laid_out: bool,
 }
 
 /// A scroller's scrollbars.
 #[derive(Clone, Debug, Default)]
 pub struct Scrollbars(Rc<RefCell<State>>);
+
+impl Scrollbars {
+    /// Whether a bar shows there.
+    pub fn contains(&self, position: Point<Pixels>) -> bool {
+        let state = self.0.borrow();
+        state.shown.iter().flatten().any(|b| b.contains(&position))
+    }
+
+    /// Whether they were laid out since the last call.
+    pub fn take_laid_out(&self) -> bool {
+        std::mem::take(&mut self.0.borrow_mut().laid_out)
+    }
+}
 
 fn ease(t: f64) -> f64 {
     let t = t.clamp(0.0, 1.0);
@@ -432,11 +448,11 @@ const CLASSIC_INNER: u32 = 0xe8e8e8ff;
 const CLASSIC_OUTER: u32 = 0xedededff;
 
 /// The scrollbars of the box this fills, over what is in it. Place it last in the box.
-pub fn scrollbars(
+pub fn scrollbars<F: Fn(Request, &mut Window, &mut App) + 'static>(
     bars: &Scrollbars,
     extent: Extent,
-    request: impl Fn(Request, &mut Window, &mut App) + 'static,
-) -> impl IntoElement {
+    request: F,
+) -> impl IntoElement + use<F> {
     let request: Rc<dyn Fn(Request, &mut Window, &mut App)> = Rc::new(request);
     let (laid_out, painted) = (bars.0.clone(), bars.0.clone());
     let advance = request.clone();
@@ -459,10 +475,13 @@ pub fn scrollbars(
             state.sync(extent.offset, now);
             frame.alpha = [0, 1].map(|a| state.alpha(settings.style, a, now));
             frame.expansion = [0, 1].map(|a| state.expansion(a, now));
+            state.laid_out = true;
+            state.shown = [None; 2];
             for axis in 0..2 {
                 if let Some(bar) = frame.bars[axis].filter(|_| frame.alpha[axis] > 0.0) {
                     let across = [0.0, settings.style.thickness() * scale];
                     let bounds = frame.place(axis, [0.0, bar.track], across);
+                    state.shown[axis] = Some(bounds);
                     let behavior = HitboxBehavior::BlockMouseExceptScroll;
                     frame.hitboxes[axis] = Some(window.insert_hitbox(bounds, behavior));
                 }
@@ -522,7 +541,7 @@ fn listen(
     request: Rc<dyn Fn(Request, &mut Window, &mut App)>,
     window: &mut Window,
 ) {
-    let client = |p: gpui_kit::Point<Pixels>| [p.x, p.y].map(|v| mouse_client(f32::from(v)));
+    let client = |p: Point<Pixels>| [p.x, p.y].map(|v| mouse_client(f32::from(v)));
     let scrolls = move |bar: &Bar, axis: usize, scale: f64| {
         (extent.content[axis] * scale - bar.max) / scale
     };

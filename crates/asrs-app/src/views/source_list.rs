@@ -17,7 +17,7 @@ use asrs_model::source_list::{
 use asrs_ui::button::IconButton;
 use asrs_ui::gpui::{
     AnyElement, App, BoxShadow, ClickEvent, Context, Div, Hsla, InteractiveElement, IntoElement,
-    MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, ScrollHandle,
+    MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, Pixels, Point, ScrollEvent,
     Stateful, StatefulInteractiveElement, Styled, Window, div, point, px, rgb, rgba,
 };
 use asrs_ui::icon::{Icon, IconFit, IconSource};
@@ -26,7 +26,8 @@ use asrs_ui::text::{self, Measurer, Text, TextStyle, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 use asrs_ui::tooltip::{titled_rtl, untitled};
 
-use super::frame::{FrameHost, HubFrame};
+use super::frame::{FrameHost, HubFrame, wheel_of};
+use super::scrollers::{Area, HandleScroller};
 
 const TITLE_HEIGHT: f64 = 30.0;
 const BUTTON: f32 = 25.0;
@@ -110,7 +111,7 @@ pub fn type_name_client_width(
 /// position.
 pub struct ListsLayout {
     lists: HashMap<String, ListLayout>,
-    scroll: HashMap<String, ScrollHandle>,
+    scroll: HashMap<String, HandleScroller>,
     measurer: Measurer,
     body_width: f64,
     scale: f32,
@@ -572,6 +573,7 @@ impl<H: FrameHost> HubFrame<H> {
         cx: &mut Context<'_, Self>,
     ) {
         let geometry = self.host().source_list_geometry();
+        let now = self.host().frame_time(cx);
         let mut layout = geometry.0.borrow_mut();
         layout.body_width = body_width;
         layout.scale = scale;
@@ -580,15 +582,53 @@ impl<H: FrameHost> HubFrame<H> {
             let scroll = layout
                 .scroll
                 .entry(list.uuid().to_owned())
-                .or_default()
-                .offset();
-            let scroll_top = -f64::from(f32::from(scroll.y));
+                .or_default();
+            scroll.animate(now, f64::from(scale));
+            let scroll_top = scroll.top();
             lists.insert(
                 list.uuid().to_owned(),
                 ListLayout::new(root, list.items(), scroll_top),
             );
         }
         layout.lists = lists;
+    }
+
+    fn source_list_wheel(
+        &mut self,
+        uuid: &str,
+        event: &ScrollEvent,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let now = self.host().frame_time(cx);
+        let scale = f64::from(window.scale_factor());
+        let geometry = self.host().source_list_geometry();
+        if let Some(scroller) = geometry.0.borrow_mut().scroll.get_mut(uuid) {
+            scroller.wheel(wheel_of(event), now, scale);
+        }
+        cx.notify();
+    }
+
+    pub(super) fn source_list_smooth(&mut self, uuid: &str, by: f64, cx: &mut Context<'_, Self>) {
+        let now = self.host().frame_time(cx);
+        let geometry = self.host().source_list_geometry();
+        if let Some(scroller) = geometry.0.borrow_mut().scroll.get_mut(uuid) {
+            scroller.smooth(by, now);
+        }
+    }
+
+    pub(super) fn source_list_scroll_to(&mut self, uuid: &str, to: f64, scale: f64) {
+        let geometry = self.host().source_list_geometry();
+        if let Some(scroller) = geometry.0.borrow_mut().scroll.get_mut(uuid) {
+            scroller.scroll_to(to, scale);
+        }
+    }
+
+    pub(super) fn source_list_range(&self, uuid: &str) -> Option<[[f64; 2]; 2]> {
+        let geometry = self.host().source_list_geometry();
+        let geometry = geometry.0.borrow();
+        geometry.lists.contains_key(uuid).then_some(())?;
+        Some(geometry.scroll.get(uuid)?.range())
     }
 
     fn list_input(&mut self, uuid: &str, event: ListPointer, cx: &mut Context<'_, Self>) {
@@ -666,10 +706,10 @@ impl<H: FrameHost> HubFrame<H> {
 
     #[allow(clippy::too_many_arguments)]
     fn list_element(
-        &self,
+        &mut self,
         list: &Shown,
         layout: &ListLayout,
-        scroll: ScrollHandle,
+        scroll: HandleScroller,
         root: ListRoot,
         controls: [f64; 4],
         scale: f64,
@@ -767,6 +807,7 @@ impl<H: FrameHost> HubFrame<H> {
         }
 
         let count = list.items.len();
+        let area = Area::List(uuid.to_string());
         let mut items = div()
             .id(("sl-list", uuid_hash(&uuid)))
             .absolute()
@@ -774,8 +815,18 @@ impl<H: FrameHost> HubFrame<H> {
             .top(px(TITLE_HEIGHT as f32))
             .w(px(inner as f32))
             .h(px((r.height - TITLE_HEIGHT).max(0.0) as f32))
-            .overflow_y_scroll()
-            .track_scroll(&scroll)
+            .overflow_hidden()
+            .track_scroll(&scroll.handle)
+            .capture_any_mouse_down({
+                let area = area.clone();
+                cx.listener(move |frame, _, _, _| frame.press_area(&area))
+            })
+            .on_scroll({
+                let uuid = uuid.clone();
+                cx.listener(move |frame, event: &ScrollEvent, window, cx| {
+                    frame.source_list_wheel(&uuid, event, window, cx)
+                })
+            })
             .flex()
             .flex_col()
             .on_any_mouse_down({
@@ -814,7 +865,16 @@ impl<H: FrameHost> HubFrame<H> {
             );
             items = items.child(row);
         }
-        element = element.child(items);
+        let bars = self.area_bars(area, scroll.extent(), cx);
+        element = element.child(items).child(
+            div()
+                .absolute()
+                .left_0()
+                .top(px(TITLE_HEIGHT as f32))
+                .w(px(inner as f32))
+                .h(px((r.height - TITLE_HEIGHT).max(0.0) as f32))
+                .child(bars),
+        );
 
         if list.hand_icon {
             element = element.child(

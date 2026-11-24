@@ -10,6 +10,7 @@ use asrs_canvas::text::inline::{self, Breaker, Item, Line};
 use asrs_canvas::text::{FixedAdvance, FontSpec, TextBackend, platform_backend};
 use asrs_js::string::JsString;
 use asrs_model::scroll_sensor::{Wheel, WheelScroll, assign_scroll_offset};
+use asrs_ui::scroll::Extent;
 use asrs_model::source_list::Rect;
 use asrs_tabs::ansi::AnsiStyle;
 use asrs_tabs::console::ConsoleNode;
@@ -17,6 +18,8 @@ use asrs_tabs::console::controller::ConsoleGeometry;
 use asrs_tabs::console::view::ConsoleRow;
 use asrs_ui::selection::geometry;
 use asrs_ui::text::TextStyle;
+
+use super::scrollers::smooth;
 
 /// The header row: `height: 30px` and its 1 px bottom border.
 pub const HEADER_HEIGHT: f64 = 31.0;
@@ -421,6 +424,43 @@ impl ConsoleLayout {
         let client = [state.container[2], state.container[3]];
         if let Some([_, to]) = state.wheel.wheel(wheel, now, offset, max, client) {
             state.scroll_to(to);
+        }
+    }
+
+    /// A smooth scroll by a key or a scrollbar at `now` (ms).
+    pub fn scroll_smooth(&self, by: f64, now: f64) {
+        let mut state = self.0.borrow_mut();
+        let (offset, max) = ([0.0, state.offset], [0.0, state.max_offset()]);
+        let wheel = smooth([0.0, by]);
+        state
+            .wheel
+            .wheel(wheel, now, offset, max, [f64::INFINITY; 2]);
+    }
+
+    /// A scrollbar's scroll.
+    pub fn drag_to(&self, to: f64) {
+        let mut state = self.0.borrow_mut();
+        state.wheel.stop();
+        state.scroll_to(to);
+    }
+
+    pub fn max_scroll(&self) -> f64 {
+        self.0.borrow().max_offset()
+    }
+
+    /// The container's box without its scrollbar.
+    pub fn client(&self) -> [f64; 2] {
+        let state = self.0.borrow();
+        [state.block.width, state.container[3]]
+    }
+
+    pub fn extent(&self) -> Extent {
+        let state = self.0.borrow();
+        Extent {
+            content: [0.0, state.scroll_height()],
+            offset: [0.0, state.scroll_top()],
+            axes: [false, true],
+            dark: false,
         }
     }
 

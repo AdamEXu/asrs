@@ -19,6 +19,7 @@ pub mod page_text;
 pub mod prompts;
 pub mod range;
 pub mod satellite_host;
+mod scrollers;
 pub mod select;
 pub mod sidebar;
 pub mod source_list;

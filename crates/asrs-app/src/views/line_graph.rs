@@ -25,7 +25,8 @@ use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, chains};
 
-use super::frame::{FrameHost, HubFrame, wheel_of};
+use super::frame::{FrameHost, HubFrame, wheel_of, overlay_range};
+use super::scrollers::Area;
 
 const SCROLL_BOTTOM: f64 = 35.0;
 const DEFAULT_SCROLL_TOP: f64 = 8.0;
@@ -313,6 +314,9 @@ impl<H: FrameHost> HubFrame<H> {
             "div.line-graph-scroll",
             div()
                 .id("line-graph-scroll")
+                .capture_any_mouse_down(
+                    cx.listener(|frame, _, _, _| frame.press_area(&Area::LineGraph)),
+                )
                 .absolute()
                 .left(px((x - shown.root[0]) as f32))
                 .top(px((y - shown.root[1]) as f32))
@@ -510,6 +514,21 @@ impl<H: FrameHost> HubFrame<H> {
             });
         });
         cx.notify();
+    }
+
+    pub(super) fn line_graph_smooth(&mut self, by: [f64; 2], cx: &mut Context<'_, Self>) {
+        let now = self.host().frame_time(cx);
+        let Some(shown) = self.line_graph().shown else {
+            return;
+        };
+        if let Some(tab) = self.line_graph_mut().tabs.get_mut(&shown.key) {
+            tab.sensor.scroll_by(by, now);
+        }
+    }
+
+    pub(super) fn line_graph_range(&self) -> Option<[[f64; 2]; 2]> {
+        let shown = self.line_graph().shown?;
+        Some(overlay_range(shown.overlay_client_size()))
     }
 
     fn line_graph_wheel(&mut self, event: &ScrollEvent, cx: &mut Context<'_, Self>) {

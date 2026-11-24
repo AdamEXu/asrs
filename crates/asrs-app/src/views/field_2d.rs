@@ -39,7 +39,8 @@ use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, FONT_FAMIL
 use asrs_ui::tooltip::{titled, untitled};
 
 use super::field_image::{self, FieldImage};
-use super::frame::{FrameHost, HubFrame, wheel_of};
+use super::frame::{FrameHost, HubFrame, wheel_of, overlay_range};
+use super::scrollers::Area;
 use super::select::FormSelect;
 use super::source_list::{centred_offset, place_in};
 
@@ -605,6 +606,9 @@ impl<H: FrameHost> HubFrame<H> {
                 "div.field-2d-scroll",
                 local(container)
                     .id("field-2d-scroll")
+                .capture_any_mouse_down(
+                    cx.listener(|frame, _, _, _| frame.press_area(&Area::Field2d)),
+                )
                     .on_any_mouse_down(cx.listener(|frame, event: &MouseDownEvent, _, cx| {
                         frame.field_2d_mouse_down(event, cx)
                     }))
@@ -948,6 +952,21 @@ impl<H: FrameHost> HubFrame<H> {
             });
         });
         cx.notify();
+    }
+
+    pub(super) fn field_2d_smooth(&mut self, by: [f64; 2], cx: &mut Context<'_, Self>) {
+        let now = self.host().frame_time(cx);
+        let Some(shown) = self.field_2d.shown else {
+            return;
+        };
+        if let Some(tab) = self.field_2d.tabs.get_mut(&shown.key) {
+            tab.sensor.scroll_by(by, now);
+        }
+    }
+
+    pub(super) fn field_2d_range(&self) -> Option<[[f64; 2]; 2]> {
+        let shown = self.field_2d.shown?;
+        Some(overlay_range(shown.overlay_client_size()))
     }
 
     fn field_2d_wheel(&mut self, event: &ScrollEvent, cx: &mut Context<'_, Self>) {

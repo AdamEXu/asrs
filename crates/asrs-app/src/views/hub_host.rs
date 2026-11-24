@@ -474,6 +474,14 @@ impl FrameHost for HubEntityHost {
         self.hub.read(cx).frame_time(cx)
     }
 
+    fn side_bar_smooth(&mut self, by: f64, cx: &mut App) {
+        self.sidebar.update(cx, |view, cx| view.scroll_smooth(by, cx));
+    }
+
+    fn side_bar_range(&self, cx: &App) -> Option<[[f64; 2]; 2]> {
+        Some(self.sidebar.read(cx).scroll_range())
+    }
+
     fn hub<'a>(&'a self, cx: &'a App) -> &'a HubModel {
         self.hub.read(cx).model()
     }

@@ -11,7 +11,7 @@ use asrs_tabs::points::{Dimension, PointsController, PointsSelect};
 use asrs_tabs::swerve::{SwerveController, SwerveInput};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement,
-    StatefulInteractiveElement, Styled, Subscription, Window, div, px, rgb,
+    ScrollEvent, StatefulInteractiveElement, Styled, Subscription, Window, div, px, rgb,
 };
 use asrs_ui::icon::IconSource;
 use asrs_ui::input::style::CONTROL_FONT;
@@ -24,8 +24,9 @@ use asrs_ui::text::{self, LineHeight, Text, TextStyle, WhiteSpace, snap_remainde
 use asrs_ui::theme::{Appearance, FONT_FAMILY};
 use asrs_ui::tooltip::titled;
 
-use super::super::frame::{FrameHost, HubFrame};
+use super::super::frame::{FrameHost, HubFrame, wheel_of};
 use super::super::number::FormNumber;
+use super::super::scrollers::{Area, HandleScroller};
 use super::super::select::FormSelect;
 use super::super::source_list::{centred_offset, place_in};
 use super::{local, lu, tab_index, tab_key, with_controller};
@@ -171,12 +172,14 @@ struct NumberView {
 pub struct SettingsViews {
     numbers: HashMap<(usize, Control), NumberView>,
     selects: HashMap<(usize, Control), SelectView>,
+    scrollers: HashMap<usize, HandleScroller>,
 }
 
 impl SettingsViews {
     pub fn retain(&mut self, live: &HashSet<usize>) {
         self.numbers.retain(|(key, _), _| live.contains(key));
         self.selects.retain(|(key, _), _| live.contains(key));
+        self.scrollers.retain(|key, _| live.contains(key));
     }
 }
 
@@ -520,6 +523,14 @@ impl<H: FrameHost> HubFrame<H> {
             }
         }
         let [_, _, _, height] = layout.panel;
+        let now = self.host().frame_time(cx);
+        let views = &mut self.canvas_tabs.settings;
+        let scroller = views.scrollers.entry(key).or_default();
+        if scroller.animate(now, f64::from(scale)) {
+            window.request_animation_frame();
+        }
+        let (handle, extent) = (scroller.handle.clone(), scroller.extent());
+        let bars = self.area_bars(Area::CanvasSettings(key), extent, cx);
         let element = local(layout.panel, controls)
             .child(
                 div()
@@ -538,8 +549,24 @@ impl<H: FrameHost> HubFrame<H> {
                     .top_0()
                     .w(px(layout.content_width as f32))
                     .h(px(height as f32))
-                    .overflow_y_scroll()
+                    .overflow_hidden()
+                    .track_scroll(&handle)
+                    .capture_any_mouse_down(cx.listener(move |frame, _, _, _| {
+                        frame.press_area(&Area::CanvasSettings(key))
+                    }))
+                    .on_scroll(cx.listener(move |frame, event: &ScrollEvent, window, cx| {
+                        frame.canvas_settings_wheel(key, event, window, cx)
+                    }))
                     .child(content),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .left(px(1.0))
+                    .top_0()
+                    .w(px(layout.content_width as f32))
+                    .h(px(height as f32))
+                    .child(bars),
             );
         div()
             .absolute()
@@ -548,6 +575,49 @@ impl<H: FrameHost> HubFrame<H> {
             .size_full()
             .child(probed(panel.probe, element))
             .into_any_element()
+    }
+
+    fn canvas_settings_wheel(
+        &mut self,
+        key: usize,
+        event: &ScrollEvent,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let now = self.host().frame_time(cx);
+        let scale = f64::from(window.scale_factor());
+        if let Some(scroller) = self.canvas_tabs.settings.scrollers.get_mut(&key) {
+            scroller.wheel(wheel_of(event), now, scale);
+        }
+        cx.notify();
+    }
+
+    pub(in crate::views) fn canvas_settings_smooth(
+        &mut self,
+        key: usize,
+        by: f64,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let now = self.host().frame_time(cx);
+        if let Some(scroller) = self.canvas_tabs.settings.scrollers.get_mut(&key) {
+            scroller.smooth(by, now);
+        }
+    }
+
+    pub(in crate::views) fn canvas_settings_scroll_to(
+        &mut self,
+        key: usize,
+        to: f64,
+        scale: f64,
+    ) {
+        if let Some(scroller) = self.canvas_tabs.settings.scrollers.get_mut(&key) {
+            scroller.scroll_to(to, scale);
+        }
+    }
+
+    pub(in crate::views) fn canvas_settings_range(&self, key: usize) -> Option<[[f64; 2]; 2]> {
+        let scroller = self.canvas_tabs.settings.scrollers.get(&key)?;
+        Some(scroller.range())
     }
 
     fn rotate_switcher(

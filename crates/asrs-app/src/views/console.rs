@@ -33,6 +33,7 @@ use super::console_layout::{
     cell_style, value_text,
 };
 use super::frame::{FrameHost, HubFrame, wheel_of};
+use super::scrollers::Area;
 use super::large_table::{
     BUTTON, Grid, HandFade, HeaderPalette, hand_icon, header_cell, line_through, plain, symbol,
 };
@@ -633,6 +634,7 @@ impl<H: FrameHost> HubFrame<H> {
                 shown, &view, visible, &layout, appearance, grid, selected, cx,
             ))
             .children(recorded)
+            .child(self.area_bars(Area::Console(shown.key), layout.extent(), cx))
             .child(self.console_header(shown, &view, appearance, blurred, grid, window, cx));
         let drag_hidden = displayed(self.host().hub(cx))
             .is_none_or(|(_, r)| r.dom().borrow().drag_highlight_hidden);
@@ -672,6 +674,9 @@ impl<H: FrameHost> HubFrame<H> {
         }
         div()
             .id("console-table-container")
+            .capture_any_mouse_down(
+                cx.listener(move |frame, _, _, _| frame.press_area(&Area::Console(shown.key))),
+            )
             .absolute()
             .left_0()
             .top_0()
@@ -1198,6 +1203,25 @@ impl<H: FrameHost> HubFrame<H> {
         }
         self.console_input(cx, |renderer, page| renderer.row_click(page, row));
         cx.notify();
+    }
+
+    pub(super) fn console_smooth(&mut self, key: usize, by: f64, cx: &mut Context<'_, Self>) {
+        let now = self.host().frame_time(cx);
+        if let Some(tab) = self.console.tabs.get(&key) {
+            tab.layout.scroll_smooth(by, now);
+        }
+    }
+
+    pub(super) fn console_scroll_to(&mut self, key: usize, to: f64, _: &mut Context<'_, Self>) {
+        if let Some(tab) = self.console.tabs.get(&key) {
+            tab.layout.drag_to(to);
+        }
+    }
+
+    pub(super) fn console_range(&self, key: usize) -> Option<[[f64; 2]; 2]> {
+        let shown = self.console.shown.filter(|s| s.key == key)?;
+        let layout = &self.console.tabs.get(&shown.key)?.layout;
+        Some([layout.client(), [0.0, layout.max_scroll()]])
     }
 
     fn console_wheel(&mut self, event: &ScrollEvent, cx: &mut Context<'_, Self>) {

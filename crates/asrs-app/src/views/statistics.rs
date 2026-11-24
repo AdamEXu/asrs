@@ -14,7 +14,7 @@ use asrs_canvas::{Pixmap, RasterState, ShadeCache};
 use asrs_hub::hub::HubModel;
 use asrs_js::math;
 use asrs_js::string::JsString;
-use asrs_model::scroll_sensor::{WheelScroll, assign_scroll_offset};
+use asrs_model::scroll_sensor::{Wheel, WheelScroll, assign_scroll_offset};
 use asrs_model::tab_type::TabType;
 use asrs_tabs::form::{self, NumberInput};
 use asrs_tabs::histogram::EventKind;
@@ -36,6 +36,7 @@ use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, Theme};
 use asrs_ui::tooltip::titled;
 
+use asrs_ui::scroll::Extent;
 use super::cell_text::{CellLine, CellText, css};
 use super::frame::{FrameHost, HubFrame, wheel_of};
 use super::large_table::{Grid, mean};
@@ -43,6 +44,7 @@ use super::number::FormNumber;
 use super::page_text::{
     Owner, PageText, PlacedBlock, Selected, beside_table, device, floor_device, unselectable,
 };
+use super::scrollers::{Area, smooth};
 use super::select::FormSelect;
 use super::source_list::{centred_offset, place_in};
 use super::statistics_layout::{CellKind, Placed, StatisticsLayout, cell_style};
@@ -786,7 +788,11 @@ impl<H: FrameHost> HubFrame<H> {
             .child(probed(
                 "table.stats-values",
                 grid.place([origin[0], origin[1], width, height]),
-            ));
+            ))
+            .capture_any_mouse_down(
+                cx.listener(move |frame, _, _, _| frame.press_area(&Area::Statistics(key))),
+            )
+            .child(self.area_bars(Area::Statistics(key), layout.extent(), cx));
         let dump = self.statistics.tabs.get(&key)?.bitmap.clone();
         let canvas_rect = shown.canvas;
         let entity = cx.entity().downgrade();
@@ -960,6 +966,34 @@ impl<H: FrameHost> HubFrame<H> {
             self.statistics_pointer(EventKind::Click, x, y, cx);
             cx.notify();
         }
+    }
+
+    pub(super) fn statistics_smooth(
+        &mut self,
+        key: usize,
+        by: [f64; 2],
+        cx: &mut Context<'_, Self>,
+    ) {
+        let now = self.host().frame_time(cx);
+        if let Some(tab) = self.statistics.tabs.get(&key) {
+            tab.layout.scroll_smooth(by, now);
+        }
+    }
+
+    pub(super) fn statistics_scroll_to(
+        &mut self,
+        key: usize,
+        to: [f64; 2],
+        _: &mut Context<'_, Self>,
+    ) {
+        if let Some(tab) = self.statistics.tabs.get(&key) {
+            tab.layout.drag_to(to);
+        }
+    }
+
+    pub(super) fn statistics_range(&self, key: usize) -> Option<[[f64; 2]; 2]> {
+        let shown = self.statistics.shown.filter(|s| s.key == key)?;
+        Some(self.statistics.tabs.get(&shown.key)?.layout.range())
     }
 
     fn statistics_wheel(&mut self, event: &ScrollEvent, cx: &mut Context<'_, Self>) {
@@ -1171,6 +1205,9 @@ impl<H: FrameHost> HubFrame<H> {
             .place(layout.panel)
             .id("stats-settings")
             .overflow_hidden()
+            .capture_any_mouse_down(cx.listener(move |frame, _, _, _| {
+                frame.press_area(&Area::StatisticsSettings(key))
+            }))
             .on_scroll(cx.listener(move |frame, event: &ScrollEvent, _, cx| {
                 frame.statistics_settings_wheel(key, layout, event, cx)
             }))
@@ -1209,7 +1246,69 @@ impl<H: FrameHost> HubFrame<H> {
             let field = within.place(scrolled(rect)).child(field);
             out = out.child(probed(id, titled(title, field)));
         }
+        let extent = Extent {
+            content: [0.0, layout.max_scroll + height],
+            offset: [0.0, scroll],
+            axes: [false, true],
+            dark: false,
+        };
+        out = out.child(self.area_bars(Area::StatisticsSettings(key), extent, cx));
         Some(probed("div.stats-settings", out).into_any_element())
+    }
+
+    pub(super) fn statistics_settings_smooth(
+        &mut self,
+        key: usize,
+        by: f64,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.statistics_settings_scrolled(key, smooth([0.0, by]), [f64::INFINITY; 2], cx);
+    }
+
+    pub(super) fn statistics_settings_scroll_to(
+        &mut self,
+        key: usize,
+        to: f64,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let Some([_, [_, max]]) = self.statistics_settings_range(key) else {
+            return;
+        };
+        let tab = self.statistics.tabs.get_mut(&key);
+        if let Some(parts) = tab.and_then(|t| t.controls.as_mut()) {
+            parts.wheel.stop();
+            parts.scroll = to.clamp(0.0, max);
+        }
+        cx.notify();
+    }
+
+    pub(super) fn statistics_settings_range(&self, key: usize) -> Option<[[f64; 2]; 2]> {
+        let shown = self.statistics.shown.filter(|s| s.key == key)?;
+        let layout = shown.settings?;
+        let client = [layout.panel[2], layout.panel[3]];
+        Some([client, [0.0, layout.max_scroll]])
+    }
+
+    fn statistics_settings_scrolled(
+        &mut self,
+        key: usize,
+        wheel: Wheel,
+        client: [f64; 2],
+        cx: &mut Context<'_, Self>,
+    ) {
+        let now = self.host().frame_time(cx);
+        let Some([_, max]) = self.statistics_settings_range(key) else {
+            return;
+        };
+        let tab = self.statistics.tabs.get_mut(&key);
+        let Some(parts) = tab.and_then(|t| t.controls.as_mut()) else {
+            return;
+        };
+        let offset = [0.0, parts.scroll];
+        if let Some([_, to]) = parts.wheel.wheel(wheel, now, offset, max, client) {
+            parts.scroll = to.clamp(0.0, max[1]);
+        }
+        cx.notify();
     }
 
     fn statistics_settings_wheel(
@@ -1219,18 +1318,8 @@ impl<H: FrameHost> HubFrame<H> {
         event: &ScrollEvent,
         cx: &mut Context<'_, Self>,
     ) {
-        let now = self.host().frame_time(cx);
-        let tab = self.statistics.tabs.get_mut(&key);
-        let Some(parts) = tab.and_then(|t| t.controls.as_mut()) else {
-            return;
-        };
-        let offset = [0.0, parts.scroll];
-        let max = [0.0, layout.max_scroll];
         let client = [layout.panel[2], layout.panel[3]];
-        if let Some([_, to]) = parts.wheel.wheel(wheel_of(event), now, offset, max, client) {
-            parts.scroll = to.clamp(0.0, layout.max_scroll);
-        }
-        cx.notify();
+        self.statistics_settings_scrolled(key, wheel_of(event), client, cx);
     }
 }
 

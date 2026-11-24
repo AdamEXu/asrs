@@ -7,12 +7,14 @@ use std::rc::Rc;
 use asrs_canvas::text::dom::Lu;
 use asrs_canvas::text::{FixedAdvance, TextBackend, platform_backend};
 use asrs_model::scroll_sensor::{Wheel, WheelScroll, assign_scroll_offset};
+use asrs_ui::scroll::Extent;
 use asrs_tabs::statistics::renderer::StatisticsGeometry;
 use asrs_tabs::statistics::values::StatisticsRow;
 use asrs_ui::text::TextStyle;
 use asrs_ui::theme::{FONT_FAMILY, MONOSPACE_FAMILY};
 
 use super::cell_text::{CellText, border, css, length, px};
+use super::scrollers::smooth;
 
 /// `table.stats-values`: `margin: 10px`; also what the histogram keeps to its right and below.
 const MARGIN: f64 = 10.0;
@@ -354,6 +356,40 @@ impl StatisticsLayout {
         let mut state = self.0.borrow_mut();
         state.wheel.stop();
         state.scroll_to([left + by[0], top + by[1]]);
+    }
+
+    /// A smooth scroll by a key or a scrollbar at `now` (ms).
+    pub fn scroll_smooth(&self, by: [f64; 2], now: f64) {
+        let mut state = self.0.borrow_mut();
+        let (offset, max) = (state.offset, state.place().max_scroll());
+        state
+            .wheel
+            .wheel(smooth(by), now, offset, max, [f64::INFINITY; 2]);
+    }
+
+    /// A scrollbar's scroll.
+    pub fn drag_to(&self, to: [f64; 2]) {
+        let mut state = self.0.borrow_mut();
+        state.wheel.stop();
+        state.scroll_to(to);
+    }
+
+    /// The container's box without its scrollbars, and the largest offsets.
+    pub fn range(&self) -> [[f64; 2]; 2] {
+        let placed = self.0.borrow_mut().place();
+        let client = placed.container.map(|v| css(v, placed.scale));
+        [client, placed.max_scroll()]
+    }
+
+    pub fn extent(&self) -> Extent {
+        let offset = self.scroll();
+        let placed = self.0.borrow_mut().place();
+        Extent {
+            content: placed.scroll_size().map(|v| css(round(v), placed.scale)),
+            offset,
+            axes: [true; 2],
+            dark: false,
+        }
     }
 
     pub fn scroll(&self) -> [f64; 2] {
