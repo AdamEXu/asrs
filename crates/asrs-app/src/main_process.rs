@@ -916,6 +916,7 @@ impl MainProcess {
             &menu,
             Rc::new(dispatch::dispatch),
         );
+        platform::install_edit_commands(cx, dispatch::edit);
     }
 
     /// `loadAssets()`, then `sendAllPreferences()` and `sendAssets()`.

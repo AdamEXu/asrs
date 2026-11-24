@@ -123,6 +123,12 @@ pub enum Action {
     Hub,
     /// Waits until the download window shows this.
     Download(DownloadShows),
+    /// The Edit menu's Select All in the window.
+    SelectAll,
+    /// The Edit menu's Copy in the window, and what that leaves on an emptied clipboard.
+    Copy(String),
+    /// Whether the windows count as active.
+    Focus(bool),
     Capture {
         name: String,
         probes: Vec<String>,
@@ -212,7 +218,7 @@ pub fn default_window() -> (f64, f64) {
 const TOP_KEYS: [&str; 10] = [
     "page", "window", "scales", "themes", "gl", "prefs", "userData", "robot", "actions", "about",
 ];
-const ACTION_KEYS: [&str; 15] = [
+const ACTION_KEYS: [&str; 18] = [
     "main",
     "open",
     "eval",
@@ -227,6 +233,9 @@ const ACTION_KEYS: [&str; 15] = [
     "appMenu",
     "prompt",
     "download",
+    "role",
+    "copy",
+    "focus",
     "capture",
 ];
 
@@ -379,6 +388,12 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
             JsValue::String(s) => DownloadShows::Text(s.to_string_lossy()),
             _ => return Err("download is not a text or a number".into()),
         }),
+        "role" => match text().as_deref() {
+            Some("selectAll") => Action::SelectAll,
+            other => return Err(format!("unknown role {other:?}")),
+        },
+        "copy" => Action::Copy(text().ok_or("copy is not a name")?),
+        "focus" => Action::Focus(value.as_bool().ok_or("focus is not a boolean")?),
         "capture" => {
             let name = text().ok_or("capture is not a name")?;
             Action::Capture {

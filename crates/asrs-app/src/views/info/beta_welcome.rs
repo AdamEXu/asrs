@@ -16,7 +16,8 @@ use asrs_ui::parity::probed;
 use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH};
 
 use super::layout::{BetaLayout, BetaRow, LuRect, TextBlock, Typesetter};
-use super::page::{self, PageScroll, Placer, ScrolledPage};
+use super::page::{self, PageScroll, Placer, ScrolledPage, mix};
+use super::text::{DocumentText, PageText};
 
 /// `h2` and `button`: a colour per theme, light then dark.
 const ACCENT: [u32; 2] = [0x012be5, 0x446ce3];
@@ -50,6 +51,7 @@ pub struct BetaWelcomePage {
     app_name: &'static str,
     typesetter: Typesetter,
     scroll: PageScroll,
+    text: PageText,
     body: FocusHandle,
     checkboxes: [FocusHandle; CHECKBOXES],
     button: FocusHandle,
@@ -74,6 +76,7 @@ impl BetaWelcomePage {
             app_name,
             typesetter: Typesetter::default(),
             scroll: PageScroll::new(cx),
+            text: PageText::default(),
             body,
             checkboxes: std::array::from_fn(|_| cx.focus_handle()),
             button: cx.focus_handle(),
@@ -238,15 +241,6 @@ fn ease(t: f64) -> f64 {
     bezier(y1, y2, (low + high) / 2.0)
 }
 
-/// `over` at `opacity` on `under`.
-fn mix(over: u32, under: u32, opacity: f64) -> u32 {
-    [16, 8, 0].into_iter().fold(0, |out, shift| {
-        let channel = |color: u32| f64::from(color >> shift & 0xff);
-        let mixed = channel(over) * opacity + channel(under) * (1.0 - opacity);
-        out | (mixed.round() as u32) << shift
-    })
-}
-
 impl Focusable for BetaWelcomePage {
     fn focus_handle(&self, _: &App) -> FocusHandle {
         self.body.clone()
@@ -256,6 +250,14 @@ impl Focusable for BetaWelcomePage {
 impl ScrolledPage for BetaWelcomePage {
     fn scroll(&mut self) -> &mut PageScroll {
         &mut self.scroll
+    }
+
+    fn text(&mut self) -> &mut PageText {
+        &mut self.text
+    }
+
+    fn document_text(&self, _: &Window) -> Option<Box<dyn DocumentText>> {
+        None
     }
 }
 
@@ -417,7 +419,7 @@ impl Render for BetaWelcomePage {
         let appearance = Appearance::of(window, cx);
         let theme = appearance.theme();
         let pick = |colors: [u32; 2]| appearance.pick(colors[0], colors[1]);
-        let mut root = page::root("beta-welcome", cx)
+        let mut root = page::root("beta-welcome", self, cx)
             .track_focus(&self.body)
             .on_key_down(cx.listener(|view, event: &KeyDownEvent, _, cx| {
                 if view.scroll.key(&event.keystroke, cx) {

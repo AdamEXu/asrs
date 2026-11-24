@@ -80,6 +80,10 @@ impl<B: TextBackend> TextBackend for Cached<B> {
         shaped
     }
 
+    fn space_width(&mut self, font: &FontSpec, zoom: f32) -> f32 {
+        self.backend.space_width(font, zoom)
+    }
+
     fn metrics(&mut self, font: &FontSpec) -> FontMetrics {
         *self
             .metrics

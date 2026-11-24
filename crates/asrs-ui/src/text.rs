@@ -10,6 +10,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
+use asrs_canvas::text::caret;
 use asrs_canvas::text::dom::{self, Layout, Lu};
 use asrs_canvas::text::font::FontKey;
 use asrs_canvas::text::lut::MaskGammaLut;
@@ -20,6 +21,8 @@ use gpui_kit::{
     Style, StyleRefinement, Styled, Window, WindowId, fill, point, px, size,
 };
 use image::{Frame, RgbaImage};
+
+use crate::selection::colors::SelectionColors;
 
 pub use asrs_canvas::text::FontSpec;
 pub use asrs_canvas::text::dom::{
@@ -254,6 +257,12 @@ pub fn font_metrics(cx: &mut App, style: &TextStyle, scale: f32) -> (f32, f32) {
     (ascent as f32 / 64.0, descent as f32 / 64.0)
 }
 
+/// The advance of a space in device px.
+pub fn space_width(cx: &mut App, style: &TextStyle, scale: f32) -> f32 {
+    let system = cx.default_global::<TextSystem>();
+    caret::space_width(system.backend.as_mut(), &style.font, scale)
+}
+
 /// One glyph run's coverage, after mask gamma, at a whole device pixel position.
 pub struct GlyphMask {
     pub x: i32,
@@ -353,6 +362,7 @@ pub struct Text {
     content_width: Option<f64>,
     underline: bool,
     cut: Option<f64>,
+    selected: Option<Rgba>,
     gpui: StyleRefinement,
     /// Each width the measure function returned, snapped as GPUI will snap the box, with the
     /// exact width it stands for: lines wrap and align at the exact width, as in Chromium.
@@ -371,6 +381,7 @@ impl Text {
             content_width: None,
             underline: false,
             cut: None,
+            selected: None,
             gpui: StyleRefinement::default(),
             measured: Rc::default(),
         }
@@ -412,6 +423,15 @@ impl Text {
     pub fn underline(mut self) -> Self {
         self.underline = true;
         self
+    }
+
+    /// Draws the whole text selected, the line breaks after its lines included.
+    pub fn selected(mut self, colors: Option<SelectionColors>) -> Self {
+        self.selected = colors.map(|colors| colors.rgba());
+        match colors.and_then(|colors| colors.text) {
+            Some(text) => self.color(text),
+            None => self,
+        }
     }
 
     /// Draws only what fits in `room` CSS px, for a box the line's ellipsis follows or replaces.
@@ -539,6 +559,22 @@ impl Element for Text {
             }
         }
         let Prepaint { layout, origin } = prepaint;
+        let mut selection = Vec::new();
+        if self.selected.is_some() {
+            let space = caret::space_width(system.backend.as_mut(), &self.style.font, scale);
+            let round = |lu: Lu| (lu + 32).div_euclid(64);
+            for line in &layout.lines {
+                if let (Some(first), Some(last)) = (line.fragments.first(), line.fragments.last()) {
+                    let left = round(origin.0 + first.x);
+                    let right = origin.0 + last.x + last.width + (space * 64.0) as Lu;
+                    let box_top = line.baseline - layout.ascent;
+                    let top = round(origin.1 + line.top.min(box_top));
+                    let bottom = (line.top + line.height).max(line.baseline + layout.descent);
+                    let bottom = round(origin.1 + bottom);
+                    selection.push([left, top, round(right) - left, bottom - top]);
+                }
+            }
+        }
         let mut images = Vec::new();
         let mut underlines = Vec::new();
         for line in &layout.lines {
@@ -570,6 +606,15 @@ impl Element for Text {
         let clip = (self.style.overflow != Overflow::Visible).then_some(ContentMask { bounds });
         window.with_content_mask(clip, |window| {
             let to_px = |v: i32| px(v as f32 / scale);
+            if let Some(background) = self.selected {
+                for [x, y, w, h] in selection {
+                    let rect = Bounds {
+                        origin: point(to_px(x), to_px(y)),
+                        size: size(to_px(w), to_px(h)),
+                    };
+                    window.paint_quad(fill(rect, background));
+                }
+            }
             let [r, g, b] = self.color.map(|c| f32::from(c) / 255.0);
             for s in underlines {
                 let rect = Bounds {

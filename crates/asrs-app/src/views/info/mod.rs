@@ -6,6 +6,7 @@ pub mod layout;
 pub mod licenses;
 pub mod page;
 pub mod source_list_help;
+pub mod text;
 
 pub use beta_welcome::{Acknowledged, BetaWelcomePage};
 pub use licenses::LicensesPage;

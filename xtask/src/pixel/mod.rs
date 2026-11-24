@@ -510,8 +510,8 @@ pub(crate) fn compare_variant(
     Ok(results)
 }
 
-/// `run.json`'s `files` and the files dialogs were answered with: (path under files/, changed
-/// from its seed).
+/// `run.json`'s `files`, the files dialogs were answered with and what copies left on the
+/// clipboard: (path under files/, changed from its seed).
 fn written_files(variant: &Path) -> Result<Vec<(String, bool)>> {
     let run = read_json(&variant.join("run.json"))?;
     let mut files: Vec<(String, bool)> = list(&run, "files")
@@ -521,9 +521,11 @@ fn written_files(variant: &Path) -> Result<Vec<(String, bool)>> {
             Some((string(f, "file")?, changed))
         })
         .collect();
-    let chosen = variant.join("files/dialog");
-    if chosen.is_dir() {
-        list_files(&chosen, "dialog", &mut files)?;
+    for folder in ["dialog", "clipboard"] {
+        let written = variant.join("files").join(folder);
+        if written.is_dir() {
+            list_files(&written, folder, &mut files)?;
+        }
     }
     Ok(files)
 }

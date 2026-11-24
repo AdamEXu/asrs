@@ -1,0 +1,543 @@
+{
+ "entry": "genTextSelection",
+ "platforms": [
+  "macos-aarch64",
+  "linux-aarch64",
+  "windows-aarch64"
+ ],
+ "inputs": [
+  "../../../oracle/src/genTextSelectionMain.ts",
+  "../../../oracle/tools/pasteboard.m"
+ ],
+ "fixture": {
+  "pages": [
+   {
+    "name": "table",
+    "css": [
+     "global.css",
+     "renderers.css"
+    ],
+    "body": "",
+    "html": "<p data-u=\"0\">before the table</p><table class=\"data-table\"><tbody><tr><th>x</th><th data-u=\"0\"><div class=\"data-table-key-container\">/Drive/LeftVelocity</div></th><th>y</th></tr><tr><td data-b=\"0\">+0.000</td><td data-b=\"1\">1</td><td data-b=\"2\">&quot;Idle&quot;</td></tr><tr><td data-b=\"3\">+0.020</td><td data-b=\"4\">1.1600000000000001</td><td data-b=\"5\"></td></tr><tr><td data-b=\"6\">+0.040</td><td data-b=\"7\">🟩 true</td><td data-b=\"8\">[1, 2.5, -3]</td></tr><tr><td data-b=\"9\">+12:34:56.789</td><td data-b=\"10\">null</td><td data-b=\"11\">don&#x27;t stop, naïve_x a b</td></tr></tbody></table><p data-u=\"12\">after the table</p>",
+    "blocks": [
+     {
+      "cell": true,
+      "tab": false,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": true,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": true,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": true,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": true,
+      "other": false,
+      "gap": 1
+     }
+    ],
+    "seed": 11,
+    "sequences": 60,
+    "steps": 4
+   },
+   {
+    "name": "console",
+    "css": [
+     "global.css",
+     "renderers.css"
+    ],
+    "body": "",
+    "html": "<table class=\"console-table\" style=\"width:700px\"><tbody><tr><th data-u=\"0\" style=\"width:97px\">t</th><th>key</th></tr><tr><td data-u=\"0\">+0.125</td><td data-b=\"0\">Robot program starting on 10.63.28.2</td></tr><tr><td data-u=\"1\">+1.125</td><td data-b=\"1\"><span style=\"color:rgb(0,187,0)\">Connected</span> to <b>Power Distribution</b>, <a href=\"#\">docs</a></td></tr><tr><td data-u=\"2\">+2.125</td><td data-b=\"2\">first line<br>second line<br><br>    indented fourth</td></tr><tr><td data-u=\"3\">+3.125</td><td data-b=\"3\">col1\tcol2\tlast</td></tr><tr><td data-u=\"4\">+4.125</td><td data-b=\"4\"></td></tr><tr><td data-u=\"5\">+5.125</td><td data-b=\"5\">[12] ERROR(3): kStale -- no frame for 250ms, and then a line that is long enough to wrap onto another one in the cell, which is as wide as the table lets it be, more or less</td></tr></tbody></table><p style=\"margin:40px 0 0\">after</p>",
+    "blocks": [
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": true,
+      "other": true,
+      "gap": 8
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": true,
+      "other": true,
+      "gap": 8
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": true,
+      "other": true,
+      "gap": 8
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": true,
+      "other": true,
+      "gap": 8
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": true,
+      "other": true,
+      "gap": 8
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": true,
+      "other": true,
+      "gap": 8
+     }
+    ],
+    "seed": 12,
+    "sequences": 60,
+    "steps": 4
+   },
+   {
+    "name": "metadata",
+    "css": [
+     "global.css",
+     "renderers.css"
+    ],
+    "body": "",
+    "html": "<table class=\"metadata-table\" style=\"width:900px\"><tbody><tr><th data-u=\"0\"></th><th>Real</th><th>Replay</th></tr><tr><td data-u=\"0\">ProjectName</td><td data-b=\"0\">KitBot</td><td data-b=\"1\">KitBot</td></tr><tr><td data-u=\"2\">Notes</td><td data-b=\"2\">First line<br>Second line, which goes on until it is long enough that it has to wrap onto another one<br><br>Last line</td><td data-b=\"3\" class=\"no-data\">NA</td></tr><tr><td data-u=\"4\">Runtime</td><td data-b=\"4\">kRoboRIO</td><td data-b=\"5\" class=\"no-data\">NA</td></tr></tbody></table>",
+    "blocks": [
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": true,
+      "gap": 13
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": true,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": true,
+      "gap": 7
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": true,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": true,
+      "gap": 9
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": true,
+      "other": false,
+      "gap": 1
+     }
+    ],
+    "seed": 13,
+    "sequences": 60,
+    "steps": 4
+   },
+   {
+    "name": "licenses",
+    "css": [
+     "global.css",
+     "licenses.css"
+    ],
+    "body": "",
+    "html": "<div data-b=\"0\" class=\"module-text\">AdvantageScope</div><div data-b=\"1\" class=\"license-text\">Copyright (c) 2021-2026 Littleton Robotics.<br><br>Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:<br>- Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer. </div><div data-b=\"2\" class=\"module-text\">@ampproject/remapping</div><div data-b=\"3\" class=\"license-text\">Apache License Version 2.0, January 2004 http://www.apache.org/licenses/<br><br>TERMS AND CONDITIONS</div>",
+    "blocks": [
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     }
+    ],
+    "seed": 14,
+    "sequences": 80,
+    "steps": 4
+   },
+   {
+    "name": "help",
+    "css": [
+     "global.css",
+     "sourceListHelp.css"
+    ],
+    "body": "",
+    "html": "<div class=\"type-header\"><div class=\"type-icon-container\"></div><div class=\"type-title\" data-b=\"0\">Robot</div></div><table class=\"options\" data-t=\"1 6\"><tbody><tr><td data-b=\"2\">Bumpers:</td><td data-b=\"3\"><span style=\"color:#00aa00\">Alliance Color</span>, <span>Green</span>, or <span>Red</span></td></tr><tr><td data-b=\"4\">Thickness:</td><td data-b=\"5\">Normal or Bold</td></tr></tbody></table><div class=\"source-types\" data-b=\"7\">Sources: Pose2d, Pose3d, Pose2d[], or Transform3d[]</div><div class=\"type-header\"><div class=\"type-icon-container\"></div><div class=\"type-title\" data-b=\"8\">Ghost</div></div><table class=\"options\" data-t=\"9 12\"><tbody><tr><td data-b=\"10\">Color:</td><td data-b=\"11\">Green, Red, Blue, Orange, Cyan, Yellow, or Magenta</td></tr></tbody></table><div class=\"source-types\" data-b=\"13\">Source: number</div>",
+    "blocks": [
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": false,
+      "before": true,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": true,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1,
+      "table_end": true
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": false,
+      "before": true,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": true,
+      "tab": true,
+      "before": false,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": false,
+      "after": false,
+      "closed": false,
+      "other": false,
+      "gap": 1,
+      "table_end": true
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     }
+    ],
+    "seed": 15,
+    "sequences": 60,
+    "steps": 4
+   },
+   {
+    "name": "words",
+    "css": [
+     "global.css",
+     "licenses.css"
+    ],
+    "body": "",
+    "html": "<div data-b=\"0\" class=\"license-text\">www.example.org a.b 1.5 x.1 2.y</div><div data-b=\"1\" class=\"license-text\">a:b 12:34 foo_bar don't it’s</div><div data-b=\"2\" class=\"license-text\">1,000 3;4 a/b C++ c# user@host.io</div><div data-b=\"3\" class=\"license-text\">カタカナ漢字</div><div data-b=\"4\" class=\"license-text\">café naïve_2 µs °C</div><div data-b=\"5\" class=\"license-text\">kStale -- no (id=3): \"quoted\" it's_</div><div data-b=\"6\" class=\"license-text\">你好世界 hello</div>",
+    "blocks": [
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     },
+     {
+      "cell": false,
+      "tab": false,
+      "before": true,
+      "after": true,
+      "closed": false,
+      "other": false,
+      "gap": 1
+     }
+    ],
+    "seed": 16,
+    "sequences": 80,
+    "steps": 4
+   }
+  ]
+ }
+}

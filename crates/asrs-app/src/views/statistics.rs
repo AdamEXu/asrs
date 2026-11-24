@@ -3,9 +3,13 @@
 //! histogram's canvas; and the controller's `div.stats-settings` (`www/hub.css`). Its source
 //! list is the frame's.
 
+use std::borrow::Cow;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::sync::Arc;
 
+use asrs_canvas::text::TextBackend;
 use asrs_canvas::{Pixmap, RasterState, ShadeCache};
 use asrs_hub::hub::HubModel;
 use asrs_js::math;
@@ -27,13 +31,17 @@ use asrs_ui::gpui::{
 use asrs_ui::input::style::CONTROL_FONT;
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, Select, SelectEvent, TextField};
 use asrs_ui::parity::probed;
+use asrs_ui::selection::{Document, Hit, Place};
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, Theme};
 
-use super::cell_text::{CellText, css};
+use super::cell_text::{CellLine, CellText, css};
 use super::frame::{FrameHost, HubFrame, wheel_of};
 use super::large_table::{Grid, mean};
 use super::number::FormNumber;
+use super::page_text::{
+    Owner, PageText, PlacedBlock, Selected, beside_table, device, floor_device, unselectable,
+};
 use super::select::FormSelect;
 use super::source_list::{centred_offset, place_in};
 use super::statistics_layout::{CellKind, Placed, StatisticsLayout, cell_style};
@@ -156,6 +164,7 @@ impl TabView {
 #[derive(Clone, Copy, Debug)]
 struct Shown {
     key: usize,
+    renderer: [f64; 4],
     values: [f64; 4],
     canvas: [f64; 4],
     settings: Option<SettingsLayout>,
@@ -302,23 +311,215 @@ pub(super) fn text_lines(
     color: u32,
     layer: Div,
 ) -> Div {
+    lines_of(grid, &text.lines, style, [x, y], color, false, layer)
+}
+
+fn lines_of(
+    grid: Grid,
+    lines: &[CellLine],
+    style: &TextStyle,
+    [x, y]: [f64; 2],
+    color: u32,
+    again: bool,
+    layer: Div,
+) -> Div {
     let mut style = *style;
     style.white_space = WhiteSpace::Pre;
     style.align = text::Align::Start;
     let scale = grid.scale as f32;
-    text.lines.iter().fold(layer, |layer, line| {
+    lines.iter().fold(layer, |layer, line| {
         let at = [x + css(line.left, scale), y + css(line.top, scale)];
-        layer.child(grid.text(Text::new(line.text.clone(), style).color(color), at))
+        let text = Text::new(line.text.clone(), style).color(color);
+        let text = if again { text.unrecorded() } else { text };
+        layer.child(grid.text(text, at))
     })
+}
+
+/// The value cells in document order.
+struct StatisticsText {
+    placed: Rc<Placed>,
+    /// Each value cell's row and column.
+    cells: Vec<[usize; 2]>,
+    builds: u64,
+}
+
+impl StatisticsText {
+    fn new(placed: Rc<Placed>, builds: u64) -> StatisticsText {
+        let mut cells = Vec::new();
+        for (r, row) in placed.rows.iter().enumerate() {
+            let values = row.cells.iter().enumerate();
+            let values = values.filter(|(_, cell)| cell.kind == CellKind::Value);
+            cells.extend(values.map(|(c, _)| [r, c]));
+        }
+        StatisticsText {
+            placed,
+            cells,
+            builds,
+        }
+    }
+
+    fn cell(&self, block: usize) -> &CellText {
+        let [row, column] = self.cells[block];
+        &self.placed.rows[row].cells[column].text
+    }
+
+    /// The first value cell in or after a cell.
+    fn block(&self, row: usize, column: usize) -> usize {
+        self.cells.partition_point(|&at| at < [row, column])
+    }
+}
+
+impl Document for StatisticsText {
+    fn len(&self) -> usize {
+        self.cells.len()
+    }
+
+    fn text(&self, block: usize) -> Cow<'_, str> {
+        Cow::Borrowed(&self.cell(block).text)
+    }
+
+    fn place(&self, block: usize) -> Place {
+        let [row, column] = self.cells[block];
+        let cells = &self.placed.rows[row].cells;
+        let last = column + 1 == cells.len();
+        let title = if column == 1 {
+            2 + cells[0].text.text.encode_utf16().count()
+        } else {
+            1
+        };
+        Place {
+            cell: true,
+            tab: true,
+            newline_after: last,
+            closed: last,
+            after_other: column == 1,
+            gap: title,
+            ..Place::default()
+        }
+    }
+
+    fn generation(&self) -> u64 {
+        self.builds
+    }
+}
+
+struct StatisticsPage {
+    doc: StatisticsText,
+    style: TextStyle,
+    renderer: [f64; 4],
+    values: [f64; 4],
+    /// The table's client position.
+    origin: [f64; 2],
+}
+
+impl PageText for StatisticsPage {
+    fn document(&self) -> &dyn Document {
+        &self.doc
+    }
+
+    fn scroller(&self) -> [f64; 4] {
+        self.values
+    }
+
+    fn renderer(&self) -> [f64; 4] {
+        self.renderer
+    }
+
+    fn hit(&self, at @ [x, y]: [f64; 2], backend: &mut dyn TextBackend) -> Hit {
+        let placed = &*self.doc.placed;
+        let scale = f64::from(placed.scale);
+        let [left, _, width, _] = self.values;
+        if (left + width..).contains(&x) {
+            return unselectable(&self.doc, self.doc.len());
+        }
+        let lu = |css: f64| floor_device(css, scale);
+        let table = placed.table;
+        let at_table = [lu(x - self.origin[0]), lu(y - self.origin[1])];
+        let outside = [0, 1]
+            .into_iter()
+            .any(|axis| at_table[axis] < 0 || at_table[axis] >= table[axis]);
+        if outside {
+            let width = css(table[0], placed.scale);
+            return beside_table(&self.doc, x, [self.origin[0], width]);
+        }
+        let rows = &placed.rows;
+        let row = rows
+            .partition_point(|row| row.top + row.height <= at_table[1])
+            .min(rows.len() - 1);
+        let cells = &rows[row].cells;
+        let column = cells
+            .partition_point(|cell| cell.left + cell.width <= at_table[0])
+            .min(cells.len() - 1);
+        let (placed_row, cell) = (&rows[row], &cells[column]);
+        let index = self.doc.block(row, column);
+        if cell.kind != CellKind::Value {
+            return unselectable(&self.doc, index);
+        }
+        let [dx, dy] = placed.content(placed_row, cell);
+        let block = cell.text.block(&self.style);
+        let text = PlacedBlock {
+            index,
+            block: &block,
+            text: &cell.text.text,
+            origin: [
+                device(self.origin[0], scale) + dx,
+                device(self.origin[1], scale) + dy,
+            ],
+            scale,
+        };
+        let inside = at_table[0] >= cell.left
+            && at_table[1] >= placed_row.top
+            && at_table[0] < cell.left + cell.width
+            && at_table[1] < placed_row.top + placed_row.height;
+        let hit = text.hit(at, backend);
+        Hit {
+            selectable: inside,
+            text: hit.text && inside,
+            ..hit
+        }
+    }
+}
+
+/// The selected parts of a cell's lines in the colour selected text has.
+pub(super) fn selected_lines(
+    grid: Grid,
+    (text, style): (&CellText, &TextStyle),
+    at: [f64; 2],
+    selected: &Selected,
+    block: &PlacedBlock<'_>,
+    backend: &mut dyn TextBackend,
+) -> Vec<Div> {
+    if selected.colors.text.is_none() {
+        return Vec::new();
+    }
+    let mut count = 0;
+    let shown: Vec<usize> = (block.block.lines.iter())
+        .map(|line| {
+            let before = count;
+            count += usize::from(!line.pieces.is_empty());
+            before
+        })
+        .collect();
+    (block.pieces(&selected.range, backend).into_iter())
+        .filter(|(_, piece, _)| piece.is_some())
+        .filter_map(|(line, _, rect)| {
+            let lines = &text.lines[shown[line]..=shown[line]];
+            selected.recoloured(grid, rect, |color| {
+                vec![lines_of(grid, lines, style, at, color, true, div())]
+            })
+        })
+        .collect()
 }
 
 fn table_layer(
     grid: Grid,
-    placed: &Placed,
+    doc: &StatisticsText,
     rows: &[StatisticsRow],
     [x, y]: [f64; 2],
     appearance: Appearance,
+    selected: Option<(&Selected, &RefCell<Box<dyn TextBackend>>)>,
 ) -> Div {
+    let placed = &*doc.placed;
     let palette = Palette::of(appearance);
     let theme = appearance.theme();
     let px = |lu| css(lu, placed.scale);
@@ -350,6 +551,41 @@ fn table_layer(
                 _ => None,
             };
             let [dx, dy] = placed.content(row, cell).map(px);
+            let mut over = Vec::new();
+            if cell.kind == CellKind::Value
+                && let Some((selected, backend)) = selected
+            {
+                let index = doc.block(r, c);
+                let block = cell.text.block(&styles[cell.kind as usize]);
+                let content = placed.content(row, cell);
+                let block = PlacedBlock {
+                    index,
+                    block: &block,
+                    text: &cell.text.text,
+                    origin: [
+                        device(x, grid.scale) + content[0],
+                        device(y, grid.scale) + content[1],
+                    ],
+                    scale: grid.scale,
+                };
+                // `overflow: hidden` clips at the padding box.
+                let inner = [
+                    x + px(cell.left) + border,
+                    y + px(row.top) + border,
+                    px(cell.width) - 2.0 * border,
+                    px(row.height) - 2.0 * border,
+                ];
+                let clip = Grid {
+                    origin: [grid.snap(inner[0]), grid.snap(inner[1])],
+                    ..grid
+                };
+                let drawn = grid.place(inner).overflow_hidden();
+                let backend = &mut **backend.borrow_mut();
+                layer = layer.child(selected.paint(clip, &block, backend, drawn));
+                let text = (&cell.text, &styles[cell.kind as usize]);
+                let at = [x + dx, y + dy];
+                over = selected_lines(grid, text, at, selected, &block, backend);
+            }
             layer = text_lines(
                 grid,
                 &cell.text,
@@ -357,7 +593,8 @@ fn table_layer(
                 [x + dx, y + dy],
                 cell_color(value, theme),
                 layer,
-            );
+            )
+            .children(over);
         }
     }
     layer
@@ -432,6 +669,7 @@ impl<H: FrameHost> HubFrame<H> {
             keep
         });
         self.statistics.tabs = tabs;
+        self.text_retain(|owner| !matches!(owner, Owner::Statistics(key) if !live.contains(key)));
         for mut presenter in dropped {
             presenter.release(cx);
         }
@@ -470,6 +708,7 @@ impl<H: FrameHost> HubFrame<H> {
         let container = layout.histogram(left, chart_size.0);
         let shown = Shown {
             key,
+            renderer: rect,
             values: [
                 rect[0],
                 rect[1],
@@ -524,6 +763,12 @@ impl<H: FrameHost> HubFrame<H> {
         let margin = css(placed.margin, scale);
         let origin = [rect[0] + margin - scroll_x, rect[1] + margin - scroll_y];
         let [width, height] = placed.table.map(|v| css(v, scale));
+        let builds = displayed(self.host().hub(cx)).map_or(0, |(r, _)| r.table().builds());
+        let doc = StatisticsText::new(placed.clone(), builds);
+        let owner = Owner::Statistics(key);
+        let selected = self.text.selected(&owner, &doc, window, cx);
+        let selected = selected.as_ref().map(|s| (s, self.text.backend_cell()));
+        let table = table_layer(grid, &doc, &rows, origin, appearance, selected);
         let values = grid
             .place(shown.values)
             .id("stats-values-container")
@@ -531,12 +776,12 @@ impl<H: FrameHost> HubFrame<H> {
             .on_scroll(
                 cx.listener(|frame, event: &ScrollEvent, _, cx| frame.statistics_wheel(event, cx)),
             )
-            .child(table_layer(grid, &placed, &rows, origin, appearance))
+            .child(table)
             .child(probed(
                 "table.stats-values",
                 grid.place([origin[0], origin[1], width, height]),
             ));
-        let dump = tab.bitmap.clone();
+        let dump = self.statistics.tabs.get(&key)?.bitmap.clone();
         let canvas_rect = shown.canvas;
         let entity = cx.entity().downgrade();
         let bitmap = canvas(
@@ -587,6 +832,39 @@ impl<H: FrameHost> HubFrame<H> {
                 ))
                 .into_any_element(),
         )
+    }
+
+    /// The displayed statistics tab's text that can be selected.
+    pub(super) fn statistics_text<'a>(
+        &'a self,
+        cx: &'a App,
+    ) -> Option<(Owner, Box<dyn PageText + 'a>)> {
+        let (renderer, _) = displayed(self.host().hub(cx))?;
+        let key = renderer_key(renderer);
+        let shown = self.statistics.shown.filter(|s| s.key == key)?;
+        let layout = &self.statistics.tabs.get(&key)?.layout;
+        let placed = layout.place(renderer.table().rows());
+        let margin = css(placed.margin, placed.scale);
+        let scroll = layout.scroll();
+        let [left, top, ..] = shown.values;
+        let page = StatisticsPage {
+            doc: StatisticsText::new(placed, renderer.table().builds()),
+            style: cell_style(CellKind::Value),
+            renderer: shown.renderer,
+            values: shown.values,
+            origin: [left + margin - scroll[0], top + margin - scroll[1]],
+        };
+        Some((Owner::Statistics(key), Box::new(page)))
+    }
+
+    /// `AutoscrollController`'s scrolling of the values.
+    pub(super) fn statistics_scroll_by(&mut self, by: [f64; 2]) {
+        let Some(shown) = self.statistics.shown else {
+            return;
+        };
+        if let Some(tab) = self.statistics.tabs.get(&shown.key) {
+            tab.layout.scroll_by(by);
+        }
     }
 
     /// The tab shown last is gone or hidden: its focused input blurs and the pointer leaves it.

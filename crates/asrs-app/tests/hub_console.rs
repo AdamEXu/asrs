@@ -7,6 +7,7 @@
 #[path = "support/hub_page.rs"]
 mod hub_page;
 
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -20,7 +21,10 @@ use asrs_model::tab_type::TabType;
 use asrs_tabs::console::controller::{ConsoleGeometry, ConsoleRenderer};
 use asrs_tabs::console::view::ConsoleRow;
 use asrs_ui::capture::HeadlessCapture;
-use asrs_ui::gpui::{MouseMoveEvent, PlatformInput, ScrollDelta, point, px};
+use asrs_ui::gpui::{
+    ClipboardItem, Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    PlatformInput, ScrollDelta, point, px,
+};
 use hub_page::Page;
 
 const LINES: usize = 200;
@@ -159,6 +163,217 @@ fn dragging_a_field_in_fills_the_console(headless: &mut HeadlessCapture, scale: 
     page.close();
 }
 
+impl Page<'_> {
+    fn press(&mut self, x: f64, y: f64) {
+        self.dispatch(PlatformInput::MouseDown(MouseDownEvent {
+            button: MouseButton::Left,
+            position: point(px(x as f32), px(y as f32)),
+            click_count: 1,
+            ..MouseDownEvent::default()
+        }));
+    }
+
+    fn drag_to(&mut self, x: f64, y: f64) {
+        self.dispatch(PlatformInput::MouseMove(MouseMoveEvent {
+            position: point(px(x as f32), px(y as f32)),
+            pressed_button: Some(MouseButton::Left),
+            ..MouseMoveEvent::default()
+        }));
+    }
+
+    fn release(&mut self, x: f64, y: f64) {
+        self.dispatch(PlatformInput::MouseUp(MouseUpEvent {
+            button: MouseButton::Left,
+            position: point(px(x as f32), px(y as f32)),
+            click_count: 1,
+            ..MouseUpEvent::default()
+        }));
+    }
+
+    fn key(&mut self, key: &str) {
+        let keystroke = Keystroke {
+            modifiers: Modifiers {
+                platform: cfg!(target_os = "macos"),
+                control: !cfg!(target_os = "macos"),
+                ..Modifiers::default()
+            },
+            key: key.to_owned(),
+            key_char: None,
+        };
+        self.headless
+            .context()
+            .update_window(self.window.into(), |_, window, cx| {
+                window.dispatch_keystroke(keystroke, cx);
+            })
+            .expect("window");
+        self.frames(1);
+    }
+
+    fn plain_key(&mut self, key: &str) {
+        let keystroke = Keystroke {
+            modifiers: Modifiers::default(),
+            key: key.to_owned(),
+            key_char: (key.len() == 1).then(|| key.to_owned()),
+        };
+        let window = self.window.into();
+        (self.headless.context())
+            .update_window(window, |_, window, cx| {
+                window.dispatch_keystroke(keystroke, cx);
+            })
+            .expect("window");
+        self.frames(1);
+    }
+
+    /// The window as it is drawn now.
+    fn shot(&mut self) -> Vec<[u8; 4]> {
+        let window = self.window.into();
+        let image = self.headless.context().capture_screenshot(window);
+        let pixels = image.expect("a screenshot").into_raw();
+        pixels.as_chunks::<4>().0.to_vec()
+    }
+
+    fn one_frame(&mut self) {
+        let cx = self.headless.context();
+        cx.advance_clock(std::time::Duration::from_millis(16));
+        cx.update_window(self.window.into(), |_, window, cx| {
+            window.simulate_next_frame(cx);
+        })
+        .expect("window");
+        cx.run_until_parked();
+    }
+
+    fn set_metadata(&mut self, time: f64, value: &str) {
+        self.model(|model| {
+            let key = JsString::from("/RealMetadata/Key");
+            let mut log = model.page().shared_log().borrow_mut();
+            log.put_string(&key, time, JsString::from(value));
+        });
+        self.model(|model| {
+            let (tabs, page) = model.tabs_mut();
+            let index = tabs.selected_index().expect("a selected tab");
+            let tab = tabs.tab_mut(index).expect("the tab");
+            tab.controller.refresh(page).expect("refresh");
+        });
+    }
+
+    fn copied(&mut self) -> String {
+        self.headless.context().update(|cx| {
+            cx.write_to_clipboard(ClipboardItem::new_string(String::new()));
+        });
+        self.key("c");
+        let copied = self.headless.context().update(|cx| {
+            let item = cx.read_from_clipboard();
+            item.and_then(|item| item.text()).unwrap_or_default()
+        });
+        copied.replace("\r\n", "\n")
+    }
+}
+
+/// What Blink's `(td, 0)` boundary points and text iterator make of rows that come and change:
+/// see `selection/gestures` and the `select-console` scenario.
+fn selected_text_survives_new_lines(headless: &mut HeadlessCapture, scale: f32) {
+    let mut page = Page::open(headless, scale);
+    page.lines(0..20);
+    page.open_console();
+    page.frames(4);
+    let container = page.layout(|layout, _| layout.container_rect());
+    let left = container.x + 98.0 + 6.0 + 1.0;
+    let right = container.x + container.width - 20.0;
+    let row = |index: f64| container.y + 31.0 + (index + 0.5) * LINE_HEIGHT;
+    let line = |range: std::ops::Range<usize>| {
+        let lines: Vec<String> = range.map(|i| format!("line {i}")).collect();
+        lines.join("\n")
+    };
+    page.press(left, row(2.0));
+    page.drag_to(right, row(3.0));
+    page.drag_to(right, row(4.0));
+    page.release(right, row(4.0));
+    page.frames(1);
+    assert_eq!(page.copied(), line(2..5), "{scale}x: dragged");
+    page.lines(20..LINES);
+    page.frames(3);
+    assert_eq!(page.copied(), line(2..5), "{scale}x: with more lines");
+    page.key("a");
+    assert_eq!(page.copied(), line(0..LINES), "{scale}x: all");
+    page.lines(LINES..LINES + 3);
+    page.frames(3);
+    let all = line(0..LINES + 3);
+    assert_eq!(page.copied(), all, "{scale}x: all of more lines");
+    let time = container.x + 50.0;
+    page.press(time, row(2.0));
+    page.release(time, row(2.0));
+    assert_eq!(page.copied(), all, "{scale}x: a press on a timestamp");
+    let console = page.model(|model| model.tabs().selected_index().expect("the console"));
+    page.select_documentation();
+    page.frames(3);
+    assert_eq!(page.copied(), "", "{scale}x: a hidden console");
+    page.select(console);
+    page.frames(3);
+    page.press(left, row(2.0));
+    page.release(left, row(2.0));
+    assert_eq!(page.copied(), "", "{scale}x: a click on the selection");
+    page.close();
+}
+
+/// `selectAllChildren` of the body: no text node of the table is an end of it.
+fn selecting_all_survives_a_rebuilt_table(headless: &mut HeadlessCapture, scale: f32) {
+    let mut page = Page::open(headless, scale);
+    page.set_metadata(0.0, "first");
+    page.open_tab(TabType::Metadata, &JsValue::Null);
+    page.frames(3);
+    let plain = page.shot();
+    page.key("a");
+    page.frames(2);
+    let selected = page.shot();
+    let mut counts = HashMap::new();
+    for (before, after) in plain.iter().zip(&selected) {
+        if before != after {
+            *counts.entry(*after).or_insert(0) += 1;
+        }
+    }
+    let (color, area) = counts.into_iter().max_by_key(|e| e.1).expect("selected");
+    page.set_metadata(1.0, "other");
+    page.one_frame();
+    let left = page.shot().iter().filter(|p| **p == color).count();
+    assert!(
+        left > area / 2,
+        "{scale}x: {left} of {area} pixels selected"
+    );
+    assert_eq!(page.copied(), "other", "{scale}x");
+    page.close();
+}
+
+fn keys_with_text_selected(headless: &mut HeadlessCapture, scale: f32) {
+    let mut page = Page::open(headless, scale);
+    page.lines(0..20);
+    page.open_console();
+    page.frames(4);
+    let container = page.layout(|layout, _| layout.container_rect());
+    page.press(container.x + 105.0, container.y + 40.0);
+    page.drag_to(container.x + container.width - 20.0, container.y + 40.0);
+    page.release(container.x + container.width - 20.0, container.y + 40.0);
+    page.frames(1);
+    assert_eq!(page.copied(), "line 0", "{scale}x");
+    assert_eq!(page.mode(), SelectionMode::Static);
+    page.plain_key("space");
+    assert_eq!(page.mode(), SelectionMode::Playback, "{scale}x: space");
+    page.plain_key("space");
+    let time = page.selection(|selection| selection.get_selected_time());
+    page.plain_key("right");
+    let stepped = page.selection(|selection| selection.get_selected_time());
+    assert_ne!(stepped, time, "{scale}x: right");
+    assert_eq!(page.copied(), "line 0", "{scale}x: after the keys");
+    let input = [container.x + container.width - 60.0, container.y + 15.0];
+    page.press(input[0], input[1]);
+    page.release(input[0], input[1]);
+    page.frames(2);
+    assert_eq!(page.copied(), "", "{scale}x: the input's caret");
+    page.plain_key("1");
+    page.key("a");
+    assert_eq!(page.copied(), "1", "{scale}x: the input's text");
+    page.close();
+}
+
 fn main() {
     if !cfg!(any(target_os = "macos", target_os = "linux")) {
         println!("hub console: skipped, no headless renderer on this platform");
@@ -171,6 +386,9 @@ fn main() {
         }
         hiding_leaves_the_hovered_row(&mut headless, scale);
         dragging_a_field_in_fills_the_console(&mut headless, scale);
+        selected_text_survives_new_lines(&mut headless, scale);
+        selecting_all_survives_a_rebuilt_table(&mut headless, scale);
+        keys_with_text_selected(&mut headless, scale);
     }
     println!("hub_console: ok");
 }

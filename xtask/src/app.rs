@@ -188,6 +188,7 @@ struct Scenario {
     scales: Vec<u32>,
     themes: Vec<String>,
     gl: bool,
+    copies: bool,
 }
 
 fn scenarios_dir(paths: &Paths) -> PathBuf {
@@ -245,6 +246,10 @@ fn load_scenarios(paths: &Paths, only: &[String]) -> Result<Vec<Scenario>> {
                 scales: numbers("scales", &SCALES),
                 themes: strings("themes", &THEMES),
                 gl: value.get("gl") == Some(&Json::Bool(true)),
+                copies: value
+                    .get("actions")
+                    .and_then(Json::as_array)
+                    .is_some_and(|actions| actions.iter().any(|a| a.get("copy").is_some())),
                 name,
                 file,
             })
@@ -308,6 +313,9 @@ fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path)
         .current_dir(&paths.root)
         .env_remove("ELECTRON_RUN_AS_NODE");
     oracle::pin_environment(&mut command, oracle::DEFAULT_ZONE);
+    if scenario.copies {
+        private_pasteboard(paths, &mut command)?;
+    }
     let status = command
         .status()
         .map_err(|e| format!("running Electron: {e}"))?;
@@ -329,6 +337,27 @@ fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path)
             record.display()
         ));
     }
+    Ok(())
+}
+
+/// Gives Electron a pasteboard of its own (macOS): the user's would hold what scenarios copy.
+pub(crate) fn private_pasteboard(paths: &Paths, command: &mut Command) -> Result {
+    if !cfg!(target_os = "macos") {
+        return Ok(());
+    }
+    let library = paths.root.join("target/oracle/pasteboard.dylib");
+    let status = Command::new("cc")
+        .args(["-dynamiclib", "-framework", "AppKit", "-o"])
+        .arg(&library)
+        .arg(paths.root.join("oracle/tools/pasteboard.m"))
+        .status()
+        .map_err(|e| format!("running cc: {e}"))?;
+    if !status.success() {
+        return Err(format!("building {}: {status}", library.display()));
+    }
+    command
+        .env("DYLD_INSERT_LIBRARIES", library)
+        .env("ASRS_PRIVATE_PASTEBOARD", "1");
     Ok(())
 }
 
