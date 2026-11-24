@@ -228,12 +228,24 @@ impl Placer {
         [x, y - self.scrolled].map(|v| css(v - snapped(v), self.scale))
     }
 
-    /// The boxes a selection paints.
-    pub fn selection(&self, rects: Vec<LuRect>, color: Rgba) -> Vec<Div> {
+    /// The part of `text` in each box of a selection, in the colour selected text has.
+    pub fn recoloured(&self, rects: &[LuRect], text: impl Fn() -> Vec<Div>) -> Vec<Div> {
         rects
-            .into_iter()
-            .map(|rect| self.place(rect).bg(color))
+            .iter()
+            .map(|&rect| {
+                let [x, y, ..] = rect;
+                let left = px(-self.device(x));
+                let top = px(-self.device(y - self.scrolled));
+                let layer = div().absolute().left(left).top(top).children(text());
+                self.place(rect).overflow_hidden().child(layer)
+            })
             .collect()
+    }
+
+    /// The boxes a selection paints.
+    pub fn selection(&self, rects: &[LuRect], color: Rgba) -> Vec<Div> {
+        let boxes = rects.iter();
+        boxes.map(|&rect| self.place(rect).bg(color)).collect()
     }
 
     /// A line's piece of text in its box.
@@ -268,6 +280,20 @@ impl Placer {
                 let bounds = [x + piece.x, y + line.box_top, piece.width, height];
                 self.record(cx, &piece.text, bounds);
                 self.text(&piece.text, &block.style, color(piece.item), bounds)
+            })
+            .collect()
+    }
+
+    /// A block's text in one colour, unrecorded.
+    pub fn plain_block(&self, block: &TextBlock, color: u32) -> Vec<Div> {
+        let [x, y] = block.origin;
+        let height = block.flow.box_height;
+        let lines = block.flow.lines.iter();
+        lines
+            .flat_map(|line| line.pieces.iter().map(move |piece| (line, piece)))
+            .map(|(line, piece)| {
+                let bounds = [x + piece.x, y + line.box_top, piece.width, height];
+                self.text(&piece.text, &block.style, color, bounds)
             })
             .collect()
     }

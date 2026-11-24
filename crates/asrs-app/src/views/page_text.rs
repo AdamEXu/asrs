@@ -9,6 +9,7 @@ use asrs_canvas::text::{FixedAdvance, TextBackend, platform_backend};
 use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::gpui::{
     App, Context, Div, KeyDownEvent, MouseButton, MouseDownEvent, ParentElement, Styled, Window,
+    div, px,
 };
 use asrs_ui::input;
 use asrs_ui::selection::all;
@@ -168,6 +169,23 @@ impl Selected {
             .fold(layer, |layer, rect| {
                 layer.child(grid.place(rect).bg(self.colors.rgba()))
             })
+    }
+}
+
+impl Selected {
+    /// The part of `text`, what is drawn in the layer, that is in a box of the selection, in the
+    /// colour selected text has.
+    pub(super) fn recoloured(
+        &self,
+        grid: Grid,
+        [x, y, w, h]: [f64; 4],
+        text: impl FnOnce(u32) -> Vec<Div>,
+    ) -> Option<Div> {
+        let color = self.colors.text?;
+        let left = px((grid.origin[0] - grid.snap(x)) as f32);
+        let top = px((grid.origin[1] - grid.snap(y)) as f32);
+        let layer = div().absolute().left(left).top(top).children(text(color));
+        Some(grid.place([x, y, w, h]).overflow_hidden().child(layer))
     }
 }
 

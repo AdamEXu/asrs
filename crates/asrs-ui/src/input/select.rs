@@ -11,7 +11,7 @@ use std::time::Instant;
 use asrs_canvas::Pixmap;
 use gpui_kit::{
     App, Bounds, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, ParentElement, Pixels, Render, Rgba,
+    KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, ParentElement, Pixels, Render,
     StatefulInteractiveElement, Styled, Window, canvas, div, px,
 };
 
@@ -24,6 +24,7 @@ use crate::input::style::{
 };
 use crate::platform::{self, SelectMenu, SelectMenuItem, SelectMenuItemKind};
 use crate::selection;
+use crate::selection::colors::SelectionColors;
 use crate::text::{self, LineHeight, Overflow, TextStyle, WhiteSpace};
 
 /// One of the select's list items as the popup shows it.
@@ -297,7 +298,7 @@ fn draw(
     css: (f32, f32),
     state: SelectState,
     label: &str,
-    selected: Option<Rgba>,
+    selected: Option<SelectionColors>,
     scale: f32,
 ) -> Option<Pixmap> {
     let (ascent, descent) = text::font_metrics(cx, &TextStyle::new(CONTROL_FONT), scale);
@@ -360,6 +361,7 @@ fn draw(
     skia::over(&mut pixmap, &skia::svg(w, h, 1.0, &body)?);
 
     if !label.is_empty() {
+        let color = selected.and_then(|s| s.text).unwrap_or(color);
         let [tx, ty, tw, _] = g.text;
         let masks = text::glyph_masks(
             cx,
@@ -375,7 +377,7 @@ fn draw(
             ..((origin.0 + cx0 + cw).round() as i32).min(w as i32);
         let clip_y = ((origin.1 + cy0).round() as i32).max(0)
             ..((origin.1 + cy0 + ch).round() as i32).min(h as i32);
-        if let Some(selected) = selected {
+        if let Some(selected) = selected.map(|s| s.rgba()) {
             let style = text_style(line, scale);
             let width = text::measure(cx, &style, label, scale).0 as f32 * scale;
             let space = text::space_width(cx, &style, scale);
@@ -462,9 +464,9 @@ pub fn paint_select(
         origin: gpui_kit::point(px(left / scale), px(top / scale)),
         size: bounds.size,
     };
-    let selected = selection::all::color(window, cx);
+    let selected = selection::all::colors(window, cx);
     let key = (
-        ("select", selected.map(u32::from)),
+        ("select", selected),
         w,
         h,
         state,

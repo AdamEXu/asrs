@@ -14,7 +14,7 @@ use asrs_ui::selection::{
     Behavior, Button, Caret, Document, Hit, Place, Position, Press, TextSelection,
 };
 
-const PLATFORMS: [&str; 2] = ["macos-aarch64", "linux-aarch64"];
+const PLATFORMS: [&str; 3] = ["macos-aarch64", "linux-aarch64", "windows-aarch64"];
 
 struct Page {
     texts: Vec<String>,

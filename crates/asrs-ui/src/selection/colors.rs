@@ -23,11 +23,11 @@ pub fn blend_with_white(rgb: u32) -> u32 {
     out
 }
 
-/// `#rrggbbaa`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct SelectionColors {
+    /// `0xRRGGBBAA`.
     pub background: u32,
-    /// What selected text is drawn in, on platforms that change it.
+    /// What selected text is drawn in, `0xRRGGBB`, on platforms that change it.
     pub text: Option<u32>,
 }
 

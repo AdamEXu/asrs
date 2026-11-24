@@ -493,6 +493,15 @@ impl Rows<'_> {
                 }
                 layer = layer.child(piece);
             }
+            if let (Some(rect), Some((selected, _)), false) = (selected_rect, &self.selected, tabs)
+            {
+                let font = cell_font(first || style.bold, style.italic);
+                let line_top = y - self.text_box.0;
+                layer = layer.children(selected.recoloured(self.grid, rect, |color| {
+                    let text = plain(text, cell_style(font), blend(color)).form_control();
+                    vec![self.grid.text(text, [x, line_top])]
+                }));
+            }
             if style.underline || *link {
                 let font = cell_font(first || style.bold, style.italic);
                 let text = if tabs { "" } else { text };

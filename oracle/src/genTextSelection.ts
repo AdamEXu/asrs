@@ -15,7 +15,9 @@ import { readFixture } from "./dom/fixtureFile";
 const { file, fixture } = readFixture("genTextSelection", process.argv[2]);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "asrs-text-selection-"));
+const output = path.join(scratch, "records.jsonl");
 let run;
+let records = "";
 try {
   const env = { ...process.env };
   delete env.ELECTRON_RUN_AS_NODE;
@@ -35,12 +37,13 @@ try {
   const css = (name: string) => fs.readFileSync(path.join(UPSTREAM_DIR, "www", name), "utf8");
   const pages = fixture.pages.map((page: any) => ({ ...page, css: page.css.map(css).join("\n") }));
   const requestPath = path.join(scratch, "request.json");
-  fs.writeFileSync(requestPath, JSON.stringify({ fixture: { ...fixture, pages }, page: path.join(scratch, "page.html"), userData: path.join(scratch, "userData") }));
+  fs.writeFileSync(requestPath, JSON.stringify({ fixture: { ...fixture, pages }, output, page: path.join(scratch, "page.html"), userData: path.join(scratch, "userData") }));
   run = spawnSync(
     process.execPath,
     ["--force-device-scale-factor=1", "--lang=en-US", "--log-level=3", path.join(here, "genTextSelectionMain.mjs"), requestPath],
-    { env, encoding: "utf8", maxBuffer: 1 << 30, stdio: ["ignore", "pipe", "inherit"] }
+    { env, stdio: ["ignore", "ignore", "inherit"] }
   );
+  if (run.status === 0) records = fs.readFileSync(output, "utf8");
 } finally {
   fs.rmSync(scratch, { recursive: true, force: true });
 }
@@ -48,4 +51,4 @@ if (run.status !== 0) {
   process.stderr.write(`genTextSelection: Electron exited with ${run.status ?? run.signal}\n`);
   process.exit(1);
 }
-process.stdout.write(run.stdout, () => process.exit(0));
+process.stdout.write(records, () => process.exit(0));

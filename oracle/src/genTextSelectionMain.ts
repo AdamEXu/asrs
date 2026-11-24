@@ -273,6 +273,7 @@ app
         }
       }
     }
-    process.stdout.write(lines.map((l) => l + "\n").join(""), () => app.exit(0));
+    fs.writeFileSync(request.output, lines.map((l) => l + "\n").join(""));
+    app.exit(0);
   })
   .catch((error) => fail(String(error?.stack ?? error)));

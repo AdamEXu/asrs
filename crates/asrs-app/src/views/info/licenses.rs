@@ -13,7 +13,9 @@ use asrs_ui::gpui::{
 use asrs_ui::selection::{Document, Hit, Place};
 use asrs_ui::theme::Appearance;
 
-use super::layout::{LicenseBlock, LicensesLayout, Typesetter, license_style, module_style};
+use super::layout::{
+    LicenseBlock, LicensesLayout, ParagraphLine, Typesetter, license_style, module_style,
+};
 use super::page::{self, PageScroll, Placer, ScrolledPage};
 use super::text::{self, DocumentText, PageText};
 
@@ -157,15 +159,16 @@ impl Render for LicensesPage {
             layout.blocks.partition_point(above)
         };
         for (i, LicenseBlock { module, top, text }) in shown.iter().enumerate() {
+            let mut rects = Vec::new();
             if let Some(selected) = &selected {
                 let index = first + i;
                 let style = &styles[usize::from(*module)];
                 let block = text.block(style, from - top, to - top);
                 let origin = [layout.left, *top];
                 let scale = window.scale_factor();
-                let rects =
+                rects =
                     (self.text).rects(&selected.range, (index, &block), &text.text, origin, scale);
-                root = root.children(placer.selection(rects, selected.colors.rgba()));
+                root = root.children(placer.selection(&rects, selected.colors.rgba()));
             }
             let height = text.box_height;
             let lines = if recording {
@@ -179,6 +182,23 @@ impl Render for LicensesPage {
                 if placer.shows(bounds[1], height, window) {
                     let style = &styles[usize::from(*module)];
                     root = root.child(placer.text(&line.text, style, theme.text, bounds));
+                }
+            }
+            if let Some(color) = selected.as_ref().and_then(|s| s.colors.text) {
+                let style = &styles[usize::from(*module)];
+                for rect in rects {
+                    let in_rect = |line: &&ParagraphLine| {
+                        top + line.box_top < rect[1] + rect[3]
+                            && rect[1] < top + line.box_top + height
+                    };
+                    root = root.children(placer.recoloured(&[rect], || {
+                        let lines = lines.iter().filter(in_rect);
+                        let text = lines.map(|line| {
+                            let bounds = [layout.left, top + line.box_top, line.width, height];
+                            placer.text(&line.text, style, color, bounds)
+                        });
+                        text.collect()
+                    }));
                 }
             }
         }

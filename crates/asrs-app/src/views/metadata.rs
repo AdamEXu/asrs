@@ -23,7 +23,7 @@ use super::metadata_layout::{
 use super::page_text::{
     Owner, PageText, PlacedBlock, Selected, beside_table, device, floor_device, unselectable,
 };
-use super::statistics::text_lines;
+use super::statistics::{selected_lines, text_lines};
 
 #[derive(Default)]
 pub struct MetadataView {
@@ -198,6 +198,7 @@ fn table_element(
             }
             let [dx, dy] = placed.content(row, cell).map(px);
             let style = cell_style(cell.kind);
+            let mut over = Vec::new();
             if let Some(selected) = selected
                 && r > 0
                 && c > 0
@@ -215,6 +216,9 @@ fn table_element(
                     scale: grid.scale,
                 };
                 layer = selected.paint(grid, &block, backend, layer);
+                let text = (&cell.text, &style);
+                let at = [x + dx, y + dy];
+                over = selected_lines(grid, text, at, selected, &block, backend);
             }
             layer = text_lines(
                 grid,
@@ -223,7 +227,8 @@ fn table_element(
                 [x + dx, y + dy],
                 theme.text,
                 layer,
-            );
+            )
+            .children(over);
         }
     }
     let container = [x, y, rect[2], px(placed.height)];

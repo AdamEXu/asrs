@@ -311,13 +311,27 @@ pub(super) fn text_lines(
     color: u32,
     layer: Div,
 ) -> Div {
+    lines_of(grid, text, style, [x, y], color, false, layer)
+}
+
+fn lines_of(
+    grid: Grid,
+    text: &CellText,
+    style: &TextStyle,
+    [x, y]: [f64; 2],
+    color: u32,
+    again: bool,
+    layer: Div,
+) -> Div {
     let mut style = *style;
     style.white_space = WhiteSpace::Pre;
     style.align = text::Align::Start;
     let scale = grid.scale as f32;
     text.lines.iter().fold(layer, |layer, line| {
         let at = [x + css(line.left, scale), y + css(line.top, scale)];
-        layer.child(grid.text(Text::new(line.text.clone(), style).color(color), at))
+        let text = Text::new(line.text.clone(), style).color(color);
+        let text = if again { text.unrecorded() } else { text };
+        layer.child(grid.text(text, at))
     })
 }
 
@@ -466,6 +480,23 @@ impl PageText for StatisticsPage {
     }
 }
 
+/// The selected parts of a cell's lines in the colour selected text has.
+pub(super) fn selected_lines(
+    grid: Grid,
+    (text, style): (&CellText, &TextStyle),
+    at: [f64; 2],
+    selected: &Selected,
+    block: &PlacedBlock<'_>,
+    backend: &mut dyn TextBackend,
+) -> Vec<Div> {
+    let rects = block.rects(&selected.range, backend);
+    let lines = |color| vec![lines_of(grid, text, style, at, color, true, div())];
+    rects
+        .into_iter()
+        .filter_map(|rect| selected.recoloured(grid, rect, lines))
+        .collect()
+}
+
 fn table_layer(
     grid: Grid,
     doc: &StatisticsText,
@@ -506,6 +537,7 @@ fn table_layer(
                 _ => None,
             };
             let [dx, dy] = placed.content(row, cell).map(px);
+            let mut over = Vec::new();
             if cell.kind == CellKind::Value
                 && let Some((selected, backend)) = selected
             {
@@ -536,6 +568,9 @@ fn table_layer(
                 let drawn = grid.place(inner).overflow_hidden();
                 let backend = &mut **backend.borrow_mut();
                 layer = layer.child(selected.paint(clip, &block, backend, drawn));
+                let text = (&cell.text, &styles[cell.kind as usize]);
+                let at = [x + dx, y + dy];
+                over = selected_lines(grid, text, at, selected, &block, backend);
             }
             layer = text_lines(
                 grid,
@@ -544,7 +579,8 @@ fn table_layer(
                 [x + dx, y + dy],
                 cell_color(value, theme),
                 layer,
-            );
+            )
+            .children(over);
         }
     }
     layer

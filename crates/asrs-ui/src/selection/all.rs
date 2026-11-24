@@ -2,7 +2,7 @@
 
 use std::collections::HashSet;
 
-use gpui_kit::{App, Global, Rgba, Window, WindowId};
+use gpui_kit::{App, Global, Window, WindowId};
 
 use super::colors::{SelectionColors, page_active};
 use crate::theme::Appearance;
@@ -29,9 +29,9 @@ pub fn set(all: bool, window: &Window, cx: &mut App) {
 }
 
 /// What a form control's text is selected with.
-pub fn color(window: &Window, cx: &App) -> Option<Rgba> {
+pub fn colors(window: &Window, cx: &App) -> Option<SelectionColors> {
     let id = window.window_handle().window_id();
     cx.try_global::<Windows>()?.0.get(&id)?;
     let appearance = Appearance::of(window, cx);
-    Some(SelectionColors::of(appearance, page_active(window, cx)).rgba())
+    Some(SelectionColors::of(appearance, page_active(window, cx)))
 }

@@ -39,11 +39,12 @@ pub(super) fn popup_menu(
 
 pub(super) fn install_edit_commands(_: &mut App, _: impl Fn(EditCommand, &mut App) + 'static) {}
 
+/// What Electron selects text with on the Windows and Linux render hosts.
 pub(super) fn selection_colors(_dark: bool) -> SystemSelection {
     SystemSelection {
-        active: 0x1e90ff,
+        active: 0x3367d1,
         inactive: 0xc8c8c8,
-        text: None,
+        text: Some([0xffffff, 0x323232]),
     }
 }
 

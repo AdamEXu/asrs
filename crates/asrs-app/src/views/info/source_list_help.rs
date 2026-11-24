@@ -10,10 +10,11 @@ use asrs_tabs::info::SourceListHelp;
 use asrs_tabs::info::source_list_help::{HelpItem, ThemeColors};
 use asrs_ui::gpui::{
     App, Context, Div, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyDownEvent,
-    ParentElement, Render, Rgba, Styled, Window, div, rgb,
+    ParentElement, Render, Styled, Window, div, rgb,
 };
 use asrs_ui::icon::{Icon, IconSource};
 use asrs_ui::parity::probed;
+use asrs_ui::selection::colors::SelectionColors;
 use asrs_ui::selection::{Caret, Document, Hit, Place, Position};
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::Text;
@@ -152,7 +153,7 @@ struct Painter<'a> {
     boxes: Vec<Div>,
     /// The boxes the selection paints behind each block.
     selection: Vec<Vec<LuRect>>,
-    selected: Option<Rgba>,
+    selected: Option<SelectionColors>,
     /// The block painted next.
     next: usize,
     cx: &'a mut App,
@@ -168,12 +169,25 @@ impl Painter<'_> {
             .push(div().child(probed(id, self.placer.place(rect))));
     }
 
-    /// The selection behind the next block.
-    fn behind(&mut self) -> Vec<Div> {
-        let rects = std::mem::take(&mut self.selection[self.next]);
+    /// The selection's boxes in the next block.
+    fn behind(&mut self) -> Vec<LuRect> {
         self.next += 1;
-        let color = self.selected.unwrap_or_default();
-        self.placer.selection(rects, color)
+        std::mem::take(&mut self.selection[self.next - 1])
+    }
+
+    /// The next block's selection and text.
+    fn block(&mut self, block: &TextBlock, color: impl Fn(usize) -> u32) {
+        let rects = self.behind();
+        let mut boxes = Vec::new();
+        if let Some(colors) = self.selected {
+            boxes = self.placer.selection(&rects, colors.rgba());
+        }
+        boxes.extend(self.text(block, color));
+        if let Some(color) = self.selected.and_then(|colors| colors.text) {
+            let again = || self.placer.plain_block(block, color);
+            boxes.extend(self.placer.recoloured(&rects, again));
+        }
+        self.boxes.extend(boxes);
     }
 
     fn item(&mut self, item: &HelpItem, layout: &HelpItemLayout) {
@@ -188,56 +202,64 @@ impl Painter<'_> {
             let icon = self.placer.place(layout.icon).child(icon.subpixel(dx, dy));
             self.boxes.push(icon);
         }
-        let behind = self.behind();
-        self.boxes.extend(behind);
+        let rects = self.behind();
         let [_, dy] = self.placer.remainder(layout.title);
-        let title = Text::new(item.title.clone(), help_title_style())
-            .color(theme.text)
-            .content_width(css(layout.title[2], self.scale))
-            .subpixel(0.0, dy as f32);
-        self.boxes.push(div().child(probed(
-            "div.type-title",
-            self.placer.place(layout.title).child(title),
-        )));
+        let title = |color| {
+            Text::new(item.title.clone(), help_title_style())
+                .color(color)
+                .content_width(css(layout.title[2], self.scale))
+                .subpixel(0.0, dy as f32)
+        };
+        let shown = self.placer.place(layout.title).child(title(theme.text));
+        let mut boxes = vec![div().child(probed("div.type-title", shown))];
+        if let Some(colors) = self.selected {
+            boxes.splice(0..0, self.placer.selection(&rects, colors.rgba()));
+        }
+        if let Some(color) = self.selected.and_then(|colors| colors.text) {
+            let again = || {
+                let title = title(color).unrecorded();
+                vec![self.placer.place(layout.title).child(title)]
+            };
+            boxes.extend(self.placer.recoloured(&rects, again));
+        }
+        self.boxes.extend(boxes);
         if let Some((rect, block)) = &layout.warning {
             self.probe("div.parent-warning", *rect);
-            let behind = self.behind();
-            self.boxes.extend(behind);
-            let text = self.text(block, |_| PARENT_WARNING);
-            self.boxes.extend(text);
+            self.block(block, |_| PARENT_WARNING);
         }
         if let Some((rect, rows)) = &layout.table {
             self.probe("table.options", *rect);
             self.next += 1;
             for (row, option) in rows.iter().zip(&item.options) {
-                let behind = [self.behind(), self.behind()];
-                self.boxes.extend(behind.into_iter().flatten());
-                let name = self.text(&row.name, |_| theme.text);
+                self.block(&row.name, |_| theme.text);
                 let appearance = self.appearance;
-                let values = self.text(&row.values, |i| {
+                self.block(&row.values, |i| {
                     let colors = option.values[i].colors.as_ref();
                     colors.map_or(theme.text, |colors| color(colors, appearance))
                 });
-                self.boxes.extend(name.into_iter().chain(values));
             }
         }
         if layout.table.is_some() {
             self.next += 1;
         }
         self.probe("div.source-types", layout.sources);
-        let behind = self.behind();
-        if behind.is_empty() {
-            let text = self.text(&layout.sources_text, |_| theme.text);
-            let text = text.into_iter().map(|line| line.opacity(SOURCES_OPACITY));
-            self.boxes.extend(text);
-        } else {
-            // The opacity is the group's: what is behind the text does not show through it.
-            let behind = behind.into_iter().map(|rect| rect.opacity(SOURCES_OPACITY));
-            self.boxes.extend(behind);
-            let blended = mix(theme.text, theme.background, SOURCES_OPACITY.into());
-            let text = self.text(&layout.sources_text, |_| blended);
-            self.boxes.extend(text);
+        let first = self.boxes.len();
+        if self.selection[self.next].is_empty() {
+            self.block(&layout.sources_text, |_| theme.text);
+            for line in self.boxes.split_off(first) {
+                self.boxes.push(line.opacity(SOURCES_OPACITY));
+            }
+            return;
         }
+        // The opacity is the group's: what is behind the text does not show through it.
+        let faint = |color| mix(color, theme.background, SOURCES_OPACITY.into());
+        let colors = self.selected;
+        self.selected = colors.map(|colors| SelectionColors {
+            background: faint(colors.background >> 8) << 8 | colors.background & 0xff,
+            text: colors.text.map(faint),
+        });
+        self.block(&layout.sources_text, |_| faint(theme.text));
+        self.selected = colors;
     }
 }
 
@@ -285,7 +307,7 @@ impl Render for SourceListHelpPage {
             scale,
             boxes: Vec::new(),
             selection: selection.collect(),
-            selected: selected.as_ref().map(|s| s.colors.rgba()),
+            selected: selected.as_ref().map(|s| s.colors),
             next: 0,
             cx,
         };
@@ -300,7 +322,7 @@ impl Render for SourceListHelpPage {
                 whole || (range.start.block < *block && *block <= range.end.block)
             };
             let icons = text.icons.iter().filter(covered).map(|(_, rect)| *rect);
-            boxes.extend(placer.selection(icons.collect(), colors.rgba()));
+            boxes.extend(placer.selection(&icons.collect::<Vec<_>>(), colors.rgba()));
         }
         page::root("source-list-help", self, cx)
             .track_focus(&self.focus)

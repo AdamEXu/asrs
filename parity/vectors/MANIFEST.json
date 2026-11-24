@@ -528,6 +528,7 @@
     "satellite/page": {"cases":389,"content":"fd8854662a3924f0","generator":"29ab73035dfe6dc0","spec":"parity/specs/satellite/page.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "selection/gestures/linux-aarch64": {"cases":6281,"content":"243918f6f5a3cde5","generator":"87f48c693bb61e63","spec":"parity/specs/selection/gestures.entry.json","zone":"UTC","generatedOn":"linux-aarch64"},
     "selection/gestures/macos-aarch64": {"cases":6292,"content":"e90f8b61ac66183b","generator":"87f48c693bb61e63","spec":"parity/specs/selection/gestures.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "selection/gestures/windows-aarch64": {"cases":6281,"content":"2d8a9b35c924fe56","generator":"43821f2ff5452e20","spec":"parity/specs/selection/gestures.entry.json","zone":"UTC","generatedOn":"windows-aarch64"},
     "spark/2025": {"cases":101233,"content":"1e1e04e36553bdd4","generator":"e695b29c6041e945","spec":"parity/specs/spark/2025.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "spark/2026": {"cases":101387,"content":"63d71ee55046d700","generator":"bdbac679643b52c2","spec":"parity/specs/spark/2026.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "tabs/ansi": {"cases":4033,"content":"b6f4bc1bbdfb2a6e","generator":"e42ce64ab3c73fcd","spec":"parity/specs/tabs/ansi.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},

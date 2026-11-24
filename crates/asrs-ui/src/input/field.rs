@@ -499,7 +499,7 @@ impl<M: FieldModel> Render for TextField<M> {
             .text_color(editor_text_color)
             .child(Input::new(&self.editor));
         let subpixel = (self.subpixel.0 + dx, self.subpixel.1 + dy);
-        let page_selected = selection::all::color(window, cx);
+        let page_selected = selection::all::colors(window, cx);
         let paint = |s: &str, rgba_hex: u32| {
             Text::new(s.to_owned(), text_style)
                 .form_control()

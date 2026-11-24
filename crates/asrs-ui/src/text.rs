@@ -22,6 +22,8 @@ use gpui_kit::{
 };
 use image::{Frame, RgbaImage};
 
+use crate::selection::colors::SelectionColors;
+
 pub use asrs_canvas::text::FontSpec;
 pub use asrs_canvas::text::dom::{
     Align, Direction, ELLIPSIS, LineHeight, Overflow, Style as TextStyle, WhiteSpace,
@@ -424,9 +426,12 @@ impl Text {
     }
 
     /// Draws the whole text selected, the line breaks after its lines included.
-    pub fn selected(mut self, background: Option<Rgba>) -> Self {
-        self.selected = background;
-        self
+    pub fn selected(mut self, colors: Option<SelectionColors>) -> Self {
+        self.selected = colors.map(|colors| colors.rgba());
+        match colors.and_then(|colors| colors.text) {
+            Some(text) => self.color(text),
+            None => self,
+        }
     }
 
     /// Draws only what fits in `room` CSS px, for a box the line's ellipsis follows or replaces.
