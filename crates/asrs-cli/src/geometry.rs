@@ -12,10 +12,12 @@ use asrs_log::geometry::{
 use asrs_log::log::Log;
 use asrs_parity::{Response, Utf16String, Value};
 
-use crate::functions::{arg, quiet_nan, to_number, to_units, type_error};
+use crate::functions::{arg, quiet_nan, to_number, type_error};
+use crate::js_ops::get_prop;
+use crate::js_ops::to_units;
 use crate::log_field::{boolean, js_string};
 use crate::log_run;
-use crate::shared::{Function, get_prop, strict_equal};
+use crate::shared::{Function, strict_equal};
 
 pub const FUNCTIONS: &[(&str, Function)] = &[
     ("shared/geometry:translation2dTo3d", |a| {
