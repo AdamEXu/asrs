@@ -255,7 +255,6 @@ fn replay(platform: &str) -> usize {
     let records = vectors::load(&id).unwrap_or_else(|e| panic!("{id}: {e}"));
     let mut replay = None;
     let mut sequence = None;
-    let mut skipped = None;
     let mut compared = 0;
     let mut active = false;
     for record in &records {
@@ -268,9 +267,6 @@ fn replay(platform: &str) -> usize {
             replay = Some(Replay::new(cx));
             active = false;
         }
-        if skipped == sequence {
-            continue;
-        }
         let replay = replay.as_mut().expect("a sequence");
         let op = record.field("op").and_then(Json::as_array).expect("an op");
         let id = record.field("active").and_then(Json::as_str);
@@ -278,12 +274,12 @@ fn replay(platform: &str) -> usize {
         if text(&op[0]) == "active" {
             active = op[1] == Json::Bool(true);
         }
-        // A press activates the window before the page has it.
+        // The app's window is active before it sees a press. Blink's, which is not, only blurs.
         if !active && text(&op[0]) == "press" && id.is_none() {
-            skipped = sequence;
-            continue;
+            replay.page(|_, window, cx| window.blur(cx));
+        } else {
+            replay.perform(op, id.as_deref());
         }
-        replay.perform(op, id.as_deref());
         let bool_of = |key: &str| record.field(key) == Some(&Json::Bool(true));
         let at = format!("{platform} sequence {number}: {op:?} -> {id:?}");
         let Some(id) = id.as_deref() else {
@@ -301,10 +297,12 @@ fn replay(platform: &str) -> usize {
         assert!(focused, "{at}: the focus is elsewhere");
         compared += 1;
         assert_eq!(has_focus, bool_of("focus"), "{at}: :focus");
-        let ring = match id {
-            "s" => has_focus,
-            _ => visible && RINGED.contains(&id),
+        let visible = match id {
+            "s" | "i" | "x" => has_focus,
+            _ => visible,
         };
+        assert_eq!(visible, bool_of("visible"), "{at}: :focus-visible");
+        let ring = visible && RINGED.contains(&id);
         assert_eq!(ring, bool_of("ring"), "{at}: the ring");
     }
     compared
