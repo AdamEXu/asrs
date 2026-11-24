@@ -194,6 +194,8 @@ mod script {
     #[derive(Clone, Debug, PartialEq)]
     pub enum Reply {
         Button(usize),
+        /// The dialog stays open.
+        Unanswered,
         Open(Vec<PathBuf>),
         Save(Option<PathBuf>),
     }
@@ -225,6 +227,9 @@ mod script {
         script
             .shown
             .push((window.map(Window::window_handle), shown));
+        if reply == Reply::Unanswered {
+            return None;
+        }
         let value = read(reply);
         cx.spawn(async move |cx| cx.update(|cx| on_done(value, cx)))
             .detach();

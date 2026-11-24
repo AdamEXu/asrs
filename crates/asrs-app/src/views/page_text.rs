@@ -447,7 +447,7 @@ impl<H: FrameHost> HubFrame<H> {
         match edit_command(event) {
             Some(EditCommand::Copy) => self.copy_text(cx),
             Some(EditCommand::SelectAll) => self.select_all_text(cx),
-            None => {}
+            _ => {}
         }
     }
 

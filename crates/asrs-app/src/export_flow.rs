@@ -146,11 +146,21 @@ pub(crate) fn may_close(hub: WindowId, cx: &mut App) -> bool {
     if !MainProcess::is_exporting(cx, hub) {
         return true;
     }
-    let options = dispatch::message_box_options(&export_flow::closing_warning());
-    dispatch::show_message_box(Some(hub), options, cx, move |response, cx| {
-        if response != 0 {
+    ask_to_close(hub, cx, move |close, cx| {
+        if close {
             windows::close(cx, hub);
         }
     });
     false
+}
+
+pub(crate) fn ask_to_close(
+    hub: WindowId,
+    cx: &mut App,
+    on_answer: impl FnOnce(bool, &mut App) + 'static,
+) {
+    let options = dispatch::message_box_options(&export_flow::closing_warning());
+    dispatch::show_message_box(Some(hub), options, cx, move |response, cx| {
+        on_answer(response != 0, cx);
+    });
 }

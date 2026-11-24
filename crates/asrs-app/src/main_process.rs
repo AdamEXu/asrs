@@ -2,6 +2,7 @@
 //! events, the 5 s asset reload and the asset download loop with `set-assets`, the 250 ms state
 //! save, the AdvantageKit path poll, `window-all-closed`, `activate` and the quit cleanup.
 
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::Duration;
@@ -41,9 +42,11 @@ use crate::menus::bridge;
 use crate::menus::click::ClickEnv;
 use crate::menus::dispatch;
 use crate::menus::model::MenuItem;
+use crate::quit;
 use crate::satellite::{Satellite, SatelliteEvent};
 use crate::video;
 use crate::views::documentation::DocumentationRoot;
+use crate::views::frame::HubFrame;
 use crate::views::hub_host::{HubEntityHost, boot_messages, show_satellite_menu};
 use crate::views::info::{self, SourceListHelpPage};
 use crate::views::prompts;
@@ -630,6 +633,9 @@ impl MainProcess {
             .global_mut::<MainProcess>()
             .state
             .hub_message(&RealFs, id as f64, message);
+        if message.name == HubToMain::SetExporting {
+            quit::exports_changed(cx);
+        }
         match handled {
             Err(e) => eprintln!("asrs: {}: {e:?}", message.name.name()),
             Ok(()) if message.name == HubToMain::UpdatePreferences => {
@@ -794,7 +800,7 @@ impl MainProcess {
                 let options = dispatch::message_box_options(&options);
                 dispatch::show_message_box(Some(window), options, cx, |response, cx| {
                     if beta::beta_expired_response(response) {
-                        cx.quit();
+                        quit::quit(cx);
                     }
                 });
             }
@@ -828,7 +834,7 @@ impl MainProcess {
             let _ = handle.update(cx, |_, window, cx| {
                 window.on_window_should_close(cx, |_, cx| {
                     if beta::beta_welcome_closed() {
-                        cx.quit();
+                        cx.defer(quit::quit);
                     }
                     true
                 });
@@ -916,7 +922,7 @@ impl MainProcess {
             &menu,
             Rc::new(dispatch::dispatch),
         );
-        platform::install_edit_commands(cx, dispatch::edit);
+        platform::install_edit_commands(cx, dispatch::run_edit);
     }
 
     /// `loadAssets()`, then `sendAllPreferences()` and `sendAssets()`.
@@ -1051,12 +1057,44 @@ impl MainProcess {
                 });
             });
         }
+        Self::observe_full_screen(cx, id, &frame);
+        Windows::on_closed(cx, id, quit::exports_changed);
         let weak = hub.downgrade();
         let main = cx.global_mut::<MainProcess>();
         main.hubs.retain(|(_, h)| h.upgrade().is_some());
         main.hubs.push((id, weak));
         Self::beta_init(cx, id);
         Some(id)
+    }
+
+    /// `enter-full-screen` and `leave-full-screen`.
+    fn observe_full_screen(cx: &mut App, id: WindowId, frame: &Entity<HubFrame<HubEntityHost>>) {
+        let Some(handle) = Windows::handle(cx, id) else {
+            return;
+        };
+        let send = move |full_screen: bool, cx: &mut App| {
+            let data = JsValue::Bool(full_screen);
+            Self::send_to_hub(cx, id, MainToHub::SetFullscreen, data);
+        };
+        let observed = handle.update(cx, |_, window, cx| {
+            if let Some(observer) = platform::observe_full_screen(window, cx, send) {
+                return Some(observer);
+            }
+            let last = Cell::new(false);
+            frame.update(cx, |_, cx| {
+                cx.observe_window_bounds(window, move |_, window, cx| {
+                    let full_screen = window.is_fullscreen();
+                    if last.replace(full_screen) != full_screen {
+                        cx.defer(move |cx| send(full_screen, cx));
+                    }
+                })
+                .detach();
+            });
+            None
+        });
+        if let Ok(Some(observer)) = observed {
+            Windows::on_closed(cx, id, move |_| observer.stop());
+        }
     }
 
     /// `openFilesSmart(files, sourceWindow)`.
@@ -1339,6 +1377,7 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
         scenario_seed: None,
     });
     MainProcess::install_menu(cx);
+    quit::init(cx);
     let opened = std::iter::from_fn(|| open_events.try_recv().ok());
     let first_open_path = lifecycle::first_open_path(opened, argv);
 
@@ -1389,8 +1428,8 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
     })
     .detach();
     cx.on_window_closed(|cx, _| {
-        if Platform::current() != Platform::Mac && cx.windows().is_empty() {
-            cx.quit();
+        if cx.windows().is_empty() {
+            quit::windows_all_closed(cx);
         }
     })
     .detach();

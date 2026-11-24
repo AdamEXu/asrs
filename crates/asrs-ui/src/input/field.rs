@@ -2,7 +2,9 @@ use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 
-use gpui_kit::base::input::{Input, InputEvent, InputState, MoveDown, MoveUp, Paste, Position};
+use gpui_kit::base::input::{
+    Cut, Delete, Input, InputEvent, InputState, MoveDown, MoveUp, Paste, Position,
+};
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, ClipboardItem, Context, DispatchPhase, Entity,
     EntityInputHandler, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement,
@@ -13,6 +15,7 @@ use gpui_kit::{
 
 use crate::focus;
 use crate::icon::{IconSource, Placement, paint_icon};
+use crate::input::DeleteSelection;
 use crate::input::model::{FieldModel, FieldValue};
 use crate::input::native::{PointerState, paint_text_field};
 use crate::input::spin::{self, paint_spin_button};
@@ -450,6 +453,24 @@ impl<M: FieldModel> TextField<M> {
         }
     }
 
+    /// The editor's own cut of a caret empties the clipboard.
+    fn cut(&mut self, _: &Cut, _: &mut Window, cx: &mut Context<'_, Self>) {
+        if self.editor.read(cx).selected_range().is_empty() {
+            cx.stop_propagation();
+        }
+    }
+
+    fn delete_selection(
+        &mut self,
+        _: &DeleteSelection,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if !self.editor.read(cx).selected_range().is_empty() {
+            window.dispatch_action(Box::new(Delete), cx);
+        }
+    }
+
     /// `HandleKeydownEventForSpinButton`.
     fn arrow_key(&mut self, up: bool, window: &mut Window, cx: &mut Context<'_, Self>) {
         if self.kind != FieldKind::Number {
@@ -736,6 +757,8 @@ impl<M: FieldModel> Render for TextField<M> {
             .id("text-field")
             .key_context(super::CONTEXT)
             .capture_action(cx.listener(Self::paste))
+            .capture_action(cx.listener(Self::cut))
+            .on_action(cx.listener(Self::delete_selection))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(|this, _: &selection::SelectAll, window, cx| {
                 let editor = this.editor.clone();
