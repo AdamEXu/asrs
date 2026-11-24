@@ -57,6 +57,14 @@
           {
             "kind": "eval",
             "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          },
+          {
+            "kind": "eval",
+            "expr": "document.documentElement.style.getPropertyValue(\"--show-timeline\")"
+          },
+          {
+            "kind": "eval",
+            "expr": "[...window.tabs.getActiveFields()]"
           }
         ],
         "label": "boot"
@@ -382,6 +390,25 @@
         "label": "vb-string-auto-end-locks"
       },
       {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "Period"
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
+        ],
+        "label": "va-skip-vb-locked-noop"
+      },
+      {
         "main": "video-data",
         "data": {
           "uuid": "va",
@@ -611,6 +638,25 @@
           "index": 2,
           "type": "click"
         }
+      },
+      {
+        "event": {
+          "target": "window",
+          "type": "keydown",
+          "kind": "KeyboardEvent",
+          "init": {
+            "code": "ArrowRight"
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*video:view*/window.tabs.tabList.filter((t) => t.type === 7).map((t) => { const c = t.controller; const p = (e) => [e.hidden, e.disabled]; return { uuid: c.UUID, buttons: [c.LOCK_BUTTON, c.UNLOCK_BUTTON, c.SKIP_BACK_BUTTON, c.FRAME_BACK_BUTTON, c.PLAY_BUTTON, c.PAUSE_BUTTON, c.FRAME_FORWARD_BUTTON, c.SKIP_FORWARD_BUTTON].map(p), slider: [c.VIDEO_TIMELINE_INPUT.value, c.VIDEO_TIMELINE_INPUT.max, c.VIDEO_TIMELINE_INPUT.disabled], progress: c.VIDEO_TIMELINE_PROGRESS.style.width, animating: [c.YOUTUBE_SOURCE.classList.contains(\"animating\"), c.TBA_SOURCE.classList.contains(\"animating\")], data: [c.imgFolder, c.lastImgFolder, c.fps, c.totalFrames, c.completedFrames, c.autoEndFrame], locked: c.locked, lockedStartLog: c.lockedStartLog, playing: c.playing, play: [c.playStartFrame, c.playStartReal] }; })"
+          }
+        ],
+        "label": "vb-playing-frame-noop"
       },
       {
         "advance": 500
