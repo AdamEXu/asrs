@@ -8,18 +8,12 @@ pub const INTERIOR_MAX_DELTA: u8 = 2;
 pub const INTERIOR_DIFFERING_MAX_PCT: f64 = 0.05;
 pub const DIFFERING_MAX_PCT: f64 = 1.0;
 pub const EDGE_RADIUS: usize = 2;
-pub const CINEMATIC_MEAN_DELTA_E_MAX: f64 = 1.5;
 /// Every mode, edge zone included: no 8-connected blob of more than `OUTLIER_BLOB_MAX` pixels
 /// may differ by more than `OUTLIER_DELTA` levels. The edge mask comes from the port's own
 /// buffers, so without this a port bug that adds or moves thin geometry (cap shape, line
 /// topology) hides in its own edge zone.
 pub const OUTLIER_DELTA: u8 = 32;
 pub const OUTLIER_BLOB_MAX: usize = 4;
-/// Temporary cinematic exception, tracked by #243: PCF receivers keep isolated 1-ulp acne
-/// flips, so cinematic replaces the standard interior clauses with these two and keeps every
-/// other clause. Remove it (cinematic on `pass`) once #243 is fixed.
-pub const CINEMATIC_INTERIOR_DIFFERING_MAX_PCT: f64 = 0.2;
-pub const CINEMATIC_INTERIOR_BLOB_MAX: usize = 2;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Gate4 {
@@ -32,13 +26,7 @@ pub struct Gate4 {
     pub mean_delta_e: f64,
     /// Largest 8-connected blob of pixels differing by more than [`OUTLIER_DELTA`].
     pub outlier_blob: usize,
-    /// Largest 8-connected blob of interior pixels differing by more than
-    /// [`INTERIOR_MAX_DELTA`].
-    pub interior_blob: usize,
-    /// The standard and low-power rule.
     pub pass: bool,
-    /// The temporary cinematic exception (#243).
-    pub cinematic_pass: bool,
 }
 
 fn luma(image: &Rgba) -> Vec<f64> {
@@ -276,7 +264,6 @@ pub fn gate4(reference: &Rgba, port: &Rgba, edges: &[bool]) -> Result<Gate4, Str
     let mut interior_max = 0u8;
     let mut max_delta = 0u8;
     let mut outliers = vec![false; w * h];
-    let mut interior_outliers = vec![false; w * h];
     for i in 0..w * h {
         let delta = (0..3)
             .map(|c| reference.data[i * 4 + c].abs_diff(port.data[i * 4 + c]))
@@ -290,14 +277,12 @@ pub fn gate4(reference: &Rgba, port: &Rgba, edges: &[bool]) -> Result<Gate4, Str
         if !edge_zone[i] {
             interior += 1;
             interior_max = interior_max.max(delta);
-            interior_outliers[i] = delta > INTERIOR_MAX_DELTA;
             if delta > 0 {
                 interior_differing += 1;
             }
         }
     }
     let outlier_blob = largest_blob(&outliers, w, h);
-    let interior_blob = largest_blob(&interior_outliers, w, h);
     let pct = |n: usize, of: usize| {
         if of == 0 {
             0.0
@@ -309,15 +294,11 @@ pub fn gate4(reference: &Rgba, port: &Rgba, edges: &[bool]) -> Result<Gate4, Str
     let mean_delta_e = mean_delta_e(reference, port);
     let differing_pct = pct(differing, w * h);
     let interior_differing_pct = pct(interior_differing, interior);
-    let common =
-        ssim >= SSIM_MIN && differing_pct <= DIFFERING_MAX_PCT && outlier_blob <= OUTLIER_BLOB_MAX;
-    let pass = common
+    let pass = ssim >= SSIM_MIN
+        && differing_pct <= DIFFERING_MAX_PCT
+        && outlier_blob <= OUTLIER_BLOB_MAX
         && interior_max <= INTERIOR_MAX_DELTA
         && interior_differing_pct <= INTERIOR_DIFFERING_MAX_PCT;
-    let cinematic_pass = common
-        && interior_differing_pct <= CINEMATIC_INTERIOR_DIFFERING_MAX_PCT
-        && interior_blob <= CINEMATIC_INTERIOR_BLOB_MAX
-        && mean_delta_e <= CINEMATIC_MEAN_DELTA_E_MAX;
     Ok(Gate4 {
         ssim,
         differing_pct,
@@ -327,9 +308,7 @@ pub fn gate4(reference: &Rgba, port: &Rgba, edges: &[bool]) -> Result<Gate4, Str
         max_delta,
         mean_delta_e,
         outlier_blob,
-        interior_blob,
         pass,
-        cinematic_pass,
     })
 }
 
@@ -397,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    fn edge_zone_outlier_blobs_fail_every_rule() {
+    fn edge_zone_outlier_blobs_fail() {
         let a = image(100, 100, |_, _| [100, 100, 100, 255]);
         let blob = |n: u32| {
             image(100, 100, move |x, y| {
@@ -411,31 +390,10 @@ mod tests {
         let edges = vec![true; 10_000];
         let g = gate4(&a, &blob(4), &edges).unwrap();
         assert_eq!(g.outlier_blob, 4);
-        assert!(g.pass && g.cinematic_pass);
+        assert!(g.pass);
         let g = gate4(&a, &blob(5), &edges).unwrap();
         assert_eq!(g.outlier_blob, 5);
-        assert!(!g.pass && !g.cinematic_pass);
-    }
-
-    #[test]
-    fn cinematic_tolerates_isolated_interior_flips_only() {
-        let a = image(100, 100, |_, _| [100, 100, 100, 255]);
-        let flips = |pixels: &'static [(u32, u32)]| {
-            image(100, 100, move |x, y| {
-                if pixels.contains(&(x, y)) {
-                    [120, 100, 100, 255]
-                } else {
-                    [100, 100, 100, 255]
-                }
-            })
-        };
-        let edges = vec![false; 10_000];
-        let g = gate4(&a, &flips(&[(10, 10), (11, 11), (50, 50)]), &edges).unwrap();
-        assert_eq!(g.interior_blob, 2);
-        assert!(!g.pass && g.cinematic_pass);
-        let g = gate4(&a, &flips(&[(10, 10), (11, 11), (12, 10)]), &edges).unwrap();
-        assert_eq!(g.interior_blob, 3);
-        assert!(!g.cinematic_pass);
+        assert!(!g.pass);
     }
 
     #[test]

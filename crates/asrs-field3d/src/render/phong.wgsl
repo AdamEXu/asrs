@@ -141,7 +141,7 @@ fn finish_vertex(v: VertexIn, object_normal: vec3<f32>, mv_input: vec4<f32>) -> 
     var coords = array<vec4<f32>, MAX_SPOT_SHADOWS>();
     for (var i = 0u; i < frame.shadow_counts.x; i++) {
         let shadow_world_position = world_position + vec4<f32>(shadow_world_normal * frame.spot_shadow[i].params.z, 0.0);
-        coords[i] = spot_light_coord(frame.spot_shadow[i].matrix, shadow_world_position);
+        coords[i] = spot_light_coord(i, frame.spot_shadow[i].matrix, shadow_world_position);
     }
     out.spot_coord0 = coords[0];
     out.spot_coord1 = coords[1];
@@ -173,17 +173,30 @@ fn opaque(v: vec4<f32>) -> vec4<f32> {
 }
 
 // spotLightMatrix[i] * shadowWorldPosition in the operation order Metal's fast-math compiler
-// gives ANGLE's translation of shadowmap_vertex: translation column first, then y, x and z,
-// each fused. The receiver's depth is compared against the shadow map's at full precision, so
-// any other order turns 1-ulp differences into shadow acne on different pixels. The opaque
-// steps stop the compiler from reordering the sum for this shader. The order was measured
-// against ANGLE's Metal backend on Apple GPUs only: D3D11 and SwiftShader compile upstream's
-// GLSL their own way, so T10 has to measure it again per backend.
-fn spot_light_coord(m: mat4x4<f32>, v: vec4<f32>) -> vec4<f32> {
-    var acc = opaque(m[3] * v.w);
+// gives ANGLE's translation of shadowmap_vertex, which reassociates each light's product its own
+// way: w, y, x, z for light 0, y, x, z, w for light 1 and x, y, z, w for light 2, each fused. The
+// receiver's depth is compared against the shadow map's at full precision, so any other order
+// turns 1-ulp differences into shadow acne on different pixels. The opaque steps stop the
+// compiler from reordering the sum for this shader. The orders were measured for upstream's three
+// spot lights against ANGLE's Metal backend on Apple GPUs only: D3D11 and SwiftShader compile
+// upstream's GLSL their own way, so T10 has to measure them again per backend.
+fn spot_light_coord(light: u32, m: mat4x4<f32>, v: vec4<f32>) -> vec4<f32> {
+    if (light == 0u) {
+        var acc = opaque(m[3] * v.w);
+        acc = opaque(fma(m[1], vec4<f32>(v.y), acc));
+        acc = opaque(fma(m[0], vec4<f32>(v.x), acc));
+        return fma(m[2], vec4<f32>(v.z), acc);
+    }
+    if (light == 1u) {
+        var acc = opaque(m[1] * v.y);
+        acc = opaque(fma(m[0], vec4<f32>(v.x), acc));
+        acc = opaque(fma(m[2], vec4<f32>(v.z), acc));
+        return fma(m[3], vec4<f32>(v.w), acc);
+    }
+    var acc = opaque(m[0] * v.x);
     acc = opaque(fma(m[1], vec4<f32>(v.y), acc));
-    acc = opaque(fma(m[0], vec4<f32>(v.x), acc));
-    return fma(m[2], vec4<f32>(v.z), acc);
+    acc = opaque(fma(m[2], vec4<f32>(v.z), acc));
+    return fma(m[3], vec4<f32>(v.w), acc);
 }
 
 // metal::fast::normalize, which ANGLE emits for GLSL normalize.
