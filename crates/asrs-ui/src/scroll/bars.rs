@@ -534,7 +534,8 @@ impl Frame {
         };
         let radius = w.min(h) / 2.0;
         let color = faded(color, alpha);
-        if alpha < 1.0 {
+        // Ganesh covers a corner by its distance, as GPUI's quads do.
+        if alpha < 1.0 || self.style == Style::Fluent {
             let mut quad = fill(bounds, rgba(color));
             quad.corner_radii = Corners::all(px((radius / scale) as f32));
             window.paint_quad(quad);
