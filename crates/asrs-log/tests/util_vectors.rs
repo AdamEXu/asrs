@@ -15,6 +15,9 @@ mod js_math;
 #[path = "../../asrs-cli/src/js_msgpack.rs"]
 #[allow(dead_code)]
 mod js_msgpack;
+#[path = "../../asrs-cli/src/js_ops.rs"]
+#[allow(dead_code)]
+mod js_ops;
 #[path = "../../asrs-cli/src/js_regex.rs"]
 #[allow(dead_code)]
 mod js_regex;
@@ -93,6 +96,11 @@ fn log_sequences() {
 #[test]
 fn log_writers() {
     check_fn_vectors("log/writers", dispatch);
+}
+
+#[test]
+fn photon_untyped_fields() {
+    check_fn_vectors("log/photon-untyped", dispatch);
 }
 
 #[test]

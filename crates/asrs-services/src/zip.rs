@@ -21,6 +21,9 @@ pub struct ZipEntry {
     pub data: Vec<u8>,
 }
 
+/// Upstream has no limit; beyond this an archive or a compressed body fails.
+pub(crate) const MAX_UNPACKED: u64 = 4 << 30;
+
 fn u16le(buf: &[u8], at: usize) -> u16 {
     u16::from_le_bytes([buf[at], buf[at + 1]])
 }
@@ -33,7 +36,7 @@ fn u64le(buf: &[u8], at: usize) -> u64 {
     u64::from(u32le(buf, at + 4)) * 0x1_0000_0000 + u64::from(u32le(buf, at))
 }
 
-fn crc32(data: &[u8]) -> u32 {
+pub(crate) fn crc32(data: &[u8]) -> u32 {
     let mut table = [0u32; 256];
     for (i, e) in table.iter_mut().enumerate() {
         let mut c = i as u32;
@@ -84,6 +87,10 @@ fn validate_name(name: &str) -> Result<(), Invalid> {
 /// parsed and its data decoded before anything is returned, so a failure
 /// anywhere means nothing was written.
 pub fn read_entries(buf: &[u8]) -> Result<Vec<ZipEntry>, Invalid> {
+    read_entries_within(buf, MAX_UNPACKED)
+}
+
+fn read_entries_within(buf: &[u8], mut room: u64) -> Result<Vec<ZipEntry>, Invalid> {
     let size = buf.len();
     let window = (22 + 0xffff).min(size);
     if window < 22 {
@@ -195,6 +202,7 @@ pub fn read_entries(buf: &[u8]) -> Result<Vec<ZipEntry>, Invalid> {
                 break;
             }
         }
+        room = room.checked_sub(uncompressed).ok_or(Invalid)?;
         if method == 0 && compressed != uncompressed + u64::from(flags & 1 != 0) * 12 {
             return Err(Invalid);
         }
@@ -262,5 +270,46 @@ pub fn decompress_unzip(buf: &[u8]) -> Result<Vec<ZipEntry>, Invalid> {
         read_entries(buf)
     } else {
         Ok(Vec::new())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// `entries` central entries that share one stored local entry of `data`.
+    fn overlapping(entries: u16, data: &[u8]) -> Vec<u8> {
+        let size = (data.len() as u32).to_le_bytes();
+        let common = [
+            &[20, 0, 0, 0, 0, 0, 0, 0, 0, 0][..],
+            &crc32(data).to_le_bytes(),
+            &size,
+            &size,
+            &[1, 0, 0, 0],
+        ]
+        .concat();
+        let mut out = [b"PK\x03\x04", &common[..], b"a", data].concat();
+        let start = out.len();
+        for _ in 0..entries {
+            out.extend([b"PK\x01\x02\x14\x03", &common[..], &[0; 14], b"a"].concat());
+        }
+        let directory = ((out.len() - start) as u32).to_le_bytes();
+        out.extend(b"PK\x05\x06\0\0\0\0");
+        out.extend(entries.to_le_bytes());
+        out.extend(entries.to_le_bytes());
+        out.extend(directory);
+        out.extend((start as u32).to_le_bytes());
+        out.extend([0, 0]);
+        out
+    }
+
+    #[test]
+    fn entries_share_one_limit() {
+        let archive = overlapping(3, b"0123456789");
+        let unpacked = |room| read_entries_within(&archive, room).map(|entries| entries.len());
+        assert_eq!(unpacked(30), Ok(3));
+        assert_eq!(unpacked(29), Err(Invalid));
+        assert_eq!(unpacked(0), Err(Invalid));
+        assert_eq!(read_entries(&archive).map(|entries| entries.len()), Ok(3));
     }
 }

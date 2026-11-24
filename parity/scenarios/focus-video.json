@@ -1,0 +1,292 @@
+{
+  "about": "Focus rings (#355) in the active hub: the video tab's buttons and its slider, which takes none, pressed and after keys",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 7,
+              "title": "Match",
+              "controller": null,
+              "controllerUUID": "video000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 85
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.0
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000"
+      }
+    },
+    {
+      "main": "video-data",
+      "data": {
+        "uuid": "video000000000000000000000000000",
+        "imgFolder": {
+          "$clip": "wide"
+        },
+        "fps": 30,
+        "totalFrames": 16,
+        "completedFrames": 5,
+        "autoEndFrame": -1
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 344,
+      "y": 607
+    },
+    {
+      "mouse": "down",
+      "x": 344,
+      "y": 607
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "source-pressed",
+      "probes": [
+        ".video-source > button",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "source-key",
+      "probes": [
+        ".video-source > button",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 560,
+      "y": 586
+    },
+    {
+      "mouse": "down",
+      "x": 560,
+      "y": 586
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "lock-pressed",
+      "probes": [
+        ".video-source > button",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "lock-key",
+      "probes": [
+        ".video-source > button",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 800,
+      "y": 582
+    },
+    {
+      "mouse": "down",
+      "x": 800,
+      "y": 582
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "slider-pressed",
+      "probes": [
+        ".video-source > button",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "slider-key",
+      "probes": [
+        ".video-source > button",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 820,
+      "y": 628
+    },
+    {
+      "mouse": "down",
+      "x": 820,
+      "y": 628
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "control-pressed",
+      "probes": [
+        ".video-source > button",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "control-key",
+      "probes": [
+        ".video-source > button",
+        ".video-timeline-controls > button"
+      ]
+    },
+    {
+      "focus": false
+    },
+    {
+      "wait": 50
+    },
+    {
+      "capture": "inactive",
+      "probes": [
+        ".video-source > button",
+        ".video-timeline-controls > button"
+      ]
+    }
+  ]
+}

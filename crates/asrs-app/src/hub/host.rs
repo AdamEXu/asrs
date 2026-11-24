@@ -1,4 +1,5 @@
-use std::collections::{HashMap, VecDeque};
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -7,22 +8,23 @@ use std::time::{Duration, Instant};
 use asrs_formats::export::{ExportError, ExportOptions, Format, Output, Sampling, export};
 use asrs_formats::historical::{MainRequest, WorkerName};
 use asrs_formats::worker::{Abort, DecodeWorker, Request, WorkerMessage, WorkerThread};
-use asrs_hub::hub::{ExportReply, HubFrame, HubHost, HubInterval, HubTimeout, LiveSourceKind};
+use asrs_hub::hub::{ExportReply, HubFrame, HubHost, HubInterval, HubTimeout};
+use asrs_hub::live::{LiveNet, LiveRole};
 use asrs_hub::tabs::SatelliteUpdate;
-use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng, V8MathRandom};
 use asrs_js::value::JsValue;
-use asrs_log::log::{Log, SerializedLog};
+use asrs_live::nt4::TokioTransport;
+use asrs_live::{NetOptions, TimerId, TimerQueue};
+use asrs_log::log::{Log, LogError, SerializedLog};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_services::fs::RealFs;
 use asrs_services::historical_start::{FileOpen, Outcome, UPSTREAM_HAS_LZMA};
-use asrs_ui::gpui::{AnyWindowHandle, AppContext, Context, Task};
+use asrs_ui::gpui::{App, AppContext, Context, Task, Window};
 
+use super::frames::{FRAME_PERIOD, Frames};
 use super::{Hub, HubEvent, WorkerRealm, frame_time};
-
-/// `requestAnimationFrame` without a window.
-const FRAME_PERIOD: Duration = Duration::from_micros(16_667);
+use crate::live::{self, Slice};
 
 /// The delay Blink gives `setInterval(fn, period_ms)`: WebIDL converts the timeout to a
 /// `long`, truncating `1000 / 60` to 16, and never less than 1 ms.
@@ -37,10 +39,12 @@ fn interval_period(period_ms: f64) -> Duration {
 
 /// Blink's `TimerBase::RunInternal`: a repeating timer's next fire time is set before its
 /// callback runs and stays on the original period grid, skipping beats it missed, so the
-/// callback's own duration and late wakeups never make it drift.
+/// callback's own duration and late wakeups never make it drift. A beat less than a 20th of the
+/// period away counts as missed.
 fn next_fire(scheduled: Instant, now: Instant, period: Duration) -> Instant {
-    let late = now.saturating_duration_since(scheduled).as_nanos() % period.as_nanos();
-    now + period - Duration::from_nanos(late as u64)
+    let late = (now + period / 20).saturating_duration_since(scheduled);
+    let beats = late.as_nanos().div_ceil(period.as_nanos()).max(1);
+    scheduled + Duration::from_nanos((beats * period.as_nanos()) as u64)
 }
 
 /// `setInterval(fire, period_ms)` in the page of `cx`'s entity, until the task is dropped.
@@ -99,46 +103,59 @@ impl ExportProgress {
     }
 }
 
+enum PageTimer {
+    Interval(HubInterval),
+    Timeout(HubTimeout),
+}
+
 pub(super) struct HostState {
-    window: Option<AnyWindowHandle>,
     clock: Rc<dyn Clock>,
     pub(super) frame_origin: Instant,
     worker_realm: WorkerRealm,
     temp_dir: String,
-    intervals: HashMap<HubInterval, Task<()>>,
-    timeouts: VecDeque<HubTimeout>,
-    frames: Vec<HubFrame>,
-    frame_scheduled: bool,
+    timers: TimerQueue,
+    timer_tasks: HashMap<TimerId, PageTimer>,
+    timer_due: Option<f64>,
+    timer_alarm: Option<Task<()>>,
+    pub(super) frames: Frames,
+    frame_callbacks: Vec<HubFrame>,
     next_worker: u64,
     workers: Vec<WorkerSlot>,
     terminated: Vec<WorkerThread>,
     exports: Vec<(u64, Task<()>)>,
     posted: (SyncSender<()>, Receiver<()>),
+    live_pumps: HashMap<LiveRole, Task<()>>,
+    live_timer: live::Alarm,
 }
 
 impl HostState {
     pub(super) fn new(
-        window: Option<AnyWindowHandle>,
+        window: Option<&Window>,
         clock: Rc<dyn Clock>,
-        frame_origin: Instant,
         worker_realm: WorkerRealm,
         temp_dir: String,
+        cx: &mut Context<'_, Hub>,
     ) -> Self {
+        let frame_origin = cx.background_executor().now();
+        let timer_clock = live::ExecutorClock::new(frame_origin, cx);
         HostState {
-            window,
             clock,
             frame_origin,
             worker_realm,
             temp_dir,
-            intervals: HashMap::new(),
-            timeouts: VecDeque::new(),
-            frames: Vec::new(),
-            frame_scheduled: false,
+            timers: TimerQueue::new(Rc::new(timer_clock)),
+            timer_tasks: HashMap::new(),
+            timer_due: None,
+            timer_alarm: None,
+            frames: Frames::new(window, cx),
+            frame_callbacks: Vec::new(),
             next_worker: 0,
             workers: Vec::new(),
             terminated: Vec::new(),
             exports: Vec::new(),
             posted: sync_channel(1),
+            live_pumps: HashMap::new(),
+            live_timer: live::Alarm::default(),
         }
     }
 
@@ -149,6 +166,26 @@ impl HostState {
             .chain(&self.terminated)
             .filter(|t| !t.is_finished())
             .count()
+    }
+
+    fn timer_clock(&self, cx: &App) -> live::ExecutorClock {
+        live::ExecutorClock::new(self.frame_origin, cx)
+    }
+
+    pub(super) fn frame_requested(&self) -> bool {
+        !self.frame_callbacks.is_empty()
+    }
+
+    pub(super) fn begin_task(&mut self) {
+        self.timers.begin_task();
+    }
+
+    pub(super) fn posted(&self) -> SyncSender<()> {
+        self.posted.0.clone()
+    }
+
+    pub(super) fn wait_for_live(&self, timeout: Duration) -> bool {
+        self.posted.1.recv_timeout(timeout).is_ok()
     }
 
     pub(super) fn wait_for_threads(&self, timeout: Duration) -> Result<bool, RecvTimeoutError> {
@@ -172,51 +209,89 @@ impl<'a, 'b> GpuiHost<'a, 'b> {
     fn emit(&mut self, event: HubEvent) {
         self.cx.emit(event);
     }
-
-    fn unmodeled(&mut self, task: &'static str, what: &str) {
-        self.emit(HubEvent::Exception {
-            task,
-            error: format!("unmodeled: {what}"),
-        });
-    }
-
-    fn schedule_frame(&mut self) {
-        let this = self.cx.weak_entity();
-        match self.state.window {
-            Some(window) => self.cx.defer(move |cx| {
-                let _ = window.update(cx, |_, window, _| {
-                    window.on_next_frame(move |_, cx| {
-                        let _ = this.update(cx, |hub, cx| hub.frame(cx));
-                    });
-                });
-            }),
-            None => self
-                .cx
-                .spawn(async move |this, cx| {
-                    cx.background_executor().timer(FRAME_PERIOD).await;
-                    let _ = this.update(cx, |hub, cx| hub.frame(cx));
-                })
-                .detach(),
-        }
-    }
 }
 
 impl Hub {
-    fn frame(&mut self, cx: &mut Context<'_, Self>) {
-        self.host.frame_scheduled = false;
-        for frame in std::mem::take(&mut self.host.frames) {
+    pub(super) fn frame(&mut self, cx: &mut Context<'_, Self>) {
+        for frame in std::mem::take(&mut self.host.frame_callbacks) {
             self.task(cx, |model, host| model.animation_frame(&frame, host));
         }
     }
 
-    fn run_timeout(&mut self, cx: &mut Context<'_, Self>) {
-        if let Some(timeout) = self.host.timeouts.pop_front() {
-            self.task(cx, |model, host| model.run_timeout(timeout, host));
+    /// Sets the host's one alarm for whichever page timer is due first.
+    pub(super) fn arm_timer(&mut self, cx: &mut Context<'_, Self>) {
+        let due = self.host.timers.next_due();
+        if self.host.timer_due == due {
+            return;
+        }
+        self.host.timer_due = due;
+        self.host.timer_alarm = due.map(|due| {
+            let wait = ((due - self.host.timers.now()) * 1e6).ceil().max(0.0) as u64;
+            let executor = cx.background_executor();
+            let timer = (wait > 0).then(|| executor.timer(Duration::from_nanos(wait)));
+            cx.spawn(async move |this, cx| {
+                if let Some(timer) = timer {
+                    timer.await;
+                }
+                let _ = this.update(cx, |hub, cx| hub.fire_timer(cx));
+            })
+        });
+    }
+
+    fn fire_timer(&mut self, cx: &mut Context<'_, Self>) {
+        self.host.timer_due = None;
+        let Some(id) = self.host.timers.fire_next() else {
+            self.arm_timer(cx);
+            return;
+        };
+        let timers = &mut self.host.timer_tasks;
+        match timers.remove(&id) {
+            Some(PageTimer::Interval(interval)) => {
+                timers.insert(id, PageTimer::Interval(interval.clone()));
+                self.run(cx, |model, host| model.fire_interval(&interval, host));
+            }
+            Some(PageTimer::Timeout(timeout)) => {
+                self.run(cx, |model, host| model.run_timeout(timeout, host));
+            }
+            None => self.arm_timer(cx),
         }
     }
 
-    fn fire_interval(&mut self, interval: &HubInterval, cx: &mut Context<'_, Self>) {
-        self.task(cx, |model, host| model.fire_interval(interval, host));
+    /// Arms the host's one timer for whichever live timer is due first. A timer whose task
+    /// outlasts its period is due again at once, so each firing is bounded too.
+    pub(super) fn arm_live_timer(&mut self, cx: &mut Context<'_, Self>) {
+        let due = self.model.next_live_timer();
+        let now = self.host.timer_clock(cx).now();
+        self.host.live_timer.arm(due, now, cx, |hub: &mut Hub, cx| {
+            hub.host.live_timer.clear();
+            let slice = Slice::start();
+            hub.task(
+                cx,
+                |model, host| {
+                    while model.fire_live_timer(host) && !slice.is_over() {}
+                },
+            );
+        });
+    }
+
+    /// Dispatches what has arrived on `net`, one task per event, until `slice` is used up.
+    fn live_events(
+        &mut self,
+        role: LiveRole,
+        net: &Rc<RefCell<TokioTransport>>,
+        slice: Slice,
+        cx: &mut Context<'_, Self>,
+    ) -> bool {
+        loop {
+            let event = net.borrow_mut().next_event();
+            let Some(event) = event else {
+                return false;
+            };
+            self.task(cx, |model, host| model.live_event(role, &event, host));
+            if slice.is_over() {
+                return true;
+            }
+        }
     }
 
     fn main_reply(&mut self, outcome: Outcome, cx: &mut Context<'_, Self>) {
@@ -335,7 +410,11 @@ fn run_export(
         export_options(options),
     ) {
         (Ok(log), Some(options)) => export(&log, &options, progress),
-        (Err(_), _) => Err(ExportError::Unported("a log the export worker cannot read")),
+        (Err(LogError::Proto(_) | LogError::StackOverflow), _) => Err(ExportError::Rejected),
+        (Err(LogError::NeverCompletes), _) => Err(ExportError::Unported(
+            "a log the export worker never finishes reading",
+        )),
+        (Err(LogError::Unmodeled(what)), _) => Err(ExportError::Unported(what)),
         (_, None) => Err(ExportError::Unported("export options of another shape")),
     };
     ExportMessage::Reply(ExportReply::Payload(match output {
@@ -382,31 +461,33 @@ impl HubHost for GpuiHost<'_, '_> {
     }
 
     fn set_timeout(&mut self, timeout: HubTimeout) {
-        self.state.timeouts.push_back(timeout);
-        self.cx
-            .spawn(async move |this, cx| {
-                let _ = this.update(cx, |hub, cx| hub.run_timeout(cx));
-            })
-            .detach();
+        let id = self.state.timers.set_timeout(0.0);
+        let timer = PageTimer::Timeout(timeout);
+        self.state.timer_tasks.insert(id, timer);
     }
 
     fn set_interval(&mut self, interval: HubInterval, period_ms: f64) {
-        let key = interval.clone();
-        let task = super::interval(self.cx, period_ms, move |hub: &mut Hub, cx| {
-            hub.fire_interval(&key, cx)
-        });
-        self.state.intervals.insert(interval, task);
+        self.clear_interval(&interval);
+        let id = self.state.timers.set_interval(period_ms);
+        let timer = PageTimer::Interval(interval);
+        self.state.timer_tasks.insert(id, timer);
     }
 
     fn clear_interval(&mut self, interval: &HubInterval) {
-        self.state.intervals.remove(interval);
+        let timers = &mut self.state.timers;
+        self.state.timer_tasks.retain(|id, timer| {
+            let cleared = matches!(timer, PageTimer::Interval(i) if i == interval);
+            if cleared {
+                timers.clear(*id);
+            }
+            !cleared
+        });
     }
 
     fn request_animation_frame(&mut self, frame: HubFrame) {
-        self.state.frames.push(frame);
-        if !self.state.frame_scheduled {
-            self.state.frame_scheduled = true;
-            self.schedule_frame();
+        self.state.frame_callbacks.push(frame);
+        if self.state.frame_callbacks.len() == 1 {
+            self.state.frames.schedule(self.cx);
         }
     }
 
@@ -511,24 +592,63 @@ impl HubHost for GpuiHost<'_, '_> {
         self.emit(HubEvent::Exception { task, error });
     }
 
-    fn start_live_source(&mut self, kind: LiveSourceKind, _address: &JsString) {
-        self.unmodeled("live", &format!("a {kind:?} live source"));
+    fn live_net(&mut self, role: LiveRole) -> Result<LiveNet, String> {
+        let handle = live::runtime(self.cx)?;
+        let (wake, ready) = async_channel::bounded::<()>(1);
+        let posted = self.state.posted.0.clone();
+        let options = NetOptions {
+            handle,
+            notify: Arc::new(move || {
+                let _ = wake.try_send(());
+                let _ = posted.try_send(());
+            }),
+            dial: live::dial(self.cx),
+        };
+        let whole_bodies = role == LiveRole::Source { whole_bodies: true };
+        let net = Rc::new(RefCell::new(if whole_bodies {
+            TokioTransport::with_bodies(options)
+        } else {
+            TokioTransport::new(options)
+        }));
+        let weak = Rc::downgrade(&net);
+        let pump = self.cx.spawn(async move |this, cx| {
+            live::pump(ready, cx, |slice, cx| {
+                let net = weak.upgrade()?;
+                this.update(cx, |hub, cx| hub.live_events(role, &net, slice, cx))
+                    .ok()
+            })
+            .await;
+        });
+        self.state.live_pumps.insert(role, pump);
+        Ok(net)
     }
 
-    fn stop_live_source(&mut self) {}
-
-    fn live_data(&mut self, _data: &JsValue) {}
-
-    fn start_publisher(&mut self, _is_sim: &JsValue) {
-        self.unmodeled("live", "the NT4 publisher");
+    fn timer_clock(&self) -> Rc<dyn Clock> {
+        Rc::new(self.state.timer_clock(self.cx))
     }
 
-    fn stop_publisher(&mut self) {}
+    fn idle_period(&self) -> Option<f64> {
+        Some(FRAME_PERIOD.as_secs_f64() * 1000.0)
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use asrs_log::log::proto_decoder::SerializedProtoDecoder;
+
     use super::*;
+
+    #[test]
+    fn an_export_whose_log_replay_throws_fails() {
+        let anon = b"\x22\x11\x0a\x04Anon\x12\x09\x0a\x01x\x18\x01\x20\x01\x28\x05".to_vec();
+        let mut log = Log::new(true).to_serialized();
+        log.proto_decoder = SerializedProtoDecoder(vec![anon.clone()]);
+        let once = run_export(log.clone(), &JsValue::Null, &mut |_| {});
+        assert!(matches!(once, ExportMessage::Unmodeled(_)));
+        log.proto_decoder = SerializedProtoDecoder(vec![anon.clone(), anon]);
+        let reply = run_export(log, &JsValue::Null, &mut |_| {});
+        assert!(matches!(reply, ExportMessage::Reply(ExportReply::Failed)));
+    }
 
     #[test]
     fn intervals_stay_on_their_period_grid() {
@@ -537,6 +657,8 @@ mod tests {
         let ms = |n| t0 + Duration::from_millis(n);
         assert_eq!(next_fire(ms(250), ms(250), period), ms(500));
         assert_eq!(next_fire(ms(250), ms(280), period), ms(500));
+        assert_eq!(next_fire(ms(250), ms(485), period), ms(500));
+        assert_eq!(next_fire(ms(250), ms(490), period), ms(750));
         assert_eq!(next_fire(ms(250), ms(790), period), ms(1000));
         assert_eq!(interval_period(1000.0 / 60.0), Duration::from_millis(16));
     }

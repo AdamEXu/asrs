@@ -7,12 +7,20 @@
 //! does (oracle/src/dom/env.ts timers and frames, workers drained oldest first after every
 //! task, main's `historical-start` reply as a zero-delay timeout); decode workers are the real
 //! `asrs_formats` workers on their own threads and the export worker is `asrs_formats::export`.
+//!
+//! A fixture with `live` also runs the live sources and the publisher against that session's
+//! mock server, over the in-memory network of asrs-live's session tests, scheduled as
+//! `oracle/src/live/pageLoop.ts` does, and main's RLOG socket through `RlogMain`.
 
 #[path = "../../asrs-cli/src/js_json.rs"]
 #[allow(dead_code)]
 mod js_json;
 
-use std::cell::Cell;
+#[path = "../../asrs-live/tests/support/mod.rs"]
+#[allow(dead_code, clippy::all)]
+mod live_support;
+
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -20,20 +28,23 @@ use std::sync::Arc;
 use asrs_formats::export::{ExportError, ExportOptions, Format, Output, Sampling, export};
 use asrs_formats::historical::{MainReply, MainRequest, WorkerName};
 use asrs_formats::worker::{Abort, DecodeWorker, Request, WorkerMessage, WorkerThread};
-use asrs_hub::hub::{
-    ExportReply, HubFrame, HubHost, HubInterval, HubModel, HubTimeout, HubView, LiveSourceKind,
-};
+use asrs_hub::hub::{ExportReply, HubFrame, HubHost, HubInterval, HubModel, HubTimeout, HubView};
+use asrs_hub::live::{LiveNet, LiveRole};
 use asrs_hub::sidebar::{NoLayout, SidebarGeometry};
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng, SetClock, V8MathRandom};
 use asrs_js::value::{JsValue, ToJs};
-use asrs_log::log::{Log, SerializedLog};
+use asrs_live::rlog::{Ipc, MainCall, MainContext, RlogMain};
+use asrs_live::{ManualClock, TimerQueue, TunedValue};
+use asrs_log::log::{Log, LogError, SerializedLog};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::selection::Selection;
 use asrs_parity::cve1::Value;
 use asrs_parity::json::{self, Json};
+use asrs_parity::live::{ServerHost, Session};
 use asrs_parity::vectors::{self, Record};
+use live_support::{Delivery, FakeNet, SessionEvent, Trace};
 
 const START_TIME: f64 = 1767225600000.0;
 const FRAME_PERIOD: f64 = 16.0;
@@ -107,9 +118,17 @@ impl HubView for View {
 /// Records each value the loading glow's style takes.
 const WATCH_GLOW: &str = "(() => { const read = () => [document.documentElement.style.getPropertyValue('--show-loading-glow'), document.documentElement.style.getPropertyValue('--loading-glow-progress')]; window.__glow = []; let last = JSON.stringify(read()); new MutationObserver(() => { const now = read(); if (JSON.stringify(now) !== last) { last = JSON.stringify(now); window.__glow.push(now); } }).observe(document.documentElement, { attributes: true, attributeFilter: ['style'] }); return read(); })()";
 
-struct Emit(Vec<(&'static str, Value)>);
+/// Records each text the title takes.
+const WATCH_TITLE: &str = "(() => { const t = document.getElementsByTagName('title')[0]; window.__titles = []; let last = t.textContent; new MutationObserver(() => { if (t.textContent !== last) { last = t.textContent; window.__titles.push(last); } }).observe(t, { childList: true, characterData: true, subtree: true }); return last; })()";
+
+enum Emit {
+    Record(Vec<(&'static str, Value)>),
+    /// A line of the network's trace.
+    Trace(String),
+}
 
 enum Task {
+    Live,
     Interval(HubInterval, f64),
     Timeout(HubTimeout),
     Main(MainReply),
@@ -150,11 +169,70 @@ struct Host {
     emitted: Vec<Emit>,
     unmodeled: Vec<String>,
     ignored: Vec<String>,
+    live: Option<Live>,
+}
+
+/// The fixture's `live`: the network and main's side of RLOG.
+struct Live {
+    clock: ManualClock,
+    trace: Trace,
+    net: Rc<RefCell<FakeNet>>,
+    rlog: RlogMain,
+    rlog_timers: TimerQueue,
+    armed: Option<f64>,
+}
+
+impl Live {
+    fn new(session: &Session) -> Result<Self, String> {
+        let clock = ManualClock::new(0.0);
+        let trace = Trace::default();
+        let host = ServerHost::new(session)?;
+        let net = FakeNet::new(host, clock.clone(), session.latency_ms, trace.clone());
+        let mut rlog_timers = TimerQueue::new(Rc::new(clock.clone()));
+        Ok(Live {
+            clock,
+            trace,
+            net: Rc::new(RefCell::new(net)),
+            rlog: RlogMain::new(&mut rlog_timers),
+            rlog_timers,
+            armed: None,
+        })
+    }
+
+    fn rlog<R>(&mut self, f: impl FnOnce(&mut RlogMain, &mut MainContext<'_>) -> R) -> R {
+        let net = &mut *self.net.borrow_mut();
+        let result = f(
+            &mut self.rlog,
+            &mut MainContext {
+                timers: &mut self.rlog_timers,
+                net,
+            },
+        );
+        while let Some(message) = self.rlog.outbox.pop_front() {
+            net.deliver(0.0, Delivery::Ipc(Ipc::ToSource(message.into_value())));
+        }
+        result
+    }
 }
 
 impl Host {
     fn emit(&mut self, values: Vec<(&'static str, Value)>) {
-        self.emitted.push(Emit(values));
+        self.drain_trace();
+        self.emitted.push(Emit::Record(values));
+    }
+
+    fn drain_trace(&mut self) {
+        if let Some(live) = &self.live {
+            self.emitted
+                .extend(live.trace.take().into_iter().map(Emit::Trace));
+        }
+    }
+
+    fn set_clock(&mut self, now: f64) {
+        self.clock.set(now);
+        if let Some(live) = &self.live {
+            live.clock.set(now - START_TIME);
+        }
     }
 
     fn add_timer(&mut self, delay: f64, task: Task) {
@@ -213,6 +291,15 @@ impl HubHost for Host {
         if !self.ignored.iter().any(|i| i == name) {
             self.emit(vec![("main", cve_str(name)), ("data", cve(&message.data))]);
         }
+        if let Some(call) = MainCall::parse(name, &message.data) {
+            match &self.live {
+                Some(live) => {
+                    let ipc = Delivery::Ipc(Ipc::ToMain(call));
+                    live.net.borrow_mut().deliver(0.0, ipc);
+                }
+                None => self.unmodeled.push(name.to_owned()),
+            }
+        }
     }
 
     fn send_historical_request(&mut self, request: MainRequest) {
@@ -250,6 +337,11 @@ impl HubHost for Host {
     }
 
     fn set_interval(&mut self, interval: HubInterval, period_ms: f64) {
+        // pageLoop.ts's timers follow Blink's rules, unlike env.ts's.
+        let period_ms = match &self.live {
+            Some(_) => period_ms.trunc(),
+            None => period_ms,
+        };
         let period = period_ms.max(1.0);
         self.add_timer(period, Task::Interval(interval, period));
     }
@@ -355,7 +447,11 @@ impl HubHost for Host {
             (Ok(log), Some(options)) => export(&log, &options, &mut |value| {
                 replies.push(ExportReply::Progress(value))
             }),
-            (Err(_), _) => Err(ExportError::Unported("a log the export worker cannot read")),
+            (Err(LogError::Proto(_) | LogError::StackOverflow), _) => Err(ExportError::Rejected),
+            (Err(LogError::NeverCompletes), _) => Err(ExportError::Unported(
+                "a log the export worker never finishes reading",
+            )),
+            (Err(LogError::Unmodeled(what)), _) => Err(ExportError::Unported(what)),
             (_, None) => Err(ExportError::Unported("export options of another shape")),
         };
         match output {
@@ -385,27 +481,38 @@ impl HubHost for Host {
         ]);
     }
 
-    fn start_live_source(&mut self, _kind: LiveSourceKind, _address: &JsString) {
-        self.unmodeled.push("a live source".to_owned());
+    fn live_net(&mut self, _role: LiveRole) -> Result<LiveNet, String> {
+        match &self.live {
+            Some(live) => Ok(live.net.clone()),
+            None => {
+                self.unmodeled.push("a live connection".to_owned());
+                Err("no network".to_owned())
+            }
+        }
     }
 
-    fn stop_live_source(&mut self) {}
-
-    fn live_data(&mut self, _data: &JsValue) {
-        self.unmodeled.push("live-data".to_owned());
+    fn timer_clock(&self) -> Rc<dyn Clock> {
+        match &self.live {
+            Some(live) => Rc::new(live.clock.clone()),
+            None => Rc::new(ManualClock::new(0.0)),
+        }
     }
 
-    fn start_publisher(&mut self, _is_sim: &JsValue) {
-        self.unmodeled.push("a publisher".to_owned());
+    fn idle_period(&self) -> Option<f64> {
+        None
     }
-
-    fn stop_publisher(&mut self) {}
 }
 
 struct Runner {
     host: Host,
     hub: HubModel,
     glow: Option<Glow>,
+    titles: Option<Titles>,
+}
+
+struct Titles {
+    last: JsString,
+    seen: Vec<JsString>,
 }
 
 /// The loading glow's style as the watching expression sees it: its value after the last task
@@ -440,6 +547,105 @@ impl Runner {
             glow.seen.push(now.clone());
             glow.last = now;
         }
+        let title = self.hub.title();
+        if let Some(titles) = &mut self.titles
+            && *title != titles.last
+        {
+            titles.seen.push(title.clone());
+            titles.last = title.clone();
+        }
+    }
+
+    /// pageLoop.ts `taskEnded`: the page timer is armed for what is due next.
+    fn arm_live(&mut self) {
+        let Some(live) = &mut self.host.live else {
+            return;
+        };
+        let due = {
+            let net = live.net.borrow();
+            [
+                net.host.next_time(),
+                net.next_task_due(),
+                live.rlog_timers.next_due(),
+                self.hub.next_live_timer(),
+            ]
+        };
+        let due = due.into_iter().flatten().reduce(f64::min);
+        if due == live.armed {
+            return;
+        }
+        live.armed = due;
+        self.host.timers.retain(|t| !matches!(t.task, Task::Live));
+        if let Some(due) = due {
+            let due = START_TIME + due;
+            let seq = self.host.seq;
+            self.host.seq += 1;
+            self.host.timers.push(Timer {
+                due,
+                seq,
+                task: Task::Live,
+            });
+        }
+    }
+
+    /// pageLoop.ts `pump`: the server, then one delivery or timer.
+    fn run_live(&mut self) -> Result<(), String> {
+        let live = self.host.live.as_mut().expect("armed by a live fixture");
+        live.armed = None;
+        let now = live.clock.now();
+        let net = live.net.clone();
+        let server_due = net.borrow().host.next_time();
+        if let Some(due) = server_due.filter(|due| *due <= now) {
+            net.borrow_mut().server_events(due)?;
+        }
+        let delivery = net.borrow_mut().take_task(now);
+        if let Some(delivery) = delivery {
+            live.rlog_timers.begin_task();
+            let events = net.borrow_mut().apply(delivery);
+            for event in events {
+                self.live_event(event);
+            }
+        } else {
+            let rlog_due = live.rlog_timers.next_due().unwrap_or(f64::INFINITY);
+            let page_due = self.hub.next_live_timer().unwrap_or(f64::INFINITY);
+            if rlog_due <= now && rlog_due <= page_due {
+                let id = live.rlog_timers.fire_next().expect("due");
+                live.rlog(|main, cx| main.handle_timer(id, cx));
+            } else {
+                self.hub.fire_live_timer(&mut self.host);
+            }
+        }
+        loop {
+            let event = net.borrow_mut().microtasks.pop_front();
+            let Some(event) = event else {
+                return Ok(());
+            };
+            self.live_event(SessionEvent::Net(event));
+        }
+    }
+
+    fn live_event(&mut self, event: SessionEvent) {
+        let live = self.host.live.as_mut().expect("a live fixture");
+        match event {
+            SessionEvent::Net(event) => {
+                let source = LiveRole::Source {
+                    whole_bodies: false,
+                };
+                self.hub.live_event(source, &event, &mut self.host);
+                self.hub
+                    .live_event(LiveRole::Publisher, &event, &mut self.host);
+            }
+            SessionEvent::Tcp(event) => {
+                live.rlog(|main, cx| main.handle_net_event(&event, cx));
+            }
+            SessionEvent::Ipc(Ipc::ToMain(call)) => {
+                live.rlog(|main, cx| main.handle(&call, cx));
+            }
+            SessionEvent::Ipc(Ipc::ToSource(data)) => {
+                let message = NamedMessage::new(MainToHub::LiveData, data);
+                self.hub.handle_main_message(&message, &mut self.host);
+            }
+        }
     }
 
     /// The page between tasks: each worker message in turn, from the oldest worker that has
@@ -454,6 +660,8 @@ impl Runner {
                         Work::Export { replies, .. } => !replies.is_empty(),
                     }
             }) else {
+                self.host.drain_trace();
+                self.arm_live();
                 return Ok(());
             };
             let slot = &mut self.host.slots[index];
@@ -495,6 +703,7 @@ impl Runner {
 
     fn run_timer(&mut self, timer: Timer) -> Result<(), String> {
         match timer.task {
+            Task::Live => self.run_live()?,
             Task::Interval(interval, period) => {
                 self.host.timers.push(Timer {
                     due: timer.due + period,
@@ -525,12 +734,12 @@ impl Runner {
             let frame_at = self.host.last_frame + FRAME_PERIOD;
             match next {
                 Some((i, due)) if due <= end && due <= frame_at => {
-                    self.host.clock.set(self.host.clock.get().max(due));
+                    self.host.set_clock(self.host.clock.get().max(due));
                     let timer = self.host.timers.remove(i);
                     self.run_timer(timer)?;
                 }
                 _ if frame_at <= end => {
-                    self.host.clock.set(frame_at);
+                    self.host.set_clock(frame_at);
                     self.host.last_frame = frame_at;
                     for frame in std::mem::take(&mut self.host.frames) {
                         self.hub.animation_frame(&frame, &mut self.host);
@@ -539,7 +748,7 @@ impl Runner {
                     self.settle()?;
                 }
                 _ => {
-                    self.host.clock.set(end);
+                    self.host.set_clock(end);
                     return Ok(());
                 }
             }
@@ -595,6 +804,24 @@ impl Runner {
                 let glow = self.glow.as_mut().ok_or_else(|| err("no watched glow"))?;
                 Value::Array(glow.seen.drain(..).map(|pair| glow_value(&pair)).collect())
             }
+            WATCH_TITLE => {
+                let last = self.hub.title().clone();
+                self.titles = Some(Titles {
+                    last: last.clone(),
+                    seen: Vec::new(),
+                });
+                cve(&JsValue::String(last))
+            }
+            "window.__titles.splice(0)" => {
+                let titles = self
+                    .titles
+                    .as_mut()
+                    .ok_or_else(|| err("no watched title"))?;
+                strings(std::mem::take(&mut titles.seen))
+            }
+            "window.tuner !== null && window.tuner.hasTunableFields()" => {
+                Value::Bool(self.hub.with_sidebar(|_, env| env.has_tunable_fields()))
+            }
             "window.log.getFieldKeys()" => strings(self.hub.page().log().get_field_keys()),
             "window.log.getTimestampRange()" => {
                 let [a, b] = self.hub.page().log().get_timestamp_range();
@@ -616,6 +843,42 @@ impl Runner {
             }
             other => return Err(format!("eval {other} is not modeled")),
         })
+    }
+
+    /// `window.tuner.publish(key, value)` and `window.tuner.unpublish(key)` with JSON arguments,
+    /// each in its own task.
+    fn tune(&mut self, expr: &str) -> Result<(), String> {
+        let call = expr
+            .strip_prefix("window.tuner.")
+            .and_then(|rest| rest.strip_suffix(')'))
+            .and_then(|rest| rest.split_once('('));
+        let Some((method, args)) = call else {
+            return Err(format!("eval {expr} is not modeled"));
+        };
+        let args = json::parse(&format!("[{args}]")).map_err(|e| e.to_string())?;
+        let args = args.as_array().ok_or_else(|| err("no arguments"))?;
+        let key = to_js(&args[0])?.into_string();
+        let key = key.ok_or_else(|| err("a tuned key is a string"))?;
+        let thrown = match (method, args.get(1).map(to_js).transpose()?) {
+            ("publish", Some(JsValue::Number(n))) => {
+                let value = TunedValue::Number(n);
+                self.hub.with_sidebar(|_, env| env.publish(&key, value))
+            }
+            ("publish", Some(JsValue::Bool(b))) => {
+                let value = TunedValue::Boolean(b);
+                self.hub.with_sidebar(|_, env| env.publish(&key, value))
+            }
+            ("unpublish", None) => self.hub.with_sidebar(|_, env| env.unpublish(&key)),
+            _ => return Err(format!("eval {expr} is not modeled")),
+        };
+        if let Err(thrown) = thrown {
+            self.host.emit(vec![
+                ("exception", cve_str("eval")),
+                ("error", cve(&JsValue::String(thrown.0))),
+            ]);
+        }
+        self.observe();
+        self.settle()
     }
 
     fn capture(&mut self, kind: &Json) -> Result<(), String> {
@@ -734,6 +997,7 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
                 .ok_or_else(|| err("ignoreMain lists names"))?,
             None => IGNORED_MAIN.map(str::to_owned).into(),
         },
+        live: None,
     };
     let mut rng = DomRng(seed);
     // One `Math.random()` happens while hub.ts's imports evaluate, before the hub draws any
@@ -746,10 +1010,24 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
         Box::new(View { sidebar: NoLayout }),
         &mut host,
     );
+    let intervals = host.timers.iter().filter_map(|t| match &t.task {
+        Task::Interval(interval, period) => Some((interval.clone(), *period)),
+        _ => None,
+    });
+    assert_eq!(
+        intervals.take(3).collect::<Vec<_>>(),
+        [
+            (HubInterval::SidebarTuning, 250.0),
+            (HubInterval::SaveState, 250.0),
+            (HubInterval::SaveTypeMemory, 1000.0),
+        ],
+        "the order of hub.ts's constructors"
+    );
     let mut runner = Runner {
         host,
         hub,
         glow: None,
+        titles: None,
     };
 
     let version = asrs_js::ops::object([
@@ -761,6 +1039,10 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
             JsValue::string(asrs_model::build_constants::LITE_VERSION),
         ),
     ]);
+    if let Some(live) = fixture.get("live") {
+        let session = Session::parse(&live.to_compact())?;
+        runner.host.live = Some(Live::new(&session)?);
+    }
     let boot: Vec<(&str, JsValue)> = vec![
         ("set-assets", JsValue::Null),
         ("set-fullscreen", JsValue::Bool(false)),
@@ -790,6 +1072,8 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
                 None => JsValue::Undefined,
             };
             runner.main(&name.to_string_lossy(), data)?;
+        } else if let Some(expr) = step.get("eval").and_then(Json::as_str) {
+            runner.tune(&expr.to_string_lossy())?;
         } else if let Some(ms) = step.get("advance").and_then(Json::as_f64) {
             runner.advance(ms)?;
         } else if let Some(frames) = step.get("frames").and_then(Json::as_f64) {
@@ -808,6 +1092,7 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
             return Err(format!("step {index} is not modeled"));
         }
     }
+    runner.host.drain_trace();
     let unmodeled = std::mem::take(&mut runner.host.unmodeled);
     Ok((std::mem::take(&mut runner.host.emitted), unmodeled))
 }
@@ -834,14 +1119,24 @@ fn compare(spec: &Path, id: &str) -> Result<usize, String> {
                 record.line, record.text
             )
         })?;
-        let keys: Vec<String> = emit.0.iter().map(|(k, _)| (*k).to_owned()).collect();
+        let emit = match emit {
+            Emit::Record(values) => values,
+            Emit::Trace(line) if *line == record.text => continue,
+            Emit::Trace(line) => {
+                return Err(format!(
+                    "line {}: upstream {} but the port's network saw {line}",
+                    record.line, record.text
+                ));
+            }
+        };
+        let keys: Vec<String> = emit.iter().map(|(k, _)| (*k).to_owned()).collect();
         if keys != record_keys(record) {
             return Err(format!(
                 "line {}: upstream {} but the port emitted keys {keys:?}",
                 record.line, record.text
             ));
         }
-        for (key, value) in &emit.0 {
+        for (key, value) in emit {
             let expected = record.value(key).map_err(|e| e.0)?;
             if !vectors::values_match(&expected, value) {
                 let report = asrs_parity::diff::report(&expected, value)

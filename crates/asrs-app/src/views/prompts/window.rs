@@ -6,6 +6,7 @@ use asrs_js::value::JsValue;
 use asrs_tabs::form::NumberInput;
 use asrs_tabs::prompts::{Control, ControlValue, PromptEvent, PromptPage, TableRow};
 use asrs_ui::button::IconButton;
+use asrs_ui::focus::{self, LINK_OUTLINE_OFFSET, TransformedOutline};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Bounds, ClickEvent, Context, Div, Entity, EventEmitter,
     FocusHandle, Focusable, InteractiveElement, IntoElement, KeyboardButton, ParentElement, Pixels,
@@ -21,6 +22,7 @@ use asrs_ui::platform;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, snap_remainder};
 use asrs_ui::theme::Appearance;
+use asrs_ui::tooltip::titled;
 
 use super::layout::{
     self, BUTTON_BOTTOM, BUTTON_SIZE, CONFIRM_RIGHT, ControlHeights, EXIT_RIGHT, HELP_RIGHT,
@@ -67,7 +69,6 @@ pub struct PromptWindow {
     exit: FocusHandle,
     confirm: FocusHandle,
     help: FocusHandle,
-    help_from_keyboard: bool,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -107,7 +108,6 @@ impl PromptWindow {
             exit: cx.focus_handle(),
             confirm: cx.focus_handle(),
             help: cx.focus_handle().tab_stop(true),
-            help_from_keyboard: false,
             _subscriptions: subscriptions,
         }
     }
@@ -444,6 +444,11 @@ impl PromptWindow {
     ) -> Div {
         let button = IconButton::new(id, Symbol::named(icon).expect("prompt icon"))
             .size(BUTTON_SIZE as f32, BUTTON_SIZE as f32)
+            .title(match id {
+                EXIT => "Cancel",
+                _ if self.page.has_help() => "Export",
+                _ => "Confirm",
+            })
             .blurred(self.page.blurred())
             .track_focus(focus)
             .on_click(cx.listener(move |view, _, window, cx| view.click(f, window, cx)));
@@ -462,15 +467,13 @@ impl PromptWindow {
         window: &Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
-        let theme = Appearance::of(window, cx).theme();
+        let appearance = Appearance::of(window, cx);
+        let theme = appearance.theme();
         let (w, h) = text::measure(cx, &help_style(), "Help", scale);
         let left = width - HELP_RIGHT - HELP_WIDTH;
         let top = height - BUTTON_BOTTOM - BUTTON_SIZE;
         let x = left + HELP_WIDTH / 2.0 - w / 2.0;
         let y = top + BUTTON_SIZE / 2.0 - h / 2.0;
-        let focused = self.help.is_focused(window);
-        self.help_from_keyboard =
-            focused && (self.help_from_keyboard || window.last_input_was_keyboard());
         let mut link = div()
             .id(HELP)
             .track_focus(&self.help)
@@ -498,18 +501,15 @@ impl PromptWindow {
                     )
                     .probe("a"),
             );
-        if self.help_from_keyboard && window.is_window_active() {
-            link = link.child(
-                div()
-                    .absolute()
-                    .top(px(-2.0))
-                    .left(px(-2.0))
-                    .right(px(-2.0))
-                    .bottom(px(-2.0))
-                    .border(px(2.0))
-                    .border_color(rgb(theme.focus_ring))
-                    .rounded(px(5.0)),
-            );
+        if focus::focus_visible(&self.help, window, cx) {
+            let outline = TransformedOutline {
+                size: [w, h],
+                offset: LINK_OUTLINE_OFFSET,
+                subpixel: [x, y].map(|v| f64::from(snap_remainder(v as f32, scale))),
+                translate: [-w / 2.0, -h / 2.0],
+                appearance,
+            };
+            link = link.child(outline.element());
         }
         let boxed = div()
             .absolute()
@@ -519,8 +519,40 @@ impl PromptWindow {
             .h(px(BUTTON_SIZE as f32));
         div()
             .child(probed("div.help-div", boxed))
-            .child(link)
+            .child(titled("Open export documentation", link))
             .into_any_element()
+    }
+}
+
+/// The `title` of the control with this id, in whichever page has it.
+fn control_title(id: &str) -> &'static str {
+    match id {
+        "max" => "Maximum value",
+        "min" => "Minimum value",
+        "fov" => "Set camera field of view (degrees)",
+        "name" => "Enter tab name",
+        "unitType" => "Select unit dimension type",
+        "fromUnit" => "Select unit to convert from",
+        "toUnit" => "Select unit to convert to",
+        "extraFactor" => "Enter custom scale factor (multiplier)",
+        "theme" => "Select the application theme",
+        "coordinateSystem" => "Select the 3D coordinate system origin and orientation",
+        "timestamps" => "Select how timestamps are displayed",
+        "tbaApiKey" => "Enter your API key for The Blue Alliance",
+        "robotAddress" => "Enter the IP address or hostname of the robot",
+        "remotePath" => "Enter the path to log files on the robot",
+        "liveSubscribeMode" => "Select live data subscription mode",
+        "liveDiscard" => "Select how long to retain live data before discarding",
+        "publishFilter" => "Enter prefixes for NetworkTables publishing, separated by commas",
+        "field3dModeAc" => "Select the default 3D rendering mode",
+        "field3dModeBattery" => "Select the 3D rendering mode when running on battery",
+        "field3dAntialiasing" => "Toggle 3D antialiasing",
+        "format" => "Select export format",
+        "samplingMode" => "Select timestamp sampling mode",
+        "samplingPeriod" => "Enter sampling period in milliseconds",
+        "prefixes" => "Enter field prefixes to export, separated by commas (optional)",
+        "includeGenerated" => "Select whether to include generated fields in the export",
+        other => unreachable!("no control {other}"),
     }
 }
 
@@ -632,7 +664,8 @@ impl PromptWindow {
                 ("select", s.clone().into_any_element())
             }
         };
-        probed(id, positioned(bounds).child(control)).into_any_element()
+        let title = control_title(self.fields[i].id);
+        probed(id, titled(title, positioned(bounds).child(control))).into_any_element()
     }
 }
 

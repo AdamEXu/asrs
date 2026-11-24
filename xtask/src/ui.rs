@@ -242,6 +242,10 @@ fn run_port(paths: &Paths) -> Result {
             );
             let ours_rgba = pixel::read_png(&port.join(format!("{capture}.png")))?;
             let ours = pixel::composite(&ours_rgba, background);
+            let (reference, ours) = match region(&scene, scale) {
+                Some(region) => (crop(&reference, region), crop(&ours, region)),
+                None => (reference, ours),
+            };
             let cmp = pixel::compare(&reference, &ours, background)?;
             let mut failures = Vec::new();
             if cmp.stats.mismatch_pct > PIXEL_MAX_PCT {
@@ -318,6 +322,24 @@ fn run_port(paths: &Paths) -> Result {
             failed.len(),
             failed.join(", ")
         ))
+    }
+}
+
+/// A scene's `region` in device px.
+fn region(scene: &Json, scale: &str) -> Option<[usize; 4]> {
+    let scale: f64 = scale.parse().ok()?;
+    let region = scene.get("region")?.as_array()?;
+    let side = |i: usize| region.get(i)?.as_f64().map(|v| (v * scale) as usize);
+    Some([side(0)?, side(1)?, side(2)?, side(3)?])
+}
+
+fn crop(image: &pixel::Rgb, [x, y, w, h]: [usize; 4]) -> pixel::Rgb {
+    let width = image.width as usize;
+    let rows = (y..y + h).flat_map(|y| &image.data[y * width + x..y * width + x + w]);
+    pixel::Rgb {
+        width: w as u32,
+        height: h as u32,
+        data: rows.copied().collect(),
     }
 }
 

@@ -6,7 +6,7 @@
 use std::sync::Arc;
 
 use crate::aaa;
-use crate::blit::Spans;
+use crate::blit::{Kind, Spans};
 use crate::path::Path;
 use crate::skpath::{Rect, SkPath};
 
@@ -157,6 +157,23 @@ impl RasterClip {
         trimmed(bounds, &alpha)
     }
 
+    /// `clipHandlesSprite`.
+    pub fn handles_sprite(&self, sprite: IRect) -> bool {
+        match self {
+            RasterClip::Rect(_) => true,
+            RasterClip::Mask(mask) => {
+                contains(mask.bounds, sprite)
+                    && (sprite[1]..sprite[3]).all(|y| {
+                        let row = mask.row(y);
+                        row[(sprite[0] - mask.bounds[0]) as usize
+                            ..(sprite[2] - mask.bounds[0]) as usize]
+                            .iter()
+                            .all(|&a| a == 255)
+                    })
+            }
+        }
+    }
+
     /// `spans` through `SkRectClipBlitter` or `SkAAClipBlitter`, neither of which keeps the
     /// two-pixel blits.
     pub fn apply(&self, spans: Spans) -> Spans {
@@ -170,7 +187,7 @@ impl RasterClip {
         }
         let mut out = spans.same_size();
         let clip = self.bounds();
-        for (x, y, run) in spans.iter() {
+        for (x, y, run, kind) in spans.iter_kinds() {
             if y < clip[1] || y >= clip[3] {
                 continue;
             }
@@ -180,6 +197,7 @@ impl RasterClip {
             }
             let run = &run[(from - x) as usize..(to - x) as usize];
             match self {
+                RasterClip::Rect(_) if kind == Kind::Mask => out.mask(from, y, run),
                 RasterClip::Rect(_) => out.anti_h(from, y, run),
                 RasterClip::Mask(mask) => {
                     let row = &mask.row(y)[(from - clip[0]) as usize..];

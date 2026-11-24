@@ -97,6 +97,12 @@ impl Windows {
             .map(|(_, h)| *h)
     }
 
+    /// The open windows, oldest first.
+    pub fn ids(cx: &App) -> Vec<WindowId> {
+        let windows = cx.global::<Windows>();
+        windows.handles.iter().map(|(id, _)| *id).collect()
+    }
+
     pub fn id(cx: &App, window: &Window) -> Option<WindowId> {
         Self::id_of(cx, window.window_handle())
     }
@@ -182,13 +188,13 @@ pub fn on_focus_change<V: Render>(
     cx: &mut App,
     id: WindowId,
     root: &Entity<V>,
-    listener: impl Fn(bool, &mut App) + 'static,
+    listener: impl Fn(bool, &mut App) + Clone + 'static,
 ) {
     let Some(handle) = Windows::handle(cx, id) else {
         return;
     };
     let observed = handle.update(cx, |_, window, cx| {
-        let native = asrs_ui::platform::focus_changes(window);
+        let native = asrs_ui::platform::observe_focus(window, cx, listener.clone());
         if native.is_none() {
             root.update(cx, |_, cx| {
                 cx.observe_window_activation(window, move |_, window, cx| {
@@ -196,20 +202,12 @@ pub fn on_focus_change<V: Render>(
                 })
                 .detach();
             });
-            return None;
         }
-        native.map(|native| (native, listener))
+        native
     });
-    let Ok(Some(((observer, changes), listener))) = observed else {
-        return;
-    };
-    cx.spawn(async move |cx| {
-        while let Ok(focused) = changes.recv().await {
-            cx.update(|cx| listener(focused, cx));
-        }
-    })
-    .detach();
-    Windows::on_closed(cx, id, move |_| drop(observer));
+    if let Ok(Some(observer)) = observed {
+        Windows::on_closed(cx, id, move |_| observer.stop());
+    }
 }
 
 /// `window.destroy()`. A modal prompt is detached from its parent first, and a parent's prompts

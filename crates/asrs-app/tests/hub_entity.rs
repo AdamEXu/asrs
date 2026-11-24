@@ -481,18 +481,24 @@ fn wpilog_record(out: &mut Vec<u8>, entry: u8, timestamp: u32, payload: &[u8]) {
     out.extend(payload);
 }
 
-/// A 43 MB WPILOG of one double entry, the size of the largest public corpus log.
-fn synthetic_wpilog(path: &Path) {
+/// The start of a WPILOG of one entry.
+fn wpilog(name: &str, kind: &str) -> Vec<u8> {
     let mut out = b"WPILOG".to_vec();
     out.extend(0x0100u16.to_le_bytes());
     out.extend(0u32.to_le_bytes());
     let mut start = vec![0u8];
     start.extend(1u32.to_le_bytes());
-    for text in ["/Big/Value", "double", ""] {
+    for text in [name, kind, ""] {
         start.extend((text.len() as u32).to_le_bytes());
         start.extend(text.as_bytes());
     }
     wpilog_record(&mut out, 0, 0, &start);
+    out
+}
+
+/// A 43 MB WPILOG of one double entry, the size of the largest public corpus log.
+fn synthetic_wpilog(path: &Path) {
+    let mut out = wpilog("/Big/Value", "double");
     let mut timestamp = 0u32;
     while out.len() < 43_000_000 {
         timestamp += 1_000;
@@ -554,6 +560,43 @@ fn closing_a_43_mb_log_frees_its_decode_thread_within_100_ms() {
     match asrs_parity::cache::public_log("rar1741/FRC_20250315_191317_INKOK_Q21.wpilog") {
         Ok(public) if public.exists() => closing_frees_the_decode_thread(&public),
         _ => eprintln!("the 43 MB public log is not fetched; only the synthetic one ran"),
+    }
+}
+
+/// Upstream concatenates the chunks in a timeout, awaits another after the 1st, 1001st, ... and
+/// hands the bytes over in a last one. Electron 39 gives such a chain's timers no delay up to the
+/// sixth and 4 ms from the seventh on.
+#[test]
+fn nested_timeouts_of_a_child_log_are_clamped() {
+    for (chunks, waits) in [(1, 0), (4_000, 0), (4_001, 1), (8_000, 4)] {
+        let dir = std::env::temp_dir().join(format!("asrs-child-log-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).expect("create a scratch directory");
+        let mut log = wpilog("/Child", "log:rlog");
+        for i in 0..chunks {
+            wpilog_record(&mut log, 1, i * 1_000, &i.to_le_bytes());
+        }
+        let path = dir.join("parent.wpilog");
+        std::fs::write(&path, log).expect("write the log");
+
+        let mut page = Page::new();
+        page.main(MainToHub::OpenFiles, open_files(&path.to_string_lossy()));
+        page.settle("the initial decode", |_, seen| {
+            matches!(last_status(seen), Some(Status::Idle | Status::Error))
+        });
+        page.take_seen();
+        page.main(MainToHub::PrepareExport, prepare_export("child"));
+        page.settle("the raw values", |_, seen| {
+            last_status(seen) == Some(Status::Idle)
+        });
+        for wait in 0..waits {
+            let workers = page.read(Hub::decode_threads);
+            assert_eq!(workers, 1, "{chunks} chunks, after {wait} waits");
+            page.cx.advance_clock(Duration::from_millis(4));
+            page.cx.run_until_parked();
+        }
+        let workers = page.read(Hub::decode_threads);
+        assert_eq!(workers, 2, "{chunks} chunks, after {waits} waits");
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 

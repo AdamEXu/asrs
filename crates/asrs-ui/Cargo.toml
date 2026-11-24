@@ -124,7 +124,6 @@ version = "=0.3.2"
 default-features = false
 features = [
     "std",
-    "block2",
     "objc2-core-foundation",
     "NSArray",
     "NSAttributedString",
@@ -134,9 +133,9 @@ features = [
     "NSNotification",
     "NSObjCRuntime",
     "NSObject",
-    "NSOperation",
     "NSRunLoop",
     "NSString",
+    "NSUserDefaults",
     "NSURL",
     "NSValue",
 ]
@@ -201,4 +200,13 @@ harness = false
 
 [[test]]
 name = "scheduler_locks"
+required-features = ["parity"]
+
+[[test]]
+name = "focus_rings"
+required-features = ["parity"]
+
+[[test]]
+name = "focus_fields"
+harness = false
 required-features = ["parity"]

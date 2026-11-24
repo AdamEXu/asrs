@@ -4,7 +4,7 @@
   "platform": "linux",
   "arch": "arm64",
   "osRelease": "7.0.0-38-generic",
-  "generator": "34d0cb8825716851",
+  "generator": "5e4009b59e901916",
   "lut": {
     "file": "lut-linux.bin",
     "content": "4b0396f48bb8d8e9"
@@ -62,6 +62,30 @@
     {
       "scene": "transforms-2x",
       "content": "bc11e0a15c5a1bb1"
+    },
+    {
+      "scene": "floatmatrix-1x",
+      "content": "131919a588fc74eb"
+    },
+    {
+      "scene": "floatmatrix-2x",
+      "content": "20caf9476150fb09"
+    },
+    {
+      "scene": "quarterturns-1x",
+      "content": "ea5f98dd468c08ac"
+    },
+    {
+      "scene": "quarterturns-2x",
+      "content": "ab943100a2a3f0e8"
+    },
+    {
+      "scene": "gradientedges-light-1x",
+      "content": "ff1bfa955dfdbdfb"
+    },
+    {
+      "scene": "gradientedges-light-2x",
+      "content": "36d500baa0d63296"
     }
   ],
   "host": {

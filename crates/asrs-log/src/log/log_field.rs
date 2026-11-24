@@ -12,6 +12,31 @@ use super::log_key_utils::is_child_log;
 use super::log_value_sets::{LogValue, LogValueSet, LogValueSetAny, LogValues, RawValue};
 use crate::util::{lower_bound, upper_bound};
 
+/// A field's `structuredType`: `string | null` as upstream declares it, or the `undefined`
+/// that `putPhotonStruct` stores for a field declared without a type.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum StructuredType {
+    #[default]
+    Null,
+    Undefined,
+    Named(JsString),
+}
+
+impl StructuredType {
+    pub fn as_named(&self) -> Option<&JsString> {
+        match self {
+            StructuredType::Named(s) => Some(s),
+            _ => None,
+        }
+    }
+}
+
+impl From<Option<JsString>> for StructuredType {
+    fn from(ty: Option<JsString>) -> Self {
+        ty.map_or(StructuredType::Null, StructuredType::Named)
+    }
+}
+
 /// One field: parallel timestamp and value columns, sorted ascending by timestamp.
 ///
 /// Cloning is O(1) per column and takes a snapshot: the columns are shared until either side
@@ -20,7 +45,7 @@ use crate::util::{lower_bound, upper_bound};
 pub struct LogField {
     timestamps: Arc<Vec<f64>>,
     values: LogValues,
-    pub structured_type: Option<JsString>,
+    pub structured_type: StructuredType,
     /// The original type string from WPILOG or NT4.
     pub wpilib_type: Option<JsString>,
     pub metadata_string: JsString,
@@ -36,7 +61,7 @@ pub struct LogField {
 pub struct SerializedLogField {
     pub timestamps: Arc<Vec<f64>>,
     pub values: LogValues,
-    pub structured_type: Option<JsString>,
+    pub structured_type: StructuredType,
     pub wpilib_type: Option<JsString>,
     pub metadata_string: JsString,
     pub striping_reference: bool,
@@ -69,7 +94,7 @@ impl LogField {
         LogField {
             timestamps: Arc::default(),
             values: LogValues::new(ty),
-            structured_type: None,
+            structured_type: StructuredType::Null,
             wpilib_type: None,
             metadata_string: JsString::new(),
             type_warning: false,
@@ -328,7 +353,7 @@ impl LogField {
             return;
         }
         let child_log = T::TYPE == LoggableType::Raw
-            && is_child_log(self.wpilib_type.as_ref(), self.structured_type.as_ref());
+            && is_child_log(self.wpilib_type.as_ref(), self.structured_type.as_named());
         let Some(column) = T::column_mut(&mut self.values) else {
             return;
         };

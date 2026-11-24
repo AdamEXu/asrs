@@ -4,13 +4,13 @@
 //!
 //! Everything upstream reaches through browser APIs goes through [`HubHost`], passed into each
 //! call: main messages, timers, animation frames, decode workers, the export worker and the
-//! live transports. The host decides when each task runs and hands it back through the
+//! live network. The host decides when each task runs and hands it back through the
 //! matching method. What the page reads from its layout comes from [`HubView`].
 //!
 //! Lite, XR and the drag item are out of scope here; drags are `crate::drag`.
 
 use std::cell::{Ref, RefCell};
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -24,6 +24,9 @@ use asrs_js::number;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{Clock, Rng};
 use asrs_js::value::{JsObject, JsValue, ToJs};
+use asrs_live::nt4::{NetEvent, Nt4PublisherStatus};
+use asrs_live::rlog::MainCall;
+use asrs_live::{LiveDataSourceStatus, LiveLog, TimerQueue};
 use asrs_log::log::log_key_utils::MERGE_PREFIX;
 use asrs_log::log::robot_state::{AKIT_TIMESTAMP_KEYS, get_enabled_data};
 use asrs_log::log::{Log, SerializedLog};
@@ -52,8 +55,14 @@ use asrs_tabs::table::{TableController, TableRenderer};
 use asrs_tabs::video::{VideoController, VideoCx};
 
 use crate::factory::{CanvasEnv, HubTabFactory, SatelliteFactory};
+use crate::live::{
+    FieldsRead, LiveNet, LiveRole, LiveSession, LiveSourceKind, LiveUpdate, LiveWindow,
+    PublisherSession, rlog_message,
+};
 use crate::satellite::SatelliteSelection;
-use crate::sidebar::{EventOutcome, Sidebar, SidebarEnv, SidebarGeometry, Tuner};
+use crate::sidebar::{
+    EventOutcome, Sidebar, SidebarEnv, SidebarGeometry, TUNING_INTERVAL_MS, Tuner,
+};
 use crate::tabs::{SatelliteUpdate, Tabs, TabsError, TabsHost};
 
 pub const STATE_SAVE_PERIOD_MS: f64 = 250.0;
@@ -68,6 +77,8 @@ pub(crate) const APP_NAME: &str = "AdvantageScope";
 /// A repeating timer the hub sets. Each is cleared by the same value.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum HubInterval {
+    /// `Sidebar`'s, for tuning mode.
+    SidebarTuning,
     SaveState,
     SaveTypeMemory,
     TouchBarSlider,
@@ -85,8 +96,8 @@ pub enum HubTimeout {
 /// A `requestAnimationFrame` callback. Each runs once; the hub requests the next one itself.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HubFrame {
-    /// `Sidebar`'s per-frame loop. Its 250 ms tuning interval and 3 s highlight timeouts run
-    /// in the first of these frames at or after they are due.
+    /// `Sidebar`'s per-frame loop. Its 3 s highlight timeouts run in the first of these frames at
+    /// or after they are due, as only a frame can show them.
     Sidebar,
     /// `Tabs`' per-frame loop.
     Tabs,
@@ -97,36 +108,6 @@ pub enum HubFrame {
     Show,
     /// A historical source's mock progress.
     Source(String),
-}
-
-/// `liveSource = new ...` in `startLive`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LiveSourceKind {
-    Nt4,
-    Nt4AdvantageKit,
-    Nt4Systemcore,
-    Nt4DriverStation,
-    Phoenix,
-    Rlog,
-    FtcDashboard,
-}
-
-/// `LiveDataSourceStatus`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum LiveStatus {
-    Waiting,
-    Connecting,
-    Active,
-    Error,
-    Stopped,
-}
-
-/// `NT4PublisherStatus`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum PublisherStatus {
-    Connecting,
-    Active,
-    Stopped,
 }
 
 /// What a `WorkerManager.request` resolves or rejects with.
@@ -170,17 +151,15 @@ pub trait HubHost {
     fn console(&mut self, warn: bool, text: String);
     /// A throw out of a task the page goes on from, as the browser reports it.
     fn exception(&mut self, task: &'static str, error: String);
-    /// Starts `kind` connected to `address` in place of the stopped previous source. Its
-    /// status and output come back through [`HubModel::live_status`] and
-    /// [`HubModel::live_output`]; the host also sets `window.tuner` from it with
-    /// [`HubModel::set_tuner`].
-    fn start_live_source(&mut self, kind: LiveSourceKind, address: &JsString);
-    fn stop_live_source(&mut self);
-    fn live_data(&mut self, data: &JsValue);
-    /// `new NT4Publisher(isSim, ...)`, replacing any running one; its status comes back
-    /// through [`HubModel::publisher_status`].
-    fn start_publisher(&mut self, is_sim: &JsValue);
-    fn stop_publisher(&mut self);
+    /// The network for a live source or the publisher that is connecting now; the one it had
+    /// is gone. Its events come back through [`HubModel::live_event`].
+    fn live_net(&mut self, role: LiveRole) -> Result<LiveNet, String>;
+    /// The monotonic clock live timers run on, in milliseconds. Whenever
+    /// [`HubModel::next_live_timer`] passes, the host calls [`HubModel::fire_live_timer`] until
+    /// nothing is due, letting input and frames through in between.
+    fn timer_clock(&self) -> Rc<dyn Clock>;
+    /// How often, in milliseconds, the page is idle enough to run idle callbacks.
+    fn idle_period(&self) -> Option<f64>;
 }
 
 /// What the page reads from its layout and environment.
@@ -666,9 +645,13 @@ pub struct HubModel {
     live_active: bool,
     live_connected: bool,
     live_address: JsString,
-    /// Whether `liveSource` is set; upstream never clears it, so a stopped source still gets
-    /// `live-data` and `stop()` calls.
-    has_live_source: bool,
+    live: Option<Rc<RefCell<LiveSession>>>,
+    /// A stopped RLOG source, which upstream keeps: stopping it again sends main another
+    /// `live-rlog-stop`.
+    stopped_rlog: bool,
+    publisher: Option<PublisherSession>,
+    /// A stopped publisher, which upstream keeps: stopping it again reports `Stopped` again.
+    stopped_publisher: bool,
     tuner: Option<Box<dyn Tuner>>,
     next_mock: u64,
     mocks: Vec<(HubInterval, MockProgress)>,
@@ -734,9 +717,9 @@ impl HubModel {
         view: Box<dyn HubView>,
         host: &mut dyn HubHost,
     ) -> Self {
-        let now = host.now();
-        let (mut page, sidebar, filenames) = Self::page_parts(realm, clock, view, now, None);
+        let (mut page, sidebar, filenames) = Self::page_parts(realm, clock, view, None);
         host.request_animation_frame(HubFrame::Sidebar);
+        host.set_interval(HubInterval::SidebarTuning, TUNING_INTERVAL_MS);
         let tabs = Tabs::new(Box::new(HubTabFactory::new()), &mut page);
         host.request_animation_frame(HubFrame::SourceLists);
         host.request_animation_frame(HubFrame::Tabs);
@@ -751,9 +734,8 @@ impl HubModel {
     /// The parts of the page `satellite.ts` has in common with `hub.ts`: `window.assets`,
     /// `preferences`, `isBattery` and `selection`, and the one renderer, as the only tab.
     pub(crate) fn satellite(realm: JsRealm, clock: Rc<dyn Clock>, view: Box<dyn HubView>) -> Self {
-        let now = clock.now();
         let selection = Some(SatelliteSelection::default());
-        let (page, sidebar, filenames) = Self::page_parts(realm, clock, view, now, selection);
+        let (page, sidebar, filenames) = Self::page_parts(realm, clock, view, selection);
         Self::from_parts(
             page,
             Tabs::empty(Box::new(SatelliteFactory)),
@@ -766,14 +748,13 @@ impl HubModel {
         realm: JsRealm,
         clock: Rc<dyn Clock>,
         view: Box<dyn HubView>,
-        now: f64,
         satellite: Option<SatelliteSelection>,
     ) -> (HubPage, Sidebar, Filenames) {
         let log: SharedLog = Rc::new(RefCell::new(Log::new(true)));
         let selection = SelectionImpl::new(log.clone(), clock.clone());
         let filenames = Rc::new(RefCell::new(Vec::new()));
         let names = filenames.clone();
-        let sidebar = Sidebar::new(now, move || names.borrow().clone());
+        let sidebar = Sidebar::new(move || names.borrow().clone());
         let page = HubPage {
             log,
             selection,
@@ -822,7 +803,10 @@ impl HubModel {
             live_active: false,
             live_connected: false,
             live_address: JsString::new(),
-            has_live_source: false,
+            live: None,
+            stopped_rlog: false,
+            publisher: None,
+            stopped_publisher: false,
             tuner: None,
             next_mock: 0,
             mocks: Vec::new(),
@@ -890,6 +874,8 @@ impl HubModel {
             log: &page.log,
             selection: &mut page.selection,
             tuner: self.tuner.as_deref(),
+            realm: &mut page.realm,
+            clock: &*page.clock,
             dark_theme,
             inner_height,
             loading_fields: &loading,
@@ -971,7 +957,7 @@ impl HubModel {
         std::mem::take(&mut self.status_changes)
     }
 
-    /// `window.tuner`, set by the host once a live source connects.
+    /// `window.tuner`, set once a live source connects.
     pub fn set_tuner(&mut self, tuner: Option<Box<dyn Tuner>>) {
         self.tuner = tuner;
     }
@@ -1319,9 +1305,7 @@ impl HubModel {
             self.tabs_refresh()?;
         }
 
-        if self.has_live_source {
-            host.stop_live_source();
-        }
+        self.stop_live_source(host);
         self.tuner = None;
         self.live_active = false;
         self.live_connected = false;
@@ -1373,6 +1357,7 @@ impl HubModel {
     /// Fires one interval the hub set.
     pub fn fire_interval(&mut self, interval: &HubInterval, host: &mut dyn HubHost) {
         match interval {
+            HubInterval::SidebarTuning => self.with_sidebar(Sidebar::publish_tuning),
             HubInterval::SaveState => {
                 let state = self.save_state();
                 host.send_main_message(NamedMessage::new(HubToMain::SaveState, state));
@@ -1446,11 +1431,10 @@ impl HubModel {
     pub fn animation_frame(&mut self, frame: &HubFrame, host: &mut dyn HubHost) {
         match frame {
             HubFrame::Sidebar => {
-                let now = host.now();
-                self.with_sidebar(|sidebar, env| {
-                    sidebar.fire_timers(now, env);
-                    sidebar.periodic(env);
-                });
+                if self.sidebar.next_timeout().is_some() {
+                    self.sidebar.fire_timeouts(host.now());
+                }
+                self.with_sidebar(Sidebar::periodic);
                 host.request_animation_frame(HubFrame::Sidebar);
             }
             HubFrame::Tabs => {
@@ -1602,8 +1586,181 @@ impl HubModel {
     }
 
     fn start_publisher(&mut self, is_sim: &JsValue, host: &mut dyn HubHost) {
-        host.stop_publisher();
-        host.start_publisher(is_sim);
+        self.stop_publisher(host);
+        self.stopped_publisher = false;
+        match host.live_net(LiveRole::Publisher) {
+            Ok(net) => {
+                let is_sim = truthy(is_sim);
+                let clock = host.timer_clock();
+                let publisher = self.with_live_window(FieldsRead::None, |window| {
+                    PublisherSession::start(is_sim, net, clock, window)
+                });
+                let updates = publisher.take_updates();
+                self.publisher = Some(publisher);
+                self.apply_live(updates, host);
+            }
+            Err(e) => host.exception("publisher", e),
+        }
+    }
+
+    fn stop_publisher(&mut self, host: &mut dyn HubHost) {
+        if let Some(mut publisher) = self.publisher.take() {
+            self.with_live_window(FieldsRead::None, |window| publisher.stop(window));
+            self.apply_live(publisher.take_updates(), host);
+            self.stopped_publisher = true;
+        } else if self.stopped_publisher {
+            self.publisher_status(Nt4PublisherStatus::Stopped, host);
+        }
+    }
+
+    fn stop_live_source(&mut self, host: &mut dyn HubHost) {
+        if let Some(live) = self.live.take() {
+            self.with_live_window(FieldsRead::None, |window| live.borrow_mut().stop(window));
+            self.stopped_rlog = live.borrow().is_rlog();
+            let updates = live.borrow().take_updates();
+            self.apply_live(updates, host);
+        } else if self.stopped_rlog {
+            host.send_main_message(rlog_message(MainCall::Stop));
+        }
+    }
+
+    fn with_live_window<R>(
+        &mut self,
+        fields: FieldsRead,
+        f: impl FnOnce(&mut LiveWindow<'_>) -> R,
+    ) -> R {
+        let fields = match fields {
+            FieldsRead::None => Vec::new(),
+            FieldsRead::Tabs => self.tabs.active_fields(&self.page, &self.page.log.borrow()),
+            FieldsRead::TabsAndSidebar => self.active_fields(),
+        };
+        let platform = self.platform.platform.to_string_lossy();
+        let page = &mut self.page;
+        f(&mut LiveWindow {
+            log: &page.log,
+            selection: &mut page.selection,
+            preferences: page.preferences.as_ref(),
+            realm: &mut page.realm,
+            clock: &*page.clock,
+            platform: &platform,
+            fields,
+        })
+    }
+
+    fn apply_live(&mut self, updates: VecDeque<LiveUpdate>, host: &mut dyn HubHost) {
+        for update in updates {
+            match update {
+                LiveUpdate::Status(status) => self.live_status(status, host),
+                LiveUpdate::Output(log, supplier) => self.live_output(log, supplier, host),
+                LiveUpdate::Publisher(status) => self.publisher_status(status, host),
+                LiveUpdate::Main(message) => host.send_main_message(message),
+            }
+        }
+    }
+
+    /// When the next timer of the live source or the publisher is due on
+    /// [`HubHost::timer_clock`].
+    pub fn next_live_timer(&self) -> Option<f64> {
+        let live = self.live.as_ref().and_then(|s| s.borrow().next_due());
+        let publisher = self.publisher.as_ref().and_then(PublisherSession::next_due);
+        [live, publisher]
+            .into_iter()
+            .flatten()
+            .min_by(f64::total_cmp)
+    }
+
+    /// Runs the live timer due first, if one is due, as a task.
+    pub fn fire_live_timer(&mut self, host: &mut dyn HubHost) -> bool {
+        let due = |due: Option<f64>| due.unwrap_or(f64::INFINITY);
+        let live = due(self.live.as_ref().and_then(|s| s.borrow().next_due()));
+        let publisher = due(self.publisher.as_ref().and_then(PublisherSession::next_due));
+        let fired = if live <= publisher {
+            self.fire_source_timer(host)
+        } else {
+            self.fire_publisher_timer(host)
+        };
+        if fired {
+            self.end_input_task(host);
+        }
+        fired
+    }
+
+    fn fire_source_timer(&mut self, host: &mut dyn HubHost) -> bool {
+        let Some(live) = self.live.clone() else {
+            return false;
+        };
+        let Some(id) = live.borrow_mut().fire_next() else {
+            return false;
+        };
+        let fields = live.borrow().fields_read(id);
+        self.with_live_window(fields, |window| live.borrow_mut().handle_timer(id, window));
+        let updates = live.borrow().take_updates();
+        self.apply_live(updates, host);
+        true
+    }
+
+    fn fire_publisher_timer(&mut self, host: &mut dyn HubHost) -> bool {
+        let Some(mut publisher) = self.publisher.take() else {
+            return false;
+        };
+        let fired = publisher.fire_next();
+        if let Some(id) = fired {
+            self.with_live_window(FieldsRead::None, |window| {
+                publisher.handle_timer(id, window)
+            });
+        }
+        let updates = publisher.take_updates();
+        self.publisher = Some(publisher);
+        self.apply_live(updates, host);
+        fired.is_some()
+    }
+
+    /// An event of the transport [`HubHost::live_net`] returned for `role`.
+    pub fn live_event(&mut self, role: LiveRole, event: &NetEvent, host: &mut dyn HubHost) {
+        match role {
+            LiveRole::Source { .. } => {
+                let Some(live) = self.live.clone() else {
+                    return;
+                };
+                self.with_live_window(FieldsRead::None, |window| {
+                    live.borrow_mut().handle_net_event(event, window)
+                });
+                let updates = live.borrow().take_updates();
+                self.apply_live(updates, host);
+            }
+            LiveRole::Publisher => {
+                let Some(mut publisher) = self.publisher.take() else {
+                    return;
+                };
+                self.with_live_window(FieldsRead::None, |window| {
+                    publisher.handle_net_event(event, window)
+                });
+                let updates = publisher.take_updates();
+                self.publisher = Some(publisher);
+                self.apply_live(updates, host);
+            }
+        }
+        self.end_input_task(host);
+    }
+
+    /// `live-data`.
+    fn live_data(&mut self, data: &JsValue, host: &mut dyn HubHost) {
+        let Some(live) = self.live.clone() else {
+            return;
+        };
+        let result = self.with_live_window(FieldsRead::None, |window| {
+            live.borrow_mut().handle_main_message(data, window)
+        });
+        let updates = live.borrow().take_updates();
+        self.apply_live(updates, host);
+        match result {
+            Ok(()) => {}
+            Err(Abort::Threw) => host.exception("live", "threw".to_owned()),
+            Err(Abort::NeverReturns) => {
+                host.exception("live", "the page realm never returns".to_owned())
+            }
+            Err(Abort::Unmodeled(what)) => host.exception("live", format!("unmodeled: {what}")),
+        }
     }
 
     fn request_export(
@@ -1669,10 +1826,8 @@ impl HubModel {
         host: &mut dyn HubHost,
     ) -> Result<(), TabsError> {
         self.stop_historical(host)?;
-        if self.has_live_source {
-            host.stop_live_source();
-        }
-        host.stop_publisher();
+        self.stop_live_source(host);
+        self.stop_publisher(host);
         self.live_active = true;
         self.set_loading(None);
 
@@ -1706,39 +1861,52 @@ impl HubModel {
             )));
         };
         self.live_address = address.clone();
-        self.has_live_source = true;
-        host.start_live_source(kind, &address);
+        self.stopped_rlog = false;
+        let net = match kind.role().map(|role| host.live_net(role)).transpose() {
+            Ok(net) => net,
+            Err(e) => {
+                host.exception("live", e);
+                self.live_status(LiveDataSourceStatus::Error, host);
+                return Ok(());
+            }
+        };
+        let mut timers = TimerQueue::new(host.timer_clock());
+        timers.set_idle_period(host.idle_period());
+        let date = self.page.clock.clone();
+        let live = self.with_live_window(FieldsRead::None, |window| {
+            LiveSession::connect(kind, &address, net, timers, date, window)
+        });
+        let live = Rc::new(RefCell::new(live));
+        self.live = Some(live.clone());
+        let updates = live.borrow().take_updates();
+        self.apply_live(updates, host);
+        self.set_tuner(LiveSession::tuner(&live));
         Ok(())
     }
 
     /// The live source's status callback.
-    pub fn live_status(&mut self, status: LiveStatus, host: &mut dyn HubHost) {
+    fn live_status(&mut self, status: LiveDataSourceStatus, host: &mut dyn HubHost) {
         let address = self.live_address.clone();
         match status {
-            LiveStatus::Connecting => self.set_window_title(&address, Some("Searching")),
-            LiveStatus::Active => self.set_window_title(&address, None),
-            LiveStatus::Error => {
+            LiveDataSourceStatus::Connecting => self.set_window_title(&address, Some("Searching")),
+            LiveDataSourceStatus::Active => self.set_window_title(&address, None),
+            LiveDataSourceStatus::Error => {
                 self.set_window_title(&address, Some("Error"));
                 host.send_main_message(error_message(
                     "Problem with live source",
                     "There was a problem while connecting to the live source. Please check your connection settings and try again.",
                 ));
             }
-            LiveStatus::Waiting | LiveStatus::Stopped => {}
+            LiveDataSourceStatus::Waiting | LiveDataSourceStatus::Stopped => {}
         }
-        if status != LiveStatus::Active {
+        if status != LiveDataSourceStatus::Active {
             self.page.selection.set_live_disconnected();
         }
         self.flush(host);
     }
 
     /// The live source's output callback: its `Log` becomes `window.log`.
-    pub fn live_output(
-        &mut self,
-        log: SharedLog,
-        time_supplier: TimeSupplier,
-        host: &mut dyn HubHost,
-    ) {
+    fn live_output(&mut self, log: LiveLog, time_supplier: TimeSupplier, host: &mut dyn HubHost) {
         self.live_connected = true;
         self.page.log = log.clone();
         self.page.selection.set_log(log);
@@ -1749,14 +1917,14 @@ impl HubModel {
     }
 
     /// The publisher's status callback.
-    pub fn publisher_status(&mut self, status: PublisherStatus, host: &mut dyn HubHost) {
+    fn publisher_status(&mut self, status: Nt4PublisherStatus, host: &mut dyn HubHost) {
         let Some(name) = self.log_friendly_name.clone() else {
             return;
         };
         match status {
-            PublisherStatus::Connecting => self.set_window_title(&name, Some("Searching")),
-            PublisherStatus::Active => self.set_window_title(&name, Some("Publishing")),
-            PublisherStatus::Stopped => self.set_window_title(&name, None),
+            Nt4PublisherStatus::Connecting => self.set_window_title(&name, Some("Searching")),
+            Nt4PublisherStatus::Active => self.set_window_title(&name, Some("Publishing")),
+            Nt4PublisherStatus::Stopped => self.set_window_title(&name, None),
         }
         self.flush(host);
     }
@@ -1903,9 +2071,7 @@ impl HubModel {
                 ));
             }
             MainToHub::LiveData => {
-                if self.has_live_source {
-                    host.live_data(data);
-                }
+                self.live_data(data, host);
             }
             MainToHub::OpenFiles => self.open_files(data, host)?,
             MainToHub::StartLive => {
@@ -1919,7 +2085,7 @@ impl HubModel {
                 }
             }
             MainToHub::StartPublish => self.start_publish(data, host)?,
-            MainToHub::StopPublish => host.stop_publisher(),
+            MainToHub::StopPublish => self.stop_publisher(host),
             MainToHub::SetPlaybackOptions => {
                 let speed = field("speed").as_f64().unwrap_or(f64::NAN);
                 self.page.selection.set_playback_speed(speed);

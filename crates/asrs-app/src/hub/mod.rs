@@ -1,16 +1,19 @@
 //! The hub window's page as a GPUI entity. [`Hub`] owns `asrs_hub`'s headless [`HubModel`] and
-//! is its browser: timers and intervals are foreground tasks on executor timers, animation
-//! frames are the window's next frames, each decode worker is an OS thread whose messages a
+//! is its browser: timers and intervals fire as foreground tasks, animation frames are the
+//! window's next frames while it has any, each decode worker is an OS thread whose messages a
 //! foreground task pumps into the model, the export worker is a one-shot thread, and main's
-//! `historical-start` runs `asrs_services::historical_start` on the background executor.
+//! `historical-start` runs `asrs_services::historical_start` on the background executor. Live
+//! sources and the publisher run on the foreground over sockets of the app's one
+//! [`asrs_live::LiveRuntime`]; main's RLOG socket is [`crate::live::RlogBridge`].
 //!
 //! Views read the model through [`Hub::model`] and observe the entity: it notifies after every
 //! task the page runs and emits a [`HubEvent`] for each change a view or main reacts to.
 
+mod frames;
 mod host;
 
 use std::rc::Rc;
-use std::sync::mpsc::RecvTimeoutError;
+use std::sync::mpsc::{RecvTimeoutError, SyncSender};
 use std::time::{Duration, Instant};
 
 use asrs_formats::historical::Status;
@@ -133,15 +136,15 @@ pub struct Hub {
 impl EventEmitter<HubEvent> for Hub {}
 
 impl Hub {
-    /// Evaluates the page in `window`, whose frames drive the per-frame loop; without a window
-    /// frames run on a 60 Hz timer.
+    /// Evaluates the page in `window`, whose frames drive the per-frame loop while it has any; on
+    /// a timer otherwise.
     pub fn new(window: Option<&Window>, config: HubConfig, cx: &mut Context<'_, Self>) -> Self {
         let mut host = HostState::new(
-            window.map(Window::window_handle),
+            window,
             config.clock.clone(),
-            cx.background_executor().now(),
             config.worker_realm,
             config.temp_dir,
+            cx,
         );
         let model = HubModel::new(
             config.realm,
@@ -200,6 +203,15 @@ impl Hub {
         self.host.decode_threads()
     }
 
+    pub(crate) fn live_posted(&self) -> SyncSender<()> {
+        self.host.posted()
+    }
+
+    /// Blocks until a live connection posts to the page.
+    pub fn wait_for_live(&self, timeout: Duration) -> bool {
+        self.host.wait_for_live(timeout)
+    }
+
     /// Blocks until a decode or export thread posts to the page. False, at once, when none of
     /// them has anything left to post.
     pub fn wait_for_threads(&self, timeout: Duration) -> Result<bool, RecvTimeoutError> {
@@ -207,6 +219,16 @@ impl Hub {
     }
 
     fn task<R>(
+        &mut self,
+        cx: &mut Context<'_, Self>,
+        f: impl FnOnce(&mut HubModel, &mut dyn HubHost) -> R,
+    ) -> R {
+        self.host.begin_task();
+        self.run(cx, f)
+    }
+
+    /// The body of a task, a page timer's unless [`Hub::task`] is running it.
+    fn run<R>(
         &mut self,
         cx: &mut Context<'_, Self>,
         f: impl FnOnce(&mut HubModel, &mut dyn HubHost) -> R,
@@ -228,6 +250,8 @@ impl Hub {
             self.loading = self.model.loading().clone();
             cx.emit(HubEvent::Loading);
         }
+        self.arm_timer(cx);
+        self.arm_live_timer(cx);
         cx.notify();
     }
 }

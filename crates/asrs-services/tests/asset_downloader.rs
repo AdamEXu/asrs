@@ -10,8 +10,8 @@ use asrs_js::time::NamedZone;
 use asrs_parity::vectors::check_records;
 use asrs_parity::{Json, Record, Utf16String};
 use asrs_services::asset_downloader::{
-    AssetDownloader, Distribution, DownloadHost, FetchOutcome, FetchRequest, HttpOutcome,
-    HttpRequest, Rejected, Timer,
+    AssetDownloader, Distribution, DownloadHost, FetchId, FetchOutcome, FetchRequest, HttpOutcome,
+    HttpRequest, Rejected, RequestId, Timer,
 };
 use asrs_services::asset_loader::AssetFolders;
 use asrs_services::fs::MemFs;
@@ -66,6 +66,15 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
+/// `hold` in a scripted outcome.
+fn held(args: Option<&Json>) -> Result<bool, String> {
+    match args.and_then(|a| a.get("hold")) {
+        None => Ok(false),
+        Some(Json::Bool(hold)) => Ok(*hold),
+        Some(other) => Err(format!("hold {other:?} is not a bool")),
+    }
+}
+
 fn unhex(text: &str) -> Result<Vec<u8>, String> {
     if !text.len().is_multiple_of(2) {
         return Err(format!("odd hex length {}", text.len()));
@@ -115,8 +124,10 @@ fn put_dir_all(fs: &MemFs, path: &str) {
 
 #[derive(Default)]
 struct Host {
-    fetches: VecDeque<FetchOutcome>,
-    serves: HashMap<String, VecDeque<HttpOutcome>>,
+    fetches: VecDeque<(FetchOutcome, bool)>,
+    serves: HashMap<String, VecDeque<(HttpOutcome, bool)>>,
+    held_fetch: Option<(FetchId, FetchOutcome)>,
+    held: HashMap<String, Vec<(RequestId, HttpOutcome)>>,
     free: Option<f64>,
     callback_fails: bool,
     random: f64,
@@ -132,23 +143,34 @@ impl DownloadHost for Host {
         self.free.ok_or(Rejected)
     }
 
-    fn fetch(&mut self, request: &FetchRequest) -> FetchOutcome {
+    fn fetch(&mut self, id: FetchId, request: &FetchRequest) -> FetchOutcome {
         self.fetch_log.push(request.clone());
-        self.fetches
-            .pop_front()
-            .unwrap_or(FetchOutcome::NetworkError)
+        match self.fetches.pop_front() {
+            None => FetchOutcome::NetworkError,
+            Some((outcome, false)) => outcome,
+            Some((outcome, true)) => {
+                self.held_fetch = Some((id, outcome));
+                FetchOutcome::Hang
+            }
+        }
     }
 
-    fn request(&mut self, request: &HttpRequest) -> HttpOutcome {
+    fn request(&mut self, id: RequestId, request: &HttpRequest) -> HttpOutcome {
         self.request_log.push(request.clone());
-        self.serves
-            .get_mut(&request.url)
-            .and_then(VecDeque::pop_front)
-            .unwrap_or(HttpOutcome::Response {
+        let queue = self.serves.get_mut(&request.url);
+        match queue.and_then(VecDeque::pop_front) {
+            None => HttpOutcome::Response {
                 status: 404,
                 headers: Vec::new(),
                 body: Vec::new(),
-            })
+            },
+            Some((outcome, false)) => outcome,
+            Some((outcome, true)) => {
+                let held = self.held.entry(request.url.clone()).or_default();
+                held.push((id, outcome));
+                HttpOutcome::Hang
+            }
+        }
     }
 
     fn random(&mut self) -> f64 {
@@ -241,7 +263,7 @@ impl Replay {
                             },
                         }
                     };
-                    case.host.fetches.push_back(outcome);
+                    case.host.fetches.push_back((outcome, held(args)?));
                 }
                 "serve" => {
                     let url = text(arg("url")?)?;
@@ -249,14 +271,49 @@ impl Replay {
                         HttpOutcome::Reset
                     } else if args.and_then(|a| a.get("hang")).is_some() {
                         HttpOutcome::Hang
+                    } else if let Some(code) = args.and_then(|a| a.get("error")) {
+                        HttpOutcome::Error(text(code)?)
                     } else {
-                        HttpOutcome::Response {
-                            status: number(arg("status")?)? as u16,
-                            headers: pairs(arg("headers")?)?,
-                            body: hex_bytes(arg("body")?)?,
+                        let status = number(arg("status")?)? as u16;
+                        let headers = pairs(arg("headers")?)?;
+                        let body = hex_bytes(arg("body")?)?;
+                        match args.and_then(|a| a.get("cut")).map(text).transpose()? {
+                            None => HttpOutcome::Response {
+                                status,
+                                headers,
+                                body,
+                            },
+                            Some(cut) => HttpOutcome::Truncated {
+                                status,
+                                headers,
+                                body,
+                                code: match cut.as_str() {
+                                    "fin" => None,
+                                    "rst" => Some("ECONNRESET".to_owned()),
+                                    other => return Err(format!("cut {other} is not modeled")),
+                                },
+                            },
                         }
                     };
-                    case.host.serves.entry(url).or_default().push_back(outcome);
+                    let queue = case.host.serves.entry(url).or_default();
+                    queue.push_back((outcome, held(args)?));
+                }
+                "release" => {
+                    let url = text(arg("url")?)?;
+                    let waiting = case.host.held.get_mut(&url).ok_or("nothing is held")?;
+                    if waiting.is_empty() {
+                        return Err(format!("nothing holds {url}"));
+                    }
+                    let older = args.and_then(|a| a.get("older")).is_some();
+                    let at = if older { 0 } else { waiting.len() - 1 };
+                    let (id, outcome) = waiting.remove(at);
+                    case.downloader
+                        .answered(id, outcome, &case.fs, &mut case.host);
+                }
+                "releaseFetch" => {
+                    let (id, outcome) = case.host.held_fetch.take().ok_or("no fetch is held")?;
+                    case.downloader
+                        .fetched(id, outcome, &case.fs, &mut case.host, zone);
                 }
                 "setDisk" => {
                     case.host.free = match arg("free")? {
@@ -485,7 +542,15 @@ fn replay(zone_name: &str) {
         records.len() * OUTPUT_FIELDS.len(),
         "compared fields differ from recorded fields"
     );
-    for op in ["start", "advance", "status", "serve", "queueFetch"] {
+    for op in [
+        "start",
+        "advance",
+        "status",
+        "serve",
+        "queueFetch",
+        "release",
+        "releaseFetch",
+    ] {
         assert!(
             recorded.get(op).copied().unwrap_or(0) > 0,
             "no {op} records"

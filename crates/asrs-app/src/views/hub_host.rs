@@ -32,6 +32,7 @@ use super::prompts;
 use super::sidebar::{self, SidebarView, ViewGeometry};
 use super::source_list::ListsGeometry;
 use crate::hub::{FrameClock, Hub, HubConfig, HubEvent};
+use crate::live;
 use crate::main_process::MainProcess;
 use crate::menus::bridge::{self, EffectHandler};
 use crate::menus::context::{self, ContextMenu, Effect, MenuEnv};
@@ -295,6 +296,7 @@ impl HubEntityHost {
             });
         }
         let hub = cx.new(|cx| Hub::new(Some(window), config, cx));
+        live::attach(&hub, cx);
         let handle = window.window_handle();
         let weak = hub.downgrade();
         let scheme = geometry.clone();

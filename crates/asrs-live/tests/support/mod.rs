@@ -41,6 +41,10 @@ impl Trace {
         self.push(trace_line(t, ev, None, v));
     }
 
+    pub fn take(&self) -> Vec<String> {
+        self.0.take()
+    }
+
     pub fn lines(&self) -> Vec<String> {
         self.0.borrow().clone()
     }
@@ -144,7 +148,7 @@ pub struct FakeNet {
     requests: BTreeMap<u32, FakeRequest>,
     tasks: Vec<(f64, u64, Delivery)>,
     seq: u64,
-    microtasks: VecDeque<NetEvent>,
+    pub microtasks: VecDeque<NetEvent>,
 }
 
 fn payload(data: &WsMessage) -> Payload {
@@ -160,6 +164,22 @@ fn href(url: &str) -> String {
 }
 
 impl FakeNet {
+    pub fn new(host: ServerHost, clock: ManualClock, latency_ms: f64, trace: Trace) -> Self {
+        FakeNet {
+            host,
+            clock,
+            latency_ms,
+            trace,
+            next_id: 1,
+            sockets: BTreeMap::new(),
+            tcp_sockets: BTreeMap::new(),
+            requests: BTreeMap::new(),
+            tasks: Vec::new(),
+            seq: 0,
+            microtasks: VecDeque::new(),
+        }
+    }
+
     fn now(&self) -> f64 {
         self.clock.now()
     }
@@ -175,11 +195,11 @@ impl FakeNet {
         self.seq += 1;
     }
 
-    fn next_task_due(&self) -> Option<f64> {
+    pub fn next_task_due(&self) -> Option<f64> {
         self.tasks.iter().map(|t| t.0).reduce(f64::min)
     }
 
-    fn take_task(&mut self, now: f64) -> Option<Delivery> {
+    pub fn take_task(&mut self, now: f64) -> Option<Delivery> {
         let i = self
             .tasks
             .iter()
@@ -190,7 +210,7 @@ impl FakeNet {
         Some(self.tasks.remove(i).2)
     }
 
-    fn server_events(&mut self, t: f64) -> Result<(), String> {
+    pub fn server_events(&mut self, t: f64) -> Result<(), String> {
         for event in self.host.process(t)? {
             self.trace.push(event.line(t));
             let delivery = match event {
@@ -677,19 +697,12 @@ pub fn run(
     let trace = Trace::default();
     let mut env = Env {
         timers: TimerQueue::new(Rc::new(clock.clone())),
-        net: FakeNet {
-            host: ServerHost::new(session)?,
-            clock: clock.clone(),
-            latency_ms: session.latency_ms,
-            trace: trace.clone(),
-            next_id: 1,
-            sockets: BTreeMap::new(),
-            tcp_sockets: BTreeMap::new(),
-            requests: BTreeMap::new(),
-            tasks: Vec::new(),
-            seq: 0,
-            microtasks: VecDeque::new(),
-        },
+        net: FakeNet::new(
+            ServerHost::new(session)?,
+            clock.clone(),
+            session.latency_ms,
+            trace.clone(),
+        ),
         wall: WallClock {
             loop_clock: clock.clone(),
             epoch_ms: session.epoch_ms,
@@ -944,6 +957,15 @@ fn optional_string(s: &Option<JsString>) -> Value {
     s.as_ref().map_or(Value::Null, string_value)
 }
 
+fn structured_type_value(t: &asrs_log::log::StructuredType) -> Value {
+    use asrs_log::log::StructuredType::*;
+    match t {
+        Null => Value::Null,
+        Undefined => Value::Undefined,
+        Named(s) => string_value(s),
+    }
+}
+
 fn numbers(xs: &[f64]) -> Value {
     Value::Array(xs.iter().map(|&x| Value::number(x)).collect())
 }
@@ -989,7 +1011,7 @@ fn serialized_field_value(s: &asrs_log::log::SerializedLogField) -> Value {
         ("type", Value::number(f64::from(s.get_type() as u8))),
         ("timestamps", numbers(&s.timestamps)),
         ("values", values),
-        ("structuredType", optional_string(&s.structured_type)),
+        ("structuredType", structured_type_value(&s.structured_type)),
         ("wpilibType", optional_string(&s.wpilib_type)),
         ("metadataString", string_value(&s.metadata_string)),
         ("stripingReference", Value::Bool(s.striping_reference)),

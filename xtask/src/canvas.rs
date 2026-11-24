@@ -216,8 +216,7 @@ pub(crate) fn lut(paths: &Paths, check: bool) -> Result {
     Ok(())
 }
 
-/// The scenes whose references are small enough to commit and that only differ between platforms
-/// in their text.
+/// The scenes whose references are small enough to commit.
 const PINNED_SCENES: &[&str] = &[
     "text-light-1x",
     "text-dark-1x",
@@ -231,6 +230,12 @@ const PINNED_SCENES: &[&str] = &[
     "gradienttext-light-1x",
     "transforms-1x",
     "transforms-2x",
+    "floatmatrix-1x",
+    "floatmatrix-2x",
+    "quarterturns-1x",
+    "quarterturns-2x",
+    "gradientedges-light-1x",
+    "gradientedges-light-2x",
 ];
 
 fn pin_scenes(paths: &Paths) -> Result {

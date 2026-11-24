@@ -471,7 +471,8 @@ again. Lines are written synchronously, so a worker that never answers leaves th
 upstream's `WorkerManager` on `log.toSerialized()`, as `prepare-export` does, and writes what main's
 `write-export` would: a string as UTF-8 (lone surrogates become U+FFFD), bytes as they are. Exit
 status 3 means the worker rejected (the hub's "Failed to export data"); 4 means the run was
-skipped. Two option sets are skipped because upstream would never finish:
+skipped. Two option sets are skipped, the first because upstream runs out of memory and the second
+for its size:
 
 - `fixed` sampling when `(range[1] - range[0]) / (samplingPeriod / 1000)` is not at most the
   sample limit (100000 by default), or when adding the step to either end of the range leaves it
@@ -481,7 +482,8 @@ skipped. Two option sets are skipped because upstream would never finish:
   64 plus the key's UTF-8 length, plus for each sample timestamp with a value at or before it,
   31 plus the UTF-8 length of `JSON.stringify({ value })`. The sampled MCAP branch calls
   `addMessage` without awaiting it, so once a chunk fills, every later message re-finalizes an
-  ever larger chunk.
+  ever larger chunk, and the file repeats them until it passes the longest `ArrayBuffer` and the
+  worker rejects. `export/mcap-reentry` (`src/mcapReentry.ts`) records that case.
 
 The port's `asrs-cli decode <file>` must print the same dump and `asrs-cli export <file> --options
 <json>` the same bytes, with the same skip rules, so `cargo xtask parity decode` and `export` can
@@ -1223,6 +1225,28 @@ keys the open popup takes. Its vector is generated and content-checked on Linux 
 `menus/electron-linux` (`src/genMenusHost.ts`) is `genMenus electron` on the platform it runs on,
 for Electron's role defaults there, and is likewise generated on Linux x86_64 only.
 
+
+## Spin button vectors
+
+`form/spin-buttons` (`src/spinButtons.ts`, with `src/spinButtonsMain.ts` as its Electron main
+process) is trusted mouse input, through the DevTools protocol, to the spin buttons of a number
+input in an offscreen page that emulates focus. A step is `{"name", "markup", "ops"}`; the ops and
+the records are described in `spinButtonsMain.ts`. The delays of a held button are rounded to what
+the timers are set to, and a step has no values from its hold on, so a run is reproducible. The
+delays differ by platform (macOS reads `NSScrollerButtonDelay` and `NSScrollerButtonPeriod`). The
+entry's generator hash also covers `spinButtonsMain` (`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
+
+## Tooltip recordings
+
+`cargo xtask app tooltips` runs scenarios of `parity/scenarios` with `appMain --tooltips` on macOS.
+`tools/tooltips.m` is loaded into Electron and replaces `-[ToolTipBaseView setToolTipAtMousePoint:]`,
+where Chromium hands AppKit the text, with one that writes it down; it also has every window say it
+is the key one, without which Chromium hands over nothing, since runs take no focus. At each
+capture the driver moves the pointer (`sendInputEvent`) to the middle and the corner of every
+titled element and out of the window, and reads the title `document.elementFromPoint` finds on a
+grid. `parity/tooltips/<scenario>.json` keeps the captures that differ from those before them;
+`crates/asrs-app/tests/tooltips.rs` replays them.
+
 ### Range pointer vectors
 
 `form/range-pointer` and `form/range-pointer-2x` (`src/genRangePointer.ts`, with
@@ -1233,6 +1257,24 @@ properties are assigned, and each op runs: `["press" | "move" | "release", x]` i
 slider's left edge and `["key", name]` through the DevTools protocol, `["set", property, value]`,
 `["focus"]` and `["blur"]` as script. After the markup and after each op it writes `{"step", "op",
 "value", "focused", "events"}`. The specs list the main process under `inputs`.
+
+### Focus ring vectors
+
+`focus/rings` (`src/focusRings.ts`, with `src/focusRingsMain.ts` as its Electron main process)
+records which element of a page with upstream's `global.css` has the focus, matches `:focus` and
+`:focus-visible` and has the rule's outline, after each op of the fixture's `sequences` and of
+seeded random ones: keys with and without modifiers, presses of each mouse button, pointer moves,
+`focus()` and `blur()`, in an active and an inactive window (`["active", bool]`, through
+`Emulation.setFocusEmulationEnabled`). Input is `sendInputEvent`'s: the DevTools protocol's
+focuses the page. The window is never shown, and on Linux the run uses the headless Ozone platform,
+so no display is needed. Presses on the select and keys that open its popup are left out.
+
+`focus/fields` is the same entry with `hub.css` and the fixture's `styles`, computed values to
+record: the backgrounds of focused fields, which window captures mask.
+
+`crates/asrs-ui/tests/focus_rings.rs` and `focus_fields.rs` replay them. Each is generated on macOS
+and on Linux x86_64; on the latter with `cargo xtask oracle gen` in a checkout there. Windows
+has no records (#379): the port applies the rule that the two recorded platforms share.
 
 ### Text selection vectors
 
@@ -1293,7 +1335,13 @@ lifecycle needs:
   workers and `exportWorker.js` both run this way.
 - Main's `historical-start`: the file named in the fixture (relative to it, and listed in
   `inputs` under a spec) is read, and `historical-data` arrives as a zero-delay page timeout.
-- Live sources and the NT4 publisher are not connected; fixtures only reach their refusals.
+- Live sources and the NT4 publisher, when the fixture has `live`: a live session (see "Live
+  sessions") without client steps, whose mock server answers the page's WebSockets and requests
+  and main's RLOG socket (`src/live/rlogMain.ts`) on the page's clock. `src/live/pageLoop.ts`
+  runs the server, the deliveries and the timers the page sets from then on under Blink's rules,
+  one task per firing of one page timer, so every task has the page's microtask drain after it.
+  The network's trace lines are written among the session's records. Unhandled rejections are
+  not, as in `liveSession`.
 
 Besides the `dom` records, a session writes `{"worker", "script"}`, `{"post", "type", "files" |
 "key"}` and `{"terminate"}` for worker traffic, `{"console": "warn", "text"}` for the
@@ -1306,7 +1354,8 @@ through `asrs_hub::hub::HubModel` with the same scheduling and compares every re
 
 A `lifecycle-*` fixture may also watch the loading glow: its first capture installs a
 `MutationObserver` on the document element's style, and `window.__glow.splice(0)` reads every
-value the glow took since the last read, one per page task.
+value the glow took since the last read, one per page task. `window.__titles` is the same for
+the title.
 
 ## Log routing and the export flow
 
@@ -1389,7 +1438,7 @@ alert, an alert or progress text that starts so, or that much of its progress ba
 `{"copy": name}` (the Edit menu's Copy, as `webContents.copy()`, and what that leaves on an emptied
 clipboard, written to `files/clipboard/<name>.txt`),
 `{"focus": boolean}` (whether the window's page counts as active and focused, through
-`Emulation.setFocusEmulationEnabled`; false until then),
+`Emulation.setFocusEmulationEnabled`; false until then; windows opened later need their own),
 `{"wait": ms}`, `{"idle": true}` and
 `{"capture": name, "probes": [selectors], "masks": [selectors]}`.
 

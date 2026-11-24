@@ -1,0 +1,191 @@
+{
+  "about": "Focus styling (#355) in the active hub: the statistics tab's number inputs take no ring",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 6,
+              "title": "Stats",
+              "controller": {
+                "sources": [],
+                "timeRange": "full",
+                "rangeMin": 0,
+                "rangeMax": 10,
+                "stepSize": 1
+              },
+              "controllerUUID": "statistics0000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 156
+    },
+    {
+      "mouse": "move",
+      "x": 320,
+      "y": 380
+    },
+    {
+      "mouse": "move",
+      "x": 498,
+      "y": 557
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 560
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 560
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 430
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 242
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 242
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 246
+    },
+    {
+      "mouse": "move",
+      "x": 320,
+      "y": 380
+    },
+    {
+      "mouse": "move",
+      "x": 498,
+      "y": 557
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 560
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 560
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 950,
+      "y": 550
+    },
+    {
+      "mouse": "down",
+      "x": 950,
+      "y": 550
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "input-pressed",
+      "probes": [
+        "select.time-range",
+        "input.range-min"
+      ]
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "input-key",
+      "probes": [
+        "select.time-range",
+        "input.range-min"
+      ]
+    },
+    {
+      "focus": false
+    },
+    {
+      "wait": 50
+    },
+    {
+      "capture": "inactive",
+      "probes": [
+        "select.time-range",
+        "input.range-min"
+      ]
+    }
+  ]
+}

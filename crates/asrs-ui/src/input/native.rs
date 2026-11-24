@@ -16,7 +16,18 @@ use crate::input::style::{
 /// `PaintTextField`: a white rounded rect, radius 2 zoomed px, in a `#767676` stroke one
 /// zoomed pixel wide, both inset by half the stroke. Disabled, the fill is a translucent white
 /// over a lightening layer and the stroke is translucent.
-pub fn paint_text_field(bounds: Bounds<Pixels>, disabled: bool, window: &mut Window, cx: &mut App) {
+pub fn paint_text_field(
+    bounds: Bounds<Pixels>,
+    disabled: bool,
+    pointer: PointerState,
+    window: &mut Window,
+    cx: &mut App,
+) {
+    let border_color = match pointer {
+        PointerState::Normal => NATIVE_BORDER,
+        PointerState::Hovered => HOVERED_BORDER,
+        PointerState::Pressed => PRESSED_BORDER,
+    };
     let scale = window.scale_factor();
     let (w, h) = skia::device_size(bounds, scale);
     let stroke = f64::from(native_stroke(scale));
@@ -50,7 +61,7 @@ pub fn paint_text_field(bounds: Bounds<Pixels>, disabled: bool, window: &mut Win
         let paint = format!(
             "{} {} stroke-width=\"{stroke}\"",
             skia::paint_attrs("fill", 0xffffffff),
-            skia::paint_attrs("stroke", NATIVE_BORDER)
+            skia::paint_attrs("stroke", border_color)
         );
         let body = skia::rect(
             i,
@@ -62,7 +73,8 @@ pub fn paint_text_field(bounds: Bounds<Pixels>, disabled: bool, window: &mut Win
         );
         skia::svg(w, h, 1.0, &body)
     };
-    skia::paint(("text-field", w, h, disabled), bounds, draw, window, cx);
+    let key = ("text-field", w, h, disabled, pointer);
+    skia::paint(key, bounds, draw, window, cx);
 }
 
 /// What the pointer does to a control, which the theme's colours follow.

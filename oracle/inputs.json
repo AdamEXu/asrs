@@ -7,6 +7,7 @@
     "src/app/patches.ts",
     "src/app/scenario.ts",
     "src/app/tap.ts",
+    "src/app/tooltips.ts",
     "src/appMain.ts",
     "src/canvas/png.ts",
     "src/environment.ts"
@@ -169,6 +170,15 @@
     "src/logRun.ts",
     "src/registry.ts",
     "src/shims.ts"
+  ],
+  "focusRings": [
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/focusRings.ts",
+    "src/shims.ts"
+  ],
+  "focusRingsMain": [
+    "src/focusRingsMain.ts"
   ],
   "genAssetDownload": [
     "src/environment.ts",
@@ -602,6 +612,12 @@
     "src/genThree.ts",
     "src/shims.ts"
   ],
+  "genTimeZoneRules": [
+    "src/environment.ts",
+    "src/genTimeZoneRules.ts",
+    "src/shims.ts",
+    "src/timeZoneNames.json"
+  ],
   "genTimer": [
     "src/cve1.ts",
     "src/environment.ts",
@@ -741,6 +757,15 @@
     "src/environment.ts",
     "src/historical/timers.ts",
     "src/hubSession.ts",
+    "src/live/loop.ts",
+    "src/live/msgpack.ts",
+    "src/live/net.ts",
+    "src/live/nt4Server.ts",
+    "src/live/pageLoop.ts",
+    "src/live/random.ts",
+    "src/live/rlogMain.ts",
+    "src/live/server.ts",
+    "src/live/simpleServers.ts",
     "src/shims.ts"
   ],
   "lazyHelpers/field3dFieldsRun": [
@@ -805,6 +830,11 @@
     "src/logRun.ts",
     "src/logScript.ts"
   ],
+  "mcapReentry": [
+    "src/environment.ts",
+    "src/mcapReentry.ts",
+    "src/shims.ts"
+  ],
   "protoRenderer": [
     "src/corpus/bytes.ts",
     "src/corpus/corpus.ts",
@@ -830,6 +860,13 @@
     "src/registry.ts",
     "src/shims.ts"
   ],
+  "rlogCycles": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rlog.ts",
+    "src/environment.ts",
+    "src/rlogCycles.ts",
+    "src/shims.ts"
+  ],
   "robotServer": [
     "src/environment.ts",
     "src/robotServer.ts"
@@ -851,5 +888,13 @@
   "shims": [
     "src/environment.ts",
     "src/shims.ts"
+  ],
+  "spinButtons": [
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/spinButtons.ts"
+  ],
+  "spinButtonsMain": [
+    "src/spinButtonsMain.ts"
   ]
 }

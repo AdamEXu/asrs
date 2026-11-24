@@ -22,6 +22,7 @@ asrs-field3d = { path = "../asrs-field3d" }
 asrs-formats = { path = "../asrs-formats" }
 asrs-hub = { path = "../asrs-hub" }
 asrs-js = { path = "../asrs-js" }
+asrs-live = { path = "../asrs-live" }
 asrs-log = { path = "../asrs-log" }
 asrs-model = { path = "../asrs-model" }
 asrs-ocr = { path = "../asrs-ocr" }
@@ -29,6 +30,7 @@ asrs-services = { path = "../asrs-services" }
 asrs-tabs = { path = "../asrs-tabs" }
 asrs-ui.workspace = true
 async-channel = "=2.5.0"
+fs4 = { version = "=1.1.0", default-features = false }
 png = "=0.18.1"
 rustls = { version = "=0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
 sha2 = "=0.10.9"
@@ -36,9 +38,16 @@ ureq = { version = "=3.5.2", default-features = false, features = ["gzip", "plat
 zune-core = "=0.5.3"
 zune-jpeg = "=0.5.15"
 
+[target.'cfg(windows)'.build-dependencies]
+winresource = { version = "=0.1.34", default-features = false }
+
 [dev-dependencies]
 asrs-parity = { path = "../asrs-parity" }
+futures-util = { version = "=0.3.34", default-features = false, features = ["sink", "std"] }
 image = { version = "=0.25.10", default-features = false }
+socket2 = "=0.6.5"
+tokio = { version = "=1.54.1", default-features = false, features = ["io-util", "macros", "net", "rt-multi-thread", "sync", "time"] }
+tokio-tungstenite = { version = "=0.30.0", default-features = false, features = ["handshake"] }
 
 [lints]
 workspace = true
@@ -95,6 +104,10 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "asset_download"
+required-features = ["parity"]
+
+[[test]]
 name = "bundled_assets"
 required-features = ["parity"]
 
@@ -104,7 +117,35 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "spin_buttons"
+harness = false
+required-features = ["parity"]
+
+[[test]]
+name = "tooltip_hosts"
+harness = false
+required-features = ["parity"]
+
+[[test]]
+name = "tooltips"
+harness = false
+required-features = ["parity"]
+
+[[test]]
 name = "parity_scenario"
+harness = false
+required-features = ["parity"]
+
+[[test]]
+name = "hidden_hub"
+required-features = ["parity"]
+
+[[test]]
+name = "live_sources"
+required-features = ["parity"]
+
+[[test]]
+name = "live_tuning"
 harness = false
 required-features = ["parity"]
 
@@ -115,6 +156,15 @@ required-features = ["parity"]
 [[test]]
 name = "app_menu_mac"
 harness = false
+
+[[test]]
+name = "menu_roles_mac"
+harness = false
+required-features = ["parity"]
+
+[[test]]
+name = "edit_roles"
+required-features = ["parity"]
 
 [[test]]
 name = "source_list_view"

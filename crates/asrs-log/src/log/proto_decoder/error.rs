@@ -41,6 +41,10 @@ pub enum ProtoError {
     InvalidNestedObject,
     /// A call on a value that is not a function, e.g. `extendedType.get is not a function`.
     NotAFunction(&'static str),
+    /// `undefined[key] = value`.
+    SetOnUndefined(JsString),
+    /// `Object.defineProperty` on a primitive.
+    DefineOnPrimitive,
     ReadUndefined(&'static str),
     ReadNull(&'static str),
     CannotConvertToObject,
@@ -83,6 +87,8 @@ impl ProtoError {
             | NegativeFieldId
             | InvalidNestedObject
             | NotAFunction(_)
+            | SetOnUndefined(_)
+            | DefineOnPrimitive
             | ReadUndefined(_)
             | ReadNull(_)
             | CannotConvertToObject
@@ -128,6 +134,12 @@ impl ProtoError {
             NegativeFieldId => cat(&[S("id must be a non-negative integer")]),
             InvalidNestedObject => cat(&[S("object must be a valid nested object")]),
             NotAFunction(expr) => cat(&[S(expr), S(" is not a function")]),
+            SetOnUndefined(key) => cat(&[
+                S("Cannot set properties of undefined (setting '"),
+                J(key),
+                S("')"),
+            ]),
+            DefineOnPrimitive => cat(&[S("Object.defineProperty called on non-object")]),
             ReadUndefined(prop) => cat(&[
                 S("Cannot read properties of undefined (reading '"),
                 S(prop),

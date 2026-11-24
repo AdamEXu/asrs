@@ -10,7 +10,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use asrs_canvas::pixels::transform_bilinear;
-use asrs_canvas::{Canvas2d, Pixmap, Raster, RasterState};
+use asrs_canvas::{Canvas2d, Pixmap, Raster, RasterState, ShadeCache};
 use asrs_hub::hub::{HubModel, HubPage};
 use asrs_hub::tabs::TabRef;
 use asrs_js::math;
@@ -23,18 +23,20 @@ use asrs_tabs::field_2d::{
 use asrs_tabs::form::{self, OptGroup, SelectOption};
 use asrs_ui::canvas_view::FramePresenter;
 use asrs_ui::canvas_view::geometry::{client_size, mouse_client};
+use asrs_ui::focus::{self, FocusRing, LINK_OUTLINE_OFFSET};
 use asrs_ui::gpui::{
-    AnyElement, AppContext, Context, Entity, InteractiveElement, IntoElement, MouseButton,
-    MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, StatefulInteractiveElement, Styled,
-    Subscription, Window, canvas, div, px, rgb,
+    AnyElement, App, AppContext, ClickEvent, Context, Entity, InteractiveElement, IntoElement,
+    KeyboardButton, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent,
+    StatefulInteractiveElement, Styled, Subscription, Window, canvas, div, px, rgb,
 };
 use asrs_ui::icon::IconSource;
 use asrs_ui::input::style::CONTROL_FONT;
-use asrs_ui::input::{Segment, SegmentedControl, Select, SelectEvent};
+use asrs_ui::input::{Segment, SegmentedControl, Select, SelectEvent, select_geometry};
 use asrs_ui::parity::probed;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
-use asrs_ui::theme::{Appearance, FONT_FAMILY};
+use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, FONT_FAMILY};
+use asrs_ui::tooltip::{titled, untitled};
 
 use super::field_image::{self, FieldImage};
 use super::frame::{FrameHost, HubFrame, wheel_of};
@@ -58,6 +60,8 @@ const SELECT_HEIGHT: f64 = 24.0;
 const SELECT_CHROME: f64 = 4.0 + 1.0 + 15.0 + 2.0;
 const SOURCE_PADDING: f64 = 5.0;
 const ORIENTATION_ICONS: [&str; 2] = ["rotateleft.svg", "rotateright.svg"];
+const ORIENTATION_TITLES: &[&str] = &["Rotate field counter-clockwise", "Rotate field clockwise"];
+const SIZE_TITLES: &[&str] = &["Large robot size", "Medium robot size", "Small robot size"];
 const SIZE_LABELS: [[&str; 3]; 2] = [["30", "27", "24"], ["18", "16", "14"]];
 
 fn lu(v: f64) -> f64 {
@@ -231,6 +235,7 @@ struct SelectView {
 struct TabView {
     sensor: ScrollSensor,
     raster: RasterState,
+    shades: ShadeCache,
     bitmap: Option<Arc<Pixmap>>,
     style: Option<CanvasStyle>,
     presenter: FramePresenter,
@@ -374,12 +379,16 @@ fn rasterize(
     frame: &Canvas2d,
     images: &[(String, Arc<Pixmap>)],
     state: &mut RasterState,
+    shades: &mut ShadeCache,
 ) -> Option<Pixmap> {
     let Some(mut raster) = Raster::new(frame.width, frame.height) else {
         *state = RasterState::default();
+        *shades = ShadeCache::default();
         return None;
     };
-    raster = raster.with_state(*state);
+    raster = raster
+        .with_state(*state)
+        .with_shades(std::mem::take(shades));
     for (id, pixmap) in images {
         if id == HEATMAP_IMAGE {
             raster.add_image(id, pixmap.clone());
@@ -389,6 +398,7 @@ fn rasterize(
     }
     raster.run(&frame.calls);
     *state = raster.state();
+    *shades = raster.take_shades();
     Some(raster.into_pixmap())
 }
 
@@ -519,7 +529,8 @@ impl<H: FrameHost> HubFrame<H> {
             if let Some(heatmap) = painted.heatmap {
                 images.push((HEATMAP_IMAGE.to_owned(), Arc::new(heatmap)));
             }
-            tab.bitmap = rasterize(&painted.frame, &images, &mut tab.raster).map(Arc::new);
+            let (raster, shades) = (&mut tab.raster, &mut tab.shades);
+            tab.bitmap = rasterize(&painted.frame, &images, raster, shades).map(Arc::new);
             tab.style = painted.style;
             tab.presented = None;
         }
@@ -740,21 +751,34 @@ impl<H: FrameHost> HubFrame<H> {
         }
         panel = panel.child(probed(
             "select.field-select",
-            local(layout.select).child(select),
+            titled("Select field image", local(layout.select).child(select)),
         ));
         if let (Some([lx, ly]), Some(width)) = (layout.source, source_width) {
             let (_, h) = text::measure(cx, &source_style(), "Source", scale);
             let entity = entity.clone();
-            let r = [
-                lx + SOURCE_PADDING,
-                ly + (SELECT_HEIGHT - h) / 2.0,
-                width,
-                h,
+            let focus = FocusRing::of(("field-source-focus", key), None, window, cx);
+            let (ascent, descent) = text::font_metrics(cx, &source_style(), scale);
+            let content = f64::from((ascent + descent) / scale);
+            // On the select's baseline.
+            let top = ly + f64::from(select_baseline(scale, cx) - ascent / scale);
+            let r = [lx + SOURCE_PADDING, top - (h - content) / 2.0, width, h];
+            let padded = [
+                r[0] - SOURCE_PADDING,
+                top - SOURCE_PADDING,
+                r[2] + 2.0 * SOURCE_PADDING,
+                content + 2.0 * SOURCE_PADDING,
             ];
-            panel = panel.child(
+            panel = panel.child(titled("Open field image source URL", local(padded)));
+            panel = panel.child(untitled(
                 local(r)
                     .id("field-source")
-                    .on_click(move |_, _, cx| {
+                    .track_focus(&focus.handle)
+                    .on_click(move |event, _, cx| {
+                        // Space clicks a button and scrolls from a link.
+                        if matches!(event, ClickEvent::Keyboard(e) if e.button == KeyboardButton::Space)
+                        {
+                            return;
+                        }
                         let _ = entity.update(cx, |frame, cx| {
                             frame.field_2d_settings(key, SettingsInput::Source, cx)
                         });
@@ -768,7 +792,19 @@ impl<H: FrameHost> HubFrame<H> {
                                 snap_remainder(r[1] as f32, scale),
                             ),
                     ),
-            );
+            ));
+            if focus.visible {
+                let around = SOURCE_PADDING + LINK_OUTLINE_OFFSET;
+                let outlined = [
+                    r[0] - around,
+                    top - around,
+                    width + 2.0 * around,
+                    content + 2.0 * around,
+                ];
+                let radius = px(FOCUS_RING_RADIUS + LINK_OUTLINE_OFFSET as f32 + FOCUS_RING_WIDTH);
+                panel =
+                    panel.child(local(outlined).child(focus::outline(appearance).rounded(radius)));
+            }
         }
         let orientation = ORIENTATION_ICONS
             .iter()
@@ -782,19 +818,28 @@ impl<H: FrameHost> HubFrame<H> {
             (
                 "f2d-orientation",
                 orientation,
+                ORIENTATION_TITLES,
                 None,
                 layout.orientation,
                 orientation_input,
             ),
-            ("f2d-size", size, Some(state.size), layout.size, size_input),
+            (
+                "f2d-size",
+                size,
+                SIZE_TITLES,
+                Some(state.size),
+                layout.size,
+                size_input,
+            ),
         ];
-        for (id, segments, selected, r, input) in switchers {
+        for (id, segments, titles, selected, r, input) in switchers {
             let snapped = |v: f64| math::round(v * f64::from(scale)) / f64::from(scale);
             let (x, y) = (snapped(r[0]), snapped(r[1]));
             let entity = entity.clone();
             panel = panel.child(
                 local([x, y, r[2], r[3]]).child(
                     SegmentedControl::new((id, key), segments)
+                        .titles(titles)
                         .subpixel((r[0] - x) as f32)
                         .selected(selected)
                         .size(r[2] as f32, r[3] as f32)
@@ -923,6 +968,15 @@ impl<H: FrameHost> HubFrame<H> {
         }
         cx.notify();
     }
+}
+
+/// The field select's baseline below its top, in CSS px.
+fn select_baseline(scale: f32, cx: &mut App) -> f32 {
+    let (ascent, descent) = text::font_metrics(cx, &TextStyle::new(CONTROL_FONT), scale);
+    let height = SELECT_HEIGHT as f32 * scale;
+    let snapped = (0, height.round() as i32);
+    let [_, top, _, _] = select_geometry(0.0, height, snapped, ascent + descent, scale).text;
+    (top + ascent) / scale
 }
 
 #[cfg(test)]

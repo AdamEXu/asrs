@@ -24,7 +24,8 @@ env:
 jobs:
   # Job-level `if` cannot read the matrix, so the matrix itself is chosen here: while the
   # repository is private only ubuntu-latest runs, since macOS and Windows minutes are billed
-  # at a multiple.
+  # at a multiple. Linux packages are built on Ubuntu 22.04, whose glibc is then the oldest they
+  # run on.
   matrix:
     runs-on: ubuntu-latest
     outputs:
@@ -35,11 +36,11 @@ jobs:
           PRIVATE: ${{ github.event.repository.private }}
         run: |
           all='[
-            {"os":"ubuntu-latest","target":"x86_64-unknown-linux-gnu"},
-            {"os":"ubuntu-24.04-arm","target":"aarch64-unknown-linux-gnu"},
-            {"os":"macos-latest","target":"aarch64-apple-darwin"},
-            {"os":"windows-latest","target":"x86_64-pc-windows-msvc"},
-            {"os":"windows-11-arm","target":"aarch64-pc-windows-msvc"}
+            {"os":"ubuntu-latest","package_os":"ubuntu-22.04","target":"x86_64-unknown-linux-gnu"},
+            {"os":"ubuntu-24.04-arm","package_os":"ubuntu-22.04-arm","target":"aarch64-unknown-linux-gnu"},
+            {"os":"macos-latest","package_os":"macos-latest","target":"aarch64-apple-darwin"},
+            {"os":"windows-latest","package_os":"windows-latest","target":"x86_64-pc-windows-msvc"},
+            {"os":"windows-11-arm","package_os":"windows-11-arm","target":"aarch64-pc-windows-msvc"}
           ]'
           if [ "$PRIVATE" = "false" ]; then
             filter='.'
@@ -111,11 +112,16 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: ${{ matrix.target }}
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-about@0.9.3
       - name: Build
         run: cargo build --workspace --all-targets --locked
+      # CI skips the oracle install, so this puts upstream's locked protobufjs where the
+      # descriptor table generator looks for it.
+      - name: Install protobufjs for the descriptor table check
+        run: |
+          rm -rf target/oracle/upstream
+          node oracle/tools/pinnedInstall.cjs reference/AdvantageScope/package-lock.json target/oracle/upstream protobufjs
+          cd target/oracle/upstream
+          npm ci --ignore-scripts --no-audit --no-fund
       - name: Layout, vendored gpui crates and generated tables
         run: |
           cargo xtask layout
@@ -124,6 +130,7 @@ jobs:
           cargo xtask gpui features
           cargo xtask tables units --check
           cargo xtask tables spark --check
+          cargo xtask tables proto-descriptor --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Clippy (parity features)
@@ -138,6 +145,48 @@ jobs:
         run: >-
           cargo test -p asrs-ui -p asrs-app --locked
           --features asrs-ui/parity,asrs-app/parity --no-fail-fast
+
+  package:
+    needs: matrix
+    name: package ${{ matrix.target }}
+    runs-on: ${{ matrix.package_os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Disable CRLF conversion
+        if: runner.os == 'Windows'
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v4
+      - name: Check out upstream AdvantageScope
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.UPSTREAM_REPOSITORY }}
+          ref: ${{ env.UPSTREAM_COMMIT }}
+          path: reference/AdvantageScope
+          persist-credentials: false
+      - name: Install GPUI system packages and packaging tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            pkg-config libx11-dev libx11-xcb-dev libxcb1-dev libxkbcommon-dev \
+            libxkbcommon-x11-dev libwayland-dev libfontconfig-dev libfreetype-dev \
+            libvulkan-dev mesa-vulkan-drivers libgtk-3-dev libwebkit2gtk-4.1-dev \
+            squashfs-tools xvfb xauth x11-utils desktop-file-utils libglib2.0-bin \
+            shared-mime-info xdg-utils fonts-dejavu-core
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: package-${{ matrix.target }}
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about@0.9.3
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -145,12 +194,24 @@ jobs:
         run: cargo xtask docs
       - name: Bundle
         run: cargo xtask bundle
+      - name: Smoke test
+        run: ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}cargo xtask smoke
+      # Artifacts of a public repository are public, and parts of the documentation may not be
+      # published until https://github.com/AdamEXu/asrs/issues/310 is decided. The AppImage is
+      # left out for its runtime, which contains LGPL code that comes without its source.
+      - name: Bundle without the documentation
+        run: cargo xtask bundle --no-docs
+      - name: Smoke test without the documentation
+        run: ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}cargo xtask smoke --no-docs
       - uses: actions/upload-artifact@v4
         with:
           name: asrs-${{ matrix.target }}
-          # Artifacts of a public repository are public, and parts of the documentation may not
-          # be published until https://github.com/AdamEXu/asrs/issues/310 is decided.
           path: |
-            target/bundle/host
-            !target/bundle/host/docs
+            target/bundle/host-no-docs/*.dmg
+            target/bundle/host-no-docs/*.zip
+            target/bundle/host-no-docs/*-setup.exe
+            target/bundle/host-no-docs/*.tar.gz
           if-no-files-found: error
+      - name: Test-support stays out of release builds
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: cargo xtask gpui release-audit

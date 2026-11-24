@@ -509,4 +509,17 @@ export function protoMatrix(corpus: Corpus) {
       c.spec
     );
   }
+  {
+    const id = "payload/proto/dup-descriptor";
+    const c = new ProtoCase();
+    const anon = fileDescriptor({ messageType: [{ name: "Anon", field: [f("x", 1, T.INT32)] }] });
+    c.descriptor("anon", anon);
+    c.descriptor("anon", anon);
+    c.data("/Proto/Anon", "Anon", pb().vint(1, 3));
+    corpus.spec(
+      id,
+      "a nameless descriptor recorded twice: the second add throws in the hub's fromSerialized",
+      c.spec
+    );
+  }
 }

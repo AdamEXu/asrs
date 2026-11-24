@@ -6,6 +6,7 @@
 use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::hash::{DefaultHasher, Hash, Hasher};
 use std::rc::Rc;
 
 use asrs_canvas::text::TextBackend;
@@ -26,8 +27,8 @@ use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Context, Div, Entity, Focusable, InteractiveElement, IntoElement,
-    MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, Styled, Subscription,
-    Window, div, px, rgb,
+    MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, SharedString, Styled,
+    Subscription, Window, div, px, rgb,
 };
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, TextField};
 use asrs_ui::parity::probed;
@@ -35,6 +36,7 @@ use asrs_ui::selection::geometry::{Block, Line, Piece};
 use asrs_ui::selection::{Caret, Document, Hit, Place, Position};
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY};
+use asrs_ui::tooltip::{titled, untitled};
 
 use super::cell_text::following;
 use super::frame::{FrameHost, HubFrame, wheel_of};
@@ -807,6 +809,12 @@ impl<H: FrameHost> HubFrame<H> {
             ));
         }
         let blurred = !self.host().hub(cx).is_focused();
+        // `updateFields` replaces every header cell, which drops the focus of one's button.
+        let mut headers = DefaultHasher::new();
+        for field in &view.headers {
+            (&field.text.to_string_lossy(), field.available).hash(&mut headers);
+        }
+        let headers = headers.finish();
         let mut header = div().absolute().inset_0();
         for (index, field) in view.headers.iter().enumerate() {
             let column = index + 1;
@@ -836,7 +844,8 @@ impl<H: FrameHost> HubFrame<H> {
                 .absolute()
                 .inset_0()
                 .child(header_cell(grid, cell, !last, border, &header_palette))
-                .child(key_box);
+                .child(titled(field.title.to_string_lossy(), grid.place(cell)))
+                .child(untitled(key_box));
             if !field.available {
                 let key = field.text.to_string_lossy();
                 let style = key_style("left");
@@ -856,7 +865,9 @@ impl<H: FrameHost> HubFrame<H> {
                     left + w - cell_border - CLOSE_RIGHT - BUTTON,
                     y + BUTTON_TOP,
                 ];
-                let button = IconButton::new(("table-close", index), symbol("close.svg"))
+                let id = format!("table-close-{headers:x}-{index}");
+                let button = IconButton::new(SharedString::from(id), symbol("close.svg"))
+                    .title("")
                     .blurred(blurred)
                     .on_click(cx.listener(move |frame, _, _, cx| frame.table_close(index, cx)));
                 th = th.child(grid.button(button, at));
@@ -872,6 +883,7 @@ impl<H: FrameHost> HubFrame<H> {
         let jump_at = [first[0] + jx, y + jy, jw, jh];
         let button = IconButton::new("table-jump", symbol("verticalalignbottom.svg"))
             .blurred(blurred)
+            .title("Go to timestamp")
             .on_click(cx.listener(|frame, _, _, cx| frame.table_jump(cx)));
         let button_at = [first[0] + JUMP_BUTTON_LEFT, y + BUTTON_TOP];
         header = header
@@ -882,14 +894,15 @@ impl<H: FrameHost> HubFrame<H> {
                 border,
                 &header_palette,
             ))
-            .child(
+            .child(titled(
+                "Go to timestamp",
                 grid.place(jump_at)
                     .on_mouse_down_out({
                         let jump = jump.clone();
                         move |_, window, cx| jump.update(cx, |field, cx| field.blur(window, cx))
                     })
                     .child(jump),
-            )
+            ))
             .child(grid.button(button, button_at));
         probes = probes
             .child(probed("input.data-table-jump-input", grid.place(jump_at)))

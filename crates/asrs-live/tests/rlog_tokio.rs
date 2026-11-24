@@ -4,10 +4,12 @@
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use asrs_live::LiveRuntime;
 use asrs_live::rlog::{RlogNetEvent, RlogTransport, TcpId, TokioRlogTransport};
+use asrs_live::{LiveRuntime, NetOptions};
 
 fn collect(
     net: &mut TokioRlogTransport,
@@ -54,7 +56,7 @@ fn follows_node_socket_rules_over_real_sockets() {
         (held, rest)
     });
 
-    let mut net = TokioRlogTransport::new(runtime.handle().clone());
+    let mut net = TokioRlogTransport::new(NetOptions::new(runtime.handle().clone()));
     let id = net.tcp_connect("127.0.0.1", f64::from(port));
     net.tcp_write(id, &[6, 3, 2, 8]);
     net.tcp_set_timeout(id, 200.0);
@@ -93,7 +95,7 @@ fn an_empty_host_falls_back_across_families_like_node() {
     let listener = TcpListener::bind("127.0.0.1:0").unwrap();
     let port = listener.local_addr().unwrap().port();
     let server = std::thread::spawn(move || listener.accept().map(|_| ()));
-    let mut net = TokioRlogTransport::new(runtime.handle().clone());
+    let mut net = TokioRlogTransport::new(NetOptions::new(runtime.handle().clone()));
     let id = net.tcp_connect("", f64::from(port));
     net.tcp_set_timeout(id, 1000.0);
     let mut events = Vec::new();
@@ -110,7 +112,7 @@ fn a_refused_connection_reports_error_then_close() {
         .local_addr()
         .unwrap()
         .port();
-    let mut net = TokioRlogTransport::new(runtime.handle().clone());
+    let mut net = TokioRlogTransport::new(NetOptions::new(runtime.handle().clone()));
     let id = net.tcp_connect("127.0.0.1", f64::from(port));
     net.tcp_write(id, b"held");
     let mut events = Vec::new();
@@ -121,4 +123,59 @@ fn a_refused_connection_reports_error_then_close() {
         events,
         vec![RlogNetEvent::Error(id), RlogNetEvent::Close(id)]
     );
+}
+
+#[test]
+fn a_backlog_stops_reading_the_socket() {
+    const TOTAL: usize = 96 * 1024 * 1024;
+    let runtime = LiveRuntime::new().unwrap();
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let written = Arc::new(AtomicUsize::new(0));
+    let count = written.clone();
+    let server = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let chunk = vec![7u8; 1024 * 1024];
+        for _ in 0..TOTAL / chunk.len() {
+            stream.write_all(&chunk).unwrap();
+            count.fetch_add(chunk.len(), Ordering::SeqCst);
+        }
+    });
+    let mut net = TokioRlogTransport::new(NetOptions::new(runtime.handle().clone()));
+    let id = net.tcp_connect("127.0.0.1", f64::from(port));
+    let start = Instant::now();
+    let mut last = 0;
+    let mut still = 0;
+    while still < 10 {
+        assert!(start.elapsed() < Duration::from_secs(60));
+        std::thread::sleep(Duration::from_millis(50));
+        let now = written.load(Ordering::SeqCst);
+        still = if now == last && now > 0 { still + 1 } else { 0 };
+        last = now;
+    }
+    assert!(
+        last < TOTAL / 2,
+        "{last} bytes were read with no one to take them"
+    );
+
+    let mut received = 0;
+    while received < TOTAL {
+        assert!(
+            start.elapsed() < Duration::from_secs(60),
+            "{received} received"
+        );
+        match net.next_event() {
+            Some(RlogNetEvent::Data(_, bytes)) => received += bytes.len(),
+            Some(_) => {}
+            None => std::thread::sleep(Duration::from_millis(1)),
+        }
+    }
+    server.join().unwrap();
+    net.tcp_destroy(id);
+    drop(net);
+    let start = Instant::now();
+    while runtime.alive_tasks() > 0 {
+        assert!(start.elapsed() < Duration::from_secs(10));
+        std::thread::sleep(Duration::from_millis(1));
+    }
 }

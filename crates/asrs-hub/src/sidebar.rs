@@ -13,9 +13,12 @@ use asrs_js::math::{abs, floor, max2, min2, rem, round};
 use asrs_js::number;
 use asrs_js::sort::{array_sort, code_unit_cmp};
 use asrs_js::string::JsString;
+use asrs_js::time::Clock;
 use asrs_js::value::{JsObject, JsValue};
+use asrs_live::{Thrown, TunedValue};
 use asrs_log::log::log_util::{TYPE_KEY, get_value_at};
-use asrs_log::log::{Log, LogFieldTree, LoggableType, search_fields};
+use asrs_log::log::{Log, LogFieldTree, LoggableType, StructuredType, search_fields};
+use asrs_log::realm::JsRealm;
 use asrs_log::util::arrays_equal;
 use asrs_model::hub_state::SidebarState;
 use asrs_model::selection::{Selection, SelectionMode};
@@ -55,7 +58,7 @@ pub const OPEN_LOG_TITLE: &str = "Open a log or connect to view data";
 
 const TYPE_WARNING_TEXT: &str = "Values with conflicting types have been written to this field. \
 Only values compatible with the initial type can be viewed and exported.";
-const TUNING_INTERVAL_MS: f64 = 250.0;
+pub const TUNING_INTERVAL_MS: f64 = 250.0;
 const HIGHLIGHT_TIMEOUT_MS: f64 = 3000.0;
 const HANDLE_DOUBLE_CLICK_MS: f64 = 400.0;
 const SCROLL_BLUR_THRESHOLD: f64 = 50.0;
@@ -248,10 +251,23 @@ impl SidebarGeometry for NoLayout {
 
 /// `window.tuner`.
 pub trait Tuner {
-    fn has_tunable_fields(&self) -> bool;
-    fn is_tunable(&self, key: &JsString) -> bool;
-    fn publish(&self, key: &JsString, value: &JsValue);
-    fn unpublish(&self, key: &JsString);
+    /// `log` is `window.log`.
+    fn has_tunable_fields(&self, log: &Log) -> bool;
+    fn is_tunable(&self, log: &Log, key: &JsString) -> bool;
+    fn publish(
+        &self,
+        window: &mut TunerWindow<'_>,
+        key: &JsString,
+        value: TunedValue,
+    ) -> Result<(), Thrown>;
+    fn unpublish(&self, window: &mut TunerWindow<'_>, key: &JsString) -> Result<(), Thrown>;
+}
+
+/// What publishing reads of `window`.
+pub struct TunerWindow<'a> {
+    pub log: &'a RefCell<Log>,
+    pub realm: &'a mut JsRealm,
+    pub clock: &'a dyn Clock,
 }
 
 /// The `window.*` services upstream `Sidebar` reads.
@@ -259,10 +275,49 @@ pub struct SidebarEnv<'a> {
     pub log: &'a RefCell<Log>,
     pub selection: &'a mut dyn Selection,
     pub tuner: Option<&'a dyn Tuner>,
+    pub realm: &'a mut JsRealm,
+    pub clock: &'a dyn Clock,
     pub dark_theme: bool,
     pub inner_height: f64,
     pub loading_fields: &'a HashSet<JsString>,
     pub geometry: &'a mut dyn SidebarGeometry,
+}
+
+impl SidebarEnv<'_> {
+    /// `window.tuner !== null && window.tuner.hasTunableFields()`.
+    pub fn has_tunable_fields(&self) -> bool {
+        self.tuner
+            .is_some_and(|t| t.has_tunable_fields(&self.log.borrow()))
+    }
+
+    fn is_tunable(&self, key: &JsString) -> bool {
+        self.tuner
+            .is_some_and(|t| t.is_tunable(&self.log.borrow(), key))
+    }
+
+    /// `window.tuner?.publish(key, value)`.
+    pub fn publish(&mut self, key: &JsString, value: TunedValue) -> Result<(), Thrown> {
+        match self.tuner {
+            Some(tuner) => tuner.publish(&mut self.tuner_window(), key, value),
+            None => Ok(()),
+        }
+    }
+
+    /// `window.tuner?.unpublish(key)`.
+    pub fn unpublish(&mut self, key: &JsString) -> Result<(), Thrown> {
+        match self.tuner {
+            Some(tuner) => tuner.unpublish(&mut self.tuner_window(), key),
+            None => Ok(()),
+        }
+    }
+
+    fn tuner_window(&mut self) -> TunerWindow<'_> {
+        TunerWindow {
+            log: self.log,
+            realm: self.realm,
+            clock: self.clock,
+        }
+    }
 }
 
 /// Whether the upstream listener or `refresh` threw part-way, leaving rows half built.
@@ -278,16 +333,9 @@ type Aborted = EventOutcome;
 type Attempt<T> = Result<T, Aborted>;
 
 #[derive(Clone, Debug)]
-struct Timer {
+struct HighlightTimeout {
     due: f64,
-    seq: u64,
-    kind: TimerKind,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum TimerKind {
-    TuningPublish,
-    ClearHighlight(u64),
+    node: u64,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -491,14 +539,13 @@ pub struct Sidebar {
     last_handle_click: f64,
     menu_active: Vec<bool>,
     main_messages: Vec<(JsString, JsValue)>,
-    timers: Vec<Timer>,
-    next_timer_seq: u64,
+    highlight_timeouts: Vec<HighlightTimeout>,
     generation: u64,
 }
 
 impl Sidebar {
-    pub fn new(now: f64, get_filenames: impl Fn() -> Vec<JsString> + 'static) -> Self {
-        let mut sidebar = Sidebar {
+    pub fn new(get_filenames: impl Fn() -> Vec<JsString> + 'static) -> Self {
+        Sidebar {
             get_filenames: Box::new(get_filenames),
             sidebar_handle_active: false,
             sidebar_width: DEFAULT_SIDEBAR_WIDTH,
@@ -529,67 +576,25 @@ impl Sidebar {
             last_handle_click: 0.0,
             menu_active: Vec::new(),
             main_messages: Vec::new(),
-            timers: Vec::new(),
-            next_timer_seq: 0,
+            highlight_timeouts: Vec::new(),
             generation: 0,
-        };
-        sidebar.schedule_interval(now, TUNING_INTERVAL_MS, TimerKind::TuningPublish);
-        sidebar
-    }
-
-    fn schedule_interval(&mut self, now: f64, interval: f64, kind: TimerKind) {
-        let seq = self.next_timer_seq;
-        self.next_timer_seq += 1;
-        self.timers.push(Timer {
-            due: now + interval,
-            seq,
-            kind,
-        });
-    }
-
-    fn schedule_timeout(&mut self, now: f64, delay: f64, kind: TimerKind) {
-        self.schedule_interval(now, delay, kind);
-    }
-
-    /// Earliest pending timer `due`, if any.
-    pub fn next_timer_due(&self) -> Option<f64> {
-        self.timers.iter().map(|t| t.due).reduce(min2)
-    }
-
-    /// Runs every timer due at `now`, in `(due, seq)` order like env.ts.
-    pub fn fire_timers(&mut self, now: f64, env: &mut SidebarEnv<'_>) {
-        loop {
-            let Some(pos) = self
-                .timers
-                .iter()
-                .enumerate()
-                .filter(|(_, t)| t.due <= now)
-                .min_by(|(_, a), (_, b)| {
-                    a.due
-                        .partial_cmp(&b.due)
-                        .unwrap_or(Ordering::Equal)
-                        .then(a.seq.cmp(&b.seq))
-                })
-                .map(|(i, _)| i)
-            else {
-                return;
-            };
-            let mut timer = self.timers.remove(pos);
-            match timer.kind {
-                TimerKind::TuningPublish => {
-                    self.tuning_publish_tick(env);
-                    timer.due += TUNING_INTERVAL_MS;
-                    timer.seq = self.next_timer_seq;
-                    self.next_timer_seq += 1;
-                    self.timers.push(timer);
-                }
-                TimerKind::ClearHighlight(id) => {
-                    if let Some(node) = self.nodes.iter_mut().find(|n| n.id == id) {
-                        node.highlighted = false;
-                    }
-                }
-            }
         }
+    }
+
+    pub fn next_timeout(&self) -> Option<f64> {
+        self.highlight_timeouts.iter().map(|t| t.due).reduce(min2)
+    }
+
+    /// Runs every highlight timeout due at `now`.
+    pub fn fire_timeouts(&mut self, now: f64) {
+        let nodes = &mut self.nodes;
+        self.highlight_timeouts.retain(|timeout| {
+            let due = timeout.due <= now;
+            if due && let Some(node) = nodes.iter_mut().find(|n| n.id == timeout.node) {
+                node.highlighted = false;
+            }
+            !due
+        });
     }
 
     fn send_main(&mut self, name: &str, data: JsValue) {
@@ -940,11 +945,10 @@ impl Sidebar {
         env.geometry.scroll_into_view_if_needed(self.row_ref(id));
         self.nodes[id].highlighted = true;
         let node_id = self.nodes[id].id;
-        self.schedule_timeout(
-            now,
-            HIGHLIGHT_TIMEOUT_MS,
-            TimerKind::ClearHighlight(node_id),
-        );
+        self.highlight_timeouts.push(HighlightTimeout {
+            due: now + HIGHLIGHT_TIMEOUT_MS,
+            node: node_id,
+        });
     }
 
     /// `expandForSearch` + `setExpanded` machinery.
@@ -1236,7 +1240,7 @@ impl Sidebar {
             let Some(full_key) = self.nodes[id].full_key.clone() else {
                 continue;
             };
-            let tunable = active && env.tuner.is_some_and(|t| t.is_tunable(&full_key));
+            let tunable = active && env.is_tunable(&full_key);
             match &mut self.nodes[id].value {
                 ValueState::Bool(state) => {
                     state.tunable = tunable;
@@ -1259,7 +1263,7 @@ impl Sidebar {
     }
 
     fn update_tuning_button(&mut self, env: &mut SidebarEnv<'_>) {
-        let tuner_available = env.tuner.is_some_and(|t| t.has_tunable_fields());
+        let tuner_available = env.has_tunable_fields();
         if self.tuning_button_hidden == tuner_available {
             self.tuning_button_hidden = !tuner_available;
             if !tuner_available {
@@ -1286,12 +1290,11 @@ impl Sidebar {
         let full_key = self.nodes[id].full_key.clone().unwrap();
         self.tuning_value_cache
             .insert(full_key.clone(), js(if value { "true" } else { "false" }));
-        if let Some(tuner) = env.tuner {
-            tuner.publish(&full_key, &JsValue::Bool(value));
+        if env.publish(&full_key, TunedValue::Boolean(value)).is_ok() {
+            env.log
+                .borrow_mut()
+                .put_boolean(&full_key, live_time, value);
         }
-        env.log
-            .borrow_mut()
-            .put_boolean(&full_key, live_time, value);
     }
 
     /// Number tuning input focus/blur/value/keydown (the DOM element's own state).
@@ -1317,8 +1320,8 @@ impl Sidebar {
         }
     }
 
-    /// The 250 ms tuning-publish interval.
-    fn tuning_publish_tick(&mut self, env: &mut SidebarEnv<'_>) {
+    /// The callback of the interval upstream's constructor sets, every [`TUNING_INTERVAL_MS`].
+    pub fn publish_tuning(&mut self, env: &mut SidebarEnv<'_>) {
         if !self.is_tuning_mode {
             return;
         }
@@ -1341,15 +1344,15 @@ impl Sidebar {
                 self.tuning_value_cache
                     .insert(full_key.clone(), state.input_value.clone());
                 if let Some(live_time) = env.selection.get_current_live_time() {
-                    if let Some(tuner) = env.tuner {
-                        tuner.publish(&full_key, &JsValue::Number(value));
+                    if env.publish(&full_key, TunedValue::Number(value)).is_err() {
+                        continue;
                     }
                     env.log.borrow_mut().put_number(&full_key, live_time, value);
                 }
             } else if state.last_has_value {
                 self.tuning_value_cache.remove_key(&full_key);
-                if let Some(tuner) = env.tuner {
-                    tuner.unpublish(&full_key);
+                if env.unpublish(&full_key).is_err() {
+                    continue;
                 }
             }
             state.last_has_value = has_value;
@@ -1564,13 +1567,14 @@ impl Sidebar {
                 let mut is_active = false;
                 let log = env.log.borrow();
                 let r#type = log.get_type(&full_key);
-                let structured_type = log.get_structured_type(&full_key);
+                let structured_type = log.structured_type(&full_key);
                 let wpilib_type = log.get_wpilib_type(&full_key);
                 if expanded
                     && (r#type == Some(LoggableType::BooleanArray)
                         || r#type == Some(LoggableType::NumberArray)
                         || r#type == Some(LoggableType::StringArray)
-                        || (r#type != Some(LoggableType::Empty) && structured_type.is_some())
+                        || (r#type != Some(LoggableType::Empty)
+                            && *structured_type != StructuredType::Null)
                         || (r#type == Some(LoggableType::Raw)
                             && wpilib_type.is_some_and(custom_schemas::has)))
                 {
@@ -1861,8 +1865,7 @@ impl Sidebar {
                         first_update: true,
                         ..Default::default()
                     };
-                    state.tunable =
-                        self.is_tuning_mode && env.tuner.is_some_and(|t| t.is_tunable(&full_key));
+                    state.tunable = self.is_tuning_mode && env.is_tunable(&full_key);
                     if !state.tunable {
                         self.tuning_value_cache.remove_key(&full_key);
                     }
@@ -1874,8 +1877,7 @@ impl Sidebar {
                         first_update: true,
                         ..Default::default()
                     };
-                    let tunable =
-                        self.is_tuning_mode && env.tuner.is_some_and(|t| t.is_tunable(&full_key));
+                    let tunable = self.is_tuning_mode && env.is_tunable(&full_key);
                     state.input_hidden = !tunable;
                     state.span_hidden = tunable;
                     if !tunable {

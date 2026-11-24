@@ -2,15 +2,19 @@
 
 use asrs_model::app_identity::AppIdentity;
 
+pub mod asset_download;
 pub mod download_flow;
 mod export_flow;
 pub mod hub;
 mod hub_dialogs;
 pub mod licenses;
+pub mod live;
 pub mod main_process;
 pub mod menus;
+pub mod quit;
 pub mod satellite;
 pub mod scenario;
+pub mod self_test;
 mod video;
 pub mod views;
 pub mod windows;

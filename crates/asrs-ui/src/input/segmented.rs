@@ -5,13 +5,15 @@ use gpui_kit::{
     Window, canvas, div, px, rgb,
 };
 
+use crate::focus;
 use crate::icon::{IconSource, Placement, paint_icon};
 use crate::input::style::{
     SPLIT_BADGE, SPLIT_BADGE_OPACITY, SPLIT_BADGE_RADIUS, SPLIT_ICON_FRACTION, SPLIT_RADIUS,
     SplitStyle,
 };
 use crate::text::{Align, FontSpec, LineHeight, Text, TextStyle};
-use crate::theme::{Appearance, chains};
+use crate::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, chains};
+use crate::tooltip::{titled, untitled};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Segment {
@@ -29,6 +31,7 @@ type Select = Box<dyn Fn(&usize, &mut Window, &mut App) + 'static>;
 pub struct SegmentedControl {
     id: ElementId,
     segments: Vec<Segment>,
+    titles: &'static [&'static str],
     selected: Option<usize>,
     size: (f32, f32),
     subpixel: f32,
@@ -62,6 +65,7 @@ impl SegmentedControl {
         SegmentedControl {
             id: id.into(),
             segments,
+            titles: &[],
             selected: None,
             size: (0.0, 0.0),
             subpixel: 0.0,
@@ -72,6 +76,12 @@ impl SegmentedControl {
 
     pub fn selected(mut self, selected: Option<usize>) -> Self {
         self.selected = selected;
+        self
+    }
+
+    /// The segments' `title` attributes.
+    pub fn titles(mut self, titles: &'static [&'static str]) -> Self {
+        self.titles = titles;
         self
     }
 
@@ -134,6 +144,7 @@ impl RenderOnce for SegmentedControl {
             .w(px(self.size.0))
             .h(px(self.size.1));
         let shift = self.subpixel * scale;
+        let mut ring = None;
         for (i, (segment, [x, _, w, h])) in self.segments.into_iter().zip(boxes).enumerate() {
             let x = x + shift;
             let left = (x + 0.5).floor();
@@ -152,12 +163,33 @@ impl RenderOnce for SegmentedControl {
                 style.border
             };
             let radius = px(SPLIT_RADIUS);
+            let focused = focus
+                .get(i)
+                .is_some_and(|handle| focus::focus_visible(handle, window, cx));
+            let inner = px(if focused { FOCUS_RING_RADIUS } else { 0.0 });
             let corners = Corners {
-                top_left: if i == 0 { radius } else { px(0.0) },
-                bottom_left: if i == 0 { radius } else { px(0.0) },
-                top_right: if i + 1 == count { radius } else { px(0.0) },
-                bottom_right: if i + 1 == count { radius } else { px(0.0) },
+                top_left: if i == 0 { radius } else { inner },
+                bottom_left: if i == 0 { radius } else { inner },
+                top_right: if i + 1 == count { radius } else { inner },
+                bottom_right: if i + 1 == count { radius } else { inner },
             };
+            if focused {
+                let outset = px(FOCUS_RING_WIDTH);
+                ring = Some(
+                    div()
+                        .absolute()
+                        .left(px(left / scale) - outset)
+                        .top(-outset)
+                        .w(px((right - left) / scale) + outset * 2.0)
+                        .h(px(h / scale) + outset * 2.0)
+                        .border(outset)
+                        .border_color(rgb(self.appearance.theme().focus_ring))
+                        .rounded_tl(corners.top_left + outset)
+                        .rounded_bl(corners.bottom_left + outset)
+                        .rounded_tr(corners.top_right + outset)
+                        .rounded_br(corners.bottom_right + outset),
+                );
+            }
             let (cw, ch) = (w - 2.0 * border, h - 2.0 * border);
             let content = match segment {
                 Segment::Badge(label) => {
@@ -179,7 +211,7 @@ impl RenderOnce for SegmentedControl {
                     font_style.line_height = LineHeight::Number(1.0);
                     let text_top = by + (badge - 11.0 * scale) / 2.0;
                     let snapped = text_top.round();
-                    div()
+                    let badge = div()
                         .absolute()
                         .left(px(bx.round() / scale))
                         .top(px(by.round() / scale))
@@ -202,7 +234,8 @@ impl RenderOnce for SegmentedControl {
                                         .w(px(SPLIT_BADGE)),
                                 ),
                         )
-                        .into_any_element()
+                        .into_any_element();
+                    untitled(badge).into_any_element()
                 }
                 Segment::Icon(source) => {
                     let lu = |v: f32| (f64::from(v) * 64.0) as i64 as f64 / 64.0;
@@ -230,7 +263,7 @@ impl RenderOnce for SegmentedControl {
                     } else {
                         ""
                     };
-                    canvas(
+                    let icon = canvas(
                         |_, _, _| {},
                         move |bounds, _, window, cx| {
                             let dpr = f64::from(window.scale_factor());
@@ -248,58 +281,72 @@ impl RenderOnce for SegmentedControl {
                         },
                     )
                     .absolute()
-                    .inset_0()
-                    .into_any_element()
+                    .inset_0();
+                    let [x, y] = [(cw - iw as f32) / 2.0, (ch - ih as f32) / 2.0];
+                    let image = div()
+                        .absolute()
+                        .left(px(x / scale))
+                        .top(px(y / scale))
+                        .w(px(iw as f32 / scale))
+                        .h(px(ih as f32 / scale));
+                    div()
+                        .absolute()
+                        .inset_0()
+                        .child(icon)
+                        .child(untitled(image))
+                        .into_any_element()
                 }
             };
             let hovered = state.clone();
             let (select, keyboard) = (on_select.clone(), on_select.clone());
-            root = root.child(
-                div()
-                    .id(("segment", i))
-                    .absolute()
-                    .left(px(left / scale))
-                    .top_0()
-                    .w(px((right - left) / scale))
-                    .h(px(h / scale))
-                    .bg(rgb(background))
-                    .border(px(border / scale))
-                    .border_color(rgb(border_color))
-                    .rounded_tl(corners.top_left)
-                    .rounded_bl(corners.bottom_left)
-                    .rounded_tr(corners.top_right)
-                    .rounded_br(corners.bottom_right)
-                    .on_hover(move |entered: &bool, _, cx| {
-                        hovered.update(cx, |h, cx| {
-                            if *entered {
-                                h.hovered = Some(i);
-                            } else if h.hovered == Some(i) {
-                                h.hovered = None;
-                            }
-                            cx.notify();
-                        });
-                    })
-                    .when_some(focus.get(i), |segment, focus| segment.track_focus(focus))
-                    .on_click(move |event: &ClickEvent, window, cx| {
-                        // GPUI clicks a focused element on key up; `setupKeyboardControls`
-                        // clicks on `keydown`, below.
-                        if matches!(event, ClickEvent::Keyboard(_)) {
-                            return;
+            let segment = div()
+                .id(("segment", i))
+                .absolute()
+                .left(px(left / scale))
+                .top_0()
+                .w(px((right - left) / scale))
+                .h(px(h / scale))
+                .bg(rgb(background))
+                .border(px(border / scale))
+                .border_color(rgb(border_color))
+                .rounded_tl(corners.top_left)
+                .rounded_bl(corners.bottom_left)
+                .rounded_tr(corners.top_right)
+                .rounded_br(corners.bottom_right)
+                .on_hover(move |entered: &bool, _, cx| {
+                    hovered.update(cx, |h, cx| {
+                        if *entered {
+                            h.hovered = Some(i);
+                        } else if h.hovered == Some(i) {
+                            h.hovered = None;
                         }
-                        if let Some(f) = select.as_ref() {
-                            f(&i, window, cx);
-                        }
-                    })
-                    .on_key_down(move |event: &KeyDownEvent, window, cx| {
-                        if matches!(event.keystroke.key.as_str(), "enter" | "space")
-                            && let Some(f) = keyboard.as_ref()
-                        {
-                            f(&i, window, cx);
-                        }
-                    })
-                    .child(content),
-            );
+                        cx.notify();
+                    });
+                })
+                .when_some(focus.get(i), |segment, focus| segment.track_focus(focus))
+                .on_click(move |event: &ClickEvent, window, cx| {
+                    // GPUI clicks a focused element on key up; `setupKeyboardControls`
+                    // clicks on `keydown`, below.
+                    if matches!(event, ClickEvent::Keyboard(_)) {
+                        return;
+                    }
+                    if let Some(f) = select.as_ref() {
+                        f(&i, window, cx);
+                    }
+                })
+                .on_key_down(move |event: &KeyDownEvent, window, cx| {
+                    if matches!(event.keystroke.key.as_str(), "enter" | "space")
+                        && let Some(f) = keyboard.as_ref()
+                    {
+                        f(&i, window, cx);
+                    }
+                })
+                .child(content);
+            root = match self.titles.get(i) {
+                Some(title) => root.child(titled(*title, segment)),
+                None => root.child(segment),
+            };
         }
-        root
+        root.children(ring)
     }
 }

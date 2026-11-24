@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::Duration;
 
 use gpui_kit::{App, Bounds, Pixels, ScrollEvent, Window};
 
@@ -10,6 +11,52 @@ pub(super) fn add_recent_document(_path: &Path) {}
 
 pub(super) fn numpad_enter() -> bool {
     false
+}
+
+pub(super) fn scroll_button_delays() -> (Duration, Duration) {
+    (Duration::from_millis(250), Duration::from_millis(50))
+}
+
+pub(super) fn set_tooltip(_window: &Window, _text: &str) {}
+
+/// `WS_EX_TRANSPARENT` and `WS_EX_NOACTIVATE`, which a `Widget` that accepts no events and cannot be
+/// activated gets.
+#[cfg(windows)]
+pub(super) fn ignore_input(window: &Window) {
+    use std::ffi::c_void;
+
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+    const GWL_EXSTYLE: i32 = -20;
+    const WS_EX_TRANSPARENT: isize = 0x20;
+    const WS_EX_NOACTIVATE: isize = 0x0800_0000;
+
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn GetWindowLongPtrW(window: *mut c_void, index: i32) -> isize;
+        fn SetWindowLongPtrW(window: *mut c_void, index: i32, value: isize) -> isize;
+    }
+
+    let Ok(handle) = HasWindowHandle::window_handle(window) else {
+        return;
+    };
+    let RawWindowHandle::Win32(handle) = handle.as_raw() else {
+        return;
+    };
+    let hwnd = handle.hwnd.get() as *mut c_void;
+    // SAFETY: the window is open, and both calls only read and write its styles.
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        SetWindowLongPtrW(
+            hwnd,
+            GWL_EXSTYLE,
+            style | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
+        );
+    }
+}
+
+pub(super) fn is_key_window(_window: &Window) -> bool {
+    true
 }
 
 pub(super) fn install_sidebar_vibrancy(_window: &Window) -> bool {
@@ -37,7 +84,28 @@ pub(super) fn popup_menu(
     cx.defer(move |cx| on_close(None, cx));
 }
 
-pub(super) fn install_edit_commands(_: &mut App, _: impl Fn(EditCommand, &mut App) + 'static) {}
+pub(super) fn install_edit_commands(
+    _: &mut App,
+    _: impl Fn(EditCommand, &mut Window, &mut App) + 'static,
+) {
+}
+
+pub(super) fn on_quit_request(
+    _: &mut App,
+    _: impl Fn() -> bool + 'static,
+    _: impl Fn(&mut App) + 'static,
+) {
+}
+
+pub(super) enum FullScreenObserver {}
+
+pub(super) fn observe_full_screen(
+    _: &Window,
+    _: &App,
+    _: impl Fn(bool, &mut App) + 'static,
+) -> Option<FullScreenObserver> {
+    None
+}
 
 /// `RendererPreferences`' defaults, which Electron leaves as they are: its render hosts show
 /// #3367d1 for the active one, this blended with white over white.
@@ -253,7 +321,9 @@ pub(super) mod probe {
     use gpui_kit::Window;
 
     use super::super::PopupMenu;
-    use super::super::probe::{Frame, MouseAction, WheelReading, WheelSample, WindowImage};
+    use super::super::probe::{
+        Frame, MenuRole, MouseAction, WheelReading, WheelSample, WindowChrome, WindowImage,
+    };
 
     pub fn native_menu_roundtrip(_menu: &PopupMenu) -> Option<PopupMenu> {
         None
@@ -277,8 +347,40 @@ pub(super) mod probe {
         false
     }
 
+    pub fn stay_in_background() {}
+
+    pub fn menu_role(_window: &Window, _role: &str) -> Option<MenuRole> {
+        None
+    }
+
+    pub fn perform_menu_role(_window: &Window, _role: &str) -> bool {
+        false
+    }
+
     pub fn perform_key_equivalent(_key: &str, _modifiers: u32) -> bool {
         false
+    }
+
+    pub fn perform_menu_role_without_window(_role: &str) -> Option<()> {
+        None
+    }
+
+    pub fn validate_menu_role_without_window(_role: &str) -> Option<bool> {
+        None
+    }
+
+    pub fn intercept_full_screen() -> bool {
+        false
+    }
+
+    pub fn full_screen_toggles() -> usize {
+        0
+    }
+
+    pub fn post_window_notification(_window: &Window, _name: &str) {}
+
+    pub fn window_chrome(_window: &Window) -> Option<WindowChrome> {
+        None
     }
 
     pub fn will_resize(_window: &Window, _size: (f64, f64)) -> Option<(f64, f64)> {
@@ -373,6 +475,10 @@ pub(super) mod probe {
 
     pub fn screen_height() -> f64 {
         0.0
+    }
+
+    pub fn tooltip_roundtrip(_texts: &[&str]) -> Vec<(Option<String>, bool)> {
+        Vec::new()
     }
 
     pub fn is_tagged_srgb(_window: &Window) -> Option<bool> {

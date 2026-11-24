@@ -11,7 +11,7 @@ use asrs_hub::tabs::{SatelliteUpdate, TabsError};
 use asrs_js::time::{Clock, SystemClock, V8MathRandom};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToSatellite, NamedMessage, SatelliteToMain};
-use asrs_ui::gpui::{App, Context, EventEmitter, Task};
+use asrs_ui::gpui::{App, Context, EventEmitter, Task, Window};
 
 use crate::hub::{FrameClock, frame_time, interval};
 
@@ -24,11 +24,23 @@ pub enum SatelliteEvent {
 
 impl EventEmitter<SatelliteEvent> for Satellite {}
 
+/// Blink runs a hidden page's timers once a second, and satellites keep `backgroundThrottling`.
+const HIDDEN_PERIOD_MS: f64 = 1000.0;
+
 pub struct Satellite {
     model: SatelliteModel,
     title: String,
     frame_origin: Instant,
     _save: Task<()>,
+}
+
+fn save_interval(cx: &Context<'_, Satellite>, period_ms: f64) -> Task<()> {
+    interval(cx, period_ms, |satellite: &mut Satellite, cx| {
+        satellite.task(cx, |model| {
+            model.save_state();
+            Ok(())
+        });
+    })
 }
 
 impl Satellite {
@@ -47,13 +59,21 @@ impl Satellite {
             title: model.title().to_string_lossy(),
             model,
             frame_origin: cx.background_executor().now(),
-            _save: interval(cx, SAVE_PERIOD_MS, |satellite: &mut Satellite, cx| {
-                satellite.task(cx, |model| {
-                    model.save_state();
-                    Ok(())
-                });
-            }),
+            _save: save_interval(cx, SAVE_PERIOD_MS),
         }
+    }
+
+    /// Throttles the page while `window` is hidden, once it has been shown.
+    pub fn throttle_with(&self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        cx.observe_window_visibility(window, |satellite, visibility, _, cx| {
+            let period = if visibility.is_visible() {
+                SAVE_PERIOD_MS
+            } else {
+                HIDDEN_PERIOD_MS
+            };
+            satellite._save = save_interval(cx, period);
+        })
+        .detach();
     }
 
     pub fn model(&self) -> &SatelliteModel {
