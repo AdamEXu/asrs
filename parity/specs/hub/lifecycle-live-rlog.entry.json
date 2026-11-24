@@ -1,0 +1,638 @@
+{
+ "entry": "hubSession",
+ "inputs": [
+  "logs/match.csv",
+  "logs/second.csv"
+ ],
+ "fixture": {
+  "seed": 104,
+  "live": {
+   "protocol": "rlog",
+   "seed": 1,
+   "epochMs": 1767225600000,
+   "latencyMs": 1,
+   "endMs": 600000,
+   "client": {
+    "source": "rlog",
+    "address": "10.63.28.2"
+   },
+   "server": {
+    "port": 5800
+   },
+   "steps": [
+    {
+     "t": 0,
+     "server": [
+      "down",
+      "refuse"
+     ]
+    },
+    {
+     "t": 1200,
+     "server": [
+      "up"
+     ]
+    },
+    {
+     "t": 2000,
+     "server": [
+      "send",
+      "02003ff0000000000000010000000c2f44726976652f53706565640006646f75626c6502000000083ff8000000000000010001000e2f44726976652f456e61626c65640007626f6f6c65616e020001000101010002000c2f44726976652f436f756e740005696e7436340200020008ffdfffffffffffff01000300052f4e616d650006737472696e67020003000368c3a901000400062f4761696e730008646f75626c655b5d02000400103fe0000000000000800000000000000001000500022f460005666c6f617402000500043dcccccd003ff051eb851eb85202000000083ffc000000000000"
+     ]
+    },
+    {
+     "t": 2050,
+     "server": [
+      "send",
+      "003ff0a3d70a3d70a40200000008400000000000000001000600062f466c6167730009626f6f6c65616e5b5d02000600020002003ff0f5c28f5c28f6020001000100"
+     ]
+    },
+    {
+     "t": 2500,
+     "server": [
+      "send",
+      "003ff800000000000002000000084008000000000000"
+     ]
+    },
+    {
+     "t": 2600,
+     "server": [
+      "send",
+      ""
+     ]
+    },
+    {
+     "t": 3200,
+     "server": [
+      "drop"
+     ]
+    },
+    {
+     "t": 4200,
+     "server": [
+      "send",
+      "02003ff0000000000000010000000c2f44726976652f53706565640006646f75626c6502000000083ff8000000000000010001000e2f44726976652f456e61626c65640007626f6f6c65616e020001000101010002000c2f44726976652f436f756e740005696e7436340200020008ffdfffffffffffff01000300052f4e616d650006737472696e67020003000368c3a901000400062f4761696e730008646f75626c655b5d02000400103fe0000000000000800000000000000001000500022f460005666c6f617402000500043dcccccd003ff051eb851eb85202000000083ffc000000000000"
+     ]
+    },
+    {
+     "t": 8300,
+     "server": [
+      "send",
+      "02003ff0000000000000010000000c2f44726976652f53706565640006646f75626c6502000000083ff8000000000000010001000e2f44726976652f456e61626c65640007626f6f6c65616e020001000101010002000c2f44726976652f436f756e740005696e7436340200020008ffdfffffffffffff01000300052f4e616d650006737472696e67020003000368c3a901000400062f4761696e730008646f75626c655b5d02000400103fe0000000000000800000000000000001000500022f460005666c6f617402000500043dcccccd003ff051eb851eb85202000000083ffc000000000000"
+     ]
+    },
+    {
+     "t": 8400,
+     "server": [
+      "send",
+      "63ff"
+     ]
+    },
+    {
+     "t": 9300,
+     "server": [
+      "send",
+      "02003ff0000000000000010000000c2f44726976652f53706565640006646f75626c6502000000083ff8000000000000010001000e2f44726976652f456e61626c65640007626f6f6c65616e020001000101010002000c2f44726976652f436f756e740005696e7436340200020008ffdfffffffffffff01000300052f4e616d650006737472696e67020003000368c3a901000400062f4761696e730008646f75626c655b5d02000400103fe0000000000000800000000000000001000500022f460005666c6f617402000500043dcccccd003ff051eb851eb85202000000083ffc000000000000"
+     ]
+    },
+    {
+     "t": 10200,
+     "server": [
+      "down",
+      "hang"
+     ]
+    },
+    {
+     "t": 10200,
+     "server": [
+      "drop"
+     ]
+    },
+    {
+     "t": 15000,
+     "server": [
+      "up"
+     ]
+    },
+    {
+     "t": 18000,
+     "server": [
+      "send",
+      "02003ff0000000000000010000000c2f44726976652f53706565640006646f75626c6502000000083ff8000000000000010001000e2f44726976652f456e61626c65640007626f6f6c65616e020001000101010002000c2f44726976652f436f756e740005696e7436340200020008ffdfffffffffffff01000300052f4e616d650006737472696e67020003000368c3a901000400062f4761696e730008646f75626c655b5d02000400103fe0000000000000800000000000000001000500022f460005666c6f617402000500043dcccccd003ff051eb851eb85202000000083ffc000000000000"
+     ]
+    },
+    {
+     "t": 20600,
+     "server": [
+      "send",
+      "02003ff0000000000000010000000c2f44726976652f53706565640006646f75626c6502000000083ff8000000000000010001000e2f44726976652f456e61626c65640007626f6f6c65616e020001000101010002000c2f44726976652f436f756e740005696e7436340200020008ffdfffffffffffff01000300052f4e616d650006737472696e67020003000368c3a901000400062f4761696e730008646f75626c655b5d02000400103fe0000000000000800000000000000001000500022f460005666c6f617402000500043dcccccd003ff051eb851eb85202000000083ffc000000000000"
+     ]
+    }
+   ]
+  },
+  "steps": [
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "(() => { const t = document.getElementsByTagName('title')[0]; window.__titles = []; let last = t.textContent; new MutationObserver(() => { if (t.textContent !== last) { last = t.textContent; window.__titles.push(last); } }).observe(t, { childList: true, characterData: true, subtree: true }); return last; })()"
+     }
+    ],
+    "label": "watch"
+   },
+   {
+    "main": "set-preferences",
+    "data": {
+     "theme": "system",
+     "robotAddress": "10.63.28.2",
+     "remotePath": "/U/logs",
+     "liveMode": "rlog",
+     "liveSubscribeMode": "low-bandwidth",
+     "liveDiscard": 1200,
+     "publishFilter": "",
+     "rlogPort": 5800,
+     "coordinateSystem": "automatic",
+     "field3dModeAc": "standard",
+     "field3dModeBattery": "",
+     "field3dAntialiasing": true,
+     "tbaApiKey": "",
+     "userAssetsFolder": null,
+     "skipHootNonProWarning": false,
+     "skipFRCCoordinateSystemWarning": false,
+     "skipFTCCoordinateSystemWarning": false,
+     "ctreLicenseAccepted": false,
+     "systemcoreStaticAddress": "",
+     "hasScrolledLineGraph": false,
+     "hasScrolledTimeline": false,
+     "prefersFTC": false,
+     "timestamps": "start-zero"
+    }
+   },
+   {
+    "main": "start-live",
+    "data": "robot"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "searching"
+   },
+   {
+    "advance": 1000
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "refused"
+   },
+   {
+    "advance": 700
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "waiting"
+   },
+   {
+    "advance": 350
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "active"
+   },
+   {
+    "advance": 600
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "values"
+   },
+   {
+    "advance": 800
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "dropped"
+   },
+   {
+    "advance": 900
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "reconnected"
+   },
+   {
+    "advance": 3700
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "watchdog"
+   },
+   {
+    "advance": 400
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "bad frame"
+   },
+   {
+    "advance": 1200
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "after bad frame"
+   },
+   {
+    "advance": 4500
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "hanging"
+   },
+   {
+    "advance": 4200
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "back"
+   },
+   {
+    "main": "open-files",
+    "data": {
+     "files": [
+      "logs/match.csv"
+     ],
+     "merge": false
+    }
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "opened"
+   },
+   {
+    "advance": 500
+   },
+   {
+    "main": "open-files",
+    "data": {
+     "files": [
+      "logs/second.csv"
+     ],
+     "merge": false
+    }
+   },
+   {
+    "advance": 300
+   },
+   {
+    "main": "start-live",
+    "data": "sim"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "sim"
+   },
+   {
+    "advance": 1000
+   },
+   {
+    "advance": 1200
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "sim active"
+   },
+   {
+    "main": "start-live",
+    "data": "robot"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "restarted"
+   },
+   {
+    "advance": 600
+   },
+   {
+    "main": "open-files",
+    "data": {
+     "files": [
+      "logs/match.csv",
+      "logs/second.csv"
+     ],
+     "merge": false
+    }
+   },
+   {
+    "advance": 600
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "window.__titles.splice(0)"
+     },
+     "selection",
+     {
+      "kind": "eval",
+      "expr": "window.log.getFieldKeys()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.log.getTimestampRange()"
+     },
+     {
+      "kind": "eval",
+      "expr": "window.tuner !== null && window.tuner.hasTunableFields()"
+     }
+    ],
+    "label": "two logs"
+   }
+  ]
+ }
+}

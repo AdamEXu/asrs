@@ -3,29 +3,46 @@
 //! The receiver needs no tokio context: the foreground drains it with [`EventReceiver::drain`]
 //! or awaits [`EventReceiver::recv`] on any executor, such as GPUI's.
 
+use std::sync::Arc;
+
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
+/// Runs on the sending thread after each event is queued.
+pub type Notify = Arc<dyn Fn() + Send + Sync>;
+
 pub fn event_channel<E: Send>() -> (EventSender<E>, EventReceiver<E>) {
-    let (tx, rx) = unbounded_channel();
-    (EventSender(tx), EventReceiver(rx))
+    event_channel_notifying(Arc::new(|| {}))
 }
 
-pub struct EventSender<E>(UnboundedSender<E>);
+pub fn event_channel_notifying<E: Send>(notify: Notify) -> (EventSender<E>, EventReceiver<E>) {
+    let (tx, rx) = unbounded_channel();
+    (EventSender { tx, notify }, EventReceiver(rx))
+}
+
+pub struct EventSender<E> {
+    tx: UnboundedSender<E>,
+    notify: Notify,
+}
 
 impl<E> Clone for EventSender<E> {
     fn clone(&self) -> Self {
-        Self(self.0.clone())
+        Self {
+            tx: self.tx.clone(),
+            notify: self.notify.clone(),
+        }
     }
 }
 
 impl<E> EventSender<E> {
     /// Returns the event back when the receiver is gone.
     pub fn send(&self, event: E) -> Result<(), E> {
-        self.0.send(event).map_err(|e| e.0)
+        self.tx.send(event).map_err(|e| e.0)?;
+        (self.notify)();
+        Ok(())
     }
 
     pub fn is_closed(&self) -> bool {
-        self.0.is_closed()
+        self.tx.is_closed()
     }
 }
 

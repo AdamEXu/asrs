@@ -13,9 +13,12 @@ use asrs_js::math::{abs, floor, max2, min2, rem, round};
 use asrs_js::number;
 use asrs_js::sort::{array_sort, code_unit_cmp};
 use asrs_js::string::JsString;
+use asrs_js::time::Clock;
 use asrs_js::value::{JsObject, JsValue};
+use asrs_live::{Thrown, TunedValue};
 use asrs_log::log::log_util::{TYPE_KEY, get_value_at};
 use asrs_log::log::{Log, LogFieldTree, LoggableType, search_fields};
+use asrs_log::realm::JsRealm;
 use asrs_log::util::arrays_equal;
 use asrs_model::hub_state::SidebarState;
 use asrs_model::selection::{Selection, SelectionMode};
@@ -248,10 +251,23 @@ impl SidebarGeometry for NoLayout {
 
 /// `window.tuner`.
 pub trait Tuner {
-    fn has_tunable_fields(&self) -> bool;
-    fn is_tunable(&self, key: &JsString) -> bool;
-    fn publish(&self, key: &JsString, value: &JsValue);
-    fn unpublish(&self, key: &JsString);
+    /// `log` is `window.log`.
+    fn has_tunable_fields(&self, log: &Log) -> bool;
+    fn is_tunable(&self, log: &Log, key: &JsString) -> bool;
+    fn publish(
+        &self,
+        window: &mut TunerWindow<'_>,
+        key: &JsString,
+        value: TunedValue,
+    ) -> Result<(), Thrown>;
+    fn unpublish(&self, window: &mut TunerWindow<'_>, key: &JsString) -> Result<(), Thrown>;
+}
+
+/// What publishing reads of `window`.
+pub struct TunerWindow<'a> {
+    pub log: &'a RefCell<Log>,
+    pub realm: &'a mut JsRealm,
+    pub clock: &'a dyn Clock,
 }
 
 /// The `window.*` services upstream `Sidebar` reads.
@@ -259,10 +275,49 @@ pub struct SidebarEnv<'a> {
     pub log: &'a RefCell<Log>,
     pub selection: &'a mut dyn Selection,
     pub tuner: Option<&'a dyn Tuner>,
+    pub realm: &'a mut JsRealm,
+    pub clock: &'a dyn Clock,
     pub dark_theme: bool,
     pub inner_height: f64,
     pub loading_fields: &'a HashSet<JsString>,
     pub geometry: &'a mut dyn SidebarGeometry,
+}
+
+impl SidebarEnv<'_> {
+    /// `window.tuner !== null && window.tuner.hasTunableFields()`.
+    pub fn has_tunable_fields(&self) -> bool {
+        self.tuner
+            .is_some_and(|t| t.has_tunable_fields(&self.log.borrow()))
+    }
+
+    fn is_tunable(&self, key: &JsString) -> bool {
+        self.tuner
+            .is_some_and(|t| t.is_tunable(&self.log.borrow(), key))
+    }
+
+    /// `window.tuner?.publish(key, value)`.
+    pub fn publish(&mut self, key: &JsString, value: TunedValue) -> Result<(), Thrown> {
+        match self.tuner {
+            Some(tuner) => tuner.publish(&mut self.tuner_window(), key, value),
+            None => Ok(()),
+        }
+    }
+
+    /// `window.tuner?.unpublish(key)`.
+    pub fn unpublish(&mut self, key: &JsString) -> Result<(), Thrown> {
+        match self.tuner {
+            Some(tuner) => tuner.unpublish(&mut self.tuner_window(), key),
+            None => Ok(()),
+        }
+    }
+
+    fn tuner_window(&mut self) -> TunerWindow<'_> {
+        TunerWindow {
+            log: self.log,
+            realm: self.realm,
+            clock: self.clock,
+        }
+    }
 }
 
 /// Whether the upstream listener or `refresh` threw part-way, leaving rows half built.
@@ -1236,7 +1291,7 @@ impl Sidebar {
             let Some(full_key) = self.nodes[id].full_key.clone() else {
                 continue;
             };
-            let tunable = active && env.tuner.is_some_and(|t| t.is_tunable(&full_key));
+            let tunable = active && env.is_tunable(&full_key);
             match &mut self.nodes[id].value {
                 ValueState::Bool(state) => {
                     state.tunable = tunable;
@@ -1259,7 +1314,7 @@ impl Sidebar {
     }
 
     fn update_tuning_button(&mut self, env: &mut SidebarEnv<'_>) {
-        let tuner_available = env.tuner.is_some_and(|t| t.has_tunable_fields());
+        let tuner_available = env.has_tunable_fields();
         if self.tuning_button_hidden == tuner_available {
             self.tuning_button_hidden = !tuner_available;
             if !tuner_available {
@@ -1286,12 +1341,11 @@ impl Sidebar {
         let full_key = self.nodes[id].full_key.clone().unwrap();
         self.tuning_value_cache
             .insert(full_key.clone(), js(if value { "true" } else { "false" }));
-        if let Some(tuner) = env.tuner {
-            tuner.publish(&full_key, &JsValue::Bool(value));
+        if env.publish(&full_key, TunedValue::Boolean(value)).is_ok() {
+            env.log
+                .borrow_mut()
+                .put_boolean(&full_key, live_time, value);
         }
-        env.log
-            .borrow_mut()
-            .put_boolean(&full_key, live_time, value);
     }
 
     /// Number tuning input focus/blur/value/keydown (the DOM element's own state).
@@ -1341,15 +1395,15 @@ impl Sidebar {
                 self.tuning_value_cache
                     .insert(full_key.clone(), state.input_value.clone());
                 if let Some(live_time) = env.selection.get_current_live_time() {
-                    if let Some(tuner) = env.tuner {
-                        tuner.publish(&full_key, &JsValue::Number(value));
+                    if env.publish(&full_key, TunedValue::Number(value)).is_err() {
+                        continue;
                     }
                     env.log.borrow_mut().put_number(&full_key, live_time, value);
                 }
             } else if state.last_has_value {
                 self.tuning_value_cache.remove_key(&full_key);
-                if let Some(tuner) = env.tuner {
-                    tuner.unpublish(&full_key);
+                if env.unpublish(&full_key).is_err() {
+                    continue;
                 }
             }
             state.last_has_value = has_value;
@@ -1861,8 +1915,7 @@ impl Sidebar {
                         first_update: true,
                         ..Default::default()
                     };
-                    state.tunable =
-                        self.is_tuning_mode && env.tuner.is_some_and(|t| t.is_tunable(&full_key));
+                    state.tunable = self.is_tuning_mode && env.is_tunable(&full_key);
                     if !state.tunable {
                         self.tuning_value_cache.remove_key(&full_key);
                     }
@@ -1874,8 +1927,7 @@ impl Sidebar {
                         first_update: true,
                         ..Default::default()
                     };
-                    let tunable =
-                        self.is_tuning_mode && env.tuner.is_some_and(|t| t.is_tunable(&full_key));
+                    let tunable = self.is_tuning_mode && env.is_tunable(&full_key);
                     state.input_hidden = !tunable;
                     state.span_hidden = tunable;
                     if !tunable {

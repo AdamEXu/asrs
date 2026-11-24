@@ -9,6 +9,7 @@ pub fn run() -> Result {
     gpui::check_features()?;
     tables::run(&["units".to_owned(), "--check".to_owned()])?;
     tables::run(&["spark".to_owned(), "--check".to_owned()])?;
+    tables::run(&["proto-descriptor".to_owned(), "--check".to_owned()])?;
     cargo(&["fmt", "--all", "--check"])?;
     cargo(&[
         "clippy",

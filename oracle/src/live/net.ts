@@ -4,9 +4,10 @@ import { ClientTraffic, Outbox, ServerHost } from "./server";
 
 /** The session trace: one JSON line per event, in the order events happen. */
 export class Trace {
-  readonly lines: string[] = [];
-
-  constructor(private loop: LiveLoop) {}
+  constructor(
+    private loop: LiveLoop,
+    readonly lines: string[] = []
+  ) {}
 
   add(ev: string, id: number | undefined, ...v: unknown[]): void {
     const line: { [key: string]: unknown } = { t: this.loop.now, ev };
@@ -88,7 +89,9 @@ export class Net implements Outbox {
     private loop: LiveLoop,
     private host: ServerHost,
     private trace: Trace,
-    private latencyMs: number
+    private latencyMs: number,
+    /** Copies a binary payload or parsed JSON into the client's realm. */
+    private adopt: <T>(value: T) => T = (value) => value
   ) {}
 
   private toServer(ev: string, id: number, v: unknown[], run: (s: ClientTraffic) => void): void {
@@ -153,7 +156,7 @@ export class Net implements Outbox {
       ok: status >= 200 && status < 300,
       status,
       url: new URL(request.url).href,
-      json: () => Promise.resolve().then(() => JSON.parse(body)),
+      json: () => Promise.resolve().then(() => this.adopt(JSON.parse(body))),
       text: () => Promise.resolve(body)
     });
   }
@@ -182,13 +185,12 @@ export class Net implements Outbox {
   }
 
   /** Installs the client-side globals: `WebSocket`, `CloseEvent`, `fetch`, `AbortSignal.timeout`. */
-  install(): () => void {
-    const g = globalThis as any;
-    const saved = { WebSocket: g.WebSocket, CloseEvent: g.CloseEvent, fetch: g.fetch, timeout: AbortSignal.timeout };
+  install(g: any = globalThis): () => void {
+    const saved = { WebSocket: g.WebSocket, CloseEvent: g.CloseEvent, fetch: g.fetch, timeout: g.AbortSignal.timeout };
     g.WebSocket = this.webSocketClass();
     g.CloseEvent = FakeCloseEvent;
     g.fetch = (url: string, init?: { signal?: AbortSignal }) => this.fetch(String(url), init);
-    (AbortSignal as any).timeout = (ms: number) => {
+    g.AbortSignal.timeout = (ms: number) => {
       const controller = new AbortController();
       this.loop.postDelayedTask(() => controller.abort(new DOMException("signal timed out", "TimeoutError")), ms);
       return controller.signal;
@@ -197,7 +199,7 @@ export class Net implements Outbox {
       g.WebSocket = saved.WebSocket;
       g.CloseEvent = saved.CloseEvent;
       g.fetch = saved.fetch;
-      (AbortSignal as any).timeout = saved.timeout;
+      g.AbortSignal.timeout = saved.timeout;
     };
   }
 
@@ -305,7 +307,7 @@ export class Net implements Outbox {
         let payload: unknown = data;
         if (typeof data !== "string") {
           const copy = data.slice();
-          payload = this.binaryType === "arraybuffer" ? copy.buffer : new Blob([copy]);
+          payload = this.binaryType === "arraybuffer" ? net.adopt(copy.buffer) : new Blob([copy]);
         }
         this.dispatch("message", { type: "message", data: payload });
       }
