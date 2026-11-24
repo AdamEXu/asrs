@@ -20,6 +20,9 @@ pub struct FrameOptions {
     /// `renderer.getViewport()` size: the `setSize` size in CSS pixels, which `LineSegments2`
     /// copies into its material's `resolution` before every draw.
     pub viewport: [f64; 2],
+    /// `_currentViewport` after `setPixelRatio`: the CSS size times the pixel ratio rounded,
+    /// where the drawing buffer is floored.
+    pub gl_viewport: [u32; 2],
     /// `renderer.shadowMap.enabled` (cinematic mode), always with `PCFSoftShadowMap`.
     pub shadow_map: bool,
 }
@@ -32,6 +35,7 @@ impl FrameOptions {
             height: math::floor(height * pixel_ratio) as u32,
             samples: if antialias { 4 } else { 1 },
             viewport: [width, height],
+            gl_viewport: [width, height].map(|v| math::round(v * pixel_ratio) as u32),
             shadow_map: false,
         }
     }
@@ -590,7 +594,7 @@ pub fn build_frame(
 
     let (lights, shadow_cameras) =
         light_uniforms(scene, collected.lights, &view, options.shadow_map);
-    let shadows = shadow_cameras
+    let shadows: Vec<ShadowPass> = shadow_cameras
         .into_iter()
         .map(|(camera, map_size)| {
             let mut draws = Vec::new();
@@ -666,8 +670,17 @@ pub fn build_frame(
         }
         None => [0.0, 0.0, 0.0, 0.0],
     };
+    // WebGLShadowMap.render ends in setRenderTarget(null), which floors _currentViewport.
+    let gl_viewport = if shadows.is_empty() {
+        options.gl_viewport
+    } else {
+        [options.width, options.height]
+    };
     Frame {
-        options,
+        options: FrameOptions {
+            gl_viewport,
+            ..options
+        },
         clear,
         projection: matrix_to_f32(&camera.projection_matrix),
         view: matrix_to_f32(&view),

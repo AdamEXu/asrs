@@ -335,6 +335,18 @@ struct AuxOut {
     @location(1) transparent_id: u32,
 };
 
+struct AuxSamplesOut {
+    @location(0) opaque_id: vec4<f32>,
+    @location(1) transparent_id: vec4<f32>,
+};
+
+fn aux_samples(id: u32) -> AuxSamplesOut {
+    var out: AuxSamplesOut;
+    out.opaque_id = unpack4x8unorm(id);
+    out.transparent_id = unpack4x8unorm(id);
+    return out;
+}
+
 // Object id and facing, so a fold of one mesh over itself (its silhouette against its own far
 // side) counts as an edge too.
 @fragment
@@ -344,4 +356,9 @@ fn fs_aux(@builtin(front_facing) front_facing: bool) -> AuxOut {
     out.opaque_id = id;
     out.transparent_id = id;
     return out;
+}
+
+@fragment
+fn fs_aux_samples(@builtin(front_facing) front_facing: bool) -> AuxSamplesOut {
+    return aux_samples(draw.extra.y * 2u + select(0u, 1u, front_facing));
 }

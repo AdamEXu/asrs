@@ -12,6 +12,7 @@ const OPTIONS: FrameOptions = FrameOptions {
     height: 100,
     samples: 4,
     viewport: [200.0, 100.0],
+    gl_viewport: [200, 100],
     shadow_map: false,
 };
 

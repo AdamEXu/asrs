@@ -558,13 +558,14 @@ fn main() -> Result<(), String> {
             size[1].as_f64().unwrap_or(0.0),
         );
         let antialias = flag(&spec, "antialias").unwrap_or(false);
+        let pixel_ratio = num(&spec, "pixelRatio").unwrap_or(1.0);
         for scale in [1.0, 2.0] {
             let (mut scene, mut camera) = build(&spec, &reference);
             camera.aspect = w / h;
             camera.update_projection_matrix();
             let options = FrameOptions {
                 shadow_map: flag(&spec, "shadows").unwrap_or(false),
-                ..FrameOptions::new(w, h, scale, antialias)
+                ..FrameOptions::new(w, h, scale * pixel_ratio, antialias)
             };
             for dark in [true, false] {
                 let background = if dark { "#222222" } else { "#ffffff" };
