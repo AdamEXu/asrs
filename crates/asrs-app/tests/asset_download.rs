@@ -54,7 +54,6 @@ static FREE: AtomicU64 = AtomicU64::new(1_000_000_000_000);
 fn in_fresh_home(test: &str) {
     let home = std::env::temp_dir().join(format!("asrs-assets-{test}-{}", std::process::id()));
     std::fs::create_dir_all(&home).expect("home");
-    let home = home.canonicalize().expect("home");
     let mut command = Process::new(std::env::current_exe().expect("the test binary"));
     command.args(["--exact", test, "--ignored", "--nocapture"]);
     for variable in [
