@@ -228,13 +228,20 @@ impl Hub {
         }
     }
 
-    /// Arms the host's one timer for whichever live timer is due first.
+    /// Arms the host's one timer for whichever live timer is due first. A timer whose task
+    /// outlasts its period is due again at once, so each firing is bounded too.
     pub(super) fn arm_live_timer(&mut self, cx: &mut Context<'_, Self>) {
         let due = self.model.next_live_timer();
         let now = self.host.timer_clock(cx).now();
         self.host.live_timer.arm(due, now, cx, |hub: &mut Hub, cx| {
             hub.host.live_timer.clear();
-            hub.task(cx, |model, host| model.fire_live_timers(host));
+            let slice = Slice::start();
+            hub.task(
+                cx,
+                |model, host| {
+                    while model.fire_live_timer(host) && !slice.is_over() {}
+                },
+            );
         });
     }
 
@@ -587,6 +594,10 @@ impl HubHost for GpuiHost<'_, '_> {
 
     fn timer_clock(&self) -> Rc<dyn Clock> {
         Rc::new(self.state.timer_clock(self.cx))
+    }
+
+    fn idle_period(&self) -> Option<f64> {
+        Some(FRAME_PERIOD.as_secs_f64() * 1000.0)
     }
 }
 

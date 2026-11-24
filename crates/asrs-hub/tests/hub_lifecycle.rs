@@ -493,6 +493,10 @@ impl HubHost for Host {
             None => Rc::new(ManualClock::new(0.0)),
         }
     }
+
+    fn idle_period(&self) -> Option<f64> {
+        None
+    }
 }
 
 struct Runner {

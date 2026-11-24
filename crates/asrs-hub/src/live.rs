@@ -218,11 +218,10 @@ impl LiveSession {
         kind: LiveSourceKind,
         address: &JsString,
         net: Option<LiveNet>,
-        timer_clock: Rc<dyn Clock>,
+        mut timers: TimerQueue,
         date: Rc<dyn Clock>,
         window: &mut LiveWindow<'_>,
     ) -> Self {
-        let mut timers = TimerQueue::new(timer_clock);
         let updates = Updates::default();
         let (status, output) = callbacks(&updates);
         let address = address.to_string_lossy();

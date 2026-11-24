@@ -95,7 +95,7 @@ impl Alarm {
         self.due = due;
         self.task = due.map(|due| {
             let wait = Duration::from_nanos(((due - now) * 1e6).ceil().max(0.0) as u64);
-            let timer = cx.background_executor().timer(wait);
+            let timer = cx.background_executor().timer(wait.max(YIELD));
             cx.spawn(async move |this, cx| {
                 timer.await;
                 let _ = this.update(cx, fire);
@@ -113,6 +113,10 @@ const YIELD: Duration = Duration::from_millis(1);
 pub(crate) struct Slice(Instant);
 
 impl Slice {
+    pub(crate) fn start() -> Self {
+        Slice(Instant::now())
+    }
+
     pub(crate) fn is_over(self) -> bool {
         self.0.elapsed() >= SLICE
     }
@@ -127,7 +131,7 @@ pub(crate) async fn pump(
 ) {
     while ready.recv().await.is_ok() {
         loop {
-            match drain(Slice(Instant::now()), cx) {
+            match drain(Slice::start(), cx) {
                 None => return,
                 Some(false) => break,
                 Some(true) => cx.background_executor().timer(YIELD).await,

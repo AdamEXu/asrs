@@ -26,7 +26,7 @@ use asrs_js::time::{Clock, Rng};
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_live::nt4::{NetEvent, Nt4PublisherStatus};
 use asrs_live::rlog::MainCall;
-use asrs_live::{LiveDataSourceStatus, LiveLog};
+use asrs_live::{LiveDataSourceStatus, LiveLog, TimerQueue};
 use asrs_log::log::log_key_utils::MERGE_PREFIX;
 use asrs_log::log::robot_state::{AKIT_TIMESTAMP_KEYS, get_enabled_data};
 use asrs_log::log::{Log, SerializedLog};
@@ -151,8 +151,11 @@ pub trait HubHost {
     /// is gone. Its events come back through [`HubModel::live_event`].
     fn live_net(&mut self, role: LiveRole) -> Result<LiveNet, String>;
     /// The monotonic clock live timers run on, in milliseconds. Whenever
-    /// [`HubModel::next_live_timer`] passes, the host calls [`HubModel::fire_live_timers`].
+    /// [`HubModel::next_live_timer`] passes, the host calls [`HubModel::fire_live_timer`] until
+    /// nothing is due, letting input and frames through in between.
     fn timer_clock(&self) -> Rc<dyn Clock>;
+    /// How often, in milliseconds, the page is idle enough to run idle callbacks.
+    fn idle_period(&self) -> Option<f64>;
 }
 
 /// What the page reads from its layout and environment.
@@ -1655,11 +1658,6 @@ impl HubModel {
             .min_by(f64::total_cmp)
     }
 
-    /// Runs every live timer that is due, each as its own task.
-    pub fn fire_live_timers(&mut self, host: &mut dyn HubHost) {
-        while self.fire_live_timer(host) {}
-    }
-
     /// Runs the live timer due first, if one is due, as a task.
     pub fn fire_live_timer(&mut self, host: &mut dyn HubHost) -> bool {
         let due = |due: Option<f64>| due.unwrap_or(f64::INFINITY);
@@ -1861,10 +1859,11 @@ impl HubModel {
                 return Ok(());
             }
         };
-        let clock = host.timer_clock();
+        let mut timers = TimerQueue::new(host.timer_clock());
+        timers.set_idle_period(host.idle_period());
         let date = self.page.clock.clone();
         let live = self.with_live_window(FieldsRead::None, |window| {
-            LiveSession::connect(kind, &address, net, clock, date, window)
+            LiveSession::connect(kind, &address, net, timers, date, window)
         });
         let live = Rc::new(RefCell::new(live));
         self.live = Some(live.clone());

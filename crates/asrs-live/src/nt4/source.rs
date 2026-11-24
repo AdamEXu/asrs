@@ -72,6 +72,8 @@ pub struct Nt4Window {
     pub send_main_message: SendMainMessage,
 }
 
+const IDLE_TIMEOUT_MS: f64 = 100.0;
+
 /// `NT4Source`.
 pub struct Nt4Source {
     inner: Inner,
@@ -102,7 +104,7 @@ impl Nt4Source {
                 no_fields_timeout: None,
             },
             client: None,
-            idle_timer: Some(timers.post_delayed_task(100.0)),
+            idle_timer: Some(timers.request_idle_callback(IDLE_TIMEOUT_MS)),
             logging_subscription: None,
             low_bandwidth_topic_subscription: None,
             low_bandwidth_data_subscriptions: JsObject::new(),
@@ -193,7 +195,7 @@ impl Nt4Source {
         if self.idle_timer == Some(id) {
             self.idle_timer = None;
             if self.periodic(window, cx).is_ok() {
-                self.idle_timer = Some(cx.timers.post_delayed_task(100.0));
+                self.idle_timer = Some(cx.timers.request_idle_callback(IDLE_TIMEOUT_MS));
             }
             return true;
         }

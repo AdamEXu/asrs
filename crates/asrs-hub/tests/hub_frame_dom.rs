@@ -188,6 +188,10 @@ impl HubHost for Host {
     fn timer_clock(&self) -> Rc<dyn Clock> {
         Rc::new(SetClock(0.0))
     }
+
+    fn idle_period(&self) -> Option<f64> {
+        None
+    }
 }
 
 fn err(s: impl Into<String>) -> String {

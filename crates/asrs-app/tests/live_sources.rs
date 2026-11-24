@@ -9,7 +9,7 @@
 #[allow(dead_code)]
 mod live_server;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -21,6 +21,7 @@ use asrs_hub::hub::HubView;
 use asrs_hub::sidebar::{NoLayout, SidebarGeometry};
 use asrs_js::ops;
 use asrs_js::string::JsString;
+use asrs_js::time::Clock;
 use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::log::Log;
 use asrs_log::log::log_util::get_or_default;
@@ -32,8 +33,8 @@ use asrs_parity::json::{self, Json};
 use asrs_parity::live::msgpack::{self, Unpacked};
 use asrs_parity::live::{ClientEvent, Payload};
 use asrs_ui::gpui::{
-    AnyWindowHandle, AppContext, Context, Entity, HeadlessAppContext, IntoElement, NoopTextSystem,
-    Render, Window, div, px, size,
+    AnyWindowHandle, App, AppContext, BackgroundExecutor, Context, Entity, HeadlessAppContext,
+    IntoElement, NoopTextSystem, Render, Window, div, px, size,
 };
 use live_server::LiveServer;
 
@@ -93,6 +94,13 @@ struct Page {
 
 impl Page {
     fn new(server: &LiveServer) -> Page {
+        Page::with_clock(server, |cx| Rc::new(FrameClock::new(cx)))
+    }
+
+    fn with_clock(
+        server: &LiveServer,
+        clock: impl FnOnce(&App) -> Rc<dyn Clock> + 'static,
+    ) -> Page {
         let mut cx = HeadlessAppContext::new(Arc::new(NoopTextSystem::new()));
         let slot = Rc::new(RefCell::new(None));
         let built = slot.clone();
@@ -101,7 +109,7 @@ impl Page {
         let window = cx
             .open_window(size(px(1100.0), px(650.0)), move |window, cx| {
                 let mut config = HubConfig::new(Box::new(View { sidebar: NoLayout }));
-                config.clock = Rc::new(FrameClock::new(cx));
+                config.clock = clock(cx);
                 let hub = cx.new(|cx| Hub::new(Some(window), config, cx));
                 *built.borrow_mut() = Some(hub.clone());
                 cx.new(|_| Shell(hub))
@@ -862,4 +870,109 @@ fn a_flooding_server_leaves_the_page_responsive() {
         slices >= 10,
         "{MESSAGES} messages ran in {slices} slices of the foreground"
     );
+}
+
+#[test]
+fn a_field_made_active_is_subscribed_within_two_frames() {
+    let server = LiveServer::new("nt4", TOPICS);
+    let mut page = Page::new(&server);
+    page.preferences(|p| p.live_mode = LiveMode::Nt4);
+    page.start_live("robot");
+    page.drive_until("the topics", |page| {
+        page.log(|log| log.get_field_keys().contains(&js("NT:/Tuning/kP")))
+    });
+    for i in 0..8 {
+        let (field, topic) = if i % 2 == 0 {
+            ("NT:/Tuning/kP", "/Tuning/kP")
+        } else {
+            ("NT:/Drive/x", "/Drive/x")
+        };
+        server.take_seen();
+        page.table(&[field]);
+        page.advance(35);
+        let start = Instant::now();
+        let mut seen = Vec::new();
+        loop {
+            page.cx.run_until_parked();
+            seen.extend(server.take_seen());
+            let messages = sent_text(&seen);
+            let subscribed = method(&messages, "subscribe").iter().any(|p| {
+                let topics = p.get("topics").and_then(Json::as_array).expect("topics");
+                topics
+                    .iter()
+                    .any(|t| t.as_str().is_some_and(|t| t.eq_str(topic)))
+            });
+            if subscribed {
+                break;
+            }
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "{topic} was not subscribed within 35 ms"
+            );
+            std::thread::sleep(Duration::from_millis(1));
+        }
+    }
+}
+
+/// A clock that moves on each time it is read, so what reads it takes longer than its period.
+struct SlowClock {
+    clock: FrameClock,
+    executor: BackgroundExecutor,
+    reads: Rc<Cell<usize>>,
+    slow: Rc<Cell<bool>>,
+}
+
+const SLOW_READS: usize = 200_000;
+
+impl Clock for SlowClock {
+    fn now(&self) -> f64 {
+        if self.slow.get() && self.reads.get() < SLOW_READS {
+            self.reads.set(self.reads.get() + 1);
+            let dispatcher = self.executor.dispatcher();
+            let dispatcher = dispatcher.as_test().expect("a test dispatcher");
+            dispatcher
+                .scheduler()
+                .clock()
+                .advance(Duration::from_millis(30));
+        }
+        self.clock.now()
+    }
+}
+
+#[test]
+fn a_publisher_slower_than_its_period_leaves_the_page_responsive() {
+    let server = LiveServer::new("nt4", r#"{"version":"4.1"}"#);
+    let (reads, slow) = (Rc::new(Cell::new(0)), Rc::new(Cell::new(false)));
+    let (clock_reads, clock_slow) = (reads.clone(), slow.clone());
+    let mut page = Page::with_clock(&server, move |cx| {
+        Rc::new(SlowClock {
+            clock: FrameClock::new(cx),
+            executor: cx.background_executor().clone(),
+            reads: clock_reads,
+            slow: clock_slow,
+        })
+    });
+    page.preferences(|_| {});
+    page.open_log("nt.csv", NT_CSV);
+    page.send(MainToHub::StartPublish, JsValue::Bool(true));
+    page.drive_until("the publisher to connect", |page| {
+        page.title().contains("(Publishing)")
+    });
+    page.drive_until("the first values", |_| {
+        !sent_values(&server.take_seen()).is_empty()
+    });
+    page.advance(200);
+    slow.set(true);
+    for i in 0..5 {
+        let before = reads.get();
+        page.cx.advance_clock(Duration::from_millis(25));
+        page.cx.run_until_parked();
+        assert!(reads.get() > before, "the publisher runs");
+        assert!(
+            reads.get() < SLOW_READS,
+            "the foreground never came up for air"
+        );
+        page.send(MainToHub::SetFocused, JsValue::Bool(i % 2 == 0));
+    }
+    slow.set(false);
 }

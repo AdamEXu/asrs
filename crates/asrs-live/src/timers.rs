@@ -47,6 +47,7 @@ pub struct TimerQueue {
     next_id: u32,
     timers: Vec<Timer>,
     running_level: u32,
+    idle_period: Option<f64>,
 }
 
 const MIN_DELAY_MS: f64 = 4.0;
@@ -65,7 +66,13 @@ impl TimerQueue {
             next_id: 1,
             timers: Vec::new(),
             running_level: 0,
+            idle_period: None,
         }
+    }
+
+    /// The page has an idle period this often. Without one, idle callbacks run at their timeout.
+    pub fn set_idle_period(&mut self, period: Option<f64>) {
+        self.idle_period = period;
     }
 
     pub fn now(&self) -> f64 {
@@ -109,6 +116,13 @@ impl TimerQueue {
     /// nesting level 0. Shares the timer id space and the due-time order.
     pub fn post_delayed_task(&mut self, delay: f64) -> TimerId {
         self.add(delay, false, false)
+    }
+
+    /// `requestIdleCallback(callback, { timeout })`. A page that draws frames runs one that asks
+    /// for itself again once per frame (Electron 39).
+    pub fn request_idle_callback(&mut self, timeout: f64) -> TimerId {
+        let delay = self.idle_period.map_or(timeout, |p| p.min(timeout));
+        self.post_delayed_task(delay)
     }
 
     /// Call before dispatching any task that is not a timer (a network event, an IPC message,
