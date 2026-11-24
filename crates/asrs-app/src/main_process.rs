@@ -123,6 +123,15 @@ pub fn resources_dir() -> PathBuf {
     }
 }
 
+/// The folder upstream's pages load `../www` from: where `www/textures` is shipped in a packaged
+/// build, the upstream checkout otherwise.
+pub fn app_root() -> PathBuf {
+    if PACKAGED {
+        return resources_dir();
+    }
+    Path::new(env!("CARGO_MANIFEST_DIR")).join("../../reference/AdvantageScope")
+}
+
 /// `path.join(__dirname, "..", "bundledAssets")`: shipped in a packaged build, the workspace's
 /// copy of upstream's folder otherwise.
 pub fn bundled_assets_dir() -> PathBuf {

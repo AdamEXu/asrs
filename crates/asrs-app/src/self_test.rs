@@ -5,6 +5,9 @@
 
 use std::path::Path;
 
+use asrs_field3d::managers::{april_tag_texture_path, decode_png_texture};
+use asrs_js::string::JsString;
+
 use crate::{licenses, main_process};
 
 const FLAG: &str = "--self-test";
@@ -34,6 +37,7 @@ fn checks(image: &[String]) -> Vec<Check> {
     let mut checks = vec![
         ("library", library()),
         ("assets", bundled_assets()),
+        ("textures", tag_textures()),
         ("licenses", license_list()),
         ("documentation", Ok(documentation())),
     ];
@@ -62,6 +66,17 @@ fn bundled_assets() -> Result<String, String> {
         return Err(format!("no assets in {}", dir.display()));
     }
     Ok(names.join(" "))
+}
+
+fn tag_textures() -> Result<String, String> {
+    let root = main_process::app_root();
+    for name in ["16h5/smile", "16h5/029", "36h11/smile", "36h11/586"] {
+        let url = JsString::from(format!("../www/textures/apriltag-{name}.png"));
+        let path = april_tag_texture_path(&root, &url).ok_or("not a texture's URL")?;
+        let bytes = std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+        decode_png_texture(&bytes).ok_or_else(|| format!("{}: not a PNG", path.display()))?;
+    }
+    Ok(root.display().to_string())
 }
 
 fn license_list() -> Result<String, String> {

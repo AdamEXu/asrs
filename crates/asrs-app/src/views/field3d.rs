@@ -46,6 +46,7 @@ use asrs_ui::theme::{Appearance, FONT_FAMILY, chains};
 
 use super::frame::{FrameHost, HubFrame};
 use super::select::FormSelect;
+use crate::main_process::app_root;
 
 /// `div.field-3d-canvas-container`'s `height: calc(100% + 26px)`, or `+ 10px` when `.fixed`.
 const CONTAINER_EXTRA: f64 = 26.0;
@@ -326,9 +327,8 @@ fn www_root(cx: &App) -> Option<PathBuf> {
     if let Some(root) = cx.try_global::<WwwRoot>() {
         return Some(root.0.clone());
     }
-    let dev =
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../reference/AdvantageScope");
-    dev.join("www").is_dir().then_some(dev)
+    let root = app_root();
+    root.join("www").is_dir().then_some(root)
 }
 
 /// `cubic-bezier(0.42, 0, 0.58, 1)` (`ease-in-out`) at `t`.

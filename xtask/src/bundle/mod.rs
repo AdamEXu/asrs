@@ -26,12 +26,15 @@ Each has the asrs binary (a release build without test-support, built with
 ASRS_LIBM_LGPL_SHIP=1, so it only loads the library next to it or from ASRS_LIBM_LGPL, and
 ASRS_PACKAGED=1, so it runs as a packaged app), the asrs-libm-lgpl shared library, on Linux
 asrs-webview (the only program that links WebKitGTK, and the only platform that uses it),
-upstream's bundledAssets/ (from assets/ or reference/AdvantageScope), the documentation
-`cargo xtask docs` built (as docs/build, left out with --no-docs: it may not be published, see
-issue 310) and the `cargo xtask licenses` bundle including the library's LGPL text and source.
+upstream's bundledAssets/ and www/textures/ (from assets/ or reference/AdvantageScope), the
+documentation `cargo xtask docs` built (as docs/build, left out with --no-docs: it may not be
+published, see issue 310) and the `cargo xtask licenses` bundle including the library's LGPL text
+and source.
 The version is the workspace's. Needs cargo-about.";
 
 const WEBVIEW: &str = "asrs-webview";
+/// What asrs reads from upstream's files at run time.
+const UPSTREAM_DIRS: &[&str] = &["bundledAssets", "www/textures"];
 const NAME: &str = "asrs";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// What upstream's Electron needs.
@@ -160,13 +163,13 @@ fn host_triple() -> String {
 pub fn run(args: &[String]) -> Result {
     let bundle = Bundle::parse(args, USAGE)?;
     let root = workspace_root();
-    let bundled_assets = [
-        root.join("assets/bundledAssets"),
-        root.join("reference/AdvantageScope/bundledAssets"),
-    ]
-    .into_iter()
-    .find(|dir| dir.is_dir())
-    .ok_or("upstream bundledAssets not found; link reference/AdvantageScope or run `cargo xtask assets`")?;
+    let upstream = ["assets", "reference/AdvantageScope"]
+        .map(|dir| root.join(dir))
+        .into_iter()
+        .find(|dir| UPSTREAM_DIRS.iter().all(|part| dir.join(part).is_dir()))
+        .ok_or(
+            "upstream's assets not found; link reference/AdvantageScope or run `cargo xtask assets`",
+        )?;
     let documentation = docs::build_dir();
     if bundle.docs && !documentation.join("index.html").is_file() {
         return Err(
@@ -192,7 +195,9 @@ pub fn run(args: &[String]) -> Result {
     if bundle.os == Os::Linux {
         copy(&release.join(WEBVIEW), &exe_dir.join(WEBVIEW))?;
     }
-    copy_tree(&bundled_assets, &resources.join("bundledAssets"))?;
+    for dir in UPSTREAM_DIRS {
+        copy_tree(&upstream.join(dir), &resources.join(dir))?;
+    }
     if bundle.docs {
         copy_tree(&documentation, &resources.join("docs/build"))?;
     }
