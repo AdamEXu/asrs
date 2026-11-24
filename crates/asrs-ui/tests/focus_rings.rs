@@ -17,7 +17,7 @@ use gpui_kit::{
     px, size,
 };
 
-const PLATFORMS: [&str; 1] = ["macos-aarch64"];
+const PLATFORMS: [&str; 2] = ["macos-aarch64", "linux-x86_64"];
 /// The fixture's elements with `global.css`'s ring.
 const RINGED: [&str; 6] = ["b", "s", "l", "t", "g", "w"];
 /// Elements a press focuses, and the one only the keyboard or script does.

@@ -211,23 +211,23 @@
     },
     {
       "mouse": "move",
-      "x": 318,
+      "x": 326,
       "y": 496
     },
     {
       "mouse": "down",
-      "x": 318,
+      "x": 326,
       "y": 496
     },
     {
       "mouse": "move",
-      "x": 700,
-      "y": 620
+      "x": 329,
+      "y": 496
     },
     {
       "mouse": "up",
-      "x": 700,
-      "y": 620
+      "x": 329,
+      "y": 496
     },
     {
       "wait": 100
@@ -273,12 +273,12 @@
     },
     {
       "mouse": "move",
-      "x": 513,
+      "x": 512,
       "y": 495
     },
     {
       "mouse": "up",
-      "x": 513,
+      "x": 512,
       "y": 495
     },
     {
@@ -308,58 +308,6 @@
     },
     {
       "capture": "hide-key",
-      "probes": [
-        ".timeline",
-        ".controls-content"
-      ]
-    },
-    {
-      "mouse": "move",
-      "x": 541,
-      "y": 495
-    },
-    {
-      "mouse": "down",
-      "x": 541,
-      "y": 495
-    },
-    {
-      "mouse": "move",
-      "x": 539,
-      "y": 495
-    },
-    {
-      "mouse": "up",
-      "x": 539,
-      "y": 495
-    },
-    {
-      "wait": 100
-    },
-    {
-      "capture": "remove-pressed",
-      "probes": [
-        ".timeline",
-        ".controls-content"
-      ]
-    },
-    {
-      "key": "9",
-      "modifiers": [
-        "commandOrControl"
-      ]
-    },
-    {
-      "wait": 50
-    },
-    {
-      "key": "F9"
-    },
-    {
-      "wait": 100
-    },
-    {
-      "capture": "remove-key",
       "probes": [
         ".timeline",
         ".controls-content"
