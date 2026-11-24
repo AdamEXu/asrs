@@ -28,6 +28,7 @@ use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 use asrs_ui::tooltip::{covering, titled, untitled};
 
 use crate::hub::Hub;
+use crate::views::frame::Section;
 use crate::views::number::FormNumber;
 
 const TITLE_HEIGHT: f64 = 30.0;
@@ -755,6 +756,7 @@ impl SidebarView {
     fn search_results(
         &self,
         appearance: Appearance,
+        window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> Option<AnyElement> {
         let hub = self.hub.read(cx).model();
@@ -767,9 +769,13 @@ impl SidebarView {
         let dark = appearance == Appearance::Dark;
         let theme = appearance.theme();
         let style = results_style();
-        let height = (items.len() as f64 * RESULTS_ITEM_HEIGHT + 3.0).min(RESULTS_MAX_HEIGHT);
+        let content = items.len() as f64 * RESULTS_ITEM_HEIGHT + 3.0;
+        let height = content.min(RESULTS_MAX_HEIGHT);
+        // Tab reaches a scroller that holds nothing to focus.
+        let place = focus::place("search-results-place", window, cx);
         let mut list = div()
             .id("search-results")
+            .track_focus(&place.tab_stop(content > height))
             .w_full()
             .h(px(height as f32))
             .overflow_y_scroll()
@@ -803,7 +809,10 @@ impl SidebarView {
             }
             list = list.child(item);
         }
+        // Drawn outside the side bar's own section.
         let mut popup = div()
+            .tab_group()
+            .tab_index(Section::SearchResults as isize)
             .min_w(px(min_width.unwrap_or(0.0) as f32))
             .max_w(px(700.0))
             .rounded(px(6.0))
@@ -1003,7 +1012,7 @@ impl Render for SidebarView {
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
             .child(content);
-        if let Some(results) = self.search_results(appearance, cx) {
+        if let Some(results) = self.search_results(appearance, window, cx) {
             root = root.child(results);
         }
         root

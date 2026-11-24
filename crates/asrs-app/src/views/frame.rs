@@ -188,11 +188,12 @@ pub(super) const SETTINGS_SECTION: isize = 100;
 
 /// The parts of the page in document order, as [`focus::section`] has them.
 #[derive(Clone, Copy)]
-enum Section {
+pub(super) enum Section {
     TitleBar = 1,
     TitleBarMenu,
     TabControls,
     SideBarHandle,
+    SearchResults,
     SideBar,
     Viewer,
 }
@@ -272,6 +273,8 @@ pub struct HubFrame<H: FrameHost> {
     /// Each title's focus as last drawn.
     titles: Vec<FocusHandle>,
     tab_key: Option<Subscription>,
+    drag_region: Option<[f64; 4]>,
+    no_drag_regions: Vec<[f64; 4]>,
     geometry: FrameGeometry,
     timeline: Timeline,
     timeline_sensor: ScrollSensor,
@@ -405,6 +408,8 @@ impl<H: FrameHost> HubFrame<H> {
             bar_builds: 0,
             titles: Vec::new(),
             tab_key: None,
+            drag_region: None,
+            no_drag_regions: Vec::new(),
             geometry,
             timeline: Timeline::new(Rc::new(asrs_js::time::SystemClock)),
             timeline_sensor: ScrollSensor::default(),
@@ -461,10 +466,6 @@ impl<H: FrameHost> HubFrame<H> {
         )
     }
 
-    fn now(&self) -> f64 {
-        asrs_js::math::trunc(asrs_js::time::Clock::now(&asrs_js::time::SystemClock))
-    }
-
     /// The window's `keydown` listeners, before the focused element's own key handling, which
     /// `preventDefault` keeps from running.
     fn key_down(&mut self, event: &KeyDownEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
@@ -496,7 +497,8 @@ impl<H: FrameHost> HubFrame<H> {
             let Some(back) = focus::tab_key(&event.keystroke) else {
                 return;
             };
-            if window.window_handle() != handle || menu::focused(window) {
+            let menu = menu::focused(window) || platform::menu_takes_keys(window);
+            if window.window_handle() != handle || menu {
                 return;
             }
             cx.stop_propagation();
@@ -510,6 +512,11 @@ impl<H: FrameHost> HubFrame<H> {
             self.scroll_to_focused(&focused, window, cx);
         }
         cx.notify();
+    }
+
+    /// `gone` were removed from before the rest of what `place` holds.
+    pub(super) fn focus_removed(&mut self, gone: &[FocusHandle], place: &FocusHandle) {
+        self.traversal.removed(gone, place);
     }
 
     /// Scrolls what holds the focused element to it.
@@ -580,7 +587,7 @@ impl<H: FrameHost> HubFrame<H> {
     }
 
     fn handle_click(&mut self, handle: Handle, cx: &mut Context<'_, Self>) {
-        let now = self.now();
+        let now = self.host.frame_time(cx);
         let (shell, geometry) = (&mut self.shell, &self.geometry);
         let result = self.host.input(cx, |hub| {
             geometry.sync(hub);
@@ -664,6 +671,14 @@ impl<H: FrameHost> HubFrame<H> {
         if !matches!(self.shell.cursor(), BodyCursor::Unset | BodyCursor::Initial) {
             cx.notify();
         }
+    }
+
+    /// Whether a press is on `div.title-bar`, whose `-webkit-app-region` is `drag`, and not on what
+    /// is over it.
+    fn drags_window(&self, event: &MouseDownEvent) -> bool {
+        let at = [event.position.x, event.position.y].map(|v| f64::from(f32::from(v)));
+        let holds = |r: &[f64; 4]| (0..2).all(|i| at[i] >= r[i] && at[i] < r[i] + r[i + 2]);
+        self.drag_region.as_ref().is_some_and(holds) && !self.no_drag_regions.iter().any(holds)
     }
 
     /// The pointer left the window.
@@ -1117,6 +1132,12 @@ impl<H: FrameHost> Render for HubFrame<H> {
             }
         };
         let layout = compute(&inputs);
+        self.drag_region = layout.rect(FrameElement::TitleBar);
+        self.no_drag_regions = TAB_CONTROLS
+            .into_iter()
+            .chain([FrameElement::TitleBarMenu])
+            .filter_map(|element| layout.rect(element))
+            .collect();
         if self.viewport.replace((width, height)) != Some((width, height)) {
             let resized = cx.entity().downgrade();
             window.on_next_frame(move |_, cx| {
@@ -1211,6 +1232,11 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
                     if phase == DispatchPhase::Capture {
                         let _ = frame.update(cx, |frame, cx| {
+                            if frame.drags_window(event) {
+                                // A page gets no events over its draggable regions.
+                                window.prevent_default();
+                                return;
+                            }
                             frame.traversal.pressed();
                             frame.text_mouse_down(event, window, cx);
                         });

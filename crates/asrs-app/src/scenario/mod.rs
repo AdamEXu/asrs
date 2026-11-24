@@ -45,6 +45,8 @@ pub enum MouseKind {
     Down,
     Up,
     Click,
+    /// The pointer leaves the window.
+    Leave,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -142,6 +144,8 @@ pub enum Action {
         count: usize,
         back: bool,
     },
+    /// Keeps the hub's hovered time.
+    Hover(String),
     Capture {
         name: String,
         probes: Vec<String>,
@@ -241,7 +245,7 @@ const TOP_KEYS: [&str; 11] = [
     "actions",
     "about",
 ];
-const ACTION_KEYS: [&str; 21] = [
+const ACTION_KEYS: [&str; 22] = [
     "main",
     "open",
     "eval",
@@ -262,6 +266,7 @@ const ACTION_KEYS: [&str; 21] = [
     "copy",
     "focus",
     "traverse",
+    "hover",
     "capture",
 ];
 
@@ -350,6 +355,7 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
                 Some("down") => MouseKind::Down,
                 Some("up") => MouseKind::Up,
                 Some("click") => MouseKind::Click,
+                Some("leave") => MouseKind::Leave,
                 other => return Err(format!("unknown {kind} action {other:?}")),
             },
             x: number(action, "x", None)?,
@@ -438,6 +444,7 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
                 .and_then(JsValue::as_bool)
                 .unwrap_or(false),
         },
+        "hover" => Action::Hover(text().ok_or("hover is not a name")?),
         "capture" => {
             let name = text().ok_or("capture is not a name")?;
             Action::Capture {

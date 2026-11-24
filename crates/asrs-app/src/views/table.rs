@@ -497,6 +497,8 @@ pub struct TableViews {
     pressed_row: Option<usize>,
     /// The header cells' buttons, with their column's left and width.
     deletes: Vec<(FocusHandle, [f64; 2])>,
+    /// Where Tab goes on from in the header cells.
+    cell_places: Vec<FocusHandle>,
 }
 
 fn renderer_key(renderer: &TableRenderer) -> JsString {
@@ -660,7 +662,12 @@ impl<H: FrameHost> HubFrame<H> {
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
         let shown_key = self.table.shown.as_ref().map(|s| s.key.clone());
-        let rows_place = focus::place("table-rows", window, cx);
+        let place = |part: &str, window: &mut Window, cx: &mut Context<'_, Self>| {
+            let id = SharedString::from(format!("table-{part}-{shown_key:?}"));
+            focus::place(id, window, cx)
+        };
+        let container_place = place("container", window, cx);
+        let rows_place = place("rows", window, cx);
         let palette = Palette::of(appearance);
         let header_palette = HeaderPalette::of(appearance);
         let text_color = appearance.theme().text;
@@ -816,14 +823,21 @@ impl<H: FrameHost> HubFrame<H> {
                 grid.place([*left, y, *w, header_height]),
             ));
         }
-        // `updateFields` replaces every header cell, which drops the focus of one's button.
+        // `updateFields` replaces every header cell after the first, which drops the focus of one's
+        // button. Tab goes on from before them.
         let mut headers = DefaultHasher::new();
         for field in &view.headers {
             (&field.text.to_string_lossy(), field.available).hash(&mut headers);
         }
         let headers = headers.finish();
-        let mut header = div().absolute().inset_0();
+        let columns_place = place("columns", window, cx);
+        let mut header = div().absolute().inset_0().child(
+            focus::hidden(&columns_place)
+                .tab_group()
+                .tab_index(2),
+        );
         let mut deletes = Vec::new();
+        let mut cell_places = Vec::new();
         for (index, field) in view.headers.iter().enumerate() {
             let column = index + 1;
             let [left, w] = columns[column];
@@ -838,7 +852,9 @@ impl<H: FrameHost> HubFrame<H> {
             let key_width = math::max2(w - cell_border - KEY_LEFT - key_right, 0.0);
             let key_left = left + KEY_LEFT;
             let key = field.text.to_string_lossy();
-            let place = focus::place(SharedString::from(format!("table-key-{index}")), window, cx);
+            let place = format!("table-key-{shown_key:?}-{headers:x}-{index}");
+            let place = focus::place(SharedString::from(place), window, cx);
+            cell_places.push(place.clone());
             let mut key_box = grid
                 .place([key_left, y, key_width, KEY_HEIGHT])
                 .track_focus(&place)
@@ -877,18 +893,14 @@ impl<H: FrameHost> HubFrame<H> {
                     left + w - cell_border - CLOSE_RIGHT - BUTTON,
                     y + BUTTON_TOP,
                 ];
-                let id = format!("table-close-{headers:x}-{index}");
+                let id = format!("table-close-{shown_key:?}-{headers:x}-{index}");
                 let delete = focus::place(SharedString::from(format!("{id}-focus")), window, cx);
-                let next = place.clone();
+                cell_places.push(delete.clone());
                 deletes.push((delete.clone(), [left, w]));
                 let button = IconButton::new(SharedString::from(id), symbol("close.svg"))
                     .title("")
                     .track_focus(&delete)
-                    .on_click(cx.listener(move |frame, _, window, cx| {
-                        // The focused button goes with its header cell, and Tab goes on from there.
-                        next.focus(window, cx);
-                        frame.table_close(index, cx)
-                    }));
+                    .on_click(cx.listener(move |frame, _, _, cx| frame.table_close(index, cx)));
                 th = th.child(grid.button(button, at));
                 probes = probes.child(probed(
                     "button.data-table-key-delete",
@@ -923,6 +935,11 @@ impl<H: FrameHost> HubFrame<H> {
                     .child(grid.button(button, button_at)),
             );
         self.table.deletes = deletes;
+        let gone: Vec<FocusHandle> = std::mem::replace(&mut self.table.cell_places, cell_places)
+            .into_iter()
+            .filter(|place| !self.table.cell_places.contains(place))
+            .collect();
+        self.focus_removed(&gone, &columns_place);
         probes = probes
             .child(probed("input.data-table-jump-input", grid.place(jump_at)))
             .child(probed(
@@ -932,7 +949,7 @@ impl<H: FrameHost> HubFrame<H> {
 
         div()
             .id("data-table-container")
-            .track_focus(&focus::last(&rows_place))
+            .track_focus(&container_place)
             .absolute()
             .left_0()
             .top_0()
@@ -945,6 +962,10 @@ impl<H: FrameHost> HubFrame<H> {
             )
             .on_scroll(
                 cx.listener(|frame, event: &ScrollEvent, _, cx| frame.table_wheel(event, cx)),
+            )
+            .child(
+                grid.place([x, y, width, rows_top + rows_height - y])
+                    .track_focus(&focus::last(&rows_place)),
             )
             .child(probes)
             .child(cells)

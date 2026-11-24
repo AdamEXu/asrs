@@ -656,7 +656,8 @@ impl<H: FrameHost> HubFrame<H> {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
-        let place = focus::place(("console-rows", shown.key), window, cx);
+        let place = focus::place(("console-container", shown.key), window, cx);
+        let rows_place = focus::place(("console-rows", shown.key), window, cx);
         let [x, y, width, height] = shown.container;
         let scroll_top = layout.scroll_top();
         let rows = Rows {
@@ -675,7 +676,7 @@ impl<H: FrameHost> HubFrame<H> {
         }
         div()
             .id("console-table-container")
-            .track_focus(&focus::last(&place))
+            .track_focus(&place)
             .absolute()
             .left_0()
             .top_0()
@@ -686,6 +687,10 @@ impl<H: FrameHost> HubFrame<H> {
             }))
             .on_scroll(
                 cx.listener(|frame, event: &ScrollEvent, _, cx| frame.console_wheel(event, cx)),
+            )
+            .child(
+                grid.place([x, y - scroll_top, width, layout.table_height()])
+                    .track_focus(&focus::last(&rows_place)),
             )
             .child(layer)
             .child(probed(

@@ -18,8 +18,8 @@ use asrs_services::windows::{Rect, WindowSystem};
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
     AnyWindowHandle, App, AppContext, ClipboardItem, Context, Entity, IntoElement, KeyUpEvent,
-    Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
-    PlatformInput, Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div,
+    Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent,
+    MouseUpEvent, ParentElement, PlatformInput, Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div,
     point, px, rgb, size,
 };
 use asrs_ui::parity::Recorder;
@@ -950,6 +950,11 @@ impl Variant<'_> {
                 self.dispatch(up)?;
                 self.pressed = None;
             }
+            MouseKind::Leave => self.dispatch(PlatformInput::MouseExited(MouseExitEvent {
+                position,
+                pressed_button: self.pressed,
+                modifiers,
+            }))?,
             MouseKind::Click => {
                 self.dispatch(down)?;
                 self.dispatch(up)?;
@@ -1144,6 +1149,15 @@ impl Variant<'_> {
                     .map_err(|e| e.to_string())?;
             }
             Action::Traverse { name, count, back } => self.traverse(name, *count, *back)?,
+            Action::Hover(name) => {
+                let hovered =
+                    self.with_hub(|hub, _, _| hub.model().page().selection().get_hovered_time())?;
+                let folder = self.dir.join("files/hover");
+                std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+                let hovered = hovered.map_or("null".to_owned(), asrs_js::number::to_string);
+                std::fs::write(folder.join(format!("{name}.json")), hovered + "\n")
+                    .map_err(|e| e.to_string())?;
+            }
             Action::Focus(active) => {
                 let active = ForcedActive(*active);
                 self.headless.context().update(|cx| cx.set_global(active));

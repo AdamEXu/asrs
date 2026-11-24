@@ -6,7 +6,7 @@ use std::path::Path;
 use asrs_js::value::{JsObject, JsValue};
 use asrs_ui::capture::Capture;
 use asrs_ui::gpui::{App, Window};
-use asrs_ui::parity::{Recorder, Rect};
+use asrs_ui::parity::{FocusedInput, Recorder, Rect};
 use asrs_ui::platform::dialog::{FileFilter, MessageBoxType, Shown};
 use asrs_ui::{focus, input};
 
@@ -135,12 +135,12 @@ pub fn kind(action: &Action) -> &'static str {
         Action::Copy(_) => "copy",
         Action::Focus(_) => "focus",
         Action::Traverse { .. } => "traverse",
+        Action::Hover(_) => "hover",
         Action::Capture { .. } => "capture",
     }
 }
 
-/// What `focused()` of `oracle/src/app/page.ts` keeps of `document.activeElement`, less what it is:
-/// its box and whether it takes the outline.
+/// What `focused()` of `oracle/src/app/page.ts` keeps of `document.activeElement`, less what it is.
 pub fn focused(window: &Window, cx: &App) -> String {
     let focused = window
         .tab_order()
@@ -160,7 +160,20 @@ pub fn focused(window: &Window, cx: &App) -> String {
         bounds.size.height,
     ]
     .map(f32::from);
-    format!(r#"{{"rect":[{x},{y},{w},{h}],"ring":{ring}}}"#)
+    let input = match cx.try_global::<FocusedInput>() {
+        Some(input) if input::focused(window) => {
+            let value = asrs_js::json::stringify(&JsValue::string(&input.value))
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            let selection = input.selection.map_or(String::new(), |[start, end]| {
+                format!(r#","selection":[{start},{end}]"#)
+            });
+            format!(r#","value":{value}{selection}"#)
+        }
+        _ => String::new(),
+    };
+    format!(r#"{{"rect":[{x},{y},{w},{h}],"ring":{ring}{input}}}"#)
 }
 
 pub fn write(path: &Path, text: &str) -> Result<(), String> {

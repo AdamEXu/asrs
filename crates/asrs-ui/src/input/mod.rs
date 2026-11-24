@@ -41,14 +41,27 @@ const CONTEXT: &str = "HtmlInput";
 
 const NUMBER_CONTEXT: &str = "HtmlInput HtmlNumberInput";
 
-actions!(number_input, [StepUp, StepDown]);
+actions!(number_input, [StepUp, StepDown, StepNone]);
 
-/// The arrow keys step a number input with these modifiers too, which the editor binds to
+/// The arrow keys step a number input with any modifiers, some of which the editor binds to
 /// selecting. Alt and the down arrow do nothing.
 pub(crate) fn init(cx: &mut App) {
     let within = Some("HtmlNumberInput > Input");
-    cx.bind_keys(["shift-up", "ctrl-up", "alt-up"].map(|k| KeyBinding::new(k, StepUp, within)));
-    cx.bind_keys(["shift-down", "ctrl-down"].map(|k| KeyBinding::new(k, StepDown, within)));
+    for held in 1..16 {
+        let modifiers: String = ["shift-", "ctrl-", "cmd-", "alt-"]
+            .into_iter()
+            .enumerate()
+            .filter_map(|(bit, modifier)| (held & (1 << bit) != 0).then_some(modifier))
+            .collect();
+        let key = |key: &str| format!("{modifiers}{key}").leak();
+        cx.bind_keys([
+            KeyBinding::new(key("up"), StepUp, within),
+            match modifiers.ends_with("alt-") {
+                true => KeyBinding::new(key("down"), StepNone, within),
+                false => KeyBinding::new(key("down"), StepDown, within),
+            },
+        ]);
+    }
 }
 
 /// Whether an `<input>` has the window's focus.

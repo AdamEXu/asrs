@@ -203,6 +203,13 @@ impl Traversal {
         }
     }
 
+    /// `gone` were removed, all from before the rest of what `place` holds.
+    pub fn removed(&mut self, gone: &[FocusHandle], place: &FocusHandle) {
+        if self.last.as_ref().is_some_and(|last| gone.contains(last)) {
+            self.last = Some(place.clone());
+        }
+    }
+
     /// Focuses the next or previous element of the page, beginning again at its end.
     pub fn advance(
         &mut self,
@@ -253,19 +260,20 @@ pub enum ScrollAxis {
     Vertical,
 }
 
-/// `ScrollAlignment::CenterIfNeeded`: how far a scroller that shows `visible` moves to show the
+/// `ScrollAlignment::CenterIfNeeded` as `Element::UpdateSelectionOnFocus` changes it, which leaves
+/// what shows in part horizontally: how far a scroller that shows `visible` moves to show the
 /// focused `[start, length]` at that offset from its start.
 pub fn reveal(axis: ScrollAxis, visible: f64, [start, length]: [f64; 2]) -> f64 {
-    const MIN_INTERSECT_FOR_REVEAL: f64 = 32.0;
     let end = start + length;
     let intersect = end.min(visible) - start.max(0.0);
     let shown = intersect >= length
-        || (axis == ScrollAxis::Horizontal && intersect >= MIN_INTERSECT_FOR_REVEAL);
+        || intersect >= visible
+        || (axis == ScrollAxis::Horizontal && intersect > 0.0);
     if shown {
         0.0
     } else if intersect <= 0.0 {
         start + (length - visible) / 2.0
-    } else if (end > visible && length < visible) || (end < visible && length > visible) {
+    } else if end > visible {
         end - visible
     } else {
         start

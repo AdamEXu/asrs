@@ -186,11 +186,6 @@
       "probes": []
     },
     {
-      "traverse": "locked-previous",
-      "count": 1,
-      "back": true
-    },
-    {
       "key": "Enter"
     },
     {
@@ -201,8 +196,13 @@
       "count": 0
     },
     {
+      "traverse": "unlocked-previous",
+      "count": 1,
+      "back": true
+    },
+    {
       "traverse": "slider",
-      "count": 1
+      "count": 2
     },
     {
       "capture": "slider",

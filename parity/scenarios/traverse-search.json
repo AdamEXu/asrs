@@ -175,10 +175,80 @@
       "wait": 100
     },
     {
+      "traverse": "selected-up",
+      "count": 0
+    },
+    {
       "key": "a"
     },
     {
       "wait": 100
+    },
+    {
+      "traverse": "up-typed",
+      "count": 0
+    },
+    {
+      "key": "Down"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "down",
+      "count": 0
+    },
+    {
+      "key": "b"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "down-typed",
+      "count": 0
+    },
+    {
+      "key": "Left"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "key": "Up",
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "shift-up",
+      "count": 0
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "shift-down",
+      "count": 0
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "up",
+      "count": 0
     },
     {
       "traverse": "after-up",
@@ -249,6 +319,63 @@
       "probes": [
         ".side-bar"
       ]
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "again",
+      "count": 1
+    },
+    {
+      "key": "e"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "capture": "many-results",
+      "probes": []
+    },
+    {
+      "traverse": "results-back",
+      "count": 1,
+      "back": true
+    },
+    {
+      "capture": "results-focused",
+      "probes": []
+    },
+    {
+      "wait": 200
+    },
+    {
+      "traverse": "results-hidden",
+      "count": 0
+    },
+    {
+      "traverse": "results-next",
+      "count": 1
     }
   ]
 }

@@ -118,7 +118,7 @@ impl PromptWindow {
         let handle = window.window_handle();
         let this = cx.entity().downgrade();
         cx.intercept_keystrokes(move |event, window, cx| {
-            if window.window_handle() != handle {
+            if window.window_handle() != handle || platform::menu_takes_keys(window) {
                 return;
             }
             let _ = this.update(cx, |view, cx| match event.keystroke.key.as_str() {

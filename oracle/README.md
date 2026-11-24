@@ -1420,7 +1420,7 @@ Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-fi
 the folder of a clip `src/app/clips.ts` draws into `inputs/`, as `video-data`'s `imgFolder`, dispatched on the hub's
 `messagePort`, e.g. `new-tab`, `restore-state`), `{"eval": js}`,
 `{"selection": [method, ...args]}`,
-`{"mouse": "move"|"down"|"up"|"click", "x", "y", "modifiers": [...]}`,
+`{"mouse": "move"|"down"|"up"|"click"|"leave", "x", "y", "modifiers": [...]}`,
 `{"wheel": {"x", "y", "deltaX", "deltaY", "wheelTicksX", "wheelTicksY", "precise"}}`,
 `{"key": keyCode, "modifiers": [...]}` (`commandOrControl` is Cmd on macOS and Ctrl elsewhere), `{"dialog": button index | file name | null}` (queued
 answer for the next dialog; a name ending in `/` is a folder that exists), `{"menu": [label, ...]}` (clicks the item at that label path of the
@@ -1442,7 +1442,8 @@ clipboard, written to `files/clipboard/<name>.txt`),
 `Emulation.setFocusEmulationEnabled`; false until then; windows opened later need their own),
 `{"traverse": name, "count"?: n, "back"?: boolean}` (presses Tab, or Shift+Tab, `n` times and writes
 `document.activeElement` after each, or as it is, to `files/focus/<name>.json`: what it is, whether
-Tab reaches it, its box and its ring; `pixel` compares the box and the ring),
+Tab reaches it, its box, its ring and an input's value and selection; `pixel` compares them),
+`{"hover": name}` (the hub's hovered time, written to `files/hover/<name>.json`),
 `{"wait": ms}`, `{"idle": true}` and
 `{"capture": name, "probes": [selectors], "masks": [selectors]}`.
 

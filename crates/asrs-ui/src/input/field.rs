@@ -774,6 +774,7 @@ impl<M: FieldModel> Render for TextField<M> {
             .on_action(cx.listener(|this, _: &super::StepDown, window, cx| {
                 this.arrow_key(false, window, cx);
             }))
+            .on_action(|_: &super::StepNone, _, _| {})
             .capture_action(cx.listener(Self::paste))
             .capture_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::delete_selection))
@@ -798,7 +799,11 @@ impl<M: FieldModel> Render for TextField<M> {
                 this.spin.hovered &= *hovered;
                 cx.notify();
             }))
-            .on_mouse_down_out(cx.listener(|this, _, window, cx| this.blur(window, cx)))
+            .on_mouse_down_out(cx.listener(|this, _, window, cx| {
+                if !window.default_prevented() {
+                    this.blur(window, cx);
+                }
+            }))
             .child(
                 canvas(
                     move |bounds, window, _| window.set_focus_bounds(&handle, bounds),
@@ -843,10 +848,20 @@ impl<M: FieldModel> Render for TextField<M> {
             });
         }
         if focused {
+            let value = self.value.value();
+            let editor = self.editor.read(cx);
+            let (text, selected) = (editor.value(), editor.selected_range());
+            let utf16 = |end: usize| text[..end].encode_utf16().count();
+            let selection = (self.kind != FieldKind::Number)
+                .then(|| [utf16(selected.start), utf16(selected.end)]);
             root = root.child(
                 canvas(
-                    |bounds, _, cx| {
-                        crate::parity::record_mask(cx, crate::parity::FOCUSED_INPUT, bounds)
+                    move |bounds, _, cx| {
+                        crate::parity::record_mask(cx, crate::parity::FOCUSED_INPUT, bounds);
+                        crate::parity::record_focused_input(cx, || crate::parity::FocusedInput {
+                            value,
+                            selection,
+                        });
                     },
                     |_, _, _, _| {},
                 )

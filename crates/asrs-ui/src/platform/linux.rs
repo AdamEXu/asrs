@@ -268,9 +268,13 @@ pub(super) fn close_popup_menu(window: &Window) {
     dismiss_popup(window);
 }
 
-pub(super) fn dismiss_popup(window: &Window) -> bool {
+pub(super) fn menu_takes_keys(window: &Window) -> bool {
     let id = handle_of(window).window_id();
-    let open = OPEN.with_borrow(|open| open.as_ref().is_some_and(|open| open.parent == id));
+    OPEN.with_borrow(|open| open.as_ref().is_some_and(|open| open.parent == id))
+}
+
+pub(super) fn dismiss_popup(window: &Window) -> bool {
+    let open = menu_takes_keys(window);
     if open {
         close_open_popup();
     }

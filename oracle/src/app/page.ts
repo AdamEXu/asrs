@@ -41,19 +41,25 @@ export function downloadShows(expected: string | number): boolean {
   return [alert, details].some((el) => !el.hidden && el.innerText.startsWith(expected));
 }
 
-/** `document.activeElement`: what it is, its box and whether it takes `global.css`'s outline; null when it is `body`. */
+/**
+ * `document.activeElement`: what it is, whether Tab reaches it (a scroller that holds nothing to focus has no `tabindex`
+ * and is), its box, whether it takes `global.css`'s outline, and an input's value and selection; null when it is `body`.
+ */
 export function focused() {
   const el = document.activeElement as HTMLElement | null;
   if (el === null || el === document.body) return null;
   const r = el.getBoundingClientRect();
   const style = getComputedStyle(el);
   const classes = typeof el.className === "string" ? el.className.trim().split(/\s+/).filter((c) => c !== "") : [];
+  const text = el instanceof HTMLInputElement && ["text", "search", "number"].includes(el.type) ? el : null;
   return {
     element: [el.tagName.toLowerCase(), ...classes].join("."),
     title: el.title,
-    stop: el.tabIndex >= 0,
+    stop: el.tabIndex >= 0 || !el.hasAttribute("tabindex"),
     rect: [r.x, r.y, r.width, r.height],
-    ring: style.outline === "rgb(68, 108, 227) solid 2px"
+    ring: style.outline === "rgb(68, 108, 227) solid 2px",
+    value: text?.value,
+    selection: text?.selectionStart == null ? undefined : [text.selectionStart, text.selectionEnd]
   };
 }
 

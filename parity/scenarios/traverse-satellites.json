@@ -88,6 +88,9 @@
       "index": 0
     },
     {
+      "focus": true
+    },
+    {
       "wait": 400
     },
     {
@@ -259,6 +262,9 @@
       "index": 1
     },
     {
+      "focus": true
+    },
+    {
       "wait": 400
     },
     {
@@ -366,6 +372,9 @@
     {
       "prompt": "satellite",
       "index": 2
+    },
+    {
+      "focus": true
     },
     {
       "wait": 400
@@ -509,6 +518,9 @@
     {
       "prompt": "satellite",
       "index": 3
+    },
+    {
+      "focus": true
     },
     {
       "wait": 400

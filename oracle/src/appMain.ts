@@ -713,7 +713,7 @@ async function traverse(contents: Electron.WebContents, name: string, count: num
 }
 
 let pressedButton: string | null = null;
-const MOUSE_TYPES = { move: ["mouseMove"], down: ["mouseDown"], up: ["mouseUp"], click: ["mouseDown", "mouseUp"] } as const;
+const MOUSE_TYPES = { move: ["mouseMove"], down: ["mouseDown"], up: ["mouseUp"], click: ["mouseDown", "mouseUp"], leave: ["mouseLeave"] } as const;
 
 async function perform(action: Action) {
   const contents = active().webContents;
@@ -786,6 +786,11 @@ async function perform(action: Action) {
     await emulateFocus(contents, action.focus);
   } else if ("traverse" in action) {
     await traverse(contents, action.traverse, action.count ?? 0, action.back ?? false);
+  } else if ("hover" in action) {
+    const folder = path.join(out, "files", "hover");
+    fs.mkdirSync(folder, { recursive: true });
+    const hovered = await exec("window.selection.getHoveredTime()");
+    fs.writeFileSync(path.join(folder, `${action.hover}.json`), JSON.stringify(hovered) + "\n");
   } else if ("capture" in action) {
     if (tooltipLog === undefined) await capture(action.capture, action.probes ?? [], action.masks ?? []);
     else await captureTooltips(action.capture);

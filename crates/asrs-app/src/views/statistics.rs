@@ -23,7 +23,7 @@ use asrs_tabs::statistics::renderer::StatisticsRenderer;
 use asrs_tabs::statistics::values::{StatisticsCell, StatisticsRow};
 use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::canvas_view::{FramePresenter, rasterize};
-use asrs_ui::focus::{self, ScrollAxis};
+use asrs_ui::focus::{self, FocusRing, ScrollAxis};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Bounds, ClickEvent, Context, Div, Entity, FocusHandle, Focusable,
     InteractiveElement, IntoElement, ParentElement, Pixels, ScrollEvent,
@@ -776,18 +776,36 @@ impl<H: FrameHost> HubFrame<H> {
         let selected = self.text.selected(&owner, &doc, window, cx);
         let selected = selected.as_ref().map(|s| (s, self.text.backend_cell()));
         let table = table_layer(grid, &doc, &rows, origin, appearance, selected);
-        let values = grid
+        // `satellite.html` leaves out the container's `tabindex`, so Tab reaches it as a scroller
+        // that holds nothing to focus. Presses do not.
+        let scroller = (satellite && placed.scrolls())
+            .then(|| FocusRing::of(("stats-values", key), None, window, cx));
+        let place = focus::place(("stats-values-place", key), window, cx);
+        let mut values = grid
             .place(shown.values)
             .id("stats-values-container")
             .overflow_hidden()
             .on_scroll(
                 cx.listener(|frame, event: &ScrollEvent, _, cx| frame.statistics_wheel(event, cx)),
             )
-            .child(table)
-            .child(probed(
-                "table.stats-values",
-                grid.place([origin[0], origin[1], width, height]),
-            ));
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .track_focus(&place)
+                    .child(table)
+                    .child(probed(
+                        "table.stats-values",
+                        grid.place([origin[0], origin[1], width, height]),
+                    )),
+            );
+        let mut ring = None;
+        if let Some(scroller) = scroller {
+            values = values.track_focus(&scroller.handle);
+            ring = scroller
+                .outline(appearance)
+                .map(|outline| grid.place(shown.values).child(outline));
+        }
         let dump = self.statistics.tabs.get(&key)?.bitmap.clone();
         let canvas_rect = shown.canvas;
         let entity = cx.entity().downgrade();
@@ -837,6 +855,7 @@ impl<H: FrameHost> HubFrame<H> {
                             frame.statistics_click(event, cx)
                         })),
                 ))
+                .children(ring)
                 .into_any_element(),
         )
     }

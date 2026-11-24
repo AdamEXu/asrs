@@ -88,6 +88,10 @@ impl Placed {
     }
 
     /// The largest scroll offset per axis, in CSS px: Blink's is whole device px.
+    pub fn scrolls(&self) -> bool {
+        self.max_scroll().iter().any(|max| *max > 0.0)
+    }
+
     fn max_scroll(&self) -> [f64; 2] {
         let scroll = self.scroll_size();
         [0, 1].map(|axis| {

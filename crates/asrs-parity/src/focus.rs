@@ -11,7 +11,7 @@ fn rect(focused: &Json) -> Option<Vec<f64>> {
     rect.iter().map(Json::as_f64).collect()
 }
 
-/// Whether upstream's record is of an element that takes no focus from Tab, which is `body`'s in
+/// Whether upstream's record is of an element that only a press focuses, whose focus `body` has in
 /// the port.
 fn nothing(upstream: &Json) -> bool {
     *upstream == Json::Null || upstream.get("stop") == Some(&Json::Bool(false))
@@ -34,7 +34,12 @@ pub fn difference(upstream: &Json, port: &Json) -> Option<String> {
     if !close {
         return Some(format!("{upstream:?} upstream, at {ours:?} on the port"));
     }
-    (upstream.get("ring") != port.get("ring")).then(|| format!("the ring of {upstream:?}"))
+    for key in ["ring", "value", "selection"] {
+        if upstream.get(key) != port.get(key) {
+            return Some(format!("{key}: {upstream:?} upstream, {port:?} on the port"));
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -52,12 +57,18 @@ mod tests {
             (r#"{"rect":[823,1,2,3],"ring":true}"#, true),
             (r#"{"rect":[824,1,2,3],"ring":true}"#, false),
             (r#"{"rect":[823,1,2,3],"ring":false}"#, false),
+            (r#"{"rect":[823,1,2,3],"ring":true,"value":"a"}"#, false),
             ("null", false),
         ] {
             assert_eq!(difference(&theirs, &json(ours)).is_none(), same, "{ours}");
         }
-        let scroller = json(r#"{"stop":false,"rect":[0,1,2,3],"ring":false}"#);
-        assert_eq!(difference(&scroller, &Json::Null), None);
+        let field = json(r#"{"stop":true,"rect":[0,1,2,3],"ring":false,"value":"a","selection":[0,1]}"#);
+        for (ours, same) in [(r#"[0,1]"#, true), (r#"[1,1]"#, false)] {
+            let ours = format!(r#"{{"rect":[0,1,2,3],"ring":false,"value":"a","selection":{ours}}}"#);
+            assert_eq!(difference(&field, &json(&ours)).is_none(), same, "{ours}");
+        }
+        let overlay = json(r#"{"stop":false,"rect":[0,1,2,3],"ring":false}"#);
+        assert_eq!(difference(&overlay, &Json::Null), None);
         assert_eq!(difference(&Json::Null, &Json::Null), None);
         assert!(difference(&Json::Null, &json(r#"{"rect":[0,1,2,3],"ring":true}"#)).is_some());
     }
