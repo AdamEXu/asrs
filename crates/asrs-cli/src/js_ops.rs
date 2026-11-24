@@ -374,6 +374,13 @@ impl JsOps for Cve {
         )
     }
 
+    fn as_number(&self) -> Option<f64> {
+        match self.0 {
+            Value::Number(bits) => Some(f64::from_bits(bits)),
+            _ => None,
+        }
+    }
+
     fn from_prim(p: Prim<'_>) -> Self {
         Cve(match p {
             Prim::Undefined => Value::Undefined,

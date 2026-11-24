@@ -58,13 +58,36 @@ pub enum Prim<'a> {
 pub trait JsOps: Sized {
     /// `ToPrimitive`; primitive receivers map to themselves.
     fn to_primitive(&self, hint: Hint) -> Prim<'_>;
+    /// `===`; two objects are never identical, because every operand upstream compares came
+    /// from a separate parse.
+    fn is_strictly_equal(&self, other: &Self) -> bool {
+        self.is_primitive()
+            && other.is_primitive()
+            && strict_eq_prims(
+                &self.to_primitive(Hint::Default),
+                &other.to_primitive(Hint::Default),
+            )
+    }
     /// Whether the value is already primitive (objects reduce through `to_primitive`).
     fn is_primitive(&self) -> bool;
+    fn as_number(&self) -> Option<f64>;
     /// Wraps the primitive an operator produces back into the value type.
     fn from_prim(p: Prim<'_>) -> Self;
 }
 
 impl JsOps for JsValue {
+    #[inline]
+    fn is_strictly_equal(&self, other: &Self) -> bool {
+        match (self, other) {
+            (JsValue::Undefined, JsValue::Undefined) | (JsValue::Null, JsValue::Null) => true,
+            (JsValue::Bool(x), JsValue::Bool(y)) => x == y,
+            (JsValue::Number(x), JsValue::Number(y)) => x == y,
+            (JsValue::String(x), JsValue::String(y)) => x == y,
+            (JsValue::BigInt(x), JsValue::BigInt(y)) => x == y,
+            _ => false,
+        }
+    }
+
     fn to_primitive(&self, hint: Hint) -> Prim<'_> {
         match self {
             JsValue::Undefined => Prim::Undefined,
@@ -94,6 +117,14 @@ impl JsOps for JsValue {
                 | JsValue::String(_)
                 | JsValue::BigInt(_)
         )
+    }
+
+    #[inline]
+    fn as_number(&self) -> Option<f64> {
+        match self {
+            JsValue::Number(x) => Some(*x),
+            _ => None,
+        }
     }
 
     fn from_prim(p: Prim<'_>) -> Self {
@@ -282,26 +313,18 @@ fn loose_eq_prims(a: &Prim<'_>, b: &Prim<'_>) -> bool {
     }
 }
 
-/// `===` strict equality: numbers by IEEE value (`NaN` never equal, `-0` equals `+0`),
-/// BigInts by value, and reference equality for objects, which is never true here: every
-/// operand upstream compares came from a separate parse.
+/// `===`: numbers by IEEE value (`NaN` never equal, `-0` equals `+0`), BigInts by value.
+#[inline]
 pub fn strict_equals<V: JsOps>(a: &V, b: &V) -> bool {
-    a.is_primitive()
-        && b.is_primitive()
-        && strict_eq_prims(
-            &a.to_primitive(Hint::Default),
-            &b.to_primitive(Hint::Default),
-        )
+    a.is_strictly_equal(b)
 }
 
 /// `SameValueZero`, the `Map`/`Set` key comparison: `===` except `NaN` equals `NaN`.
+#[inline]
 pub fn same_value_zero<V: JsOps>(a: &V, b: &V) -> bool {
-    if !a.is_primitive() || !b.is_primitive() {
-        return false;
-    }
-    match (a.to_primitive(Hint::Default), b.to_primitive(Hint::Default)) {
-        (Prim::Number(x), Prim::Number(y)) => x == y || (x.is_nan() && y.is_nan()),
-        (pa, pb) => strict_eq_prims(&pa, &pb),
+    match (a.as_number(), b.as_number()) {
+        (Some(x), Some(y)) => x == y || (x.is_nan() && y.is_nan()),
+        _ => a.is_strictly_equal(b),
     }
 }
 
@@ -319,6 +342,9 @@ pub fn loose_equals<V: JsOps>(a: &V, b: &V) -> bool {
 
 /// `a + b`.
 pub fn add<V: JsOps>(a: &V, b: &V) -> Result<V, JsError> {
+    if let (Some(x), Some(y)) = (a.as_number(), b.as_number()) {
+        return Ok(V::from_prim(Prim::Number(x + y)));
+    }
     Ok(V::from_prim(add_prims(
         &a.to_primitive(Hint::Default),
         &b.to_primitive(Hint::Default),
@@ -352,11 +378,11 @@ pub fn unary_plus<V: JsOps>(a: &V) -> Result<V, JsError> {
 
 /// The abstract relational comparison; `None` is its `undefined` (a NaN operand).
 pub fn compare<V: JsOps>(a: &V, b: &V) -> Result<Option<Ordering>, JsError> {
+    if let (Some(x), Some(y)) = (a.as_number(), b.as_number()) {
+        return Ok(x.partial_cmp(&y));
+    }
     let pa = a.to_primitive(Hint::Number);
     let mut pb = b.to_primitive(Hint::Number);
-    if let (Prim::Number(x), Prim::Number(y)) = (&pa, &pb) {
-        return Ok(x.partial_cmp(y));
-    }
     if let (Prim::String(x), Prim::String(y)) = (&pa, &pb) {
         return Ok(Some(x.units().cmp(y.units())));
     }
@@ -630,12 +656,11 @@ pub const DATE_PROTO: &[&str] = &[
     "toLocaleTimeString",
 ];
 
-/// Whether `name` appears in one of the prototype tables the `in` operator consults.
-pub fn inherited(tables: &[&[&str]], name: &str) -> bool {
-    tables
-        .iter()
-        .flat_map(|t| t.iter())
-        .any(|member| *member == name)
+fn inherited(tables: &[&[&str]], key: &JsString) -> bool {
+    let units = key.units();
+    tables.iter().copied().flatten().any(|member| {
+        member.len() == units.len() && member.bytes().zip(units).all(|(b, u)| u16::from(b) == *u)
+    })
 }
 
 /// `key in value` with a JS string key, including members inherited through the
@@ -643,30 +668,22 @@ pub fn inherited(tables: &[&[&str]], name: &str) -> bool {
 pub fn has_key(value: &JsValue, key: &JsString) -> Result<bool, JsError> {
     let index = array_index(key.units()).map(|i| i as usize);
     match value {
-        JsValue::Object(o) => {
-            Ok(o.get_key(key).is_some() || inherited(&[OBJECT_PROTO], &key.to_string_lossy()))
-        }
+        JsValue::Object(o) => Ok(o.get_key(key).is_some() || inherited(&[OBJECT_PROTO], key)),
         JsValue::Array(items) => Ok(match index {
             Some(i) => i < items.len(),
             None => {
                 key.units() == JsString::from("length").units()
-                    || inherited(&[ARRAY_PROTO, OBJECT_PROTO], &key.to_string_lossy())
+                    || inherited(&[ARRAY_PROTO, OBJECT_PROTO], key)
             }
         }),
         JsValue::Bytes(bytes) => Ok(match index {
             Some(i) => i < bytes.len(),
-            None => inherited(
-                &[UINT8_ARRAY_PROTO, TYPED_ARRAY_PROTO, OBJECT_PROTO],
-                &key.to_string_lossy(),
-            ),
+            None => inherited(&[UINT8_ARRAY_PROTO, TYPED_ARRAY_PROTO, OBJECT_PROTO], key),
         }),
         JsValue::ExtData(..) => Ok(*key == JsString::from("type")
             || *key == JsString::from("data")
-            || inherited(&[OBJECT_PROTO], &key.to_string_lossy())),
-        JsValue::Date(_) => Ok(inherited(
-            &[DATE_PROTO, OBJECT_PROTO],
-            &key.to_string_lossy(),
-        )),
+            || inherited(&[OBJECT_PROTO], key)),
+        JsValue::Date(_) => Ok(inherited(&[DATE_PROTO, OBJECT_PROTO], key)),
         other => Err(JsError::type_error(format!(
             "Cannot use 'in' operator to search for '{}' in {}",
             key.to_string_lossy(),
@@ -986,12 +1003,26 @@ pub fn to_string(value: &JsValue) -> JsString {
 
 /// `ToBoolean`.
 pub fn to_boolean(value: &JsValue) -> bool {
-    !value.is_primitive() || value.to_primitive(Hint::Default).to_boolean()
+    match value {
+        JsValue::Undefined | JsValue::Null => false,
+        JsValue::Bool(b) => *b,
+        JsValue::Number(n) => *n != 0.0 && !n.is_nan(),
+        JsValue::String(s) => !s.is_empty(),
+        JsValue::BigInt(b) => !b.is_zero(),
+        JsValue::Array(_)
+        | JsValue::Object(_)
+        | JsValue::Bytes(_)
+        | JsValue::Date(_)
+        | JsValue::ExtData(..) => true,
+    }
 }
 
 /// `ToNumber`, as unary `+` and an `Array.prototype.length` write apply it.
 pub fn to_number(value: &JsValue) -> Result<f64, JsError> {
-    value.to_primitive(Hint::Number).to_number()
+    match value {
+        JsValue::Number(x) => Ok(*x),
+        _ => value.to_primitive(Hint::Number).to_number(),
+    }
 }
 
 /// `ToNumber`, as a binary `-` applies it: the BigInt failure is the operator's "mix"
