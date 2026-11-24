@@ -622,7 +622,7 @@ impl<H: FrameHost> HubFrame<H> {
             scale: f64::from(scale),
         };
         let owner = Owner::Table(shown.key.clone());
-        let selected = (self.text).selected(&owner, &TableText::new(&view), appearance, window, cx);
+        let selected = (self.text).selected(&owner, &TableText::new(&view), window, cx);
         let jump = self.jump_field(&shown, &view, window, cx);
         let dark = appearance == Appearance::Dark;
         let mut root = div().absolute().left_0().top_0().size_full();

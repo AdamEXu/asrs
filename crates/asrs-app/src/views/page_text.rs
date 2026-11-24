@@ -19,7 +19,6 @@ use asrs_ui::selection::geometry::{Block, LuRect, Measure, part};
 use asrs_ui::selection::{
     Behavior, Button, Caret, Document, Hit, Position, Press, TextSelection, write_clipboard,
 };
-use asrs_ui::theme::Appearance;
 
 use super::frame::{FrameHost, HubFrame};
 use super::large_table::Grid;
@@ -242,7 +241,6 @@ impl PageSelection {
         &mut self,
         owner: &Owner,
         doc: &dyn Document,
-        appearance: Appearance,
         window: &Window,
         cx: &App,
     ) -> Option<Selected> {
@@ -257,7 +255,7 @@ impl PageSelection {
         self.state.sync(doc);
         Some(Selected {
             range: self.state.painted(doc)?,
-            colors: SelectionColors::of(appearance, page_active(window, cx)),
+            colors: SelectionColors::new(page_active(window, cx)),
         })
     }
 }

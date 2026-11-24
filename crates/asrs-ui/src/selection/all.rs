@@ -5,7 +5,6 @@ use std::collections::HashSet;
 use gpui_kit::{App, Global, Window, WindowId};
 
 use super::colors::{SelectionColors, page_active};
-use crate::theme::Appearance;
 
 #[derive(Default)]
 struct Windows(HashSet<WindowId>);
@@ -32,6 +31,5 @@ pub fn set(all: bool, window: &Window, cx: &mut App) {
 pub fn colors(window: &Window, cx: &App) -> Option<SelectionColors> {
     let id = window.window_handle().window_id();
     cx.try_global::<Windows>()?.0.get(&id)?;
-    let appearance = Appearance::of(window, cx);
-    Some(SelectionColors::of(appearance, page_active(window, cx)))
+    Some(SelectionColors::new(page_active(window, cx)))
 }

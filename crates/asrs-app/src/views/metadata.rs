@@ -274,7 +274,7 @@ impl<H: FrameHost> HubFrame<H> {
             let placed = layout.place(&table, rect[2], scale);
             let doc = MetadataText::new(placed, builds);
             let owner = Owner::Metadata;
-            let selected = self.text.selected(&owner, &doc, appearance, window, cx);
+            let selected = self.text.selected(&owner, &doc, window, cx);
             let backend = &mut **self.text.backend();
             return Some(table_element(
                 grid,

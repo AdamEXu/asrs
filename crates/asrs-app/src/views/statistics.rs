@@ -752,7 +752,7 @@ impl<H: FrameHost> HubFrame<H> {
         let builds = displayed(self.host().hub(cx)).map_or(0, |(r, _)| r.table().builds());
         let doc = StatisticsText::new(placed.clone(), builds);
         let owner = Owner::Statistics(key);
-        let selected = self.text.selected(&owner, &doc, appearance, window, cx);
+        let selected = self.text.selected(&owner, &doc, window, cx);
         let selected = selected.as_ref().map(|s| (s, self.text.backend_cell()));
         let table = table_layer(grid, &doc, &rows, origin, appearance, selected);
         let values = grid

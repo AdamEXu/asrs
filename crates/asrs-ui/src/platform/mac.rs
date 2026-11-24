@@ -12,13 +12,13 @@ use objc2::{
     sel,
 };
 use objc2_app_kit::{
-    NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication,
-    NSAutoresizingMaskOptions, NSBitmapImageRep, NSColor, NSColorSpace, NSControlStateValueOff,
-    NSControlStateValueOn, NSDocumentController, NSEvent, NSEventMask, NSEventModifierFlags,
-    NSEventType, NSFont, NSFontAttributeName, NSImage, NSLineBreakMode, NSMenu, NSMenuItem,
-    NSMutableParagraphStyle, NSParagraphStyleAttributeName, NSPopUpButtonCell, NSTextAlignment,
-    NSUserInterfaceLayoutDirection, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
-    NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowOrderingMode, NSWritingDirection,
+    NSAppearance, NSAppearanceNameAqua, NSApplication, NSAutoresizingMaskOptions, NSBitmapImageRep,
+    NSColor, NSColorSpace, NSControlStateValueOff, NSControlStateValueOn, NSDocumentController,
+    NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSFont, NSFontAttributeName, NSImage,
+    NSLineBreakMode, NSMenu, NSMenuItem, NSMutableParagraphStyle, NSParagraphStyleAttributeName,
+    NSPopUpButtonCell, NSTextAlignment, NSUserInterfaceLayoutDirection, NSView,
+    NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
+    NSWindow, NSWindowOrderingMode, NSWritingDirection,
 };
 use objc2_core_foundation::{CFData, CGRect};
 use objc2_core_graphics::{
@@ -864,15 +864,9 @@ fn srgb(color: &NSColor) -> u32 {
 
 /// `WebSandboxSupportMac::GetSystemColor`'s `kSelectedTextBackground` and
 /// `kSecondarySelectedControl`.
-pub(super) fn selection_colors(dark: bool) -> SystemSelection {
-    // SAFETY: AppKit's constant names.
-    let name = unsafe {
-        if dark {
-            NSAppearanceNameDarkAqua
-        } else {
-            NSAppearanceNameAqua
-        }
-    };
+pub(super) fn selection_colors() -> SystemSelection {
+    // SAFETY: AppKit's constant name.
+    let name = unsafe { NSAppearanceNameAqua };
     let colors = std::rc::Rc::new(Cell::new((0, 0)));
     let read = {
         let colors = colors.clone();

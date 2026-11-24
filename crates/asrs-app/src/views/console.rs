@@ -595,7 +595,7 @@ impl<H: FrameHost> HubFrame<H> {
         let selected = {
             let (_, renderer) = displayed(self.host().hub(cx))?;
             let doc = ConsoleText(&renderer.view().rows);
-            text.selected(&owner, &doc, appearance, window, cx)
+            text.selected(&owner, &doc, window, cx)
         };
         self.text = text;
         let (_, renderer) = displayed(self.host().hub(cx))?;

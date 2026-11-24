@@ -3,7 +3,6 @@
 use gpui_kit::{App, Global, Rgba, Window};
 
 use crate::platform;
-use crate::theme::Appearance;
 
 /// Blink's `Color::BlendWithWhite`: a translucent colour that looks like `rgb` on white.
 pub fn blend_with_white(rgb: u32) -> u32 {
@@ -32,17 +31,15 @@ pub struct SelectionColors {
 }
 
 impl SelectionColors {
-    /// `LayoutTheme`'s selection colours for a frame that is or is not focused and active.
-    pub fn of(appearance: Appearance, active: bool) -> SelectionColors {
-        let dark = appearance == Appearance::Dark;
-        let system = platform::selection_colors(dark);
-        let background = match (active, dark && cfg!(target_os = "macos")) {
-            (true, true) => system.active << 8 | 204,
-            (true, false) => blend_with_white(system.active),
-            (false, _) => blend_with_white(system.inactive),
-        };
-        let text = system.text.map(|[a, i]| if active { a } else { i });
-        SelectionColors { background, text }
+    /// `LayoutTheme`'s selection colours for a frame that is or is not focused and active. The
+    /// pages leave `color-scheme` at `normal`, so both themes have the light ones.
+    pub fn new(active: bool) -> SelectionColors {
+        let system = platform::selection_colors();
+        let pick = |[yes, no]: [u32; 2]| if active { yes } else { no };
+        SelectionColors {
+            background: blend_with_white(pick([system.active, system.inactive])),
+            text: system.text.map(pick),
+        }
     }
 
     pub fn rgba(&self) -> Rgba {

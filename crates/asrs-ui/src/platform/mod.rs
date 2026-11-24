@@ -410,7 +410,7 @@ fn fallback_wheel_delta(delta: &ScrollDelta) -> WheelDelta {
     }
 }
 
-/// The system's colours of selected text, `0xRRGGBB`.
+/// The system's light colours of selected text, `0xRRGGBB`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SystemSelection {
     pub active: u32,
@@ -419,8 +419,8 @@ pub struct SystemSelection {
     pub text: Option<[u32; 2]>,
 }
 
-pub fn selection_colors(dark: bool) -> SystemSelection {
-    imp::selection_colors(dark)
+pub fn selection_colors() -> SystemSelection {
+    imp::selection_colors()
 }
 
 /// Has the windows take the Edit menu's Copy and Select All, which AppKit sends to the first

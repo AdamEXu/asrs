@@ -12,7 +12,6 @@ use asrs_ui::selection::geometry::{Block, LuRect, Measure, part};
 use asrs_ui::selection::{
     Behavior, Button, Caret, Document, Hit, Position, Press, TextSelection, write_clipboard,
 };
-use asrs_ui::theme::Appearance;
 
 use super::page::ScrolledPage;
 use crate::views::page_text::{Selected, autoscroll_by, edit_command};
@@ -99,7 +98,7 @@ impl PageText {
         window: &Window,
         cx: &App,
     ) -> Option<Selected> {
-        let colors = SelectionColors::of(Appearance::of(window, cx), page_active(window, cx));
+        let colors = SelectionColors::new(page_active(window, cx));
         self.state.sync(doc);
         Some(Selected {
             range: self.state.painted(doc)?,
