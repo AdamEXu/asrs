@@ -168,6 +168,10 @@ impl HostState {
             .count()
     }
 
+    pub(super) fn decode_threads_started(&self) -> u64 {
+        self.next_worker
+    }
+
     fn timer_clock(&self, cx: &App) -> live::ExecutorClock {
         live::ExecutorClock::new(self.frame_origin, cx)
     }

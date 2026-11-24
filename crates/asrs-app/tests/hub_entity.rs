@@ -589,13 +589,13 @@ fn nested_timeouts_of_a_child_log_are_clamped() {
             last_status(seen) == Some(Status::Idle)
         });
         for wait in 0..waits {
-            let workers = page.read(Hub::decode_threads);
-            assert_eq!(workers, 1, "{chunks} chunks, after {wait} waits");
+            let started = page.read(Hub::decode_threads_started);
+            assert_eq!(started, 1, "{chunks} chunks, after {wait} waits");
             page.cx.advance_clock(Duration::from_millis(4));
             page.cx.run_until_parked();
         }
-        let workers = page.read(Hub::decode_threads);
-        assert_eq!(workers, 2, "{chunks} chunks, after {waits} waits");
+        let started = page.read(Hub::decode_threads_started);
+        assert_eq!(started, 2, "{chunks} chunks, after {waits} waits");
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
