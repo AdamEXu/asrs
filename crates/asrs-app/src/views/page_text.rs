@@ -97,7 +97,7 @@ impl PlacedBlock<'_> {
         }
     }
 
-    fn from_origin(&self, [x, y]: [f64; 2]) -> [Lu; 2] {
+    fn in_block(&self, [x, y]: [f64; 2]) -> [Lu; 2] {
         [
             floor_device(x, self.scale) - self.origin[0],
             floor_device(y, self.scale) - self.origin[1],
@@ -106,11 +106,11 @@ impl PlacedBlock<'_> {
 
     /// The text node at a client position.
     pub fn node_at(&self, at: [f64; 2]) -> Option<usize> {
-        self.block.node_at(self.from_origin(at))
+        self.block.node_at(self.in_block(at))
     }
 
     pub fn hit(&self, at: [f64; 2], backend: &mut dyn TextBackend) -> Hit {
-        let at = self.from_origin(at);
+        let at = self.in_block(at);
         let behavior = Behavior::current();
         let mut measure = self.measure(backend);
         Hit {

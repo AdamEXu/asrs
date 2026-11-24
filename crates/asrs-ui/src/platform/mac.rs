@@ -791,8 +791,10 @@ pub(super) fn set_application_menu(
     true
 }
 
+type EditHandler = Box<dyn Fn(EditCommand)>;
+
 thread_local! {
-    static EDIT_COMMAND: RefCell<Option<Box<dyn Fn(EditCommand)>>> = const { RefCell::new(None) };
+    static EDIT_COMMAND: RefCell<Option<EditHandler>> = const { RefCell::new(None) };
 }
 
 unsafe extern "C-unwind" fn copy_command(_: &AnyObject, _: Sel, _: Option<&AnyObject>) {

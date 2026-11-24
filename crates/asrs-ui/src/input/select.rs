@@ -297,8 +297,7 @@ fn draw(
     origin: (f32, f32),
     css: (f32, f32),
     state: SelectState,
-    label: &str,
-    selected: Option<SelectionColors>,
+    (label, selected): (&str, Option<SelectionColors>),
     scale: f32,
 ) -> Option<Pixmap> {
     let (ascent, descent) = text::font_metrics(cx, &TextStyle::new(CONTROL_FONT), scale);
@@ -480,7 +479,7 @@ pub fn paint_select(
     skia::paint_with_app(
         key,
         snapped,
-        |cx| draw(cx, (w, h), origin, css, state, &label, selected, scale),
+        |cx| draw(cx, (w, h), origin, css, state, (&label, selected), scale),
         window,
         cx,
     );
