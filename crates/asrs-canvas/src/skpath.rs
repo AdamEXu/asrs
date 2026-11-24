@@ -4,6 +4,7 @@
 //! the scan converters make of it: bounds, convexity, `isRect` and the auto-closing edge walk.
 
 use crate::hairline::P;
+use crate::matrix::Matrix;
 use crate::path::Affine;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -75,6 +76,15 @@ impl Rect {
         ]
     }
 
+    pub fn contains(&self, o: &Rect) -> bool {
+        !self.is_empty()
+            && !o.is_empty()
+            && self.left <= o.left
+            && self.top <= o.top
+            && self.right >= o.right
+            && self.bottom >= o.bottom
+    }
+
     pub fn intersect(&self, o: &Rect) -> Option<Rect> {
         let l = self.left.max(o.left);
         let t = self.top.max(o.top);
@@ -89,21 +99,9 @@ impl Rect {
     }
 }
 
-/// `SkMatrix::mapPoints` for an affine matrix: scale-translate matrices map as `x * sx + tx`,
-/// general ones as `x * sx + y * kx + tx`, as `Affine_vpts` orders the sum.
+/// [`Matrix::map_point`] with the matrix cast to f32.
 pub fn map_point(m: &Affine, p: P) -> P {
-    let [sx, ky, kx, sy, tx, ty] = [m.a, m.b, m.c, m.d, m.e, m.f].map(|v| v as f32);
-    if kx == 0.0 && ky == 0.0 {
-        P {
-            x: p.x * sx + tx,
-            y: p.y * sy + ty,
-        }
-    } else {
-        P {
-            x: p.x * sx + p.y * kx + tx,
-            y: p.y * sy + p.x * ky + ty,
-        }
-    }
+    Matrix::from(m).map_point(p)
 }
 
 impl SkPath {
@@ -251,11 +249,16 @@ impl SkPath {
         self.convex = Some(convex);
     }
 
-    /// `SkPath::transform` for an affine matrix: points mapped, conic weights kept.
+    /// [`SkPath::mapped`] with the matrix cast to f32.
     pub fn transformed(&self, m: &Affine) -> SkPath {
+        self.mapped(&Matrix::from(m))
+    }
+
+    /// `SkPath::transform` for an affine matrix: points mapped, conic weights kept.
+    pub fn mapped(&self, m: &Matrix) -> SkPath {
         let mut out = self.clone();
         for p in &mut out.pts {
-            *p = map_point(m, *p);
+            *p = m.map_point(*p);
         }
         out.convex = None;
         out

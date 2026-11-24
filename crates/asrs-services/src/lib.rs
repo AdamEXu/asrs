@@ -3,6 +3,7 @@ pub mod asset_downloader;
 pub mod asset_loader;
 pub mod beta;
 pub mod constants;
+mod content_encoding;
 pub mod dialog;
 pub mod download;
 pub mod download_deps;

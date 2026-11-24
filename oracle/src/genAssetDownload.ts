@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import http from "node:http";
 import https from "node:https";
+import type net from "node:net";
 import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
@@ -18,7 +19,9 @@ import zlib from "node:zlib";
 //     an empty queue is a network error.
 //   transport: got's http/https requests are rerouted to a local server that answers each URL
 //     from its own queue ({status, headers, body} | {reset} | {hang}; an empty queue is a bare
-//     404); every request got makes (redirects and retries included) is recorded.
+//     404); every request got makes (redirects and retries included) is recorded. `cut` ends the
+//     connection 8 bytes short of the content-length, with a FIN or an RST; `error` fails the
+//     request with that code before it is sent. `hold` keeps the response until `release`.
 //   clock: Date, setTimeout and AbortSignal.timeout are fake. A hung fetch rejects when its
 //     abort timer fires. Math.random returns the case's constant (got's retry noise).
 // Records: {"case","step","op","args"?,"status","timers","fetches","requests","disk",
@@ -44,8 +47,12 @@ const DOWNLOAD_BASE = "https://github.com/Mechanical-Advantage/AdvantageScopeAss
 const OBJECT_BASE = "https://objects.githubusercontent.com/github-production-release-asset-2e65be";
 
 type Distribution = "FRC6328" | "WPILib";
-type FetchOutcome = { status: number; body: string | Uint8Array | null } | { network: true } | { hang: true };
-type ServeOutcome = { status: number; headers?: Record<string, string>; body?: Uint8Array } | { reset: true } | { hang: true };
+type FetchOutcome = { status: number; body: string | Uint8Array | null; hold?: true } | { network: true } | { hang: true };
+type ServeOutcome =
+  | { status: number; headers?: Record<string, string>; body?: Uint8Array; cut?: "fin" | "rst"; hold?: true }
+  | { reset: true }
+  | { hang: true }
+  | { error: string };
 
 const realSetTimeout = globalThis.setTimeout;
 const RealDate = Date;
@@ -91,6 +98,8 @@ const signalTimeouts = new WeakMap<AbortSignal, { ms: number; controller: AbortC
 
 // Per-case scripted state.
 let fetchQueue: FetchOutcome[] = [];
+let releaseFetch: (() => void) | null = null;
+let held = new Map<string, () => void>();
 let serveQueues = new Map<string, ServeOutcome[]>();
 let diskFree: number | undefined | "throw" = 1e12;
 let callbackFails = false;
@@ -157,20 +166,28 @@ g.fetch = async (input: unknown, init: any = {}) => {
   });
   const outcome = fetchQueue.shift();
   if (outcome === undefined || "network" in outcome) throw new TypeError("fetch failed");
-  if ("hang" in outcome) {
+  const response = () => {
+    const { status, body } = outcome as { status: number; body: string | Uint8Array | null };
+    return new Response(body === null ? null : typeof body === "string" ? body : Buffer.from(body), { status });
+  };
+  if ("hang" in outcome || outcome.hold) {
     if (timeout === undefined) {
       generatorError ??= `case ${caseIndex}: hung fetch without a timeout`;
       return new Promise(() => {});
     }
-    return new Promise((_, reject) => {
-      g.setTimeout(() => {
+    return new Promise((resolve, reject) => {
+      const timer = g.setTimeout(() => {
         timeout.controller.abort(new DOMException("The operation was aborted due to timeout", "TimeoutError"));
         reject(timeout.controller.signal.reason);
       }, timeout.ms);
+      if ("hold" in outcome)
+        releaseFetch = () => {
+          g.clearTimeout(timer);
+          resolve(response());
+        };
     });
   }
-  const body = outcome.body === null ? null : typeof outcome.body === "string" ? outcome.body : Buffer.from(outcome.body);
-  return new Response(body, { status: outcome.status });
+  return response();
 };
 
 // got resolves `https`/`http` at request time; requests go to the local server instead, carrying
@@ -179,7 +196,14 @@ let serverPort = 0;
 const localAgent = new http.Agent({ keepAlive: false });
 function reroute(options: any, callback?: (res: http.IncomingMessage) => void) {
   const original: string = options.href ?? `${options.protocol}//${options.host ?? options.hostname}${options.path ?? "/"}`;
-  return realHttpRequest(
+  const failure = serveQueues.get(original)?.[0];
+  const fails = failure !== undefined && "error" in failure;
+  if (fails) {
+    serveQueues.get(original)!.shift();
+    const headers = Object.entries(options.headers ?? {}).map(([k, v]) => [k.toLowerCase(), String(v)]);
+    requestLog.push({ url: original, seq: requestSeq++, method: options.method, headers: Object.fromEntries(headers.sort((a, b) => (a[0] < b[0] ? -1 : 1))) });
+  }
+  const request = realHttpRequest(
     {
       method: options.method,
       host: "127.0.0.1",
@@ -190,6 +214,8 @@ function reroute(options: any, callback?: (res: http.IncomingMessage) => void) {
     },
     callback
   );
+  if (fails) request.destroy(Object.assign(new Error(failure.error), { code: failure.error }));
+  return request;
 }
 (https as any).request = reroute;
 (http as any).request = reroute;
@@ -211,11 +237,39 @@ const server = http.createServer((req, res) => {
     req.socket.destroy();
     return;
   }
+  if ("error" in outcome) {
+    generatorError ??= `case ${caseIndex}: ${url} reached the server`;
+    return;
+  }
   const counters = work;
-  counters.inflight++;
-  res.on("close", () => counters.inflight--);
-  res.writeHead(outcome.status, outcome.headers ?? {});
-  res.end(outcome.body === undefined ? undefined : Buffer.from(outcome.body));
+  const body = outcome.body === undefined ? undefined : Buffer.from(outcome.body);
+  const answer = () => {
+    counters.inflight++;
+    res.on("close", () => counters.inflight--);
+    if (outcome.cut === undefined) {
+      res.writeHead(outcome.status, outcome.headers ?? {});
+      res.end(body);
+      return;
+    }
+    res.writeHead(outcome.status, { ...(outcome.headers ?? {}), "content-length": String(body!.length + 8) });
+    res.write(body);
+    // Long enough for got to have read what was sent, which a reset may discard.
+    realSetTimeout(() => {
+      if (outcome.cut === "fin") {
+        counters.hung++;
+        req.socket.destroy();
+      } else (req.socket as net.Socket).resetAndDestroy();
+    }, 100);
+  };
+  if (!outcome.hold) {
+    answer();
+    return;
+  }
+  counters.hung++;
+  held.set(url, () => {
+    counters.hung--;
+    answer();
+  });
 });
 
 const realSleep = (ms: number) => new Promise((resolve) => realSetTimeout(resolve, ms));
@@ -349,6 +403,8 @@ async function reset(dist: Distribution, now: number, random = 0.5) {
   work = { downloads: 0, hung: 0, inflight: 0 };
   randomValue = random;
   fetchQueue = [];
+  releaseFetch = null;
+  held = new Map();
   serveQueues = new Map();
   diskFree = 1e12;
   callbackFails = false;
@@ -371,7 +427,7 @@ const putText = (name: string, text: string) => putFile(name, utf8(text));
 function fetchArgs(outcome: FetchOutcome): object {
   if ("status" in outcome) {
     const body = outcome.body === null ? null : hexValue(typeof outcome.body === "string" ? utf8(outcome.body) : outcome.body);
-    return { status: outcome.status, body };
+    return { status: outcome.status, body, ...(outcome.hold ? { hold: true } : {}) };
   }
   return outcome;
 }
@@ -379,7 +435,8 @@ const queueFetch = (outcome: FetchOutcome) => record("queueFetch", fetchArgs(out
 
 function serveArgs(url: string, outcome: ServeOutcome): object {
   if ("status" in outcome) {
-    return { url, status: outcome.status, headers: outcome.headers ?? {}, body: hexValue(outcome.body ?? new Uint8Array()) };
+    const { cut, hold } = outcome;
+    return { url, status: outcome.status, headers: outcome.headers ?? {}, body: hexValue(outcome.body ?? new Uint8Array()), ...(cut ? { cut } : {}), ...(hold ? { hold } : {}) };
   }
   return { url, ...outcome };
 }
@@ -387,6 +444,27 @@ const serve = (url: string, outcome: ServeOutcome) =>
   record("serve", serveArgs(url, outcome), () => {
     if (!serveQueues.has(url)) serveQueues.set(url, []);
     serveQueues.get(url)!.push(outcome);
+  });
+
+const releaseHeld = (url: string) =>
+  record("release", { url }, () => {
+    const answer = held.get(url);
+    if (answer === undefined) throw new Error(`case ${caseIndex}: nothing holds ${url}`);
+    held.delete(url);
+    answer();
+  });
+/** Releases what `url` holds now, even once it holds a newer response. */
+const releaseHeldLater = (url: string) => {
+  const answer = held.get(url);
+  if (answer === undefined) throw new Error(`case ${caseIndex}: nothing holds ${url}`);
+  held.delete(url);
+  return () => record("release", { url, older: true }, answer);
+};
+const releaseFetched = () =>
+  record("releaseFetch", undefined, () => {
+    if (releaseFetch === null) throw new Error(`case ${caseIndex}: no fetch is held`);
+    releaseFetch();
+    releaseFetch = null;
   });
 
 const setDisk = (free: number | null | "throw") =>
@@ -917,6 +995,160 @@ async function randomCase() {
   }
 }
 
+async function connections() {
+  const one = async (name: string, outcomes: ServeOutcome[], url = assetUrl(TAG_DEFAULT, `${name}.zip`)) => {
+    await reset("FRC6328", CLOCKS[0]);
+    await putDir(AUTO);
+    await apiOk([release(TAG_DEFAULT, [{ name: `${name}.zip`, url }])]);
+    for (const outcome of outcomes) await serve(url, outcome);
+    await start();
+    await advanceBy(2_100);
+    await advanceBy(4_200);
+    await advanceBy(30_000);
+  };
+  const ok = (body: Uint8Array, headers: Record<string, string> = {}): ServeOutcome => ({ status: 200, headers, body });
+
+  // Connections that end inside a body, and what got makes of the retry after a reset.
+  const text = utf8("plain text");
+  const archive = fieldZip("Cut");
+  for (const body of [text, archive.subarray(0, 200)]) {
+    await one("Robot_Fin", [{ status: 200, body, cut: "fin" }]);
+    await one("Robot_FinError", [{ status: 500, body, cut: "fin" }]);
+  }
+  await one("Robot_Rst", [{ status: 200, body: text, cut: "rst" }, ok(utf8("whole"))]);
+  await one("Robot_RstZip", [{ status: 200, body: archive.subarray(0, 200), cut: "rst" }, ok(archive)]);
+  await one("Robot_RstTwice", [{ status: 200, body: text, cut: "rst" }, { status: 200, body: utf8("more"), cut: "rst" }, ok(utf8("whole"), { "content-disposition": "attachment; filename=last.txt" })]);
+  await one("Robot_RstThrice", [1, 2, 3].map((): ServeOutcome => ({ status: 200, body: text, cut: "rst" })));
+  await one("Robot_RstGone", [{ status: 200, body: text, cut: "rst" }, { status: 404 }]);
+  await one("Robot_RstReset", [{ status: 200, body: text, cut: "rst" }, { reset: true }, ok(utf8("whole"))]);
+  await one("Robot_RstName", [{ status: 200, headers: { "content-disposition": "attachment; filename=first.txt" }, body: text, cut: "rst" }, ok(utf8("whole"), { "content-disposition": "attachment; filename=second.txt" })]);
+
+  // Error codes: those got retries, those it does not.
+  for (const code of ["ECONNREFUSED", "ETIMEDOUT", "EPIPE", "EHOSTUNREACH", "EAI_AGAIN", "EPROTO", "ERR_TLS_CERT_ALTNAME_INVALID", "ENOTFOUND", "ENETUNREACH", "CERT_HAS_EXPIRED", "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "DEPTH_ZERO_SELF_SIGNED_CERT", "CERT_REJECTED"]) {
+    await one("Robot_Error", [{ error: code }, ok(archive)]);
+  }
+  await one("Robot_Mixed", [{ error: "ECONNREFUSED" }, { reset: true }, { error: "ETIMEDOUT" }]);
+
+  // Content encodings.
+  const gzip = (data: Uint8Array) => new Uint8Array(zlib.gzipSync(data));
+  const join = (...parts: Uint8Array[]) => new Uint8Array(Buffer.concat(parts));
+  const long = utf8("a long line of text, ".repeat(5000));
+  const header = (flags: number, ...fields: Uint8Array[]) => join(new Uint8Array([0x1f, 0x8b, 8, flags, 0, 0, 0, 0, 0, 3]), ...fields, gzip(text).subarray(10));
+  const flip = (data: Uint8Array, at: number) => {
+    const copy = data.slice();
+    copy[at < 0 ? copy.length + at : at] ^= 0x55;
+    return copy;
+  };
+  const encoded: [string, Uint8Array][] = [
+    ["gzip", gzip(archive)],
+    ["gzip", gzip(text)],
+    ["gzip", gzip(long)],
+    ["gzip", gzip(utf8(""))],
+    ["gzip", join(gzip(text), gzip(utf8(" and more")))],
+    ["gzip", join(gzip(text), new Uint8Array(10))],
+    ["gzip", join(gzip(text), utf8("junk after the member"))],
+    ["gzip", join(gzip(text), new Uint8Array([0x1f]))],
+    ["gzip", join(gzip(text), gzip(text).subarray(0, 15))],
+    ["gzip", gzip(long).subarray(0, 120)],
+    ["gzip", gzip(text).subarray(0, 5)],
+    ["gzip", gzip(text).subarray(0, -3)],
+    ["gzip", new Uint8Array([0x1f])],
+    ["gzip", new Uint8Array(0)],
+    ["gzip", flip(gzip(text), -1)],
+    ["gzip", flip(gzip(text), -6)],
+    ["gzip", flip(gzip(text), 2)],
+    ["gzip", flip(gzip(text), 10)],
+    ["gzip", text],
+    ["gzip", new Uint8Array(zlib.deflateSync(text))],
+    ["gzip", header(8, utf8("name.txt\0"))],
+    ["gzip", header(16, utf8("comment\0"))],
+    ["gzip", header(4, new Uint8Array([3, 0, 1, 2, 3]))],
+    ["gzip", header(28, new Uint8Array([1, 0, 9]), utf8("n\0c\0"))],
+    ["gzip", header(0x20)],
+    ["gzip", header(2, new Uint8Array([1, 2]))],
+    ["gzip", header(2, new Uint8Array([zlib.crc32(new Uint8Array([0x1f, 0x8b, 8, 2, 0, 0, 0, 0, 0, 3])) & 0xff, (zlib.crc32(new Uint8Array([0x1f, 0x8b, 8, 2, 0, 0, 0, 0, 0, 3])) >>> 8) & 0xff]))],
+    ["deflate", new Uint8Array(zlib.deflateSync(archive))],
+    ["deflate", new Uint8Array(zlib.deflateSync(long))],
+    ["deflate", new Uint8Array(zlib.deflateSync(long)).subarray(0, 60)],
+    ["deflate", join(new Uint8Array(zlib.deflateSync(text)), utf8("junk"))],
+    ["deflate", flip(new Uint8Array(zlib.deflateSync(text)), -1)],
+    ["deflate", new Uint8Array(zlib.deflateRawSync(text))],
+    ["deflate", gzip(text)],
+    ["GZIP", gzip(text)],
+    ["x-gzip", gzip(text)],
+    ["gzip, gzip", gzip(text)],
+    ["br", text],
+    ["identity", text]
+  ];
+  for (const [encoding, body] of encoded) await one("Robot_Encoded", [ok(body, { "content-encoding": encoding })]);
+
+  // Responses that arrive later: while other downloads run, after their check failed, during the
+  // next check, after the next check wrote the same folder; an API reply inside and after its 5 s.
+  const names = ["Robot_Slow.zip", "Robot_Fast.zip"];
+  const [slow, fast] = names.map((n) => assetUrl(TAG_DEFAULT, n));
+  const api = () => apiOk([release(TAG_DEFAULT, names.map((n) => asset(TAG_DEFAULT, n)))]);
+  const hold = (url: string, body: Uint8Array) => serve(url, { status: 200, body, hold: true });
+  for (const fastFails of [false, true]) {
+    await reset("FRC6328", CLOCKS[1]);
+    await putDir(AUTO);
+    await api();
+    await hold(slow, fieldZip("Slow"));
+    await serve(fast, fastFails ? { status: 503 } : { status: 200, body: fieldZip("Fast") });
+    await start();
+    await advanceBy(10_000);
+    await releaseHeld(slow);
+    await api();
+    await serve(fast, { status: 200, body: fieldZip("Fast") });
+    await advanceBy(20_000);
+    await advanceBy(1_000);
+  }
+  await reset("FRC6328", CLOCKS[2]);
+  await putDir(AUTO);
+  await api();
+  await hold(slow, fieldZip("Slow"));
+  await hold(fast, fieldZip("Fast"));
+  await start();
+  await releaseHeld(fast);
+  await releaseHeld(slow);
+  for (const oldFirst of [true, false]) {
+    await reset("FRC6328", CLOCKS[2]);
+    await putDir(AUTO);
+    await api();
+    await hold(slow, fieldZip("Slow"));
+    await serve(fast, { status: 503 });
+    await start();
+    const second = releaseHeldLater(slow);
+    await api();
+    await hold(slow, zip([file("config.json", "second")]));
+    await serve(fast, { status: 200, body: fieldZip("Fast") });
+    await advanceBy(30_000);
+    if (oldFirst) await second();
+    await releaseHeld(slow);
+    if (!oldFirst) await second();
+    await api();
+    await advanceBy(30_000);
+    await advanceBy(1_000);
+  }
+  for (const status of [200, 500]) {
+    await reset("FRC6328", CLOCKS[3]);
+    await putDir(AUTO);
+    await queueFetch({ status, body: JSON.stringify([release(TAG_DEFAULT, [])]), hold: true });
+    await start();
+    await advanceBy(4_000);
+    await releaseFetched();
+    await advanceBy(1_000);
+  }
+  await reset("FRC6328", CLOCKS[3]);
+  await putDir(AUTO);
+  await queueFetch({ status: 200, body: JSON.stringify([release(TAG_DEFAULT, [])]), hold: true });
+  await start();
+  await advanceBy(5_000);
+  await releaseFetched();
+  await queueFetch({ status: 200, body: JSON.stringify([release(TAG_DEFAULT, [])]), hold: true });
+  await advanceBy(30_000);
+  await releaseFetched();
+}
+
 const [countArg, seedArg] = process.argv.slice(2);
 realRoot = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "asrs-asset-download-")));
 try {
@@ -927,6 +1159,7 @@ try {
   await handWritten();
   const count = Number(countArg) || 0;
   for (let i = 0; i < count; i++) await randomCase();
+  await connections();
 } finally {
   server.closeAllConnections();
   server.close();
