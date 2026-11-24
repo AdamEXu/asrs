@@ -5,10 +5,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { zstdDecompressSync } from "node:zlib";
 
 // genMenusHost <win32|linux>
 //   `genMenus electron` on the platform it runs on, whose role table Electron's real
-//   Menu.buildFromTemplate uses: the `fresh` template `genMenus template <platform> fresh` prints,
+//   Menu.buildFromTemplate uses: the `fresh` template of the committed menus/template-<platform>,
+//   which genMenus records on one platform for all (build.mjs's fakes do not resolve on Windows),
 //   handed to genMenusMain.mjs. Its vectors name that platform in `platforms`.
 
 const platform = process.argv[2];
@@ -40,7 +42,8 @@ const plain = (value: any): any => {
   return Object.fromEntries(value.o.map(([key, v]: [string, any]) => [key, plain(v)]).filter(([, v]: [string, any]) => v !== undefined));
 };
 
-const lines = run([path.join(here, "genMenus.mjs"), "template", platform, "fresh"], process.env).trim().split("\n");
+const vector = path.join(UPSTREAM_DIR, "../../..", `parity/vectors/menus/template-${platform}.jsonl.zst`);
+const lines = zstdDecompressSync(fs.readFileSync(vector)).toString("utf8").trim().split("\n");
 const first = lines.map((line) => JSON.parse(line)).find((record) => record.op === "template");
 const upstreamPackage = JSON.parse(fs.readFileSync(path.join(UPSTREAM_DIR, "package.json"), "utf8"));
 const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "asrs-gen-menus-"));
