@@ -8,6 +8,8 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 
+use asrs_canvas::text::TextBackend;
+use asrs_canvas::text::dom;
 use asrs_hub::frame::{DragContent, DragData};
 use asrs_hub::hub::{HubModel, HubPage};
 use asrs_js::math;
@@ -17,8 +19,6 @@ use asrs_model::scroll_sensor::WheelScroll;
 use asrs_model::source_list::Rect;
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
-use asrs_canvas::text::TextBackend;
-use asrs_canvas::text::dom;
 use asrs_tabs::table::layout::TableLayout;
 use asrs_tabs::table::view::{TableRow, TableView};
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
@@ -276,7 +276,9 @@ impl Document for TableText<'_> {
     }
 
     fn text(&self, block: usize) -> Cow<'_, str> {
-        let cell = self.rows[block / self.columns].cells.get(block % self.columns);
+        let cell = self.rows[block / self.columns]
+            .cells
+            .get(block % self.columns);
         collapsed(cell.map_or("", String::as_str))
     }
 
@@ -619,8 +621,7 @@ impl<H: FrameHost> HubFrame<H> {
             scale: f64::from(scale),
         };
         let owner = Owner::Table(shown.key.clone());
-        let selected =
-            (self.text).selected(&owner, &TableText::new(&view), appearance, window, cx);
+        let selected = (self.text).selected(&owner, &TableText::new(&view), appearance, window, cx);
         let jump = self.jump_field(&shown, &view, window, cx);
         let dark = appearance == Appearance::Dark;
         let mut root = div().absolute().left_0().top_0().size_full();
@@ -901,10 +902,7 @@ impl<H: FrameHost> HubFrame<H> {
 
 impl<H: FrameHost> HubFrame<H> {
     /// The displayed table's text that can be selected.
-    pub(super) fn table_text<'a>(
-        &'a self,
-        cx: &'a App,
-    ) -> Option<(Owner, Box<dyn PageText + 'a>)> {
+    pub(super) fn table_text<'a>(&'a self, cx: &'a App) -> Option<(Owner, Box<dyn PageText + 'a>)> {
         let (_, renderer) = displayed(self.host().hub(cx))?;
         let shown = self.table.shown.as_ref()?;
         let page = TablePage {

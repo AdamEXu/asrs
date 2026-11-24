@@ -84,27 +84,20 @@ impl Measure<'_> {
     fn caret_x(&mut self, piece: &Piece, offset: usize) -> f32 {
         let carets = self.carets(piece);
         let at = carets.partition_point(|&(byte, _)| byte < offset);
-        carets
-            .get(at)
-            .or(carets.last())
-            .map_or(0.0, |&(_, x)| x)
+        carets.get(at).or(carets.last()).map_or(0.0, |&(_, x)| x)
     }
 }
 
 impl Line {
     fn end(&self) -> usize {
-        self.pieces.last().map_or_else(
-            || self.newline.unwrap_or(0),
-            |piece| piece.range.end,
-        )
+        self.pieces
+            .last()
+            .map_or_else(|| self.newline.unwrap_or(0), |piece| piece.range.end)
     }
 
     /// `PositionForPointInInlineBox`.
     fn offset_at(&self, x: Lu, measure: &mut Measure<'_>) -> usize {
-        let inside = self
-            .pieces
-            .iter()
-            .find(|p| p.x <= x && x < p.x + p.width);
+        let inside = self.pieces.iter().find(|p| p.x <= x && x < p.x + p.width);
         let after = || self.pieces.iter().find(|p| x < p.x);
         let Some(piece) = inside.or_else(after).or(self.pieces.last()) else {
             return self.end();
@@ -179,9 +172,10 @@ impl Block {
                     p.range.start < offset && offset <= p.range.end
                 }
             };
-            pieces.clone().find(holds).or_else(|| {
-                pieces.find(|p| (p.range.start..=p.range.end).contains(&offset))
-            })
+            pieces
+                .clone()
+                .find(holds)
+                .or_else(|| pieces.find(|p| (p.range.start..=p.range.end).contains(&offset)))
         };
         let start_node = start.and_then(|s| Some(nodes(s, true)?.node));
         let end_node = end.and_then(|e| Some(nodes(e, false)?.node));
@@ -193,16 +187,16 @@ impl Block {
                 let Range { start: s, end: e } = piece.range;
                 let after_start = start_node.is_none_or(|n| piece.node >= n);
                 let before_end = end_node.is_none_or(|n| piece.node <= n);
-                if !after_start || !before_end || from > e && start_node != Some(piece.node) {
+                if !after_start || !before_end {
                     continue;
                 }
                 let in_start = start_node == Some(piece.node);
                 let in_end = end_node == Some(piece.node);
                 let continues = (!in_start || from <= e) && (!in_end || e < to);
                 let last = p + 1 == line.pieces.len() && line.newline.is_none();
-                let wrap = continues && last && (start_node.is_some() || start.is_none());
+                let wrap = continues && last;
                 let (a, b) = (from.clamp(s, e), to.clamp(s, e));
-                if a >= b && !wrap {
+                if a >= b {
                     continue;
                 }
                 let (left, right) = if (a, b) == (s, e) {
@@ -246,10 +240,7 @@ impl Line {
 
 /// What part of block `block` the range covers, as [`Block::selection_rects`] takes it; `None`
 /// when it covers none.
-pub fn part(
-    range: &Range<Position>,
-    block: usize,
-) -> Option<(Option<usize>, Option<usize>)> {
+pub fn part(range: &Range<Position>, block: usize) -> Option<(Option<usize>, Option<usize>)> {
     if block < range.start.block || block > range.end.block {
         return None;
     }

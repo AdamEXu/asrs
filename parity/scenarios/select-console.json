@@ -1,0 +1,1076 @@
+{
+  "about": "Selecting and copying text in the Console tab (#275): drags across rows, into the timestamps, which cannot be selected, and into the header; through line breaks, tabs, renditions, links and wrapped lines; double and triple clicks, scrolling, Select All, the filter, which takes the selection and then replaces the rows' text, and the context menu's word. Copies are compared as clipboard text",
+  "actions": [
+    {
+      "open": [
+        "app:console"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 5,
+              "title": "Output",
+              "controller": null,
+              "controllerUUID": "console00000000000000000000000000",
+              "renderer": {
+                "highlight": false
+              },
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.5
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 156
+    },
+    {
+      "mouse": "move",
+      "x": 420,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 340
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 340
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 340
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 400
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 560
+    },
+    {
+      "mouse": "move",
+      "x": 430,
+      "y": 125
+    },
+    {
+      "mouse": "down",
+      "x": 430,
+      "y": 125
+    },
+    {
+      "mouse": "move",
+      "x": 440,
+      "y": 160
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 200
+    },
+    {
+      "mouse": "up",
+      "x": 460,
+      "y": 200
+    },
+    {
+      "copy": "rows"
+    },
+    {
+      "capture": "rows"
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 560
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 561
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 125
+    },
+    {
+      "mouse": "down",
+      "x": 460,
+      "y": 125,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 460,
+      "y": 125,
+      "clickCount": 1
+    },
+    {
+      "mouse": "down",
+      "x": 460,
+      "y": 125,
+      "clickCount": 2
+    },
+    {
+      "mouse": "up",
+      "x": 460,
+      "y": 125,
+      "clickCount": 2
+    },
+    {
+      "copy": "word"
+    },
+    {
+      "capture": "word"
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 560
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 561
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 440,
+      "y": 125
+    },
+    {
+      "mouse": "down",
+      "x": 440,
+      "y": 125,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 440,
+      "y": 125,
+      "clickCount": 1
+    },
+    {
+      "mouse": "down",
+      "x": 440,
+      "y": 125,
+      "clickCount": 2
+    },
+    {
+      "mouse": "up",
+      "x": 440,
+      "y": 125,
+      "clickCount": 2
+    },
+    {
+      "mouse": "down",
+      "x": 440,
+      "y": 125,
+      "clickCount": 3
+    },
+    {
+      "mouse": "up",
+      "x": 440,
+      "y": 125,
+      "clickCount": 3
+    },
+    {
+      "copy": "paragraph"
+    },
+    {
+      "capture": "paragraph"
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 560
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 561
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 255
+    },
+    {
+      "mouse": "down",
+      "x": 460,
+      "y": 255,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 460,
+      "y": 255,
+      "clickCount": 1
+    },
+    {
+      "mouse": "down",
+      "x": 460,
+      "y": 255,
+      "clickCount": 2
+    },
+    {
+      "mouse": "up",
+      "x": 460,
+      "y": 255,
+      "clickCount": 2
+    },
+    {
+      "mouse": "down",
+      "x": 460,
+      "y": 255,
+      "clickCount": 3
+    },
+    {
+      "mouse": "up",
+      "x": 460,
+      "y": 255,
+      "clickCount": 3
+    },
+    {
+      "copy": "line"
+    },
+    {
+      "capture": "line"
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 560
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 561
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 350,
+      "y": 125
+    },
+    {
+      "mouse": "down",
+      "x": 350,
+      "y": 125
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 165
+    },
+    {
+      "mouse": "up",
+      "x": 460,
+      "y": 165
+    },
+    {
+      "copy": "from-time"
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 560
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 561
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 125
+    },
+    {
+      "mouse": "down",
+      "x": 460,
+      "y": 125
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 150
+    },
+    {
+      "mouse": "move",
+      "x": 350,
+      "y": 165
+    },
+    {
+      "mouse": "up",
+      "x": 350,
+      "y": 165
+    },
+    {
+      "copy": "to-time"
+    },
+    {
+      "capture": "to-time"
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 560
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 561
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 165
+    },
+    {
+      "mouse": "down",
+      "x": 460,
+      "y": 165
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 150
+    },
+    {
+      "mouse": "move",
+      "x": 350,
+      "y": 125
+    },
+    {
+      "mouse": "up",
+      "x": 350,
+      "y": 125
+    },
+    {
+      "copy": "up-to-time"
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 560
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 561
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 250
+    },
+    {
+      "mouse": "down",
+      "x": 460,
+      "y": 250
+    },
+    {
+      "mouse": "move",
+      "x": 470,
+      "y": 270
+    },
+    {
+      "mouse": "move",
+      "x": 480,
+      "y": 288
+    },
+    {
+      "mouse": "up",
+      "x": 480,
+      "y": 288
+    },
+    {
+      "copy": "breaks"
+    },
+    {
+      "capture": "breaks"
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 560
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 561
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 520,
+      "y": 328
+    },
+    {
+      "mouse": "down",
+      "x": 520,
+      "y": 328
+    },
+    {
+      "mouse": "move",
+      "x": 560,
+      "y": 336
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 340
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 340
+    },
+    {
+      "copy": "renditions"
+    },
+    {
+      "capture": "renditions"
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 560
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 561
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 560,
+      "y": 232
+    },
+    {
+      "mouse": "down",
+      "x": 560,
+      "y": 232
+    },
+    {
+      "mouse": "move",
+      "x": 520,
+      "y": 236
+    },
+    {
+      "mouse": "move",
+      "x": 470,
+      "y": 238
+    },
+    {
+      "mouse": "up",
+      "x": 470,
+      "y": 238
+    },
+    {
+      "copy": "tabs"
+    },
+    {
+      "capture": "tabs"
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 560
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 561
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 205
+    },
+    {
+      "mouse": "down",
+      "x": 460,
+      "y": 205
+    },
+    {
+      "mouse": "move",
+      "x": 440,
+      "y": 222
+    },
+    {
+      "mouse": "move",
+      "x": 420,
+      "y": 222
+    },
+    {
+      "mouse": "up",
+      "x": 420,
+      "y": 222
+    },
+    {
+      "copy": "wrapped"
+    },
+    {
+      "capture": "wrapped"
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 560
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 561
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 460,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 100
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 100
+    },
+    {
+      "copy": "header"
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 560
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 560,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 561
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 561,
+      "clickCount": 1
+    },
+    {
+      "mouse": "move",
+      "x": 430,
+      "y": 125
+    },
+    {
+      "mouse": "down",
+      "x": 430,
+      "y": 125
+    },
+    {
+      "mouse": "move",
+      "x": 440,
+      "y": 160
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 200
+    },
+    {
+      "mouse": "up",
+      "x": 460,
+      "y": 200
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 400,
+        "deltaX": 0,
+        "deltaY": -40,
+        "precise": true
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "idle": true
+    },
+    {
+      "copy": "scrolled"
+    },
+    {
+      "capture": "scrolled"
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 400,
+        "deltaX": 0,
+        "deltaY": 400,
+        "precise": true
+      }
+    },
+    {
+      "wait": 500
+    },
+    {
+      "idle": true
+    },
+    {
+      "role": "selectAll"
+    },
+    {
+      "copy": "all"
+    },
+    {
+      "focus": true
+    },
+    {
+      "capture": "all-active"
+    },
+    {
+      "focus": false
+    },
+    {
+      "capture": "all"
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 103
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 103,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 103,
+      "clickCount": 1
+    },
+    {
+      "key": "d"
+    },
+    {
+      "key": "r"
+    },
+    {
+      "idle": true
+    },
+    {
+      "copy": "filtered"
+    },
+    {
+      "capture": "filtered"
+    },
+    {
+      "mouse": "move",
+      "x": 440,
+      "y": 125
+    },
+    {
+      "mouse": "down",
+      "x": 440,
+      "y": 125,
+      "clickCount": 1
+    },
+    {
+      "mouse": "up",
+      "x": 440,
+      "y": 125,
+      "clickCount": 1
+    },
+    {
+      "mouse": "down",
+      "x": 440,
+      "y": 125,
+      "clickCount": 2
+    },
+    {
+      "mouse": "up",
+      "x": 440,
+      "y": 125,
+      "clickCount": 2
+    },
+    {
+      "copy": "match"
+    },
+    {
+      "capture": "match"
+    },
+    {
+      "mouse": "move",
+      "x": 520,
+      "y": 135
+    },
+    {
+      "mouse": "down",
+      "x": 520,
+      "y": 135,
+      "clickCount": 1,
+      "button": "right"
+    },
+    {
+      "mouse": "up",
+      "x": 520,
+      "y": 135,
+      "clickCount": 1,
+      "button": "right"
+    },
+    {
+      "copy": "menu"
+    },
+    {
+      "capture": "menu"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    }
+  ]
+}

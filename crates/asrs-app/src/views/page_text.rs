@@ -11,6 +11,7 @@ use asrs_ui::gpui::{
     App, Context, Div, KeyDownEvent, MouseButton, MouseDownEvent, ParentElement, Styled, Window,
 };
 use asrs_ui::input;
+use asrs_ui::selection::all;
 use asrs_ui::selection::colors::{SelectionColors, page_active};
 use asrs_ui::selection::document::end;
 use asrs_ui::selection::geometry::{Block, LuRect, Measure, part};
@@ -35,11 +36,16 @@ pub(super) enum Owner {
 pub(super) trait PageText {
     fn document(&self) -> &dyn Document;
 
-    /// What is at a client position in the tab's scroller, or past its edges.
+    /// What is at a client position in the tab's renderer element, or past the window's edges.
     fn hit(&self, at: [f64; 2], backend: &mut dyn TextBackend) -> Hit;
 
-    /// The scroller's client box.
+    /// The client box of what scrolls.
     fn scroller(&self) -> [f64; 4];
+
+    /// The renderer element's client box.
+    fn renderer(&self) -> [f64; 4] {
+        self.scroller()
+    }
 }
 
 /// A length in device `LayoutUnit`s.
@@ -63,7 +69,11 @@ pub(super) fn unselectable(doc: &dyn Document, block: usize) -> Hit {
 
 /// `PositionForPointInTable` for a point outside the table: the closer end of it.
 pub(super) fn beside_table(doc: &dyn Document, x: f64, [left, width]: [f64; 2]) -> Hit {
-    let block = if x - left <= width / 2.0 { 0 } else { doc.len() };
+    let block = if x - left <= width / 2.0 {
+        0
+    } else {
+        doc.len()
+    };
     unselectable(doc, block)
 }
 
@@ -119,9 +129,7 @@ impl PlacedBlock<'_> {
         let mut measure = self.measure(backend);
         let rects = self.block.selection_rects(from, to, &mut measure);
         let css = |lu: Lu| f64::from(lu) / f64::from(LU_PER_PX) / self.scale;
-        let place = |[x, y, w, h]: LuRect| {
-            [x + self.origin[0], y + self.origin[1], w, h].map(css)
-        };
+        let place = |[x, y, w, h]: LuRect| [x + self.origin[0], y + self.origin[1], w, h].map(css);
         rects
             .into_iter()
             .map(|(line, piece, rect)| (line, piece, place(rect)))
@@ -165,6 +173,8 @@ struct Gesture {
 pub struct PageSelection {
     state: TextSelection,
     owner: Option<Owner>,
+    /// The selection is the whole document, whichever tab shows.
+    all: bool,
     gesture: Option<Gesture>,
     /// Whether the pointer is over text that can be selected.
     on_text: bool,
@@ -176,6 +186,7 @@ impl Default for PageSelection {
         PageSelection {
             state: TextSelection::default(),
             owner: None,
+            all: false,
             gesture: None,
             on_text: false,
             backend: RefCell::new(platform_backend().unwrap_or_else(|| Box::new(FixedAdvance))),
@@ -206,12 +217,12 @@ impl PageSelection {
         window: &Window,
         cx: &App,
     ) -> Option<Selected> {
-        if self.owner.as_ref() != Some(owner) {
-            return None;
-        }
-        // An input with the focus has the page's selection.
-        if input::focused(window) {
-            self.state.clear();
+        if self.all {
+            if !self.state.is_all(doc) {
+                self.state.select_all(doc);
+            }
+            self.owner = Some(owner.clone());
+        } else if self.owner.as_ref() != Some(owner) {
             return None;
         }
         self.state.sync(doc);
@@ -234,9 +245,8 @@ impl<H: FrameHost> HubFrame<H> {
     /// What is at a client position.
     fn text_hit(&self, page: &dyn PageText, at @ [x, y]: [f64; 2], window: &Window) -> Hit {
         let doc = page.document();
-        let inside = |[left, top, w, h]: [f64; 4]| {
-            x >= left && x < left + w && y >= top && y < top + h
-        };
+        let inside =
+            |[left, top, w, h]: [f64; 4]| x >= left && x < left + w && y >= top && y < top + h;
         let size = window.viewport_size();
         let window = [
             0.0,
@@ -244,7 +254,7 @@ impl<H: FrameHost> HubFrame<H> {
             f64::from(f32::from(size.width)),
             f64::from(f32::from(size.height)),
         ];
-        let renderer = page.scroller();
+        let renderer = page.renderer();
         let timeline = self.timeline_rect().is_some_and(inside);
         if !timeline && (inside(renderer) || !inside(window)) {
             return page.hit(at, &mut **self.text.backend());
@@ -265,10 +275,16 @@ impl<H: FrameHost> HubFrame<H> {
         let found = self.page_text(cx).map(|(owner, page)| {
             let shown = self.text.owner.as_ref() == Some(&owner);
             let target = if shown { &mut state } else { &mut other };
-            (f(self, target, page.as_ref()), owner)
+            if self.text.all && !target.is_all(page.document()) {
+                target.select_all(page.document());
+            }
+            let result = f(self, target, page.as_ref());
+            let all = self.text.all && target.is_all(page.document());
+            (result, owner, all)
         });
         self.text.state = state;
-        let (result, owner) = found?;
+        let (result, owner, all) = found?;
+        self.text.all = all;
         // A selection in a hidden tab stays until another takes its place.
         if other.placed() {
             self.text.state = other;
@@ -373,7 +389,7 @@ impl<H: FrameHost> HubFrame<H> {
 
     /// A frame of `AutoscrollController`'s animation: the pointer's position is selected to, then
     /// scrolled into view.
-    pub(super) fn text_autoscroll(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+    fn text_autoscroll(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         let Some(gesture) = self.text.gesture.filter(|g| g.autoscroll) else {
             return;
         };
@@ -418,8 +434,26 @@ impl<H: FrameHost> HubFrame<H> {
     }
 
     pub(super) fn select_all_text(&mut self, cx: &mut Context<'_, Self>) {
-        self.with_text(cx, |_, state, page| state.select_all(page.document()));
+        self.text.all = true;
         cx.notify();
+    }
+
+    pub(super) fn text_frame(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let frame = cx.entity().downgrade();
+        window.defer(cx, move |window, cx| {
+            // An input that has the focus has the page's selection.
+            if input::focused(window) {
+                let _ = frame.update(cx, |frame, cx| {
+                    if frame.text.state.placed() || frame.text.all {
+                        frame.text.state.clear();
+                        frame.text.all = false;
+                        cx.notify();
+                    }
+                });
+            }
+        });
+        all::set(self.text.all, window, cx);
+        self.text_autoscroll(window, cx);
     }
 }
 

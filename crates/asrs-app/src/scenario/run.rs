@@ -17,15 +17,15 @@ use asrs_services::window_manager::Platform;
 use asrs_services::windows::{Rect, WindowSystem};
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
-    AnyWindowHandle, App, AppContext, ClipboardItem, Context, Entity, IntoElement, KeyUpEvent, Keystroke,
-    Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
+    AnyWindowHandle, App, AppContext, ClipboardItem, Context, Entity, IntoElement, KeyUpEvent,
+    Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
     PlatformInput, Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div,
     point, px, rgb, size,
 };
 use asrs_ui::parity::Recorder;
+use asrs_ui::platform::dialog::{Reply, Script};
 use asrs_ui::platform::{self, EditCommand};
 use asrs_ui::selection::colors::ForcedActive;
-use asrs_ui::platform::dialog::{Reply, Script};
 use asrs_ui::theme::ThemeSource;
 
 use super::capture::{self, Probes, Shot};

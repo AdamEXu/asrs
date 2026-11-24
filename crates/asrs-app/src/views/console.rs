@@ -266,9 +266,8 @@ impl PageText for ConsolePage<'_> {
             return unselectable(&self.doc, 0);
         }
         let below = y - top - HEADER_HEIGHT + self.layout.scroll_top();
-        let outside = x < left
-            || x >= left + width
-            || below >= self.layout.table_height() - HEADER_HEIGHT;
+        let outside =
+            x < left || x >= left + width || below >= self.layout.table_height() - HEADER_HEIGHT;
         let Some(index) = self.layout.row_at(below).filter(|_| !outside) else {
             return beside_table(&self.doc, x, [left, width]);
         };
@@ -409,7 +408,10 @@ impl Rows<'_> {
         layer: Div,
     ) -> Div {
         let theme = self.appearance.theme();
-        let selected = self.selected.as_ref().map_or(0, |(s, _)| s.colors.background);
+        let selected = self
+            .selected
+            .as_ref()
+            .map_or(0, |(s, _)| s.colors.background);
         let mut layer = layer;
         for (_, _, rect) in selection.iter().filter(|(_, piece, _)| piece.is_none()) {
             layer = layer.child(self.grid.place(*rect).bg(rgba(selected)));
@@ -422,9 +424,7 @@ impl Rows<'_> {
             .enumerate()
             .flat_map(|(i, line)| (0..line.pieces.len()).map(move |p| (i, p)))
             .collect();
-        for (at, (item, text, tabs, rect)) in
-            counts.into_iter().zip(self.pieces(cell, first, at))
-        {
+        for (at, (item, text, tabs, rect)) in counts.into_iter().zip(self.pieces(cell, first, at)) {
             let mut selected_rect = None;
             if let Some((line, Some(piece), rect)) = behind_next
                 && (*line, *piece) == at
@@ -614,7 +614,9 @@ impl<H: FrameHost> HubFrame<H> {
             .top_0()
             .size_full()
             .child(hand_icon(rect, hand, dark, grid))
-            .child(self.console_table(shown, &view, visible, &layout, appearance, grid, selected, cx))
+            .child(self.console_table(
+                shown, &view, visible, &layout, appearance, grid, selected, cx,
+            ))
             .children(recorded)
             .child(self.console_header(shown, &view, appearance, blurred, grid, window, cx));
         let drag_hidden = displayed(self.host().hub(cx))

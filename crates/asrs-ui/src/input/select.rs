@@ -4,15 +4,18 @@
 //! [`platform::select_popup`]. Keys follow the platform's `LayoutTheme` ([`SelectKeys`]).
 
 use std::cell::Cell;
+use std::ops::Range;
 use std::rc::Rc;
 use std::time::Instant;
 
 use asrs_canvas::Pixmap;
 use gpui_kit::{
     App, Bounds, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, ParentElement, Pixels, Render,
+    KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, ParentElement, Pixels, Render, Rgba,
     StatefulInteractiveElement, Styled, Window, canvas, div, px,
 };
+
+use tiny_skia::{Color, Paint, Rect, Transform};
 
 use crate::input::skia;
 use crate::input::style::{
@@ -20,6 +23,7 @@ use crate::input::style::{
     NATIVE_RADIUS, device_border, native_stroke,
 };
 use crate::platform::{self, SelectMenu, SelectMenuItem, SelectMenuItemKind};
+use crate::selection;
 use crate::text::{self, LineHeight, Overflow, TextStyle, WhiteSpace};
 
 /// One of the select's list items as the popup shows it.
@@ -293,6 +297,7 @@ fn draw(
     css: (f32, f32),
     state: SelectState,
     label: &str,
+    selected: Option<Rgba>,
     scale: f32,
 ) -> Option<Pixmap> {
     let (ascent, descent) = text::font_metrics(cx, &TextStyle::new(CONTROL_FONT), scale);
@@ -370,6 +375,25 @@ fn draw(
             ..((origin.0 + cx0 + cw).round() as i32).min(w as i32);
         let clip_y = ((origin.1 + cy0).round() as i32).max(0)
             ..((origin.1 + cy0 + ch).round() as i32).min(h as i32);
+        if let Some(selected) = selected {
+            let style = text_style(line, scale);
+            let width = text::measure(cx, &style, label, scale).0 as f32 * scale;
+            let space = text::space_width(cx, &style, scale);
+            let edge =
+                |v: f32, range: &Range<i32>| (v.round() as i32).clamp(range.start, range.end);
+            let left = edge(origin.0 + tx, &clip_x);
+            let right = edge(origin.0 + tx + width + space, &clip_x);
+            let top = edge(origin.1 + ty, &clip_y);
+            let bottom = edge(origin.1 + ty + line, &clip_y);
+            let rect = Rect::from_ltrb(left as f32, top as f32, right as f32, bottom as f32);
+            if let Some(rect) = rect {
+                let mut paint = Paint::default();
+                paint.set_color(Color::from_rgba(
+                    selected.r, selected.g, selected.b, selected.a,
+                )?);
+                pixmap.fill_rect(rect, &paint, Transform::identity(), None);
+            }
+        }
         composite_masks(&mut pixmap, &masks, color, (clip_x, clip_y));
     }
     if state == SelectState::Disabled {
@@ -385,7 +409,7 @@ fn composite_masks(
     pixmap: &mut Pixmap,
     masks: &[text::GlyphMask],
     color: u32,
-    (clip_x, clip_y): (std::ops::Range<i32>, std::ops::Range<i32>),
+    (clip_x, clip_y): (Range<i32>, Range<i32>),
 ) {
     let width = pixmap.width() as i32;
     let rgb = [(color >> 16) as u8, (color >> 8) as u8, color as u8];
@@ -438,8 +462,9 @@ pub fn paint_select(
         origin: gpui_kit::point(px(left / scale), px(top / scale)),
         size: bounds.size,
     };
+    let selected = selection::all::color(window, cx);
     let key = (
-        "select",
+        ("select", selected.map(u32::from)),
         w,
         h,
         state,
@@ -453,7 +478,7 @@ pub fn paint_select(
     skia::paint_with_app(
         key,
         snapped,
-        |cx| draw(cx, (w, h), origin, css, state, &label, scale),
+        |cx| draw(cx, (w, h), origin, css, state, &label, selected, scale),
         window,
         cx,
     );

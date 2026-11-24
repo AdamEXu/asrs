@@ -68,7 +68,11 @@ pub fn extract(doc: &dyn Document, range: &Range<Position>) -> String {
             }
         }
         let text = doc.text(block);
-        let from = if block == start.block { start.offset } else { 0 };
+        let from = if block == start.block {
+            start.offset
+        } else {
+            0
+        };
         let to = if block == end.block {
             end.offset
         } else {

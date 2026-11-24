@@ -164,6 +164,7 @@ impl TabView {
 #[derive(Clone, Copy, Debug)]
 struct Shown {
     key: usize,
+    renderer: [f64; 4],
     values: [f64; 4],
     canvas: [f64; 4],
     settings: Option<SettingsLayout>,
@@ -391,6 +392,7 @@ impl Document for StatisticsText {
 struct StatisticsPage {
     doc: StatisticsText,
     style: TextStyle,
+    renderer: [f64; 4],
     values: [f64; 4],
     /// The table's client position.
     origin: [f64; 2],
@@ -403,6 +405,10 @@ impl PageText for StatisticsPage {
 
     fn scroller(&self) -> [f64; 4] {
         self.values
+    }
+
+    fn renderer(&self) -> [f64; 4] {
+        self.renderer
     }
 
     fn hit(&self, at @ [x, y]: [f64; 2], backend: &mut dyn TextBackend) -> Hit {
@@ -516,7 +522,20 @@ fn table_layer(
                     ],
                     scale: grid.scale,
                 };
-                layer = selected.paint(grid, &block, &mut **backend.borrow_mut(), layer);
+                // `overflow: hidden` clips at the padding box.
+                let inner = [
+                    x + px(cell.left) + border,
+                    y + px(row.top) + border,
+                    px(cell.width) - 2.0 * border,
+                    px(row.height) - 2.0 * border,
+                ];
+                let clip = Grid {
+                    origin: [grid.snap(inner[0]), grid.snap(inner[1])],
+                    ..grid
+                };
+                let drawn = grid.place(inner).overflow_hidden();
+                let backend = &mut **backend.borrow_mut();
+                layer = layer.child(selected.paint(clip, &block, backend, drawn));
             }
             layer = text_lines(
                 grid,
@@ -638,6 +657,7 @@ impl<H: FrameHost> HubFrame<H> {
         let container = layout.histogram(left, chart_size.0);
         let shown = Shown {
             key,
+            renderer: rect,
             values: [
                 rect[0],
                 rect[1],
@@ -779,6 +799,7 @@ impl<H: FrameHost> HubFrame<H> {
         let page = StatisticsPage {
             doc: StatisticsText::new(placed, renderer.table().builds()),
             style: cell_style(CellKind::Value),
+            renderer: shown.renderer,
             values: shown.values,
             origin: [left + margin - scroll[0], top + margin - scroll[1]],
         };

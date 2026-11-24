@@ -4,10 +4,10 @@ use std::rc::Rc;
 
 use gpui_kit::base::input::{Input, InputEvent, InputState, MoveDown, MoveUp, Paste};
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext, ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter,
-    FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement,
-    Render, SharedString, StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window,
-    canvas, div, px, rgba,
+    AnyWindowHandle, App, AppContext, ClipboardItem, Context, Entity, EntityInputHandler,
+    EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, MouseButton,
+    ParentElement, Render, SharedString, StatefulInteractiveElement, Styled, Subscription,
+    WeakEntity, Window, canvas, div, px, rgba,
 };
 
 use crate::icon::{IconSource, Placement, paint_icon};
@@ -499,6 +499,7 @@ impl<M: FieldModel> Render for TextField<M> {
             .text_color(editor_text_color)
             .child(Input::new(&self.editor));
         let subpixel = (self.subpixel.0 + dx, self.subpixel.1 + dy);
+        let page_selected = selection::all::color(window, cx);
         let paint = |s: &str, rgba_hex: u32| {
             Text::new(s.to_owned(), text_style)
                 .form_control()
@@ -525,7 +526,7 @@ impl<M: FieldModel> Render for TextField<M> {
                     .left_0()
                     .top_0()
                     .opacity(alpha)
-                    .child(paint(self.value.shown(), color)),
+                    .child(paint(self.value.shown(), color).selected(page_selected)),
             );
         }
 

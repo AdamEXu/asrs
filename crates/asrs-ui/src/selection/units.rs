@@ -40,7 +40,10 @@ fn next(doc: &dyn Document, position: Position) -> Option<Position> {
 fn previous(doc: &dyn Document, position: Position) -> Option<Position> {
     if position.offset > 0 {
         let text = doc.text(position.block);
-        return Some(at(position.block, previous_boundary(&text, position.offset)));
+        return Some(at(
+            position.block,
+            previous_boundary(&text, position.offset),
+        ));
     }
     let block = position.block.checked_sub(1)?;
     Some(at(block, doc.text(block).len()))

@@ -7,7 +7,9 @@ use asrs_canvas::text::TextBackend;
 use asrs_hub::hub::HubModel;
 use asrs_model::tab_type::TabType;
 use asrs_tabs::metadata::MetadataRenderer;
-use asrs_ui::gpui::{AnyElement, App, Context, IntoElement, ParentElement, Styled, Window, div, rgb};
+use asrs_ui::gpui::{
+    AnyElement, App, Context, IntoElement, ParentElement, Styled, Window, div, rgb,
+};
 use asrs_ui::parity::probed;
 use asrs_ui::selection::{Document, Hit, Place};
 use asrs_ui::theme::Appearance;
@@ -74,7 +76,9 @@ impl Document for MetadataText<'_> {
     fn place(&self, block: usize) -> Place {
         let column = block % self.columns;
         let last = column + 1 == self.columns;
-        let key = &self.placed.rows[1 + block / self.columns].cells[0].text.text;
+        let key = &self.placed.rows[1 + block / self.columns].cells[0]
+            .text
+            .text;
         Place {
             cell: true,
             tab: true,
@@ -113,10 +117,7 @@ impl PageText for MetadataPage<'_> {
         let placed = self.doc.placed;
         let scale = f64::from(placed.scale);
         let [left, top, width, _] = self.rect;
-        let at_table = [
-            floor_device(x - left, scale),
-            floor_device(y - top, scale),
-        ];
+        let at_table = [floor_device(x - left, scale), floor_device(y - top, scale)];
         let outside = x < left || x >= left + width || at_table[1] < 0;
         if outside || at_table[1] >= placed.height || self.doc.is_empty() {
             return beside_table(&self.doc, x, [left, width]);

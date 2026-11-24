@@ -4,6 +4,7 @@
 //! [`Document`], which a view implements for the text its page holds. [`geometry`] finds the
 //! position at a point and the boxes a selection paints.
 
+pub mod all;
 pub mod colors;
 pub mod document;
 pub mod geometry;
@@ -297,6 +298,11 @@ impl TextSelection {
         self.set(doc, Position::default(), end);
     }
 
+    /// Whether the selection is what [`TextSelection::select_all`] makes it.
+    pub fn is_all(&self, doc: &dyn Document) -> bool {
+        self.ends(doc) == document::end(doc).map(|end| [Position::default(), end])
+    }
+
     /// `ExtendSelectionAsDirectional`.
     fn directional(
         &self,
@@ -349,9 +355,7 @@ impl TextSelection {
     /// `FrameSelection::Contains`.
     fn contains(&self, doc: &dyn Document, hit: &Hit) -> bool {
         match (self.range(doc), hit.caret) {
-            (Some(range), Some(caret)) => {
-                (range.start..=range.end).contains(&caret.position)
-            }
+            (Some(range), Some(caret)) => (range.start..=range.end).contains(&caret.position),
             _ => false,
         }
     }
@@ -487,4 +491,3 @@ impl TextSelection {
         }
     }
 }
-

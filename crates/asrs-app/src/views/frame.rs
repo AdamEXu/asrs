@@ -889,7 +889,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
         self.shell.fps_mut().frame(now, show_fps);
         self.line_graph_timers(cx);
         self.field3d_frame(window, cx);
-        self.text_autoscroll(window, cx);
+        self.text_frame(window, cx);
         if show_fps {
             window.request_animation_frame();
         }
@@ -1022,9 +1022,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
             .relative()
             .size_full()
             .on_action(cx.listener(|frame, _: &selection::Copy, _, cx| frame.copy_text(cx)))
-            .on_action(cx.listener(|frame, _: &selection::SelectAll, _, cx| {
-                frame.select_all_text(cx)
-            }))
+            .on_action(
+                cx.listener(|frame, _: &selection::SelectAll, _, cx| frame.select_all_text(cx)),
+            )
             .child(window_listeners);
         if !satellite {
             root = root.on_drop(

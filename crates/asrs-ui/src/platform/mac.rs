@@ -11,7 +11,15 @@ use objc2::{
     AllocAnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, ffi, msg_send,
     sel,
 };
-use objc2_app_kit::{NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication, NSAutoresizingMaskOptions, NSBitmapImageRep, NSColor, NSColorSpace, NSControlStateValueOff, NSControlStateValueOn, NSDocumentController, NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSFont, NSFontAttributeName, NSImage, NSLineBreakMode, NSMenu, NSMenuItem, NSMutableParagraphStyle, NSParagraphStyleAttributeName, NSPopUpButtonCell, NSTextAlignment, NSUserInterfaceLayoutDirection, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowOrderingMode, NSWritingDirection};
+use objc2_app_kit::{
+    NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication,
+    NSAutoresizingMaskOptions, NSBitmapImageRep, NSColor, NSColorSpace, NSControlStateValueOff,
+    NSControlStateValueOn, NSDocumentController, NSEvent, NSEventMask, NSEventModifierFlags,
+    NSEventType, NSFont, NSFontAttributeName, NSImage, NSLineBreakMode, NSMenu, NSMenuItem,
+    NSMutableParagraphStyle, NSParagraphStyleAttributeName, NSPopUpButtonCell, NSTextAlignment,
+    NSUserInterfaceLayoutDirection, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
+    NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowOrderingMode, NSWritingDirection,
+};
 use objc2_core_foundation::{CFData, CGRect};
 use objc2_core_graphics::{
     CGBitmapInfo, CGColorRenderingIntent, CGColorSpace, CGDataProvider, CGImage, CGImageAlphaInfo,
@@ -25,7 +33,10 @@ use objc2_quartz_core::CAMetalLayer;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 use super::probe::GpuiDelta;
-use super::{EditCommand, MenuPath, PopupEntry, PopupItem, PopupMenu, SWATCH_SIZE, SelectMenu, SelectMenuItemKind, SystemSelection, WheelDelta};
+use super::{
+    EditCommand, MenuPath, PopupEntry, PopupItem, PopupMenu, SWATCH_SIZE, SelectMenu,
+    SelectMenuItemKind, SystemSelection, WheelDelta,
+};
 
 pub(super) mod dialog;
 pub(super) mod window;
