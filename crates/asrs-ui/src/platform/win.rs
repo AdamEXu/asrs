@@ -179,6 +179,10 @@ pub(super) fn popup_menu(
     .detach();
 }
 
+pub(super) fn menu_takes_keys(_window: &Window) -> bool {
+    false
+}
+
 pub(super) fn close_popup_menu(window: &Window) {
     let Some(hwnd) = hwnd(window) else {
         return;

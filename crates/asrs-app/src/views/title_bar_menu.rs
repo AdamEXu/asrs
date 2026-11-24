@@ -1,7 +1,7 @@
 //! `div.title-bar-menu` of `www/hub.html`, which Windows and Linux show over the sidebar: its
 //! table's columns as Blink's automatic table layout makes them, and the buttons.
 
-use asrs_ui::focus::FocusRing;
+use asrs_ui::focus::{Activate, FocusRing};
 use asrs_ui::gpui::{
     AnyElement, App, Div, InteractiveElement, IntoElement, MouseButton, ParentElement,
     ScrollHandle, Stateful, StatefulInteractiveElement, Styled, Window, div, px, rgb, rgba,
@@ -157,6 +157,7 @@ fn menu_button(
         (0x000000, 0xcccccc88, 0xcccccc),
         (0xeeeeee, 0x44444488, 0x444444),
     );
+    let pressed = focus.handle.clone();
     let label_x = menu_x + x + label[0];
     let button = div()
         .id(id)
@@ -170,8 +171,11 @@ fn menu_button(
         .track_focus(&focus.handle)
         .hover(move |s| s.bg(rgba(hover)))
         .active(move |s| s.bg(rgb(active)))
-        .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-        .on_click(move |_, window, cx| on_click(index, window, cx))
+        .on_mouse_down(MouseButton::Left, move |_, window, cx| {
+            pressed.focus(window, cx);
+            cx.stop_propagation();
+        })
+        .on_activate(move |_, window, cx| on_click(index, window, cx))
         .on_hover(move |hovered, _, cx| {
             if !hovered {
                 on_leave(index, cx);

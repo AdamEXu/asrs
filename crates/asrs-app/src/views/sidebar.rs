@@ -5,7 +5,7 @@
 //! active fields follow what is on screen.
 
 use std::cell::{Cell, RefCell};
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::ops::Range;
 use std::rc::Rc;
 
@@ -13,6 +13,7 @@ use asrs_hub::hub::HubModel;
 use asrs_hub::sidebar::{RowRect, RowRef, RowValue, SidebarGeometry, SidebarRow};
 use asrs_js::string::JsString;
 use asrs_ui::button::IconButton;
+use asrs_ui::focus::{self, ScrollAxis};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Context, DispatchPhase, Entity, HitboxBehavior,
     InteractiveElement, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseUpEvent,
@@ -27,6 +28,7 @@ use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 use asrs_ui::tooltip::{covering, titled, untitled};
 
 use crate::hub::Hub;
+use crate::views::frame::Section;
 use crate::views::number::FormNumber;
 
 const TITLE_HEIGHT: f64 = 30.0;
@@ -535,7 +537,9 @@ impl SidebarView {
         let flat = row.index;
         let indent = row.indent;
         let item_width = (width - row.value_width).max(0.0);
+        let place = focus::place(("field-item-place", flat), window, cx);
         let mut container = div()
+            .track_focus(&place)
             .id(("field-item-container", flat))
             .absolute()
             .left_0()
@@ -775,6 +779,7 @@ impl SidebarView {
     fn search_results(
         &self,
         appearance: Appearance,
+        window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> Option<AnyElement> {
         let hub = self.hub.read(cx).model();
@@ -787,9 +792,13 @@ impl SidebarView {
         let dark = appearance == Appearance::Dark;
         let theme = appearance.theme();
         let style = results_style();
-        let height = (items.len() as f64 * RESULTS_ITEM_HEIGHT + 3.0).min(RESULTS_MAX_HEIGHT);
+        let content = items.len() as f64 * RESULTS_ITEM_HEIGHT + 3.0;
+        let height = content.min(RESULTS_MAX_HEIGHT);
+        // Tab reaches a scroller that holds nothing to focus.
+        let place = focus::place("search-results-place", window, cx);
         let mut list = div()
             .id("search-results")
+            .track_focus(&place.tab_stop(content > height))
             .w_full()
             .h(px(height as f32))
             .overflow_y_scroll()
@@ -823,7 +832,10 @@ impl SidebarView {
             }
             list = list.child(item);
         }
+        // Drawn outside the side bar's own section.
         let mut popup = div()
+            .tab_group()
+            .tab_index(Section::SearchResults as isize)
             .min_w(px(min_width.unwrap_or(0.0) as f32))
             .max_w(px(700.0))
             .rounded(px(6.0))
@@ -981,7 +993,37 @@ impl Render for SidebarView {
             );
         }
 
-        for (index, row) in rows.iter().enumerate().take(range.end).skip(range.start) {
+        // Tab also reaches the inputs that are scrolled out of view.
+        let tunable: Vec<usize> = rows
+            .iter()
+            .enumerate()
+            .filter(|(_, row)| {
+                let tuned = |value: &RowValue| {
+                    matches!(
+                        value,
+                        RowValue::Number {
+                            input_hidden: false,
+                            ..
+                        }
+                    )
+                };
+                !row.value_hidden && tuned(&row.value)
+            })
+            .map(|(index, _)| index)
+            .collect();
+        let (before, after) = (
+            tunable.partition_point(|&index| index < range.start),
+            tunable.partition_point(|&index| index < range.end),
+        );
+        let nearest = [
+            (before > 0).then_some(0),
+            before.checked_sub(1),
+            (after < tunable.len()).then_some(after),
+            (after < tunable.len()).then(|| tunable.len() - 1),
+        ];
+        let nearest = nearest.into_iter().flatten().map(|i| tunable[i]);
+        let shown: BTreeSet<usize> = range.chain(nearest).collect();
+        for (index, row) in shown.into_iter().map(|index| (index, &rows[index])) {
             let element = self.row(row, index, width, appearance, window, cx);
             content = content.child(element);
         }
@@ -995,7 +1037,7 @@ impl Render for SidebarView {
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
             .child(content);
-        if let Some(results) = self.search_results(appearance, cx) {
+        if let Some(results) = self.search_results(appearance, window, cx) {
             root = root.child(results);
         }
         root
@@ -1005,6 +1047,17 @@ impl Render for SidebarView {
 /// `div.side-bar`'s box as the frame laid it out, for [`ViewGeometry`].
 pub fn set_side_bar(geometry: &ViewGeometry, rect: [f64; 4]) {
     geometry.0.borrow_mut().side_bar = rect;
+}
+
+/// Scrolls `div.side-bar` to the focused element at this client y and height.
+pub fn scroll_to_focused(geometry: &ViewGeometry, [y, height]: [f64; 2]) {
+    let mut layout = geometry.0.borrow_mut();
+    let [_, top, _, visible] = layout.side_bar;
+    let by = focus::reveal(ScrollAxis::Vertical, visible, [y - top, height]);
+    if by != 0.0 {
+        let to = layout.scroll_top + by;
+        layout.scroll(to);
+    }
 }
 
 pub fn take_touched_field(geometry: &ViewGeometry) -> Option<usize> {

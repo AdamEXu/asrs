@@ -58,6 +58,52 @@ diff --git a/src/app/headless_app_context.rs b/src/app/headless_app_context.rs
      /// Captures a screenshot from a window.
      ///
      /// Requires that the context was created with a renderer factory that
+diff --git a/src/elements/div.rs b/src/elements/div.rs
+--- a/src/elements/div.rs
++++ b/src/elements/div.rs
+@@ -1,3 +1,4 @@
++// Modified by asrs: see patches/gpui-pre-0.3.12.patch in the asrs repository.
+ //! Div is the central, reusable element that most GPUI trees will be built from.
+ //! It functions as a container for other elements, and provides a number of
+ //! useful features for laying out and styling its children as well as binding
+@@ -2612,6 +2613,11 @@
+                                         // to the first item in the whole window instead of its own.
+                                         if let Some(focus_handle) = &self.tracked_focus_handle {
+                                             window.next_frame.tab_stops.insert(focus_handle);
++                                            window
++                                                .next_frame
++                                                .focus_bounds
++                                                .entry(focus_handle.id)
++                                                .or_insert(bounds);
+                                         }
+                                         if let Some(hitbox) = hitbox {
+                                             #[cfg(debug_assertions)]
+diff --git a/src/tab_stop.rs b/src/tab_stop.rs
+--- a/src/tab_stop.rs
++++ b/src/tab_stop.rs
+@@ -1,3 +1,4 @@
++// Modified by asrs: see patches/gpui-pre-0.3.12.patch in the asrs repository.
+ use std::fmt::Debug;
+ 
+ use ::sum_tree::SumTree;
+@@ -182,6 +183,17 @@
+         cursor.item()
+     }
+ 
++    /// Every handle in the map in order.
++    pub(crate) fn handles(&self) -> Vec<FocusHandle> {
++        self.order
++            .iter()
++            .filter_map(|node| {
++                let handle = self.focus_handle_for_order(node)?;
++                (self.by_id.get(&handle.id) == Some(node)).then_some(handle)
++            })
++            .collect()
++    }
++
+     pub fn replay(&mut self, nodes: &[TabStopOperation]) {
+         for node in nodes {
+             match node {
 diff --git a/src/taffy.rs b/src/taffy.rs
 --- a/src/taffy.rs
 +++ b/src/taffy.rs
@@ -116,14 +162,14 @@ diff --git a/src/util.rs b/src/util.rs
 -    (value.abs() - 0.5).ceil().copysign(value)
 +pub(crate) fn round_half_up(value: f32) -> f32 {
 +    (value + 0.5).floor()
- }
- 
- #[inline]
-+pub(crate) fn round_half_up_f64(value: f64) -> f64 {
-+    (value + 0.5).floor()
 +}
 +
 +#[inline]
++pub(crate) fn round_half_up_f64(value: f64) -> f64 {
++    (value + 0.5).floor()
+ }
+ 
+ #[inline]
  pub(crate) fn round_to_device_pixel(logical: f32, scale_factor: f32) -> f32 {
 -    round_half_toward_zero(logical * scale_factor)
 +    round_half_up(logical * scale_factor)
@@ -196,12 +242,34 @@ diff --git a/src/window.rs b/src/window.rs
  };
  pub use prompts::*;
  
-@@ -1214,6 +1215,63 @@
-     Mouse,
-     Keyboard,
+@@ -1061,6 +1062,7 @@
+     #[cfg(any(feature = "inspector", debug_assertions))]
+     pub(crate) inspector_hitboxes: FxHashMap<HitboxId, crate::InspectorElementId>,
+     pub(crate) tab_stops: TabStopMap,
++    pub(crate) focus_bounds: FxHashMap<FocusId, Bounds<Pixels>>,
+ }
+ 
+ #[derive(Clone, Default)]
+@@ -1120,6 +1122,7 @@
+             #[cfg(any(feature = "inspector", debug_assertions))]
+             inspector_hitboxes: FxHashMap::default(),
+             tab_stops: TabStopMap::default(),
++            focus_bounds: FxHashMap::default(),
+         }
+     }
+ 
+@@ -1136,6 +1139,7 @@
+         self.window_control_hitboxes.clear();
+         self.deferred_draws.clear();
+         self.tab_stops.clear();
++        self.focus_bounds.clear();
+         self.focus = None;
+ 
+         #[cfg(any(test, feature = "test-support"))]
+@@ -1216,6 +1220,63 @@
      Touch,
-+}
-+
+ }
+ 
 +/// What Blink's `:focus-visible` depends on besides the focus itself.
 +#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 +struct FocusVisibility {
@@ -257,10 +325,12 @@ diff --git a/src/window.rs b/src/window.rs
 +    fn visible(&self) -> bool {
 +        self.had_keyboard_event || !self.last_focus_from_mouse
 +    }
- }
- 
++}
++
  /// Holds the state for a specific window.
-@@ -1283,6 +1341,7 @@
+ pub struct Window {
+     pub(crate) handle: AnyWindowHandle,
+@@ -1283,6 +1344,7 @@
      #[cfg(feature = "profiler")]
      pub(crate) window_profiler: profiler::WindowProfiler,
      last_input_modality: InputModality,
@@ -268,7 +338,7 @@ diff --git a/src/window.rs b/src/window.rs
      touch_gestures: TouchGestureRecognizer,
      touch_prediction_enabled: bool,
      long_press_timer: Option<Task<()>>,
-@@ -2403,6 +2462,7 @@
+@@ -2403,6 +2465,7 @@
              #[cfg(feature = "profiler")]
              window_profiler: profiler::WindowProfiler::new(handle.window_id())?,
              last_input_modality: InputModality::Mouse,
@@ -276,7 +346,7 @@ diff --git a/src/window.rs b/src/window.rs
              touch_gestures: TouchGestureRecognizer::new(
                  cx.platform
                      .gestures()
-@@ -2624,6 +2684,7 @@
+@@ -2624,6 +2687,7 @@
          }
  
          self.focus = Some(handle.id);
@@ -284,7 +354,7 @@ diff --git a/src/window.rs b/src/window.rs
          self.focus_generation = self.focus_generation.wrapping_add(1);
          self.clear_pending_keystrokes(cx);
  
-@@ -2639,6 +2700,7 @@
+@@ -2639,6 +2703,7 @@
          }
  
          if self.focus.is_some() {
@@ -292,7 +362,31 @@ diff --git a/src/window.rs b/src/window.rs
              self.focus_generation = self.focus_generation.wrapping_add(1);
          }
          self.focus = None;
-@@ -3414,7 +3476,7 @@
+@@ -2673,6 +2738,23 @@
+         }
+     }
+ 
++    /// The focus handles of the rendered frame in tab order, tab stops or not. Copies of one
++    /// handle differ in [`FocusHandle::tab_stop`].
++    pub fn tab_order(&self) -> Vec<FocusHandle> {
++        self.rendered_frame.tab_stops.handles()
++    }
++
++    /// The bounds of the element that tracks `handle` in the rendered frame.
++    pub fn focus_bounds(&self, handle: &FocusHandle) -> Option<Bounds<Pixels>> {
++        self.rendered_frame.focus_bounds.get(&handle.id).copied()
++    }
++
++    /// Makes `bounds` the bounds of `handle`, where the element that tracks it is only a part of
++    /// what has the focus. Called while the frame is prepainted.
++    pub fn set_focus_bounds(&mut self, handle: &FocusHandle, bounds: Bounds<Pixels>) {
++        self.next_frame.focus_bounds.insert(handle.id, bounds);
++    }
++
+     /// Accessor for the text system.
+     pub fn text_system(&self) -> &Rc<WindowTextSystem> {
+         &self.text_system
+@@ -3414,7 +3496,7 @@
      #[inline]
      pub fn pixel_snap_f64(&self, value: f64) -> f64 {
          let scale_factor = f64::from(self.scale_factor());
@@ -301,20 +395,20 @@ diff --git a/src/window.rs b/src/window.rs
      }
  
      /// Snaps a bounds' origin and size to the nearest device pixel.
-@@ -3642,6 +3704,12 @@
-     /// This is used for focus-visible styling to show focus indicators only for keyboard navigation.
-     pub fn last_input_was_keyboard(&self) -> bool {
+@@ -3644,6 +3726,12 @@
          self.last_input_modality == InputModality::Keyboard
-+    }
-+
+     }
+ 
 +    /// Whether the focused element of an active window matches Blink's `:focus-visible`: the
 +    /// focus did not come from a press, or a key without Control, Alt or Cmd came since.
 +    pub fn focus_visible(&self) -> bool {
 +        self.focus_visibility.visible()
-     }
- 
++    }
++
      /// Returns whether the last input event came from a touch screen.
-@@ -5877,7 +5945,10 @@
+     pub fn last_input_was_touch(&self) -> bool {
+         self.last_input_modality == InputModality::Touch
+@@ -5877,7 +5965,10 @@
              PlatformInput::Touch(_) => InputModality::Touch,
              _ => self.last_input_modality,
          };
@@ -326,7 +420,7 @@ diff --git a/src/window.rs b/src/window.rs
              self.refresh();
          }
  
-@@ -6008,6 +6079,7 @@
+@@ -6008,6 +6099,7 @@
          } else if let Some(touch_event) = event.touch_event() {
              self.dispatch_touch_event(touch_event, cx);
          }

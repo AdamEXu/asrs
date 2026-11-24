@@ -1,3 +1,4 @@
+// Modified by asrs: see patches/gpui-pre-0.3.12.patch in the asrs repository.
 use std::fmt::Debug;
 
 use ::sum_tree::SumTree;
@@ -180,6 +181,17 @@ impl TabStopMap {
         }
 
         cursor.item()
+    }
+
+    /// Every handle in the map in order.
+    pub(crate) fn handles(&self) -> Vec<FocusHandle> {
+        self.order
+            .iter()
+            .filter_map(|node| {
+                let handle = self.focus_handle_for_order(node)?;
+                (self.by_id.get(&handle.id) == Some(node)).then_some(handle)
+            })
+            .collect()
     }
 
     pub fn replay(&mut self, nodes: &[TabStopOperation]) {

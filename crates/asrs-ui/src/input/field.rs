@@ -415,6 +415,11 @@ impl<M: FieldModel> TextField<M> {
         }
     }
 
+    fn select_contents(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.editor
+            .update(cx, |editor, cx| editor.select_all(window, cx));
+    }
+
     fn clear(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
         self.value.edit("");
         self.editor_text.borrow_mut().clear();
@@ -471,9 +476,13 @@ impl<M: FieldModel> TextField<M> {
         }
     }
 
-    /// `HandleKeydownEventForSpinButton`.
+    /// `HandleKeydownEventForSpinButton`, or the caret moving to an end of a single line.
     fn arrow_key(&mut self, up: bool, window: &mut Window, cx: &mut Context<'_, Self>) {
         if self.kind != FieldKind::Number {
+            self.editor.update(cx, |editor, cx| {
+                let end = if up { 0 } else { editor.value().len() };
+                editor.set_selected_range(end..end, cx);
+            });
             return;
         }
         cx.stop_propagation();
@@ -652,6 +661,13 @@ impl<M: FieldModel> TextField<M> {
     }
 }
 
+/// Runs an action of the editor's, which its crate does not export.
+fn select_to(action: &str, window: &mut Window, cx: &mut App) {
+    if let Ok(action) = cx.build_action(action, None) {
+        window.dispatch_action(action, cx);
+    }
+}
+
 impl<M: FieldModel> Render for TextField<M> {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let scale = window.scale_factor();
@@ -755,14 +771,32 @@ impl<M: FieldModel> Render for TextField<M> {
 
         let mut root = div()
             .id("text-field")
-            .key_context(super::CONTEXT)
+            .key_context(match self.kind {
+                FieldKind::Number => super::NUMBER_CONTEXT,
+                FieldKind::Text | FieldKind::Search => super::TEXT_CONTEXT,
+            })
+            .on_action(cx.listener(|this, _: &super::StepUp, window, cx| {
+                this.arrow_key(true, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &super::StepDown, window, cx| {
+                this.arrow_key(false, window, cx);
+            }))
+            .on_action(|_: &super::StepNone, _, _| {})
+            .on_action(|_: &super::ExtendUp, window, cx| {
+                select_to("input::SelectToStart", window, cx);
+            })
+            .on_action(|_: &super::ExtendDown, window, cx| {
+                select_to("input::SelectToEnd", window, cx);
+            })
             .capture_action(cx.listener(Self::paste))
             .capture_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::delete_selection))
             .on_action(cx.listener(Self::copy))
             .on_action(cx.listener(|this, _: &selection::SelectAll, window, cx| {
-                let editor = this.editor.clone();
-                editor.update(cx, |editor, cx| editor.select_all(window, cx));
+                this.select_contents(window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &focus::SelectContents, window, cx| {
+                this.select_contents(window, cx);
             }))
             .capture_action(cx.listener(|this, _: &MoveUp, window, cx| {
                 this.arrow_key(true, window, cx);
@@ -778,6 +812,19 @@ impl<M: FieldModel> Render for TextField<M> {
                 this.spin.hovered &= *hovered;
                 cx.notify();
             }))
+            .on_mouse_down_out(cx.listener(|this, _, window, cx| {
+                if !window.default_prevented() {
+                    this.blur(window, cx);
+                }
+            }))
+            .child(
+                canvas(
+                    move |bounds, window, _| window.set_focus_bounds(&handle, bounds),
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .inset_0(),
+            )
             .capture_any_mouse_down(cx.listener(|this, event: &MouseDownEvent, _, cx| {
                 if event.button == MouseButton::Left {
                     this.pressed = true;
@@ -814,10 +861,22 @@ impl<M: FieldModel> Render for TextField<M> {
             });
         }
         if focused {
+            let handle = self.focus_handle(cx);
+            let value = self.value.value();
+            let editor = self.editor.read(cx);
+            let (text, selected) = (editor.value(), editor.selected_range());
+            let utf16 = |end: usize| text[..end].encode_utf16().count();
+            let selection = (self.kind != FieldKind::Number)
+                .then(|| [utf16(selected.start), utf16(selected.end)]);
             root = root.child(
                 canvas(
-                    |bounds, _, cx| {
-                        crate::parity::record_mask(cx, crate::parity::FOCUSED_INPUT, bounds)
+                    move |bounds, _, cx| {
+                        crate::parity::record_mask(cx, crate::parity::FOCUSED_INPUT, bounds);
+                        crate::parity::record_focused_input(cx, || crate::parity::FocusedInput {
+                            handle,
+                            value,
+                            selection,
+                        });
                     },
                     |_, _, _, _| {},
                 )
