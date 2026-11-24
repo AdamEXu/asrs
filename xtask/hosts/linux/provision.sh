@@ -2,9 +2,16 @@
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
-sudo systemctl mask --now -q apt-daily.timer apt-daily-upgrade.timer unattended-upgrades.service || true
-sudo -E apt-get update -q
-sudo -E apt-get install -y -q --no-install-recommends --no-upgrade \
+# An upgrade can change the libraries and the kernel the references were recorded with. One that is
+# already running is left to finish: stopping it leaves half-installed packages.
+sudo systemctl mask -q --now apt-daily.timer apt-daily-upgrade.timer
+sudo systemctl mask -q apt-daily.service apt-daily-upgrade.service unattended-upgrades.service
+printf 'APT::Periodic::Update-Package-Lists "0";\nAPT::Periodic::Unattended-Upgrade "0";\n' |
+  sudo tee /etc/apt/apt.conf.d/20auto-upgrades >/dev/null
+while pgrep -f /usr/bin/unattended-upgrade >/dev/null; do sleep 2; done
+sudo -E dpkg --configure -a
+sudo -E apt-get update -q -o DPkg::Lock::Timeout=1800
+sudo -E apt-get install -y -q --no-install-recommends --no-upgrade -o DPkg::Lock::Timeout=1800 \
   xserver-xorg-core xserver-xorg-input-libinput xinit x11-xserver-utils x11-utils xauth \
   xfce4-session xfwm4 xfdesktop4 xfce4-panel xfce4-settings xfconf xfce4-terminal \
   lightdm lightdm-gtk-greeter dbus-x11 at-spi2-core gnome-themes-extra \

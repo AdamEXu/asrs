@@ -592,7 +592,15 @@ impl Host {
             Vm::Script(vm) => vm.stop(),
             Vm::Tart => {
                 if linux_running()? {
-                    exec(&mut tart(&["stop", LINUX_VM, "--timeout", "60"]))?;
+                    // `tart stop` cuts the power, which loses what the guest wrote last.
+                    let _ = self.script("sync; sudo systemctl poweroff");
+                    let start = Instant::now();
+                    while linux_running()? && start.elapsed() < Duration::from_secs(90) {
+                        std::thread::sleep(Duration::from_secs(1));
+                    }
+                    if linux_running()? {
+                        exec(&mut tart(&["stop", LINUX_VM, "--timeout", "60"]))?;
+                    }
                 }
                 eprintln!("stopped");
                 Ok(())
@@ -645,7 +653,7 @@ impl Host {
                 self.upload(&hosts.join("linux/provision.sh"), "$HOME/asrs-provision.sh")?;
                 self.upload(&hosts.join("linux/fonts.sh"), "$HOME/asrs-fonts.sh")?;
                 self.script(&format!(
-                    "set -e\nbash $HOME/asrs-provision.sh\ntest -f {dir}/packages.txt || bash $HOME/asrs-fonts.sh $HOME/.cache/asrs-fonts {dir}"
+                    "set -e\nbash $HOME/asrs-provision.sh\ntest -f {dir}/packages.txt || bash $HOME/asrs-fonts.sh $HOME/.cache/asrs-fonts {dir}\nsync"
                 ))
             }
             Os::Windows => {
@@ -1696,7 +1704,7 @@ fn display_profile() -> Json {
     match std::env::consts::OS {
         "linux" => {
             let icc = command_text("xprop", &["-root", "_ICC_PROFILE"]).unwrap_or_default();
-            Json::string(if icc.contains("not found") || icc.is_empty() {
+            Json::string(if icc.is_empty() || !icc.contains(" = ") {
                 "none (sRGB)"
             } else {
                 "_ICC_PROFILE set on the root window"
