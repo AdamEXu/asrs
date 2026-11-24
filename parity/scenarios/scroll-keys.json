@@ -51,9 +51,14 @@
       "idle": true
     },
     {
+      "mouse": "move",
+      "x": 700,
+      "y": 103
+    },
+    {
       "mouse": "click",
-      "x": 640,
-      "y": 400
+      "x": 700,
+      "y": 103
     },
     {
       "mouse": "move",
@@ -207,6 +212,11 @@
       ]
     },
     {
+      "mouse": "move",
+      "x": 60,
+      "y": 420
+    },
+    {
       "mouse": "click",
       "x": 60,
       "y": 420
@@ -254,6 +264,66 @@
       "wait": 1500
     },
     {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Graph",
+              "controller": {
+                "leftSources": [],
+                "rightSources": [],
+                "discreteSources": [],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 400
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 70
+    },
+    {
       "mouse": "click",
       "x": 700,
       "y": 70
@@ -272,7 +342,7 @@
     {
       "capture": "timeline-down",
       "probes": [
-        ".timeline-canvas"
+        ".timeline"
       ]
     },
     {
@@ -287,7 +357,7 @@
     {
       "capture": "timeline-up",
       "probes": [
-        ".timeline-canvas"
+        ".timeline"
       ]
     }
   ]

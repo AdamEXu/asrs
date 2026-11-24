@@ -28,7 +28,7 @@ use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Context, Div, Entity, Focusable, InteractiveElement, IntoElement,
     MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, SharedString, Styled,
-    Subscription, Window, div, px, rgb,
+    Subscription, Window, div, point, px, rgb,
 };
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, TextField};
 use asrs_ui::parity::probed;
@@ -1120,6 +1120,7 @@ impl<H: FrameHost> HubFrame<H> {
         let covered = self.table_covered(&shown, x, y, cx);
         let on_root = shown.contains(x, y) && !covered;
         let over = on_root
+            && !self.on_scrollbar(point(px(x as f32), px(y as f32)))
             && self
                 .table_input(cx, |renderer, _| {
                     renderer.dom().borrow_mut().layout.body_contains(x, y)

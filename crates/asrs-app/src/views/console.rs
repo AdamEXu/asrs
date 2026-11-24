@@ -19,7 +19,7 @@ use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Context, Div, Entity, InteractiveElement, IntoElement,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, Styled,
-    Subscription, Window, div, px, rgb, rgba,
+    Subscription, Window, div, point, px, rgb, rgba,
 };
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, PlainText, TextField};
 use asrs_ui::parity::probed;
@@ -1156,7 +1156,8 @@ impl<H: FrameHost> HubFrame<H> {
         let Some(shown) = self.console.shown else {
             return;
         };
-        let row = if self.console_covered() {
+        let on_bar = self.on_scrollbar(point(px(x as f32), px(y as f32)));
+        let row = if self.console_covered() || on_bar {
             None
         } else {
             self.console_row_at(shown, x, y)

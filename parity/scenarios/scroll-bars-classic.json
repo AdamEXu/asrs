@@ -1,5 +1,5 @@
 {
-  "about": "Interaction (#268): classic scrollbars of the table, hovered and pressed, and a statistics table that scrolls",
+  "about": "Interaction (#268): the table's classic scrollbars, hovered and pressed, and what is laid out next to one",
   "scrollbars": "classic",
   "platforms": [
     "darwin"
