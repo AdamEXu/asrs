@@ -507,7 +507,10 @@ impl MainProcess {
         let key = ops::to_string(&uuid).to_string_lossy();
         let opened = windows::open_satellite(cx, &key, placement, |window, cx| {
             let dark = Appearance::of(window, cx) == Appearance::Dark;
-            SatelliteHost::open(dark, &boot, seed, cx)
+            let frame = SatelliteHost::open(dark, &boot, seed, cx);
+            let satellite = frame.read(cx).host().satellite().clone();
+            satellite.update(cx, |page, cx| page.throttle_with(window, cx));
+            frame
         });
         let (id, frame) = match opened {
             Ok(opened) => opened,

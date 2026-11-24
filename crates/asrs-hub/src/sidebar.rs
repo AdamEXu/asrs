@@ -58,7 +58,7 @@ pub const OPEN_LOG_TITLE: &str = "Open a log or connect to view data";
 
 const TYPE_WARNING_TEXT: &str = "Values with conflicting types have been written to this field. \
 Only values compatible with the initial type can be viewed and exported.";
-const TUNING_INTERVAL_MS: f64 = 250.0;
+pub const TUNING_INTERVAL_MS: f64 = 250.0;
 const HIGHLIGHT_TIMEOUT_MS: f64 = 3000.0;
 const HANDLE_DOUBLE_CLICK_MS: f64 = 400.0;
 const SCROLL_BLUR_THRESHOLD: f64 = 50.0;
@@ -333,16 +333,9 @@ type Aborted = EventOutcome;
 type Attempt<T> = Result<T, Aborted>;
 
 #[derive(Clone, Debug)]
-struct Timer {
+struct HighlightTimeout {
     due: f64,
-    seq: u64,
-    kind: TimerKind,
-}
-
-#[derive(Clone, Copy, Debug)]
-enum TimerKind {
-    TuningPublish,
-    ClearHighlight(u64),
+    node: u64,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -546,14 +539,13 @@ pub struct Sidebar {
     last_handle_click: f64,
     menu_active: Vec<bool>,
     main_messages: Vec<(JsString, JsValue)>,
-    timers: Vec<Timer>,
-    next_timer_seq: u64,
+    highlight_timeouts: Vec<HighlightTimeout>,
     generation: u64,
 }
 
 impl Sidebar {
-    pub fn new(now: f64, get_filenames: impl Fn() -> Vec<JsString> + 'static) -> Self {
-        let mut sidebar = Sidebar {
+    pub fn new(get_filenames: impl Fn() -> Vec<JsString> + 'static) -> Self {
+        Sidebar {
             get_filenames: Box::new(get_filenames),
             sidebar_handle_active: false,
             sidebar_width: DEFAULT_SIDEBAR_WIDTH,
@@ -584,67 +576,25 @@ impl Sidebar {
             last_handle_click: 0.0,
             menu_active: Vec::new(),
             main_messages: Vec::new(),
-            timers: Vec::new(),
-            next_timer_seq: 0,
+            highlight_timeouts: Vec::new(),
             generation: 0,
-        };
-        sidebar.schedule_interval(now, TUNING_INTERVAL_MS, TimerKind::TuningPublish);
-        sidebar
-    }
-
-    fn schedule_interval(&mut self, now: f64, interval: f64, kind: TimerKind) {
-        let seq = self.next_timer_seq;
-        self.next_timer_seq += 1;
-        self.timers.push(Timer {
-            due: now + interval,
-            seq,
-            kind,
-        });
-    }
-
-    fn schedule_timeout(&mut self, now: f64, delay: f64, kind: TimerKind) {
-        self.schedule_interval(now, delay, kind);
-    }
-
-    /// Earliest pending timer `due`, if any.
-    pub fn next_timer_due(&self) -> Option<f64> {
-        self.timers.iter().map(|t| t.due).reduce(min2)
-    }
-
-    /// Runs every timer due at `now`, in `(due, seq)` order like env.ts.
-    pub fn fire_timers(&mut self, now: f64, env: &mut SidebarEnv<'_>) {
-        loop {
-            let Some(pos) = self
-                .timers
-                .iter()
-                .enumerate()
-                .filter(|(_, t)| t.due <= now)
-                .min_by(|(_, a), (_, b)| {
-                    a.due
-                        .partial_cmp(&b.due)
-                        .unwrap_or(Ordering::Equal)
-                        .then(a.seq.cmp(&b.seq))
-                })
-                .map(|(i, _)| i)
-            else {
-                return;
-            };
-            let mut timer = self.timers.remove(pos);
-            match timer.kind {
-                TimerKind::TuningPublish => {
-                    self.tuning_publish_tick(env);
-                    timer.due += TUNING_INTERVAL_MS;
-                    timer.seq = self.next_timer_seq;
-                    self.next_timer_seq += 1;
-                    self.timers.push(timer);
-                }
-                TimerKind::ClearHighlight(id) => {
-                    if let Some(node) = self.nodes.iter_mut().find(|n| n.id == id) {
-                        node.highlighted = false;
-                    }
-                }
-            }
         }
+    }
+
+    pub fn next_timeout(&self) -> Option<f64> {
+        self.highlight_timeouts.iter().map(|t| t.due).reduce(min2)
+    }
+
+    /// Runs every highlight timeout due at `now`.
+    pub fn fire_timeouts(&mut self, now: f64) {
+        let nodes = &mut self.nodes;
+        self.highlight_timeouts.retain(|timeout| {
+            let due = timeout.due <= now;
+            if due && let Some(node) = nodes.iter_mut().find(|n| n.id == timeout.node) {
+                node.highlighted = false;
+            }
+            !due
+        });
     }
 
     fn send_main(&mut self, name: &str, data: JsValue) {
@@ -995,11 +945,10 @@ impl Sidebar {
         env.geometry.scroll_into_view_if_needed(self.row_ref(id));
         self.nodes[id].highlighted = true;
         let node_id = self.nodes[id].id;
-        self.schedule_timeout(
-            now,
-            HIGHLIGHT_TIMEOUT_MS,
-            TimerKind::ClearHighlight(node_id),
-        );
+        self.highlight_timeouts.push(HighlightTimeout {
+            due: now + HIGHLIGHT_TIMEOUT_MS,
+            node: node_id,
+        });
     }
 
     /// `expandForSearch` + `setExpanded` machinery.
@@ -1371,8 +1320,8 @@ impl Sidebar {
         }
     }
 
-    /// The 250 ms tuning-publish interval.
-    fn tuning_publish_tick(&mut self, env: &mut SidebarEnv<'_>) {
+    /// The callback of the interval upstream's constructor sets, every [`TUNING_INTERVAL_MS`].
+    pub fn publish_tuning(&mut self, env: &mut SidebarEnv<'_>) {
         if !self.is_tuning_mode {
             return;
         }

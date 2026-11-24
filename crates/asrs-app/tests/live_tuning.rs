@@ -208,9 +208,14 @@ impl Wire {
         found.map(|(_, uid)| *uid)
     }
 
-    fn sent(&self, topic: &str, value: &Unpacked) -> bool {
+    fn count(&self, topic: &str, value: &Unpacked) -> usize {
+        let sent = |uid| self.values.iter().filter(move |(id, _)| *id == uid);
         self.uid(topic)
-            .is_some_and(|uid| self.values.iter().any(|(id, v)| *id == uid && v == value))
+            .map_or(0, |uid| sent(uid).filter(|(_, v)| v == value).count())
+    }
+
+    fn sent(&self, topic: &str, value: &Unpacked) -> bool {
+        self.count(topic, value) > 0
     }
 }
 
@@ -265,6 +270,21 @@ fn tuning(page: &mut Page<'_>, server: &LiveServer) {
         assert_eq!(wire.uid("/Tune/aa"), None, "another row's field was tuned");
         wire.sent("/Tune/kP", &Unpacked::Number(7.0))
     });
+    let before = wire.count("/Tune/kP", &Unpacked::Number(7.0));
+    for _ in 0..100 {
+        let cx = page.headless.context();
+        cx.advance_clock(Duration::from_millis(10));
+        cx.run_until_parked();
+    }
+    let start = Instant::now();
+    while wire.count("/Tune/kP", &Unpacked::Number(7.0)) < before + 4 {
+        wire.read(server);
+        assert!(
+            start.elapsed() < Duration::from_secs(60),
+            "no tuning without frames"
+        );
+        std::thread::sleep(Duration::from_millis(4));
+    }
     click_value(page, "kP");
     keys(page, &["backspace", "backspace", "enter"]);
     wait(page, "the cleared field", |_| {

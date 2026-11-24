@@ -60,7 +60,9 @@ use crate::live::{
     PublisherSession, rlog_message,
 };
 use crate::satellite::SatelliteSelection;
-use crate::sidebar::{EventOutcome, Sidebar, SidebarEnv, SidebarGeometry, Tuner};
+use crate::sidebar::{
+    EventOutcome, Sidebar, SidebarEnv, SidebarGeometry, TUNING_INTERVAL_MS, Tuner,
+};
 use crate::tabs::{SatelliteUpdate, Tabs, TabsError, TabsHost};
 
 pub const STATE_SAVE_PERIOD_MS: f64 = 250.0;
@@ -75,6 +77,8 @@ pub(crate) const APP_NAME: &str = "AdvantageScope";
 /// A repeating timer the hub sets. Each is cleared by the same value.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum HubInterval {
+    /// `Sidebar`'s, for tuning mode.
+    SidebarTuning,
     SaveState,
     SaveTypeMemory,
     TouchBarSlider,
@@ -92,8 +96,8 @@ pub enum HubTimeout {
 /// A `requestAnimationFrame` callback. Each runs once; the hub requests the next one itself.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum HubFrame {
-    /// `Sidebar`'s per-frame loop. Its 250 ms tuning interval and 3 s highlight timeouts run
-    /// in the first of these frames at or after they are due.
+    /// `Sidebar`'s per-frame loop. Its 3 s highlight timeouts run in the first of these frames at
+    /// or after they are due, as only a frame can show them.
     Sidebar,
     /// `Tabs`' per-frame loop.
     Tabs,
@@ -711,9 +715,9 @@ impl HubModel {
         view: Box<dyn HubView>,
         host: &mut dyn HubHost,
     ) -> Self {
-        let now = host.now();
-        let (mut page, sidebar, filenames) = Self::page_parts(realm, clock, view, now, None);
+        let (mut page, sidebar, filenames) = Self::page_parts(realm, clock, view, None);
         host.request_animation_frame(HubFrame::Sidebar);
+        host.set_interval(HubInterval::SidebarTuning, TUNING_INTERVAL_MS);
         let tabs = Tabs::new(Box::new(HubTabFactory::new()), &mut page);
         host.request_animation_frame(HubFrame::SourceLists);
         host.request_animation_frame(HubFrame::Tabs);
@@ -728,9 +732,8 @@ impl HubModel {
     /// The parts of the page `satellite.ts` has in common with `hub.ts`: `window.assets`,
     /// `preferences`, `isBattery` and `selection`, and the one renderer, as the only tab.
     pub(crate) fn satellite(realm: JsRealm, clock: Rc<dyn Clock>, view: Box<dyn HubView>) -> Self {
-        let now = clock.now();
         let selection = Some(SatelliteSelection::default());
-        let (page, sidebar, filenames) = Self::page_parts(realm, clock, view, now, selection);
+        let (page, sidebar, filenames) = Self::page_parts(realm, clock, view, selection);
         Self::from_parts(
             page,
             Tabs::empty(Box::new(SatelliteFactory)),
@@ -743,14 +746,13 @@ impl HubModel {
         realm: JsRealm,
         clock: Rc<dyn Clock>,
         view: Box<dyn HubView>,
-        now: f64,
         satellite: Option<SatelliteSelection>,
     ) -> (HubPage, Sidebar, Filenames) {
         let log: SharedLog = Rc::new(RefCell::new(Log::new(true)));
         let selection = SelectionImpl::new(log.clone(), clock.clone());
         let filenames = Rc::new(RefCell::new(Vec::new()));
         let names = filenames.clone();
-        let sidebar = Sidebar::new(now, move || names.borrow().clone());
+        let sidebar = Sidebar::new(move || names.borrow().clone());
         let page = HubPage {
             log,
             selection,
@@ -1346,6 +1348,7 @@ impl HubModel {
     /// Fires one interval the hub set.
     pub fn fire_interval(&mut self, interval: &HubInterval, host: &mut dyn HubHost) {
         match interval {
+            HubInterval::SidebarTuning => self.with_sidebar(Sidebar::publish_tuning),
             HubInterval::SaveState => {
                 let state = self.save_state();
                 host.send_main_message(NamedMessage::new(HubToMain::SaveState, state));
@@ -1419,11 +1422,10 @@ impl HubModel {
     pub fn animation_frame(&mut self, frame: &HubFrame, host: &mut dyn HubHost) {
         match frame {
             HubFrame::Sidebar => {
-                let now = host.now();
-                self.with_sidebar(|sidebar, env| {
-                    sidebar.fire_timers(now, env);
-                    sidebar.periodic(env);
-                });
+                if self.sidebar.next_timeout().is_some() {
+                    self.sidebar.fire_timeouts(host.now());
+                }
+                self.with_sidebar(Sidebar::periodic);
                 host.request_animation_frame(HubFrame::Sidebar);
             }
             HubFrame::Tabs => {
