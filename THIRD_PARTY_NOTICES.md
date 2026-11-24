@@ -50,6 +50,31 @@ Infima's, which its package omits, is [`licenses/infima.txt`](licenses/infima.tx
 - Used in: `asrs-webview`, the process behind the Documentation tab, linked dynamically from the
   system's libraries and not shipped. asrs itself does not link them.
 
+## plasma-wayland-protocols (Linux)
+
+- License: LGPL-2.1-or-later ([`licenses/LGPL-2.1.txt`](licenses/LGPL-2.1.txt))
+- Copyright 2015 Martin Gräßlin, 2015 Marco Martin
+- Source: `src/protocols/blur.xml` in https://invent.kde.org/libraries/plasma-wayland-protocols,
+  as in the `wayland-protocols-plasma` 0.3.12 crate
+- Used in: asrs on Linux, through GPUI's Wayland backend, as the interface description (names,
+  numbers and argument types) of KWin's blur protocol, from which the crate generates Rust code
+
+asrs's complete source is public, so the program can be rebuilt with a changed description.
+
+## Microsoft WebView2 SDK (Windows)
+
+- License: BSD-3-Clause ([`licenses/WebView2 SDK.txt`](licenses/WebView2%20SDK.txt))
+- Copyright (C) Microsoft Corporation
+- Version: 1.0.3650.58, as in the `webview2-com-sys` 0.38.2 crate
+- Used in: asrs on Windows, which links the SDK's `WebView2LoaderStatic.lib` and uses the system's
+  WebView2 runtime
+
+## IANA time zone database
+
+- Public domain, https://www.iana.org/time-zones
+- Version: 2025b, the release in Electron 39.2.7, as in the `jiff-tzdb` 0.1.4 crate
+- Used in: `crates/asrs-js/src/time.rs`
+
 ## Google Material Symbols
 
 - License: Apache-2.0 ([`licenses/Apache-2.0.txt`](licenses/Apache-2.0.txt))
@@ -234,8 +259,9 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
   `stroke.rs`; `dash.rs`; `clip.rs`; `raster_clip.rs`; `geometry.rs`; `hairline.rs`;
   `skpath.rs`; `pixels.rs`; Graphite's MSAA tessellation in `msaa.rs`; mip levels in `mip.rs`; gradients, paths and
   the raster pipeline in `gradient.rs`, `path.rs`, `raster.rs`; text layout matrices in
-  `text/layout.rs`; the Fontations scaler, fontconfig matching and bitmap glyphs in
-  `text/linux/`; skcms, `SkColorSpace` and the colour-conversion pipeline stages in
+  `text/layout.rs` and `text/matrix.rs`; mask filling in `text/path_mask.rs` and mask gamma in
+  `text/lut.rs`; the Fontations scaler, fontconfig matching and bitmap glyphs in `text/linux/`;
+  the DirectWrite scaler, font matching and COLR glyphs in `text/win/`; skcms, `SkColorSpace` and the colour-conversion pipeline stages in
   `color_profile.rs`)
 
 ## Chromium and Blink
@@ -248,7 +274,8 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
 - Used in: `crates/asrs-canvas/src/` (`color.rs` CSS colour parsing, `path.rs` and `raster.rs`
   `CanvasPath`, `gradient.rs` stop handling, `text/dom.rs`, `text/flow.rs`, `text/inline.rs`,
   `text/layout.rs`, `text/line_break.rs`, `text/metrics.rs` text layout and `TextMetrics`,
-  `text/shaping.rs` and `text/linux/` word shaping and font fallback),
+  `text/shaping.rs`, `text/harfbuzz.rs`, `text/linux/` and `text/win/` word shaping, font fallback
+  and text settings),
   `crates/asrs-tabs/src/css_value.rs`, `crates/asrs-tabs/src/form/step.rs`,
   `crates/asrs-ui/src/selection/` (text selection), and behaviour reproduced in
   `crates/asrs-ui` (SVG painting, filters, theme), `crates/asrs-app/src/views/page_text.rs`

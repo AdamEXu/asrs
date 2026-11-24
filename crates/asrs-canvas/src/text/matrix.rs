@@ -1,5 +1,7 @@
 // Ported from Skia, Chromium m142 (BSD-3-Clause, Copyright 2006 Google Inc.). See THIRD_PARTY_NOTICES.md.
 
+use super::relax;
+
 /// The scale and skew of an `SkMatrix`: `x' = sx x + kx y`, `y' = ky x + sy y`.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct M2 {
@@ -82,6 +84,21 @@ fn givens(x: f32, y: f32) -> M2 {
         kx: -s,
         ky: s,
         sy: c,
+    }
+}
+
+/// The device matrix of text at `scale`, compressed horizontally by `x_scale`.
+pub fn upright(scale: f64, x_scale: f64) -> M2 {
+    relaxed([scale * x_scale, 0.0, 0.0, scale])
+}
+
+/// The device matrix `[a, b, c, d]` as `SkScalerContextRec` keeps it.
+pub fn relaxed([a, b, c, d]: [f64; 4]) -> M2 {
+    M2 {
+        sx: relax(a as f32),
+        kx: relax(c as f32),
+        ky: relax(b as f32),
+        sy: relax(d as f32),
     }
 }
 

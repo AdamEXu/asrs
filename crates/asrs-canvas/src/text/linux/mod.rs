@@ -6,24 +6,20 @@
 
 mod bitmap;
 pub mod fontconfig;
-mod matrix;
 mod scaler;
 
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use rustybuzz::{BufferClusterLevel, UnicodeBuffer};
-
 use self::fontconfig::{Fallback, Hinting, Match, RenderStyle};
-use self::matrix::M2;
 use self::scaler::Typeface;
 use super::font::FontKey;
-use super::shaping::{emoji_clusters, hb_scale, round, words};
-use super::{
-    Bounds, Family, FontMetrics, FontSpec, Glyph, LcdMask, Mask, Shaped, ShapedGlyph, TextBackend,
-    relax,
-};
+use super::harfbuzz::{self, Faces};
+use super::matrix::{self, M2, upright};
+use super::path_mask;
+use super::shaping::{effective, round};
+use super::{Bounds, Family, FontMetrics, FontSpec, Glyph, LcdMask, Mask, Shaped, TextBackend};
 use crate::path::Affine;
 use crate::skpath::SkPath;
 
@@ -43,43 +39,6 @@ struct Face {
     skew: bool,
     style: RenderStyle,
     fallback: bool,
-}
-
-struct ShapedRun {
-    start: usize,
-    face: u32,
-    glyphs: Vec<RunGlyph>,
-}
-
-#[derive(Clone, Copy)]
-struct RunGlyph {
-    id: u32,
-    cluster: usize,
-    /// Font units the shaper moved the advance by, or `None` where it zeroed it.
-    kern: Option<i32>,
-    offset: i32,
-}
-
-/// The device matrix of text at `scale`, compressed horizontally by `x_scale`.
-fn upright(scale: f64, x_scale: f64) -> M2 {
-    M2 {
-        sx: relax((scale * x_scale) as f32),
-        sy: relax(scale as f32),
-        ..M2::IDENTITY
-    }
-}
-
-/// `FontDescription::EffectiveFontSize`: Blink floors a font's zoomed size to 1/100 px.
-fn effective(spec: &FontSpec, zoom: f32) -> FontSpec {
-    let zoomed = spec.size * zoom;
-    let floored = (zoomed * 100.0).floor() / 100.0;
-    if floored == zoomed {
-        return *spec;
-    }
-    FontSpec {
-        size: floored / zoom,
-        ..*spec
-    }
 }
 
 /// Skia's Fontations scaler over fontconfig, configured as Chromium configures it on Linux.
@@ -153,50 +112,6 @@ impl Fontations {
         None
     }
 
-    fn primary(&mut self, spec: &FontSpec) -> Option<u32> {
-        if let Some(&face) = self.primary.get(&spec.key()) {
-            return Some(face);
-        }
-        let (family, _, typeface) = self.resolve(spec)?;
-        let bold = self.typefaces[typeface].weight >= BOLD;
-        let italic = self.typefaces[typeface].italic;
-        let style = fontconfig::render_style(&family, spec.size, bold, italic);
-        self.faces.push(Face {
-            typeface,
-            size: spec.size,
-            skew: spec.italic && !italic,
-            style,
-            fallback: false,
-        });
-        let face = (self.faces.len() - 1) as u32;
-        self.primary.insert(spec.key(), face);
-        Some(face)
-    }
-
-    /// `FontCache::PlatformFallbackFontForCharacter`.
-    fn substitute(&mut self, spec: &FontSpec, c: char, emoji: bool) -> Option<u32> {
-        if !emoji && (spec.italic || spec.weight >= BOLD) {
-            let regular = FontSpec {
-                weight: 400.0,
-                italic: false,
-                ..*spec
-            };
-            if let Some((_, _, typeface)) = self.resolve(&regular)
-                && self.typefaces[typeface].has_char(c)
-            {
-                return Some(self.substitute_face(spec, typeface));
-            }
-        }
-        let (c, locale) = if emoji {
-            (EMOJI, EMOJI_LOCALE)
-        } else {
-            (c, LOCALE)
-        };
-        let found = self.fallback.font_for(c, locale)?;
-        let typeface = self.typeface(&found)?;
-        Some(self.substitute_face(spec, typeface))
-    }
-
     fn substitute_face(&mut self, spec: &FontSpec, typeface: usize) -> u32 {
         if let Some(&face) = self.substitutes.get(&(spec.key(), typeface)) {
             return face;
@@ -225,14 +140,6 @@ impl Fontations {
         } else {
             face.style.hinting
         }
-    }
-
-    /// `SkFont::getWidth` at `size`.
-    fn advance(&mut self, face: u32, id: u32, size: f32) -> f32 {
-        if self.linear() {
-            return self.strike_advance(face, id, CANONICAL_SIZE) * (size / CANONICAL_SIZE);
-        }
-        self.strike_advance(face, id, size)
     }
 
     fn strike_advance(&mut self, face: u32, id: u32, size: f32) -> f32 {
@@ -301,7 +208,7 @@ impl Fontations {
             return Some(Arc::new(mask));
         }
         let path = self.device_path(glyph, size, post, phase, true)?;
-        scaler::gray_mask(&path).map(Arc::new)
+        path_mask::gray(&path).map(Arc::new)
     }
 
     fn color_mask(&self, glyph: Glyph, size: f32, post: &M2, phase: (f32, f32)) -> Option<Mask> {
@@ -346,7 +253,7 @@ impl Fontations {
             }
         }
         let path = self.device_path(glyph, size, &M2::IDENTITY, (0.0, 0.0), hinted)?;
-        let [left, top, width, height] = scaler::mask_bounds(&path)?;
+        let [left, top, width, height] = path_mask::bounds(&path)?;
         Some([
             left as f32,
             top as f32,
@@ -371,203 +278,87 @@ impl Fontations {
             typo: typeface.typo,
         }
     }
+}
 
-    fn shape_text(&self, face: u32, text: &str, base: usize) -> Vec<RunGlyph> {
-        let typeface = &self.typefaces[self.faces[face as usize].typeface];
-        let shaper = &typeface.shaper;
-        let mut buffer = UnicodeBuffer::new();
-        buffer.set_cluster_level(BufferClusterLevel::MonotoneGraphemes);
-        buffer.push_str(text);
-        buffer.guess_segment_properties();
-        let shaped = rustybuzz::shape(shaper, &[], buffer);
-        shaped
-            .glyph_infos()
-            .iter()
-            .zip(shaped.glyph_positions())
-            .map(|(info, pos)| {
-                let id = rustybuzz::ttf_parser::GlyphId(info.glyph_id as u16);
-                let advance = i32::from(shaper.glyph_hor_advance(id).unwrap_or(0));
-                RunGlyph {
-                    id: info.glyph_id,
-                    cluster: base + info.cluster as usize,
-                    kern: (pos.x_advance != 0 || advance == 0).then(|| pos.x_advance - advance),
-                    offset: pos.x_offset,
-                }
-            })
-            .collect()
+impl Faces for Fontations {
+    fn shaper(&self, face: u32) -> &rustybuzz::Face<'static> {
+        &self.typefaces[self.faces[face as usize].typeface].shaper
     }
 
-    /// Shapes `word[from..to]` with `face`, keeping the runs it has glyphs for and returning the
-    /// byte ranges it has none for.
-    fn shape_range(
-        &self,
-        face: u32,
-        word: &str,
-        (from, to): (usize, usize),
-        out: &mut Vec<ShapedRun>,
-    ) -> Vec<(usize, usize)> {
-        let glyphs = self.shape_text(face, &word[from..to], from);
-        let mut starts: Vec<usize> = glyphs.iter().map(|g| g.cluster).collect();
-        starts.sort_unstable();
-        starts.dedup();
-        let end_of = |cluster: usize| starts.iter().copied().find(|&s| s > cluster).unwrap_or(to);
-        let is_missing = |cluster: usize| glyphs.iter().any(|g| g.cluster == cluster && g.id == 0);
-        let mut missing: Vec<(usize, usize)> = Vec::new();
-        let mut run: Option<ShapedRun> = None;
-        for &cluster in &starts {
-            if is_missing(cluster) {
-                out.extend(run.take());
-                let end = end_of(cluster);
-                match missing.last_mut() {
-                    Some(last) if last.1 == cluster => last.1 = end,
-                    _ => missing.push((cluster, end)),
-                }
-                continue;
-            }
-            let run = run.get_or_insert_with(|| ShapedRun {
-                start: cluster,
-                face,
-                glyphs: Vec::new(),
-            });
-            run.glyphs
-                .extend(glyphs.iter().filter(|g| g.cluster == cluster));
-        }
-        out.extend(run);
-        missing
+    fn upem(&self, face: u32) -> u16 {
+        self.typefaces[self.faces[face as usize].typeface].upem
     }
 
-    /// Blink's `HarfBuzzShaper` with its `FontFallbackIterator`: the emoji font first for emoji
-    /// presentation, then the font itself, then a system fallback by character, and the font's
-    /// missing glyph for what no font has.
-    fn shape_segment(
-        &mut self,
-        spec: &FontSpec,
-        primary: u32,
-        word: &str,
-        range: (usize, usize),
-        emoji: bool,
-        out: &mut Vec<ShapedRun>,
-    ) {
-        let mut tried = Vec::new();
-        if emoji {
-            tried.extend(self.substitute(spec, EMOJI, true));
+    fn advance(&mut self, face: u32, id: u32, size: f32) -> f32 {
+        if self.linear() {
+            return self.strike_advance(face, id, CANONICAL_SIZE) * (size / CANONICAL_SIZE);
         }
-        tried.push(primary);
-        let mut pending = vec![range];
-        for &face in &tried {
-            pending = pending
-                .into_iter()
-                .flat_map(|r| self.shape_range(face, word, r, out))
-                .collect();
+        self.strike_advance(face, id, size)
+    }
+
+    fn primary(&mut self, spec: &FontSpec) -> Option<u32> {
+        if let Some(&face) = self.primary.get(&spec.key()) {
+            return Some(face);
         }
-        while let Some(range) = pending.pop() {
-            let Some(c) = word[range.0..range.1].chars().next() else {
-                continue;
+        let (family, _, typeface) = self.resolve(spec)?;
+        let bold = self.typefaces[typeface].weight >= BOLD;
+        let italic = self.typefaces[typeface].italic;
+        let style = fontconfig::render_style(&family, spec.size, bold, italic);
+        self.faces.push(Face {
+            typeface,
+            size: spec.size,
+            skew: spec.italic && !italic,
+            style,
+            fallback: false,
+        });
+        let face = (self.faces.len() - 1) as u32;
+        self.primary.insert(spec.key(), face);
+        Some(face)
+    }
+
+    fn standard(&mut self, spec: &FontSpec) -> Option<u32> {
+        let serif = FontSpec {
+            family: Family::Serif,
+            ..*spec
+        };
+        let typeface = self.resolve(&serif)?.2;
+        if self.resolve(spec).is_some_and(|found| found.2 == typeface) {
+            return self.primary(spec);
+        }
+        Some(self.substitute_face(spec, typeface))
+    }
+
+    fn substitute(&mut self, spec: &FontSpec, c: char, emoji: bool) -> Option<u32> {
+        if !emoji && (spec.italic || spec.weight >= BOLD) {
+            let regular = FontSpec {
+                weight: 400.0,
+                italic: false,
+                ..*spec
             };
-            match self.substitute(spec, c, false) {
-                Some(face) if !tried.contains(&face) => {
-                    tried.push(face);
-                    pending.extend(self.shape_range(face, word, range, out));
-                }
-                Some(face) if face != primary && !emoji => {
-                    let glyphs = self.shape_text(face, &word[range.0..range.1], range.0);
-                    out.push(ShapedRun {
-                        start: range.0,
-                        face,
-                        glyphs,
-                    });
-                }
-                _ => out.push(ShapedRun {
-                    start: range.0,
-                    face: primary,
-                    glyphs: self.shape_text(primary, &word[range.0..range.1], range.0),
-                }),
+            if let Some((_, _, typeface)) = self.resolve(&regular)
+                && self.typefaces[typeface].has_char(c)
+            {
+                return Some(self.substitute_face(spec, typeface));
             }
         }
-    }
-
-    /// One word shaped at zoom `zoom`: the pen advances by 16.16 advances from the scaler plus
-    /// the shaper's adjustments scaled to 16.16, accumulated in `f32`.
-    #[allow(clippy::too_many_arguments)]
-    fn shape_word(
-        &mut self,
-        spec: &FontSpec,
-        primary: u32,
-        word: &str,
-        zoom: f32,
-        origin: f32,
-        start: u32,
-        out: &mut Vec<ShapedGlyph>,
-    ) -> f32 {
-        let units = word.encode_utf16().count() as isize;
-        let mut bytes: HashMap<isize, usize> = HashMap::new();
-        let mut unit = 0;
-        for (at, c) in word.char_indices() {
-            bytes.insert(unit, at);
-            unit += c.len_utf16() as isize;
-        }
-        bytes.insert(units, word.len());
-        let mut runs = Vec::new();
-        let clusters = emoji_clusters(word, 0);
-        for segment in clusters.chunk_by(|a, b| a.2 == b.2) {
-            let range = (bytes[&segment[0].0], bytes[&segment[segment.len() - 1].1]);
-            self.shape_segment(spec, primary, word, range, segment[0].2, &mut runs);
-        }
-        runs.sort_by_key(|r| r.start);
-        let size = spec.size * zoom;
-        let mut pen = 0.0f32;
-        for run in runs {
-            let upem = u32::from(self.typefaces[self.faces[run.face as usize].typeface].upem);
-            for g in run.glyphs {
-                let offset = hb_scale(i64::from(g.offset), upem, size) as f32 / 65536.0;
-                out.push(ShapedGlyph {
-                    glyph: Glyph {
-                        face: run.face,
-                        id: g.id,
-                    },
-                    x: origin + pen + offset / zoom,
-                    cluster: start + word[..g.cluster].encode_utf16().count() as u32,
-                });
-                let Some(kern) = g.kern else {
-                    continue;
-                };
-                let advance = (self.advance(run.face, g.id, size) * 65536.0) as i32;
-                let total = advance + hb_scale(i64::from(kern), upem, size);
-                pen += total as f32 / 65536.0 / zoom;
-            }
-        }
-        pen
+        let (c, locale) = if emoji {
+            (EMOJI, EMOJI_LOCALE)
+        } else {
+            (c, LOCALE)
+        };
+        let found = self.fallback.font_for(c, locale)?;
+        let typeface = self.typeface(&found)?;
+        Some(self.substitute_face(spec, typeface))
     }
 }
 
 impl TextBackend for Fontations {
     fn shape(&mut self, spec: &FontSpec, text: &str, zoom: f32) -> Shaped {
-        let spec = &effective(spec, zoom);
-        let mut glyphs = Vec::new();
-        let primary = (spec.size > 0.0).then(|| self.primary(spec)).flatten();
-        let Some(primary) = primary else {
-            return Shaped { glyphs, width: 0.0 };
-        };
-        let mut width = 0.0f32;
-        let mut start = 0;
-        for word in words(text) {
-            width += self.shape_word(spec, primary, word, zoom, width, start, &mut glyphs);
-            start += word.encode_utf16().count() as u32;
-        }
-        Shaped { glyphs, width }
+        harfbuzz::shape(self, spec, text, zoom)
     }
 
     fn shape_run(&mut self, spec: &FontSpec, text: &str, zoom: f32) -> Shaped {
-        let spec = &effective(spec, zoom);
-        let mut glyphs = Vec::new();
-        let primary = (spec.size > 0.0 && !text.is_empty())
-            .then(|| self.primary(spec))
-            .flatten();
-        let Some(primary) = primary else {
-            return Shaped { glyphs, width: 0.0 };
-        };
-        let width = self.shape_word(spec, primary, text, zoom, 0.0, 0, &mut glyphs);
-        Shaped { glyphs, width }
+        harfbuzz::shape_run(self, spec, text, zoom)
     }
 
     fn metrics(&mut self, spec: &FontSpec) -> FontMetrics {
@@ -615,15 +406,10 @@ impl TextBackend for Fontations {
     fn raw_mask_transformed(
         &mut self,
         glyph: Glyph,
-        [a, b, c, d]: [f64; 4],
+        m: [f64; 4],
         phase: (u8, u8),
     ) -> Option<Arc<Mask>> {
-        let post = M2 {
-            sx: relax(a as f32),
-            kx: relax(c as f32),
-            ky: relax(b as f32),
-            sy: relax(d as f32),
-        };
+        let post = matrix::relaxed(m);
         self.mask(glyph, &post, phase)
     }
 
@@ -642,7 +428,7 @@ impl TextBackend for Fontations {
         }
         let phase = (f32::from(phase) / 4.0, 0.0);
         let path = self.device_path(glyph, face.size, &post, phase, true)?;
-        scaler::lcd_mask(&path).map(Arc::new)
+        path_mask::lcd(&path).map(Arc::new)
     }
 
     fn set_device_scale(&mut self, scale: f32) -> bool {

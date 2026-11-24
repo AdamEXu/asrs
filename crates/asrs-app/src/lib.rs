@@ -11,6 +11,7 @@ pub mod main_process;
 pub mod menus;
 pub mod satellite;
 pub mod scenario;
+pub mod self_test;
 mod video;
 pub mod views;
 pub mod windows;
