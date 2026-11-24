@@ -10,27 +10,57 @@ use crate::input::skia;
 /// `GetVerticalScrollbarButtonSize().width()`.
 pub const WIDTH: f32 = 15.0;
 
-const BACKGROUND: [u32; 3] = [0xf1f1f1ff, 0xd2d2d2ff, 0x787878ff];
-const ARROW: [u32; 3] = [0x505050ff, 0x505050ff, 0xffffffff];
+/// The colours at rest, hovered and pressed: `NativeThemeAura`'s on macOS, `NativeThemeFluent`'s
+/// elsewhere.
+const BACKGROUND: [u32; 3] = if cfg!(target_os = "macos") {
+    [0xf1f1f1ff, 0xd2d2d2ff, 0x787878ff]
+} else {
+    [0xfcfcfcff; 3]
+};
+const ARROW: [u32; 3] = if cfg!(target_os = "macos") {
+    [0x505050ff, 0x505050ff, 0xffffffff]
+} else {
+    [0x8b8b8bff, 0x8b8b8bff, 0x636363ff]
+};
 
-/// `GetArrowRect` and `PathForArrow` for an up or down button of `w` x `h` device px at (0, `y`).
-fn arrow(w: i32, h: i32, y: i32, up: bool) -> [[f64; 2]; 3] {
+/// `NativeThemeBase::GetArrowRect`: the left, top and side of the arrow's square in a button of
+/// `w` x `h` device px.
+fn aura_square(w: i32, h: i32) -> [i32; 3] {
     let inset = (w.max(h) + 3) / 4;
     let side = w.min(h).min(w.max(h) - inset * 2);
-    let left = f64::from((w - side + 1) / 2);
-    let top = f64::from(y + (h - side + 1) / 2);
-    let side_f = f64::from(side);
-    let height = f64::from(side / 2 + 1);
-    let base = top + side_f - f64::from((side / 2 + 1) / 2) + 1.0;
+    [(w - side + 1) / 2, (h - side + 1) / 2, side]
+}
+
+/// `NativeThemeFluent::GetArrowRect` without its icon font.
+fn fluent_square(w: i32, h: i32, up: bool, pressed: bool) -> [i32; 3] {
+    const BUTTON: f32 = 18.0;
+    let scale = w.max(h) as f32 / BUTTON;
+    let side = (if pressed { 7.0 } else { 9.0 } * scale).ceil() as i32;
+    let side = side + (w.min(h) - side) % 2;
+    let offset = scale.round() as i32;
+    let offset = if up { -offset } else { offset };
+    let (width, height) = (side.min(w), side.min(h));
+    [
+        (w - width).div_euclid(2),
+        (h - height).div_euclid(2) + offset,
+        width.min(height),
+    ]
+}
+
+/// `PathForArrow` in the square `[left, top, side]` of a button at (0, `y`).
+fn arrow([left, top, side]: [i32; 3], y: i32, up: bool) -> [[f64; 2]; 3] {
+    let height = side / 2 + 1;
+    let [left, top, side] = [left, top + y, side].map(f64::from);
+    let base = top + side - f64::from(height / 2) + 1.0;
     let points = [
         [left, base],
-        [left + side_f, base],
-        [left + side_f / 2.0, base - height],
+        [left + side, base],
+        [left + side / 2.0, base - f64::from(height)],
     ];
     if up {
         return points;
     }
-    let mirror = 2.0 * top + side_f;
+    let mirror = 2.0 * top + side;
     points.map(|[x, y]| [x, mirror - y])
 }
 
@@ -51,7 +81,12 @@ pub fn paint_spin_button(
             } else {
                 PointerState::Normal
             };
-            (arrow(w as i32, half, y, part), y, state as usize)
+            let square = if cfg!(target_os = "macos") {
+                aura_square(w as i32, half)
+            } else {
+                fluent_square(w as i32, half, part, state == PointerState::Pressed)
+            };
+            (arrow(square, y, part), y, state as usize)
         });
         let mut body = String::new();
         for (points, y, state) in &parts {
@@ -98,10 +133,17 @@ mod tests {
 
     #[test]
     fn arrows_sit_where_chromium_draws_them() {
-        assert_eq!(arrow(15, 7, 0, true), [[4.0, 6.0], [11.0, 6.0], [7.5, 2.0]]);
+        let aura = aura_square(15, 7);
+        assert_eq!(arrow(aura, 0, true), [[4.0, 6.0], [11.0, 6.0], [7.5, 2.0]]);
         assert_eq!(
-            arrow(15, 7, 7, false),
+            arrow(aura, 7, false),
             [[4.0, 8.0], [11.0, 8.0], [7.5, 12.0]]
         );
+        for pressed in [false, true] {
+            assert_eq!(fluent_square(15, 7, true, pressed), [4, -1, 7]);
+            assert_eq!(fluent_square(15, 7, false, pressed), [4, 1, 7]);
+        }
+        assert_eq!(fluent_square(30, 15, true, false), [7, -2, 15]);
+        assert_eq!(fluent_square(30, 15, false, true), [8, 3, 13]);
     }
 }
