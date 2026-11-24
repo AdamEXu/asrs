@@ -27,6 +27,9 @@ use asrs_ui::platform::dialog::{Reply, Script};
 use asrs_ui::platform::{self, EditCommand};
 use asrs_ui::selection::colors::ForcedActive;
 use asrs_ui::theme::ThemeSource;
+use asrs_ui::tooltip::{ForcedHost, Host};
+
+mod tooltips;
 
 use super::capture::{self, Probes, Shot};
 use super::{
@@ -52,7 +55,8 @@ use crate::windows::{self, ScriptedFrame, WindowId, WindowKind, Windows};
 
 const USAGE: &str = "usage: asrs --parity-scenario <scenario.json> --out <dir> \
 [--scale 1|2]... [--theme light|dark]... [--inputs <dir>] [--probes <probes.json>] \
-[--bundled-assets <dir>] [--licenses <file>] [--work-area [<scale>:]<x>,<y>]... [--robot <port>]
+[--bundled-assets <dir>] [--licenses <file>] [--work-area [<scale>:]<x>,<y>]... [--robot <port>] \
+[--tooltips]
 
 --inputs holds the logs `app:<name>` opens (<name>.wpilog, as the Electron driver writes them
 under inputs/); --probes defaults to probes.json beside the scenario directory;
@@ -60,7 +64,9 @@ under inputs/); --probes defaults to probes.json beside the scenario directory;
 automatic folders of each variant's userData/; --licenses is the licenses.json the Licenses window
 lists; --work-area is the primary display's work area origin on the Electron driver's host, which
 places its window 16 px inside it (default 0,0), at one scale or at every scale;
---robot is where the scenario's robot listens on 127.0.0.1.";
+--robot is where the scenario's robot listens on 127.0.0.1;
+--tooltips writes the tooltips at each capture (<name>.tooltips.json), as the Electron driver does,
+in place of the capture.";
 
 /// A tick of the page: one animation frame and this much executor time, which the page's `Date`
 /// and its scroll sensors' frame clock both run on.
@@ -152,6 +158,7 @@ struct Options {
     licenses: Option<PathBuf>,
     work_areas: Vec<(Option<u32>, (f64, f64))>,
     robot: Option<u16>,
+    tooltips: bool,
 }
 
 fn options(args: &[String]) -> Result<Options, String> {
@@ -159,6 +166,7 @@ fn options(args: &[String]) -> Result<Options, String> {
     let (mut bundled_assets, mut licenses) = (None, None);
     let mut work_areas = Vec::new();
     let mut robot = None;
+    let mut tooltips = false;
     let (mut scales, mut themes) = (Vec::new(), Vec::new());
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -173,6 +181,7 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--bundled-assets" => bundled_assets = Some(PathBuf::from(value()?)),
             "--licenses" => licenses = Some(PathBuf::from(value()?)),
             "--robot" => robot = Some(value()?.parse().map_err(|_| "--robot is a port")?),
+            "--tooltips" => tooltips = true,
             "--work-area" => {
                 let text = value()?;
                 let (scale, at) = match text.split_once(':') {
@@ -202,6 +211,7 @@ fn options(args: &[String]) -> Result<Options, String> {
         licenses,
         work_areas,
         robot,
+        tooltips,
     })
 }
 
@@ -249,6 +259,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     headless.context().update(|cx| {
         windows::init(cx);
         cx.set_global(ForcedActive(false));
+        cx.set_global(ForcedHost(Host::Native));
     });
     if let Some(file) = options.licenses.clone() {
         headless
@@ -294,6 +305,8 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 saved: Vec::new(),
                 exceptions: Rc::default(),
                 pressed: None,
+                pointer: (0.0, 0.0),
+                tooltips: options.tooltips,
             };
             variant
                 .run()
@@ -332,6 +345,9 @@ struct Variant<'a> {
     exceptions: Rc<RefCell<Vec<String>>>,
     /// The button a `mouse down` left pressed, which moves carry until `mouse up`.
     pressed: Option<MouseButton>,
+    pointer: (f64, f64),
+    /// Whether captures record the tooltips.
+    tooltips: bool,
 }
 
 /// `{...scenario.prefs, theme}`, the `prefs.json` the Electron driver seeds.
@@ -860,6 +876,7 @@ impl Variant<'_> {
         click_count: usize,
         names: &[String],
     ) -> Result<(), String> {
+        self.pointer = (x, y);
         let modifiers = modifiers(names)?;
         let position = point(px(x as f32), px(y as f32));
         let button = match button {
@@ -1055,7 +1072,13 @@ impl Variant<'_> {
                 name,
                 probes,
                 masks,
-            } => self.capture(name, probes, masks)?,
+            } => {
+                if self.tooltips {
+                    self.capture_tooltips(name)?;
+                } else {
+                    self.capture(name, probes, masks)?;
+                }
+            }
         }
         if matches!(
             action,

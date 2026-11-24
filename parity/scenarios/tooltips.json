@@ -1,0 +1,291 @@
+{
+ "about": "The title tooltips no other scenario reaches: the sidebar's metadata of every kind and its type warning, source list items that are shown, hidden, missing or cut, table headers that are cut or missing, the update and feedback buttons, and a satellite's table, which has no close buttons",
+ "scales": [
+  1
+ ],
+ "themes": [
+  "light"
+ ],
+ "actions": [
+  {
+   "open": [
+    "app:tooltips"
+   ]
+  },
+  {
+   "idle": true
+  },
+  {
+   "main": "restore-state",
+   "data": {
+    "sidebar": {
+     "width": 300,
+     "expanded": [
+      "/Meta"
+     ]
+    },
+    "tabs": {
+     "selected": 1,
+     "tabs": [
+      {
+       "type": 0,
+       "title": "",
+       "controller": null,
+       "controllerUUID": "documentation0000000000000000000",
+       "renderer": "",
+       "controlsHeight": 0
+      },
+      {
+       "type": 1,
+       "title": "Graph",
+       "controller": {
+        "leftSources": [
+         {
+          "type": "smooth",
+          "logKey": "/Meta/AFieldWhoseNameIsMuchLongerThanTheColumnOrTheSourceListItemHasRoomFor",
+          "logType": "Number",
+          "visible": true,
+          "options": {
+           "color": "#2b66a2",
+           "size": "normal"
+          }
+         },
+         {
+          "type": "smooth",
+          "logKey": "/Meta/Number",
+          "logType": "Number",
+          "visible": false,
+          "options": {
+           "color": "#e5b31b",
+           "size": "normal"
+          }
+         },
+         {
+          "type": "smooth",
+          "logKey": "/Missing/Field",
+          "logType": "Number",
+          "visible": true,
+          "options": {
+           "color": "#af2437",
+           "size": "normal"
+          }
+         }
+        ],
+        "rightSources": [],
+        "discreteSources": [],
+        "leftLockedRange": null,
+        "rightLockedRange": null,
+        "leftUnitConversion": {
+         "autoTarget": null,
+         "preset": null
+        },
+        "rightUnitConversion": {
+         "autoTarget": null,
+         "preset": null
+        },
+        "leftFilter": 0,
+        "rightFilter": 0,
+        "showRobotMode": false
+       },
+       "controllerUUID": "linegraph00000000000000000000000",
+       "renderer": null,
+       "controlsHeight": 200
+      }
+     ]
+    }
+   }
+  },
+  {
+   "idle": true
+  },
+  {
+   "main": "show-update-button",
+   "data": true
+  },
+  {
+   "wait": 200
+  },
+  {
+   "mouse": "move",
+   "x": 700,
+   "y": 300
+  },
+  {
+   "wait": 100
+  },
+  {
+   "capture": "sidebar"
+  },
+  {
+   "main": "show-update-button",
+   "data": false
+  },
+  {
+   "main": "show-feedback-button",
+   "data": false
+  },
+  {
+   "wait": 100
+  },
+  {
+   "capture": "buttons"
+  },
+  {
+   "main": "restore-state",
+   "data": {
+    "sidebar": {
+     "width": 420,
+     "expanded": [
+      "/Meta"
+     ]
+    },
+    "tabs": {
+     "selected": 1,
+     "tabs": [
+      {
+       "type": 0,
+       "title": "",
+       "controller": null,
+       "controllerUUID": "documentation0000000000000000000",
+       "renderer": "",
+       "controlsHeight": 0
+      },
+      {
+       "type": 1,
+       "title": "Graph",
+       "controller": {
+        "leftSources": [
+         {
+          "type": "smooth",
+          "logKey": "/Meta/AFieldWhoseNameIsMuchLongerThanTheColumnOrTheSourceListItemHasRoomFor",
+          "logType": "Number",
+          "visible": true,
+          "options": {
+           "color": "#2b66a2",
+           "size": "normal"
+          }
+         },
+         {
+          "type": "smooth",
+          "logKey": "/Meta/Number",
+          "logType": "Number",
+          "visible": false,
+          "options": {
+           "color": "#e5b31b",
+           "size": "normal"
+          }
+         },
+         {
+          "type": "smooth",
+          "logKey": "/Missing/Field",
+          "logType": "Number",
+          "visible": true,
+          "options": {
+           "color": "#af2437",
+           "size": "normal"
+          }
+         }
+        ],
+        "rightSources": [],
+        "discreteSources": [],
+        "leftLockedRange": null,
+        "rightLockedRange": null,
+        "leftUnitConversion": {
+         "autoTarget": null,
+         "preset": null
+        },
+        "rightUnitConversion": {
+         "autoTarget": null,
+         "preset": null
+        },
+        "leftFilter": 0,
+        "rightFilter": 0,
+        "showRobotMode": false
+       },
+       "controllerUUID": "linegraph00000000000000000000000",
+       "renderer": null,
+       "controlsHeight": 200
+      }
+     ]
+    }
+   }
+  },
+  {
+   "idle": true
+  },
+  {
+   "mouse": "move",
+   "x": 700,
+   "y": 300
+  },
+  {
+   "wait": 100
+  },
+  {
+   "capture": "wide"
+  },
+  {
+   "main": "restore-state",
+   "data": {
+    "sidebar": {
+     "width": 300,
+     "expanded": [
+      "/Meta"
+     ]
+    },
+    "tabs": {
+     "selected": 1,
+     "tabs": [
+      {
+       "type": 0,
+       "title": "",
+       "controller": null,
+       "controllerUUID": "documentation0000000000000000000",
+       "renderer": "",
+       "controlsHeight": 0
+      },
+      {
+       "type": 4,
+       "title": "Table",
+       "controller": [
+        "/Meta/Number",
+        "/Meta/AFieldWhoseNameIsMuchLongerThanTheColumnOrTheSourceListItemHasRoomFor",
+        "/Missing/Field"
+       ],
+       "controllerUUID": "table000000000000000000000000000",
+       "renderer": null,
+       "controlsHeight": 0
+      }
+     ]
+    }
+   }
+  },
+  {
+   "idle": true
+  },
+  {
+   "mouse": "move",
+   "x": 700,
+   "y": 300
+  },
+  {
+   "wait": 100
+  },
+  {
+   "capture": "table"
+  },
+  {
+   "main": "new-satellite",
+   "data": null
+  },
+  {
+   "prompt": "satellite"
+  },
+  {
+   "wait": 1500
+  },
+  {
+   "capture": "satellite"
+  }
+ ]
+}

@@ -24,6 +24,7 @@ use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, PlainText, TextField};
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{Measurer, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
+use asrs_ui::tooltip::{covering, titled, untitled};
 
 use crate::hub::Hub;
 use crate::views::number::FormNumber;
@@ -33,6 +34,8 @@ const SEARCH_TOP: f64 = TITLE_HEIGHT + 5.0;
 const SEARCH_HEIGHT: f64 = 29.0;
 const LIST_TOP: f64 = TITLE_HEIGHT + 39.0;
 const ROW_HEIGHT: f64 = 30.0;
+/// The box of an inline element in a row.
+const INLINE_HEIGHT: f32 = 18.0;
 const TUNING_INPUT_WIDTH: f64 = 56.0;
 const BOOLEAN_WIDTH: f64 = 9.0;
 const RESULTS_ITEM_HEIGHT: f64 = 25.0;
@@ -571,17 +574,19 @@ impl SidebarView {
                     .bg(rgb(theme.text)),
             );
         }
-        label = label.child(title_el);
+        label = label.child(untitled(title_el));
         if row.full_key.as_ref().is_some_and(|k| !k.is_empty()) && !row.warning_hidden {
-            label = label.child(
+            label = label.child(titled(
+                row.warning_title.to_string_lossy(),
                 div()
                     .id(("field-item-warning", flat))
+                    .h(px(INLINE_HEIGHT))
                     .cursor(asrs_ui::gpui::CursorStyle::PointingHand)
                     .child(Text::new(" \u{26A0}", label_style(italic, bold)).color(theme.text))
                     .on_click(cx.listener(move |view, _, _, cx| {
                         view.input(cx, |s, _| s.warning_click(flat));
                     })),
-            );
+            ));
         }
         if let Some(type_label) = &row.type_label {
             let opacity = if row.generated { 0.3 / 0.6 } else { 0.3 };
@@ -631,7 +636,10 @@ impl SidebarView {
             .h(px(ROW_HEIGHT as f32))
             .overflow_hidden()
             .child(icon)
-            .child(label);
+            .child(match &row.label_title {
+                Some(title) => titled(title.to_string_lossy(), label).into_any_element(),
+                None => label.into_any_element(),
+            });
         if row.generated {
             item = item.opacity(0.6);
         }
@@ -675,10 +683,7 @@ impl SidebarView {
             } => {
                 let field = self.tuning_field(row, window, cx)?;
                 Some(
-                    div()
-                        .w(px(50.0))
-                        .h(px(18.0))
-                        .child(field)
+                    titled("Set value", div().w(px(50.0)).h(px(18.0)).child(field))
                         .into_any_element(),
                 )
             }
@@ -877,7 +882,8 @@ impl Render for SidebarView {
             ""
         };
         content = content
-            .child(
+            .child(titled(
+                "Search fields",
                 div()
                     .id("side-bar-search")
                     .absolute()
@@ -895,8 +901,8 @@ impl Render for SidebarView {
                         cx.stop_propagation();
                     }))
                     .child(search),
-            )
-            .child(
+            ))
+            .child(covering(
                 div()
                     .absolute()
                     .left(px(21.0))
@@ -904,7 +910,7 @@ impl Render for SidebarView {
                     .w(px(20.0))
                     .h(px(20.0))
                     .child(Icon::new(search_icon, icon_chain)),
-            );
+            ));
         if tuning_shown {
             let tune = Symbol::named("tune.svg").expect("tune symbol");
             let tint = if tuning_active {
@@ -926,6 +932,7 @@ impl Render for SidebarView {
                     )
                     .child(
                         IconButton::new("side-bar-tuning-button", tune)
+                            .title("Toggle tuning mode")
                             .size(29.0, 29.0)
                             .tint(tint)
                             .on_click(cx.listener(|view, _, _, cx| {

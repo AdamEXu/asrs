@@ -49,9 +49,35 @@ fn host(cx: &App) -> Host {
     }
 }
 
+#[derive(Clone)]
+struct Title {
+    text: SharedString,
+    rtl: bool,
+}
+
+impl Title {
+    /// `RenderWidgetHostImpl`'s `GetWrappedTooltipText`, in an English UI.
+    fn wrapped(&self) -> String {
+        if self.rtl && !self.text.is_empty() {
+            format!("\u{202b}{}\u{202c}", self.text)
+        } else {
+            self.text.to_string()
+        }
+    }
+}
+
+#[derive(Clone)]
+enum Node {
+    Titled(Title),
+    /// Without the attribute, inside an element that may have it.
+    Inner,
+    /// Without the attribute, and not inside an element that has it.
+    Bare,
+}
+
 struct Entry {
     hitbox: Hitbox,
-    title: Option<SharedString>,
+    node: Node,
 }
 
 #[derive(Default)]
@@ -67,6 +93,8 @@ struct WindowTooltips {
     popup: Option<popup::Popup>,
     shown: Option<Shown>,
     activation: Option<Entity<Activation>>,
+    #[cfg(feature = "parity")]
+    given: Vec<String>,
 }
 
 /// Holds the observer of a window's activation.
@@ -90,47 +118,119 @@ fn state<R>(window: &Window, cx: &mut App, f: impl FnOnce(&mut WindowTooltips) -
     f(cx.default_global::<Tooltips>().0.entry(id).or_default())
 }
 
-/// The text the host was last given for the window.
-pub fn text(window: &Window, cx: &mut App) -> String {
-    state(window, cx, |state| state.text.clone())
-}
-
 /// The tooltip [`Host::Aura`] shows for the window.
 pub fn shown(window: &Window, cx: &mut App) -> Option<Shown> {
     state(window, cx, |state| state.shown.clone())
 }
 
-/// Every `title` in the window that the pointer could be over at the middle of its box, with its
-/// box in window coordinates.
-pub fn titles(window: &Window, cx: &mut App) -> Vec<(SharedString, Bounds<Pixels>)> {
-    state(window, cx, |state| {
-        let titled = |entry: &Entry| entry.title.as_ref().is_some_and(|t| !t.is_empty());
-        (state.entries.iter().filter(|e| titled(e)))
-            .filter_map(|e| Some((e.title.clone()?, e.hitbox.bounds)))
-            .collect()
-    })
+/// The texts the host was given since the last call.
+#[cfg(feature = "parity")]
+pub fn take_given(window: &Window, cx: &mut App) -> Vec<String> {
+    state(window, cx, |state| std::mem::take(&mut state.given))
+}
+
+/// The `title` at a position in the window, if any element there has one.
+#[cfg(feature = "parity")]
+pub fn title_at(at: gpui_kit::Point<Pixels>, window: &Window, cx: &mut App) -> Option<String> {
+    let id = window.window_handle().window_id();
+    let state = cx.default_global::<Tooltips>().0.get(&id)?;
+    let (_, title) = state.titled_at(at, window)?;
+    Some(title.text.to_string())
+}
+
+/// Every `title` in the window that shows at the middle of its box, with the box in window
+/// coordinates.
+#[cfg(feature = "parity")]
+pub fn titles(window: &Window, cx: &mut App) -> Vec<(String, Bounds<Pixels>)> {
+    let id = window.window_handle().window_id();
+    let Some(state) = cx.default_global::<Tooltips>().0.get(&id) else {
+        return Vec::new();
+    };
+    (state.entries.iter().enumerate())
+        .filter_map(|(i, entry)| {
+            let Node::Titled(title) = &entry.node else {
+                return None;
+            };
+            let (top, _) = state.titled_at(entry.hitbox.bounds.center(), window)?;
+            (top == i && !title.text.is_empty())
+                .then(|| (title.text.to_string(), entry.hitbox.bounds))
+        })
+        .collect()
+}
+
+impl WindowTooltips {
+    fn hovered<'a>(
+        &'a self,
+        at: gpui_kit::Point<Pixels>,
+        window: &'a Window,
+    ) -> impl Iterator<Item = (usize, &'a Entry)> {
+        (self.entries.iter().enumerate().rev())
+            .filter(move |(_, entry)| entry.hitbox.is_hovered_at(at, window))
+    }
+
+    fn titled_at<'a>(
+        &'a self,
+        at: gpui_kit::Point<Pixels>,
+        window: &'a Window,
+    ) -> Option<(usize, &'a Title)> {
+        match self
+            .hovered(at, window)
+            .find(|(_, e)| !matches!(e.node, Node::Inner))?
+        {
+            (
+                i,
+                Entry {
+                    node: Node::Titled(title),
+                    ..
+                },
+            ) => Some((i, title)),
+            _ => None,
+        }
+    }
 }
 
 /// An element with the `title` attribute, which the empty string is one of: no tooltip shows over
 /// it, not even an ancestor's.
 pub fn titled(title: impl Into<SharedString>, child: impl IntoElement) -> Titled {
     Titled {
-        title: Some(title.into()),
+        node: Node::Titled(Title {
+            text: title.into(),
+            rtl: false,
+        }),
         child: child.into_any_element(),
     }
 }
 
-/// An element without the attribute inside a [`titled`] one. The tooltip's delay starts over as
+/// [`titled`] in `direction: rtl`.
+pub fn titled_rtl(title: impl Into<SharedString>, child: impl IntoElement) -> Titled {
+    Titled {
+        node: Node::Titled(Title {
+            text: title.into(),
+            rtl: true,
+        }),
+        child: child.into_any_element(),
+    }
+}
+
+/// An element without the attribute inside a [`titled`] one: the tooltip's delay starts over as
 /// the pointer moves between the two.
 pub fn untitled(child: impl IntoElement) -> Titled {
     Titled {
-        title: None,
+        node: Node::Inner,
+        child: child.into_any_element(),
+    }
+}
+
+/// An element over a [`titled`] one it is not inside of.
+pub fn covering(child: impl IntoElement) -> Titled {
+    Titled {
+        node: Node::Bare,
         child: child.into_any_element(),
     }
 }
 
 pub struct Titled {
-    title: Option<SharedString>,
+    node: Node,
     child: AnyElement,
 }
 
@@ -191,7 +291,7 @@ impl Element for Titled {
         register(
             Entry {
                 hitbox: hitbox.clone(),
-                title: self.title.clone(),
+                node: self.node.clone(),
             },
             window,
             cx,
@@ -283,12 +383,9 @@ fn update(window: &mut Window, cx: &mut App) {
     let mut texts = Vec::new();
     let id = window.window_handle().window_id();
     if let Some(state) = cx.default_global::<Tooltips>().0.get_mut(&id) {
-        let hovered: Vec<&Entry> = (state.entries.iter())
-            .filter(|entry| entry.hitbox.is_hovered_at(position, window))
-            .collect();
-        let node = hovered.last().map(|entry| entry.hitbox.bounds);
-        let title = hovered.iter().rev().find_map(|e| e.title.as_deref());
-        state.page.moved(position, node, title, |text| {
+        let node = (state.hovered(position, window).next()).map(|(_, e)| e.hitbox.bounds);
+        let title = state.titled_at(position, window).map(|(_, t)| t.wrapped());
+        state.page.moved(position, node, title.as_deref(), |text| {
             texts.push(text.to_owned());
         });
     }
@@ -306,10 +403,14 @@ fn set_text(text: &str, window: &mut Window, cx: &mut App) {
             }
             state(window, cx, |state| text.clone_into(&mut state.text));
             let units: Vec<u16> = text.encode_utf16().take(MAC_MAX_LENGTH).collect();
-            platform::set_tooltip(window, &String::from_utf16_lossy(&units));
+            let text = String::from_utf16_lossy(&units);
+            platform::set_tooltip(window, &text);
+            #[cfg(feature = "parity")]
+            state(window, cx, |state| state.given.push(text));
         }
         Host::Aura => {
-            state(window, cx, |state| text.clone_into(&mut state.text));
+            #[cfg(feature = "parity")]
+            state(window, cx, |state| state.given.push(text.to_owned()));
             control(window, cx, |aura| aura.set_text(text));
         }
     }

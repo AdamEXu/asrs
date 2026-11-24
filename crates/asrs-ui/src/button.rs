@@ -1,10 +1,12 @@
 use gpui_kit::{
     AnyElement, App, ClickEvent, Div, ElementId, FocusHandle, InteractiveElement, IntoElement,
-    ParentElement, RenderOnce, StatefulInteractiveElement, Styled, Window, div, px, rgb,
+    ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled, Window, div, px,
+    rgb,
 };
 
 use crate::icon::{Icon, IconFit, IconSource};
 use crate::theme::{Appearance, BUTTON_RADIUS, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, IconTint};
+use crate::tooltip::titled;
 
 /// Chromium keeps `:focus-visible` until focus moves, so whether focus arrived from the
 /// keyboard is latched rather than read from the latest input.
@@ -91,6 +93,7 @@ pub struct IconButton {
     focus: Option<FocusHandle>,
     backgrounds: Option<[u32; 3]>,
     overlay: Option<AnyElement>,
+    title: Option<SharedString>,
     on_click: Option<ClickHandler>,
 }
 
@@ -112,6 +115,7 @@ impl IconButton {
             focus: None,
             backgrounds: None,
             overlay: None,
+            title: None,
             on_click: None,
         }
     }
@@ -169,6 +173,12 @@ impl IconButton {
     /// The background colours at rest, hovered and pressed, in place of the theme's.
     pub fn backgrounds(mut self, colors: [u32; 3]) -> Self {
         self.backgrounds = Some(colors);
+        self
+    }
+
+    /// The `title` attribute.
+    pub fn title(mut self, title: impl Into<SharedString>) -> Self {
+        self.title = Some(title.into());
         self
     }
 
@@ -243,6 +253,9 @@ impl RenderOnce for IconButton {
                 button = button.on_click(handler);
             }
         }
-        button
+        match self.title {
+            Some(title) => titled(title, button).into_any_element(),
+            None => button.into_any_element(),
+        }
     }
 }

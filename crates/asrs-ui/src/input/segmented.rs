@@ -12,6 +12,7 @@ use crate::input::style::{
 };
 use crate::text::{Align, FontSpec, LineHeight, Text, TextStyle};
 use crate::theme::{Appearance, chains};
+use crate::tooltip::titled;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Segment {
@@ -29,6 +30,7 @@ type Select = Box<dyn Fn(&usize, &mut Window, &mut App) + 'static>;
 pub struct SegmentedControl {
     id: ElementId,
     segments: Vec<Segment>,
+    titles: &'static [&'static str],
     selected: Option<usize>,
     size: (f32, f32),
     subpixel: f32,
@@ -62,6 +64,7 @@ impl SegmentedControl {
         SegmentedControl {
             id: id.into(),
             segments,
+            titles: &[],
             selected: None,
             size: (0.0, 0.0),
             subpixel: 0.0,
@@ -72,6 +75,12 @@ impl SegmentedControl {
 
     pub fn selected(mut self, selected: Option<usize>) -> Self {
         self.selected = selected;
+        self
+    }
+
+    /// The segments' `title` attributes.
+    pub fn titles(mut self, titles: &'static [&'static str]) -> Self {
+        self.titles = titles;
         self
     }
 
@@ -254,51 +263,53 @@ impl RenderOnce for SegmentedControl {
             };
             let hovered = state.clone();
             let (select, keyboard) = (on_select.clone(), on_select.clone());
-            root = root.child(
-                div()
-                    .id(("segment", i))
-                    .absolute()
-                    .left(px(left / scale))
-                    .top_0()
-                    .w(px((right - left) / scale))
-                    .h(px(h / scale))
-                    .bg(rgb(background))
-                    .border(px(border / scale))
-                    .border_color(rgb(border_color))
-                    .rounded_tl(corners.top_left)
-                    .rounded_bl(corners.bottom_left)
-                    .rounded_tr(corners.top_right)
-                    .rounded_br(corners.bottom_right)
-                    .on_hover(move |entered: &bool, _, cx| {
-                        hovered.update(cx, |h, cx| {
-                            if *entered {
-                                h.hovered = Some(i);
-                            } else if h.hovered == Some(i) {
-                                h.hovered = None;
-                            }
-                            cx.notify();
-                        });
-                    })
-                    .when_some(focus.get(i), |segment, focus| segment.track_focus(focus))
-                    .on_click(move |event: &ClickEvent, window, cx| {
-                        // GPUI clicks a focused element on key up; `setupKeyboardControls`
-                        // clicks on `keydown`, below.
-                        if matches!(event, ClickEvent::Keyboard(_)) {
-                            return;
+            let segment = div()
+                .id(("segment", i))
+                .absolute()
+                .left(px(left / scale))
+                .top_0()
+                .w(px((right - left) / scale))
+                .h(px(h / scale))
+                .bg(rgb(background))
+                .border(px(border / scale))
+                .border_color(rgb(border_color))
+                .rounded_tl(corners.top_left)
+                .rounded_bl(corners.bottom_left)
+                .rounded_tr(corners.top_right)
+                .rounded_br(corners.bottom_right)
+                .on_hover(move |entered: &bool, _, cx| {
+                    hovered.update(cx, |h, cx| {
+                        if *entered {
+                            h.hovered = Some(i);
+                        } else if h.hovered == Some(i) {
+                            h.hovered = None;
                         }
-                        if let Some(f) = select.as_ref() {
-                            f(&i, window, cx);
-                        }
-                    })
-                    .on_key_down(move |event: &KeyDownEvent, window, cx| {
-                        if matches!(event.keystroke.key.as_str(), "enter" | "space")
-                            && let Some(f) = keyboard.as_ref()
-                        {
-                            f(&i, window, cx);
-                        }
-                    })
-                    .child(content),
-            );
+                        cx.notify();
+                    });
+                })
+                .when_some(focus.get(i), |segment, focus| segment.track_focus(focus))
+                .on_click(move |event: &ClickEvent, window, cx| {
+                    // GPUI clicks a focused element on key up; `setupKeyboardControls`
+                    // clicks on `keydown`, below.
+                    if matches!(event, ClickEvent::Keyboard(_)) {
+                        return;
+                    }
+                    if let Some(f) = select.as_ref() {
+                        f(&i, window, cx);
+                    }
+                })
+                .on_key_down(move |event: &KeyDownEvent, window, cx| {
+                    if matches!(event.keystroke.key.as_str(), "enter" | "space")
+                        && let Some(f) = keyboard.as_ref()
+                    {
+                        f(&i, window, cx);
+                    }
+                })
+                .child(content);
+            root = match self.titles.get(i) {
+                Some(title) => root.child(titled(*title, segment)),
+                None => root.child(segment),
+            };
         }
         root
     }

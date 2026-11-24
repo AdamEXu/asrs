@@ -235,4 +235,31 @@ function robotConsole(): Uint8Array {
   return encoder.getEncoded();
 }
 
-export const GENERATED_LOGS: Record<string, () => Uint8Array> = { drive, panels, console: robotConsole, metadata };
+// Every kind of entry metadata, and a field written with two types.
+function tooltips(): Uint8Array {
+  const encoder = new WPILOGEncoder("AdvantageScope");
+  let nextEntry = 1;
+  const put = (name: string, metadata: string) => {
+    const entry = nextEntry++;
+    encoder.add(WPILOGEncoderRecord.makeControlStart(0, { entry, name, type: "double", metadata }));
+    for (let i = 0; i <= 4; i++) encoder.add(WPILOGEncoderRecord.makeDouble(entry, i * 500000, i / 4));
+  };
+  put("/Meta/Array", "[1, 2]");
+  put("/Meta/Empty", "");
+  put("/Meta/Long", "word ".repeat(300) + "end");
+  put("/Meta/LongWord", "x".repeat(1500));
+  put("/Meta/Number", "5");
+  put("/Meta/Object", '{"unit": "m/s", "source": "NT", "nested": {"a": 1}, "list": [1, [2]], "none": null, "Upper": "\\u00e9\\ud83e\\udd16"}');
+  put("/Meta/Spaces", "   ");
+  put("/Meta/Text", "plain <b>text</b>\nwith a line\tand a tab");
+  put("/Meta/AFieldWhoseNameIsMuchLongerThanTheColumnOrTheSourceListItemHasRoomFor", "");
+  const mixed = nextEntry++;
+  encoder.add(WPILOGEncoderRecord.makeControlStart(0, { entry: mixed, name: "/Meta/Mixed", type: "double", metadata: '{"unit": "V"}' }));
+  encoder.add(WPILOGEncoderRecord.makeDouble(mixed, 0, 1));
+  const again = nextEntry++;
+  encoder.add(WPILOGEncoderRecord.makeControlStart(1000000, { entry: again, name: "/Meta/Mixed", type: "string", metadata: '{"unit": "V"}' }));
+  encoder.add(WPILOGEncoderRecord.makeString(again, 1000000, "two"));
+  return encoder.getEncoded();
+}
+
+export const GENERATED_LOGS: Record<string, () => Uint8Array> = { drive, panels, console: robotConsole, metadata, tooltips };

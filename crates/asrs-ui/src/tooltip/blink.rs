@@ -7,6 +7,8 @@ pub(super) struct Page {
     point: Option<Point<Pixels>>,
     title: Option<String>,
     node: Option<Bounds<Pixels>>,
+    /// `ChromeClientImpl`'s `did_request_non_empty_tool_tip_`.
+    requested: bool,
 }
 
 impl Page {
@@ -19,17 +21,23 @@ impl Page {
         title: Option<&str>,
         mut update: impl FnMut(&str),
     ) {
+        let mut update = |text: &str, requested: &mut bool| {
+            if !text.is_empty() || *requested {
+                *requested = !text.is_empty();
+                update(text);
+            }
+        };
         if self.point == Some(point) && self.title.as_deref() == title {
             return;
         }
         let titled = self.title.as_deref().is_some_and(|title| !title.is_empty());
         if node != self.node && titled && self.title.as_deref() == title {
-            update("");
+            update("", &mut self.requested);
         }
         self.point = Some(point);
         self.title = title.map(str::to_owned);
         self.node = node;
-        update(title.unwrap_or_default());
+        update(title.unwrap_or_default(), &mut self.requested);
     }
 }
 
@@ -55,6 +63,7 @@ mod tests {
         assert_eq!(texts(&mut page, 3.0, Some(3.0), Some("a")), ["", "a"]);
         assert_eq!(texts(&mut page, 4.0, Some(4.0), Some("b")), ["b"]);
         assert_eq!(texts(&mut page, 5.0, None, None), [""]);
+        assert!(texts(&mut page, 6.0, None, None).is_empty());
     }
 
     #[test]

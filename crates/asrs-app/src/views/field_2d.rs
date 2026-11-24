@@ -35,6 +35,7 @@ use asrs_ui::parity::probed;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY};
+use asrs_ui::tooltip::titled;
 
 use super::field_image::{self, FieldImage};
 use super::frame::{FrameHost, HubFrame, wheel_of};
@@ -58,6 +59,8 @@ const SELECT_HEIGHT: f64 = 24.0;
 const SELECT_CHROME: f64 = 4.0 + 1.0 + 15.0 + 2.0;
 const SOURCE_PADDING: f64 = 5.0;
 const ORIENTATION_ICONS: [&str; 2] = ["rotateleft.svg", "rotateright.svg"];
+const ORIENTATION_TITLES: &[&str] = &["Rotate field counter-clockwise", "Rotate field clockwise"];
+const SIZE_TITLES: &[&str] = &["Large robot size", "Medium robot size", "Small robot size"];
 const SIZE_LABELS: [[&str; 3]; 2] = [["30", "27", "24"], ["18", "16", "14"]];
 
 fn lu(v: f64) -> f64 {
@@ -740,7 +743,7 @@ impl<H: FrameHost> HubFrame<H> {
         }
         panel = panel.child(probed(
             "select.field-select",
-            local(layout.select).child(select),
+            titled("Select field image", local(layout.select).child(select)),
         ));
         if let (Some([lx, ly]), Some(width)) = (layout.source, source_width) {
             let (_, h) = text::measure(cx, &source_style(), "Source", scale);
@@ -751,7 +754,8 @@ impl<H: FrameHost> HubFrame<H> {
                 width,
                 h,
             ];
-            panel = panel.child(
+            panel = panel.child(titled(
+                "Open field image source URL",
                 local(r)
                     .id("field-source")
                     .on_click(move |_, _, cx| {
@@ -768,7 +772,7 @@ impl<H: FrameHost> HubFrame<H> {
                                 snap_remainder(r[1] as f32, scale),
                             ),
                     ),
-            );
+            ));
         }
         let orientation = ORIENTATION_ICONS
             .iter()
@@ -782,19 +786,28 @@ impl<H: FrameHost> HubFrame<H> {
             (
                 "f2d-orientation",
                 orientation,
+                ORIENTATION_TITLES,
                 None,
                 layout.orientation,
                 orientation_input,
             ),
-            ("f2d-size", size, Some(state.size), layout.size, size_input),
+            (
+                "f2d-size",
+                size,
+                SIZE_TITLES,
+                Some(state.size),
+                layout.size,
+                size_input,
+            ),
         ];
-        for (id, segments, selected, r, input) in switchers {
+        for (id, segments, titles, selected, r, input) in switchers {
             let snapped = |v: f64| math::round(v * f64::from(scale)) / f64::from(scale);
             let (x, y) = (snapped(r[0]), snapped(r[1]));
             let entity = entity.clone();
             panel = panel.child(
                 local([x, y, r[2], r[3]]).child(
                     SegmentedControl::new((id, key), segments)
+                        .titles(titles)
                         .subpixel((r[0] - x) as f32)
                         .selected(selected)
                         .size(r[2] as f32, r[3] as f32)

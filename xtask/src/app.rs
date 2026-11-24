@@ -9,6 +9,7 @@ use asrs_parity::pixel::{self, Rgba};
 use lcms2::{Intent, PixelFormat, Profile, Transform};
 
 use crate::Result;
+use crate::canvas::write;
 use crate::oracle::{self, Paths};
 
 const USAGE: &str = r"usage: cargo xtask app <command>
@@ -31,6 +32,11 @@ display.icc beside the captures; `normalize` converts those to sRGB.
                   target/parity/app/<label>/<scenario>/<scale>x-<theme>/ (label default `run`).
                   --gl native|swiftshader|d3d11-warp picks the 3D switches (default native on
                   macOS, swiftshader elsewhere)
+  tooltips [<scenario>...]
+                  (macOS) the tooltips upstream gives AppKit at each capture of the scenarios
+                  that have a reference in parity/tooltips, or of the named ones, into
+                  parity/tooltips/<scenario>.json, with the generated logs in
+                  parity/tooltips/inputs
   compare <dir> <dir>
                   two run labels or directories: window captures equal outside the recorded
                   masks; canvas and drawing-buffer dumps, DOM dumps and written files equal
@@ -55,6 +61,7 @@ pub fn run(args: &[String]) -> Result {
             oracle::build_harness(&paths)?;
             run_scenarios(&paths, &options).map(|_| ())
         }
+        Some((cmd, rest)) if cmd == "tooltips" => tooltips(&paths, rest),
         Some((cmd, [a, b])) if cmd == "compare" => {
             let report = compare(&run_dir(&paths, a), &run_dir(&paths, b))?;
             report.print();
@@ -296,6 +303,7 @@ fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path)
         theme,
         gl,
         colour,
+        tooltips,
     } = variant;
     let gl_switch = scenario.gl.then_some(*gl);
     let robot = Robot::start(paths, &scenario.file)?;
@@ -315,6 +323,9 @@ fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path)
     oracle::pin_environment(&mut command, oracle::DEFAULT_ZONE);
     if scenario.copies {
         private_pasteboard(paths, &mut command)?;
+    }
+    if *tooltips {
+        tooltip_log(paths, out, &mut command)?;
     }
     let status = command
         .status()
@@ -361,11 +372,102 @@ pub(crate) fn private_pasteboard(paths: &Paths, command: &mut Command) -> Result
     Ok(())
 }
 
+/// Has Electron write the tooltips Chromium gives AppKit.
+fn tooltip_log(paths: &Paths, out: &Path, command: &mut Command) -> Result {
+    if !cfg!(target_os = "macos") {
+        return Err("tooltips are recorded on macOS".to_owned());
+    }
+    let library = paths.root.join("target/oracle/tooltips.dylib");
+    let status = Command::new("cc")
+        .args(["-dynamiclib", "-framework", "AppKit", "-o"])
+        .arg(&library)
+        .arg(paths.root.join("oracle/tools/tooltips.m"))
+        .status()
+        .map_err(|e| format!("running cc: {e}"))?;
+    if !status.success() {
+        return Err(format!("building {}: {status}", library.display()));
+    }
+    let log = out.with_extension("tooltips");
+    fs::write(&log, "").map_err(|e| format!("{}: {e}", log.display()))?;
+    command
+        .arg("--tooltips")
+        .env("DYLD_INSERT_LIBRARIES", library)
+        .env("ASRS_TOOLTIP_LOG", log);
+    Ok(())
+}
+
+fn tooltips(paths: &Paths, names: &[String]) -> Result {
+    oracle::build_harness(paths)?;
+    let references = paths.root.join("parity/tooltips");
+    let inputs = references.join("inputs");
+    fs::create_dir_all(&inputs).map_err(|e| format!("{}: {e}", inputs.display()))?;
+    let mut names = names.to_vec();
+    if names.is_empty() {
+        for entry in fs::read_dir(&references).map_err(|e| e.to_string())? {
+            let name = entry.map_err(|e| e.to_string())?.file_name();
+            names.extend(
+                name.to_str()
+                    .and_then(|n| Some(n.strip_suffix(".json")?.to_owned())),
+            );
+        }
+    }
+    for scenario in load_scenarios(paths, &names)? {
+        let out = paths
+            .root
+            .join("target/parity/app/tooltips")
+            .join(&scenario.name);
+        fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+        let variant = Variant {
+            scale: 1,
+            theme: "light",
+            gl: default_gl(),
+            colour: "srgb",
+            tooltips: true,
+        };
+        launch(paths, &scenario, &variant, &out)?;
+        let mut captures = Vec::new();
+        let dir = out.join("captures");
+        for action in read_json(&scenario.file)?
+            .get("actions")
+            .and_then(Json::as_array)
+            .unwrap_or_default()
+        {
+            let Some(name) = action.get("capture").and_then(Json::as_str) else {
+                continue;
+            };
+            let name = name.to_string();
+            let file = dir.join(format!("{name}.tooltips.json"));
+            let text = fs::read_to_string(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+            captures.push(format!(
+                "{}:{}",
+                Json::string(&name).to_compact(),
+                text.trim_end()
+            ));
+        }
+        write(
+            &references.join(format!("{}.json", scenario.name)),
+            format!("{{\n{}\n}}\n", captures.join(",\n")).as_bytes(),
+        )?;
+        let generated = out.join("inputs");
+        if generated.is_dir() {
+            for entry in fs::read_dir(&generated).map_err(|e| e.to_string())? {
+                let path = entry.map_err(|e| e.to_string())?.path();
+                if path.extension().is_some_and(|e| e == "wpilog") {
+                    let to = inputs.join(path.file_name().expect("a file"));
+                    fs::copy(&path, &to).map_err(|e| format!("{}: {e}", to.display()))?;
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
 struct Variant<'a> {
     scale: u32,
     theme: &'a str,
     gl: &'a str,
     colour: &'a str,
+    tooltips: bool,
 }
 
 fn run_scenarios(paths: &Paths, options: &RunOptions) -> Result<PathBuf> {
@@ -387,6 +489,7 @@ fn run_scenarios(paths: &Paths, options: &RunOptions) -> Result<PathBuf> {
                     theme,
                     gl,
                     colour: &options.colour,
+                    tooltips: false,
                 };
                 if let Err(e) = launch(paths, &scenario, &variant, &out) {
                     eprintln!("{e}");

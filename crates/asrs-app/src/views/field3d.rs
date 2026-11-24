@@ -43,6 +43,7 @@ use asrs_ui::platform;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, chains};
+use asrs_ui::tooltip::titled;
 
 use super::frame::{FrameHost, HubFrame};
 use super::select::FormSelect;
@@ -1389,9 +1390,12 @@ impl<H: FrameHost> HubFrame<H> {
             .border_color(rgb(if dark { 0x000000 } else { 0xdddddd }))
             .overflow_hidden()
             .child(field_title)
-            .child(probed("select.field-select", select_el))
+            .child(probed(
+                "select.field-select",
+                titled("Select field model", select_el),
+            ))
             .child(xr_title)
-            .child(probed("div.xr-button", xr));
+            .child(probed("div.xr-button", titled("Start XR streaming", xr)));
         Some(probed("div.field-3d-settings", block).into_any_element())
     }
 }
