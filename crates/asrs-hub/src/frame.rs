@@ -1073,6 +1073,39 @@ impl HubShell {
         result
     }
 
+    /// `touchstart` on the label of the sidebar's field `flat_index`.
+    pub fn field_touch_start(&mut self, hub: &mut HubModel, flat_index: usize, x: f64, y: f64) {
+        let drag = &mut self.drag;
+        hub.with_sidebar(|sidebar, env| {
+            sidebar.label_touch_start(env.geometry, drag, flat_index, x, y);
+        });
+        if self.drag.active() {
+            self.cursor = BodyCursor::Grabbing;
+        }
+    }
+
+    /// The window's `touchmove` listener, hub.ts's `dragMove`.
+    pub fn window_touch_move(
+        &mut self,
+        hub: &mut HubModel,
+        x: f64,
+        y: f64,
+    ) -> Result<(), TabsError> {
+        self.drag.move_to(x, y);
+        let result = self.dispatch_tab_drag(hub);
+        result.and(self.dispatch_drag(hub))
+    }
+
+    /// The window's `touchend` listener, hub.ts's `dragEnd`.
+    pub fn window_touch_end(&mut self, hub: &mut HubModel) -> Result<(), TabsError> {
+        if self.drag.active() {
+            self.drag.end();
+            self.cursor = BodyCursor::Unset;
+        }
+        let result = self.dispatch_tab_drag(hub);
+        result.and(self.dispatch_drag(hub))
+    }
+
     /// A list item drag the source list started: `window.startDrag` with a copy of the item.
     pub fn start_list_drag(&mut self, start: ItemDragStart, item: ItemView) {
         self.start_drag(

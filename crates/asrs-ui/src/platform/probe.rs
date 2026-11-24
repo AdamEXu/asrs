@@ -418,6 +418,11 @@ pub fn split_monitors(x: Option<u16>) -> bool {
     imp::probe::split_monitors(x)
 }
 
+/// What [`power`](super::power) reads from the system.
+pub fn battery_power() -> Option<bool> {
+    super::power::source::battery_power()
+}
+
 /// `DWMWA_SYSTEMBACKDROP_TYPE` of the window with this handle.
 #[cfg(windows)]
 pub fn backdrop_type(number: u32) -> Option<i32> {

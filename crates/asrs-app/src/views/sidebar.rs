@@ -14,10 +14,10 @@ use asrs_hub::sidebar::{RowRect, RowRef, RowValue, SidebarGeometry, SidebarRow};
 use asrs_js::string::JsString;
 use asrs_ui::button::IconButton;
 use asrs_ui::gpui::{
-    AnyElement, App, AppContext, Context, Entity, InteractiveElement, IntoElement, KeyDownEvent,
-    MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, Render, ScrollEvent,
-    StatefulInteractiveElement, Styled, Subscription, Window, anchored, deferred, div, point, px,
-    rgb, rgba,
+    AnyElement, App, AppContext, Context, DispatchPhase, Entity, HitboxBehavior,
+    InteractiveElement, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseUpEvent,
+    ParentElement, Render, ScrollEvent, StatefulInteractiveElement, Styled, Subscription,
+    TouchDragEvent, TouchPhase, Window, anchored, canvas, deferred, div, point, px, rgb, rgba,
 };
 use asrs_ui::icon::{Icon, IconFit, IconSource};
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, PlainText, TextField};
@@ -118,6 +118,7 @@ pub struct SidebarLayout {
     blur: bool,
     results_scroll: Option<ResultsScroll>,
     menu_buttons: Vec<[f64; 4]>,
+    touched: Option<usize>,
 }
 
 #[derive(Clone, Copy)]
@@ -140,6 +141,7 @@ impl Default for SidebarLayout {
             blur: false,
             results_scroll: None,
             menu_buttons: Vec::new(),
+            touched: None,
         }
     }
 }
@@ -316,6 +318,26 @@ fn shown_rows(side_bar_top: f64, scroll_top: f64, inner_height: f64, rows: usize
     let first = ((-ROW_HEIGHT - origin) / ROW_HEIGHT).ceil().max(0.0) as usize;
     let last = (((inner_height - origin) / ROW_HEIGHT).floor() + 1.0).max(0.0) as usize;
     first.min(rows)..last.min(rows)
+}
+
+/// A field label's `touchstart` listener, over its box.
+fn touch_start(layout: Rc<RefCell<SidebarLayout>>, flat: usize) -> impl IntoElement {
+    canvas(
+        |bounds, window, _| window.insert_hitbox(bounds, HitboxBehavior::Normal),
+        move |_, hitbox, window, _| {
+            window.on_mouse_event(move |event: &TouchDragEvent, phase, window, _| {
+                if phase == DispatchPhase::Bubble
+                    && event.phase == TouchPhase::Started
+                    && hitbox.is_hovered(window)
+                {
+                    window.prevent_default();
+                    layout.borrow_mut().touched = Some(flat);
+                }
+            });
+        },
+    )
+    .absolute()
+    .inset_0()
 }
 
 fn now() -> f64 {
@@ -642,7 +664,8 @@ impl SidebarView {
                         let modifier = event.modifiers.control || event.modifiers.platform;
                         view.input(cx, |s, _| s.label_mouse_up(flat, x, y, modifier));
                     }),
-                );
+                )
+                .child(touch_start(self.layout.clone(), flat));
         }
         label = label.on_mouse_down(
             MouseButton::Right,
@@ -980,6 +1003,7 @@ impl Render for SidebarView {
             ));
         if tuning_shown {
             let tune = Symbol::named("tune.svg").expect("tune symbol");
+            let blurred = !self.hub.read(cx).model().is_focused();
             let tint = if tuning_active {
                 IconTint::TUNING_ACTIVE
             } else {
@@ -1002,6 +1026,7 @@ impl Render for SidebarView {
                             .title("Toggle tuning mode")
                             .size(29.0, 29.0)
                             .tint(tint)
+                            .blurred(blurred)
                             .on_click(cx.listener(|view, _, _, cx| {
                                 view.input(cx, |s, env| s.tuning_button_click(env));
                             })),
@@ -1039,6 +1064,10 @@ impl Render for SidebarView {
 /// `div.side-bar`'s box as the frame laid it out, for [`ViewGeometry`].
 pub fn set_side_bar(geometry: &ViewGeometry, rect: [f64; 4]) {
     geometry.0.borrow_mut().side_bar = rect;
+}
+
+pub fn take_touched_field(geometry: &ViewGeometry) -> Option<usize> {
+    geometry.0.borrow_mut().touched.take()
 }
 
 pub fn set_menu_buttons(geometry: &ViewGeometry, rects: Vec<[f64; 4]>) {

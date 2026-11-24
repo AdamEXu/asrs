@@ -235,6 +235,8 @@ pub(super) mod dialog {
         MessageBoxOptions, MessageBoxResult, MessageBoxType, OpenDialogOptions, SaveDialogOptions,
     };
 
+    /// GPUI's prompts have no checkbox: its label is a last button, which answers with the
+    /// default one and the checkbox checked (#402).
     pub fn message_box(
         window: Option<&mut Window>,
         cx: &mut App,
@@ -263,15 +265,21 @@ pub(super) mod dialog {
         if buttons.is_empty() {
             buttons.push("OK");
         }
+        let checkbox = (!options.checkbox_label.is_empty()).then_some(buttons.len());
+        if checkbox.is_some() {
+            buttons.push(&options.checkbox_label);
+        }
+        let default_id = options.default_id.unwrap_or(0);
         let detail = (!options.detail.is_empty()).then_some(options.detail.as_str());
         let answer = window.prompt(level, &options.message, detail, &buttons, cx);
         cx.spawn(async move |cx| {
-            let response = answer.await.unwrap_or(0);
+            let button = answer.await.unwrap_or(0);
+            let checked = checkbox == Some(button);
             cx.update(|cx| {
                 on_done(
                     MessageBoxResult {
-                        response,
-                        checkbox_checked,
+                        response: if checked { default_id } else { button },
+                        checkbox_checked: checkbox_checked || checked,
                     },
                     cx,
                 )

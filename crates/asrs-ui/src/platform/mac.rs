@@ -41,6 +41,7 @@ use super::{
 
 mod actions;
 pub(super) mod dialog;
+pub(super) mod focus;
 mod tooltip;
 pub(super) mod window;
 
