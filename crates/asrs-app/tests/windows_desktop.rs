@@ -13,6 +13,7 @@
 mod desktop {
     use std::cell::RefCell;
     use std::io::{BufRead, BufReader, Write as _};
+    use std::net::{TcpListener, TcpStream};
     use std::path::{Path, PathBuf};
     use std::process::{Child, Command, Stdio};
     use std::rc::Rc;
@@ -45,7 +46,9 @@ mod desktop {
     const ELECTRON_MAIN: &str = r##"
 const { app, BrowserWindow, Menu } = require("electron");
 const readline = require("readline");
-const out = (line) => process.stdout.write(line + "\n");
+// The main process has no readable stdin on Windows.
+const socket = require("net").connect(Number(process.argv.at(-1)), "127.0.0.1");
+const out = (line) => socket.write(line + "\n");
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const id = (win) => win.getNativeWindowHandle().readUInt32LE(0);
 app.whenReady().then(() => {
@@ -53,7 +56,7 @@ app.whenReady().then(() => {
   const parent = new BrowserWindow({ x: 60, y: 420, width: 1100, height: 650 });
   let win = null;
   out("ready " + process.versions.electron);
-  readline.createInterface({ input: process.stdin }).on("line", async (line) => {
+  readline.createInterface({ input: socket }).on("line", async (line) => {
     const request = JSON.parse(line);
     if (request.op === "open") {
       const options = { ...request.options };
@@ -116,6 +119,7 @@ app.whenReady().then(() => {
 
     struct Electron {
         child: RefCell<Child>,
+        socket: RefCell<TcpStream>,
         lines: mpsc::Receiver<String>,
     }
 
@@ -125,20 +129,24 @@ app.whenReady().then(() => {
                 std::env::temp_dir().join(format!("asrs-windows-desktop-{}", std::process::id()));
             std::fs::create_dir_all(&dir).expect("temp dir");
             std::fs::write(dir.join("main.js"), ELECTRON_MAIN).expect("main.js");
-            let mut child = Command::new(electron_binary())
+            let listener = TcpListener::bind("127.0.0.1:0").expect("port");
+            let port = listener.local_addr().expect("port").port();
+            let child = Command::new(electron_binary())
                 .args(["--force-device-scale-factor=1"])
                 .arg(format!("--user-data-dir={}", dir.join("data").display()))
                 .arg(dir.join("main.js"))
+                .arg(port.to_string())
                 .env_remove("ELECTRON_RUN_AS_NODE")
-                .stdin(Stdio::piped())
-                .stdout(Stdio::piped())
+                .stdin(Stdio::null())
+                .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .spawn()
                 .expect("Electron");
-            let stdout = child.stdout.take().expect("stdout");
+            let (socket, _) = listener.accept().expect("Electron's connection");
+            let replies = BufReader::new(socket.try_clone().expect("socket"));
             let (send, lines) = mpsc::channel();
             std::thread::spawn(move || {
-                for line in BufReader::new(stdout).lines().map_while(Result::ok) {
+                for line in replies.lines().map_while(Result::ok) {
                     if send.send(line).is_err() {
                         return;
                     }
@@ -146,6 +154,7 @@ app.whenReady().then(() => {
             });
             Electron {
                 child: RefCell::new(child),
+                socket: RefCell::new(socket),
                 lines,
             }
         }
@@ -163,11 +172,7 @@ app.whenReady().then(() => {
         }
 
         async fn request(&self, cx: &mut AsyncApp, request: &str, prefix: &str) -> String {
-            {
-                let mut child = self.child.borrow_mut();
-                let stdin = child.stdin.as_mut().expect("stdin");
-                writeln!(stdin, "{request}").expect("request");
-            }
+            writeln!(self.socket.borrow_mut(), "{request}").expect("request");
             self.reply(cx, prefix).await
         }
 
@@ -924,7 +929,6 @@ app.whenReady().then(() => {
     /// The hub as `windows::open_hub` opens it, drawn by GPUI in its own window, against the capture
     /// scenario mode makes of the same page.
     async fn own_window(cx: &mut AsyncApp, report: &mut Report) {
-        let root = vectors::workspace_root();
         let out = std::env::temp_dir().join(format!("asrs-own-window-{}", std::process::id()));
         let status = Command::new(std::env::current_exe().expect("test binary"))
             .arg("--capture")
