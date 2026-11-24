@@ -347,7 +347,9 @@ impl McapWriter {
         id
     }
 
-    pub fn add_message(&mut self, message: Message) -> Result<(), McapError> {
+    /// Returns whether the appended records crossed the chunk bound: upstream's `addMessage`
+    /// then awaits `finalizeChunk`, which is where an unawaited call parks.
+    pub fn add_message(&mut self, message: Message) -> Result<bool, McapError> {
         let stats = &mut self.statistics;
         if stats.message_count == 0 {
             stats.message_start_time = message.log_time;
@@ -391,8 +393,9 @@ impl McapWriter {
         self.chunk_builder.add_message(&message);
         if self.chunk_builder.records.buf.len() > CHUNK_SIZE {
             self.finalize_chunk();
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
     }
 
     fn finalize_chunk(&mut self) {

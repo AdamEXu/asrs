@@ -62,7 +62,13 @@ export class Scheduler implements WorkerRouter {
         await this.waitFor(slot);
         continue;
       }
-      slot.worker.deliver(slot.inbox.shift());
+      try {
+        slot.worker.deliver(slot.inbox.shift());
+      } catch {
+        // A browser reports a throw out of a task and goes on with the next one; a hub
+        // `onmessage` that throws (a serialized Log its `fromSerialized` rejects) leaves
+        // the source where it was and the settle continues.
+      }
     }
   }
 

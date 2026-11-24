@@ -9,10 +9,11 @@
 //!   when the log has one.
 //!
 //! The sampled branch calls `addValue` without awaiting it. Its writes still happen in order
-//! until a chunk fills mid-loop, and those option sets never finish upstream (the harness
-//! skips them before export), so here every call completes in order. A sample whose
-//! `addValue` throws is an unhandled rejection, which Chromium only logs: the message is lost
-//! and the export goes on.
+//! until a chunk fills mid-loop: that `addMessage` parks inside `finalizeChunk`'s awaited
+//! write, and the next one re-enters the writer before the chunk builder is reset, so those
+//! option sets never finish upstream (the harness skips them before export) and this reports
+//! `NeverCompletes`. A sample whose `addValue` throws is an unhandled rejection, which
+//! Chromium only logs: the message is lost and the export goes on.
 
 use asrs_js::json;
 use asrs_js::math;
@@ -80,8 +81,27 @@ pub fn value_json(set: &LogValueSetAny, index: usize) -> Option<Vec<u8>> {
         .map(String::into_bytes)
 }
 
-/// `addValue`: `BigInt(Math.round(timestamp * 1e9))` throws `RangeError` once the product
-/// overflows, before `addMessage` runs.
+/// `addValue`'s body up to `addMessage`: `BigInt(Math.round(timestamp * 1e9))` throws
+/// `RangeError` once the product overflows, and `JSON.stringify` of a typeless value
+/// produces nothing, both before `addMessage` runs.
+fn message_at(
+    channel_id: u32,
+    set: &LogValueSetAny,
+    timestamp: f64,
+    index: usize,
+    sequence: usize,
+) -> Option<Message> {
+    let time = Time::from_integral(math::round(timestamp * 1e9))?;
+    let data = value_json(set, index)?;
+    Some(Message {
+        channel_id,
+        sequence: sequence as u32,
+        log_time: time,
+        publish_time: time,
+        data,
+    })
+}
+
 fn add_value(
     writer: &mut McapWriter,
     channel_id: u32,
@@ -90,17 +110,9 @@ fn add_value(
     index: usize,
     sequence: usize,
 ) -> Result<(), ()> {
-    let time = Time::from_integral(math::round(timestamp * 1e9)).ok_or(())?;
-    let data = value_json(set, index).ok_or(())?;
-    writer
-        .add_message(Message {
-            channel_id,
-            sequence: sequence as u32,
-            log_time: time,
-            publish_time: time,
-            data,
-        })
-        .map_err(|_: McapError| ())
+    let message = message_at(channel_id, set, timestamp, index, sequence).ok_or(())?;
+    writer.add_message(message).map_err(|_: McapError| ())?;
+    Ok(())
 }
 
 pub fn generate_mcap(
@@ -159,18 +171,23 @@ pub fn generate_mcap(
                 }
             }
             Some(timestamps) => {
+                // A message that fills the chunk parks its unawaited `addMessage` inside
+                // `finalizeChunk`; the next `addMessage` to run while one is parked re-enters
+                // the writer and the export never finishes. The parked call drains when the
+                // next field's `registerChannel` is awaited, so the flag is per field.
+                let mut finalize_parked = false;
                 let mut next_index = 0;
                 for (i, &timestamp) in timestamps.iter().enumerate() {
                     next_index = upper_bound(field_timestamps, timestamp, next_index);
                     if next_index != 0 {
-                        let _ = add_value(
-                            &mut writer,
-                            channel_id,
-                            &field_data,
-                            timestamp,
-                            next_index - 1,
-                            i,
-                        );
+                        if let Some(message) =
+                            message_at(channel_id, &field_data, timestamp, next_index - 1, i)
+                        {
+                            if finalize_parked {
+                                return Err(ExportError::NeverCompletes);
+                            }
+                            finalize_parked = writer.add_message(message).unwrap_or(false);
+                        }
                     }
                     progress(fraction(field_index, i, timestamps.len(), fields.len()));
                 }
@@ -293,5 +310,24 @@ mod tests {
         );
         assert_eq!(summary_message_counts(&file), (4, vec![(0, 2), (1, 2)]));
         assert_eq!(chunk_message_count(&file), 2);
+    }
+
+    #[test]
+    fn sampled_export_past_one_chunk_never_completes() {
+        let key = |k: &str| JsString::from(k);
+        let mut log = Log::new(true);
+        log.put_string(
+            &key("/Value"),
+            1.0,
+            JsString::from("x".repeat(1_100_000).as_str()),
+        );
+        let fields = [key("/Value")];
+        // The call that fills the chunk is the last one: its parked `finalizeChunk`
+        // drains once the loop ends, so a single crossing still completes.
+        assert!(generate_mcap(&log, &fields, &Some(vec![1.0]), &mut |_| {}).is_ok());
+        assert!(matches!(
+            generate_mcap(&log, &fields, &Some(vec![1.0, 2.0]), &mut |_| {}),
+            Err(ExportError::NeverCompletes)
+        ));
     }
 }

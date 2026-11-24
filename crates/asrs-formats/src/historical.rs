@@ -794,6 +794,7 @@ fn with_slash(key: &JsString) -> JsString {
 #[cfg(test)]
 mod tests {
     use asrs_js::time::{SetClock, SetRng};
+    use asrs_log::log::proto_decoder::SerializedProtoDecoder;
 
     use super::*;
 
@@ -993,5 +994,40 @@ mod tests {
                 "/Other"
             ]
         );
+    }
+
+    #[test]
+    fn an_initial_log_whose_from_serialized_throws_stays_decoding() {
+        let (mut log, mut realm) = (
+            Log::new(true),
+            JsRealm::new(Box::new(SetRng::new(vec![0.5]))),
+        );
+        let mut host = Recorder::default();
+        let mut source = open("a.wpilog", &mut host, &mut log, &mut realm);
+        let data = reply(&source, vec![Some(Arc::from(&b"x"[..]))], None);
+        let mut cx = PageContext {
+            log: &mut log,
+            realm: &mut realm,
+            host: &mut host,
+        };
+        source.handle_main_message(&data, &mut cx);
+        // A FileDescriptorProto with no `name` holding one "Anon" message type: the
+        // filename dedup does not apply, so adding it twice throws `duplicate name`.
+        let anon: &[u8] = &[
+            0x22, 0x12, 0x0a, 0x04, b'A', b'n', b'o', b'n', 0x12, 0x0a, 0x0a, 0x01, b'x', 0x18,
+            0x01, 0x20, 0x01, 0x28, 0x05,
+        ];
+        let mut serialized = Log::new(true).to_serialized();
+        serialized.proto_decoder = SerializedProtoDecoder(vec![anon.to_vec(), anon.to_vec()]);
+        let uuid = source.uuid().to_owned();
+        let initial = Response::Initial {
+            log: Box::new(serialized),
+            is_partial: false,
+        };
+        assert_eq!(
+            source.worker_message(&uuid, initial, &mut cx),
+            Err(Abort::Threw)
+        );
+        assert_eq!(source.status(), Status::DecodingInitial);
     }
 }

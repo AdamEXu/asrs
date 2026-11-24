@@ -3,7 +3,7 @@
 //! checks) and the live source (`isFile: false`, one `decode` call per TCP frame payload, so
 //! revision, keys and timestamp state persist across calls).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use asrs_js::string::{JsString, TextDecoder};
@@ -119,6 +119,68 @@ fn js(text: &str) -> JsString {
     JsString::from(text)
 }
 
+/// The mutable state a read-loop iteration closes over: the byte position, which loop it is
+/// in, the last accepted timestamp (the file-mode corruption check compares against it) and
+/// the key tables a value record looks up. Log state can be left out: fields are never
+/// removed or retyped, so the only put outcome a revisit could change is a missing field's,
+/// and that outcome (`effective_key`'s throw, `put_*`'s error) ends the decode before the
+/// loop comes around again.
+#[derive(PartialEq, Eq, Hash)]
+struct ParseState {
+    offset: i64,
+    main: bool,
+    last_timestamp: u64,
+    key_ids: Vec<(i16, JsString)>,
+    key_types: Vec<(i16, JsString)>,
+}
+
+/// Like `dsevents`' visited positions (`dslog.rs`): a negative length or the corruption
+/// resync's `offset -= 7` can send the offset backwards, and a loop that comes back to a
+/// state it already ran means upstream spins forever; that ends in `Abort::NeverReturns`
+/// instead. Tracking starts on the first non-forward step so ordinary logs pay nothing.
+struct CycleWatch {
+    previous: i64,
+    armed: bool,
+    seen: HashSet<ParseState>,
+}
+
+impl CycleWatch {
+    fn new() -> Self {
+        CycleWatch {
+            previous: i64::MIN,
+            armed: false,
+            seen: HashSet::new(),
+        }
+    }
+
+    fn check(&mut self, decoder: &RlogDecoder, offset: i64, main: bool) -> Result<(), Fail> {
+        self.armed |= offset <= self.previous;
+        self.previous = offset;
+        if !self.armed {
+            return Ok(());
+        }
+        let table = |map: &HashMap<i16, JsString>| {
+            let mut entries: Vec<(i16, JsString)> =
+                map.iter().map(|(id, value)| (*id, value.clone())).collect();
+            entries.sort();
+            entries
+        };
+        let state = ParseState {
+            offset,
+            main,
+            last_timestamp: decoder
+                .last_timestamp
+                .map_or(u64::MAX, |timestamp| timestamp.to_bits()),
+            key_ids: table(&decoder.key_ids),
+            key_types: table(&decoder.key_types),
+        };
+        if !self.seen.insert(state) {
+            return Err(Fail::Abort(Abort::NeverReturns));
+        }
+        Ok(())
+    }
+}
+
 /// `type.split(prefix)[1]` for a type that starts with `prefix`.
 fn schema_type(type_: &JsString, prefix: &str) -> JsString {
     type_.split(Some(&js(prefix)), None)[1].clone()
@@ -202,6 +264,7 @@ impl RlogDecoder {
             }
         }
         shift(&mut offset, 1);
+        let mut cycles = CycleWatch::new();
         'main: loop {
             if offset >= data.len() as i64 {
                 break 'main;
@@ -209,6 +272,7 @@ impl RlogDecoder {
             if crate::worker::stop_requested() {
                 return Err(Fail::Abort(Abort::Threw));
             }
+            cycles.check(self, offset, true)?;
             let mut timestamp = f64_at(data, shift(&mut offset, 8))?;
             if timestamp < 0.0 {
                 timestamp = 0.0;
@@ -226,6 +290,7 @@ impl RlogDecoder {
             }
             self.last_timestamp = Some(timestamp);
             'read: loop {
+                cycles.check(self, offset, false)?;
                 let Some(entry_type) = u8_at(data, shift(&mut offset, 1)) else {
                     break 'read;
                 };
@@ -957,5 +1022,56 @@ mod tests {
         );
         assert_eq!(end, Ok(()));
         assert!(matches!(responses.last(), Some(Response::Failed)));
+    }
+
+    fn never_returns(data: &[u8]) -> bool {
+        let mut realm = realm();
+        let mut log = Log::new(false);
+        matches!(
+            RlogDecoder::new(true).decode(&mut realm, &mut log, data, &SetClock(0.0), None),
+            Err(Abort::NeverReturns)
+        )
+    }
+
+    #[test]
+    fn a_negative_length_that_repeats_parse_state_never_returns() {
+        // An r2 value whose length sends the offset back to its own entry byte.
+        let mut file = builder(2);
+        timestamp(&mut file, 1.0);
+        key(&mut file, 1, "/A", Some("string"));
+        file.push(2);
+        file.extend(1i16.to_be_bytes());
+        file.extend((-5i16).to_be_bytes());
+        assert!(never_returns(&file));
+
+        // An r1 string whose length does the same.
+        let mut file = builder(1);
+        timestamp(&mut file, 1.0);
+        key(&mut file, 1, "/A", None);
+        file.push(2);
+        file.extend(1i16.to_be_bytes());
+        file.push(7);
+        file.extend((-6i16).to_be_bytes());
+        assert!(never_returns(&file));
+    }
+
+    #[test]
+    fn a_negative_length_that_lands_on_new_entries_keeps_decoding() {
+        // The value's length lands the offset on its own key id's low byte, which parses
+        // back as a key record for id -3; the run then finishes normally.
+        let mut file = builder(2);
+        timestamp(&mut file, 1.0);
+        key(&mut file, 1, "/A", Some("string"));
+        file.push(2);
+        file.extend(1i16.to_be_bytes());
+        file.extend((-3i16).to_be_bytes());
+        file.extend([0, 1, b'Z', 0, 1, b's']);
+        marker(&mut file);
+        timestamp(&mut file, 2.0);
+        marker(&mut file);
+        let (log, ok) = decode_file(&file);
+        assert!(ok);
+        let field = log.get_field(&js("/A")).expect("a string field");
+        assert_eq!(field.get_type(), LoggableType::String);
     }
 }
