@@ -28,10 +28,10 @@ use std::sync::Arc;
 use asrs_formats::export::{ExportError, ExportOptions, Format, Output, Sampling, export};
 use asrs_formats::historical::{MainReply, MainRequest, WorkerName};
 use asrs_formats::worker::{Abort, DecodeWorker, Request, WorkerMessage, WorkerThread};
-use asrs_hub::hub::{ExportReply, HubFrame, HubHost, HubInterval, HubModel, HubTimeout, HubView};
+use asrs_hub::hub::{ExportReply, HubFrame, HubHost, HubInterval, HubModel, HubPage, HubTimeout, HubView};
 use asrs_hub::live::{LiveNet, LiveRole};
 use asrs_hub::sidebar::{NoLayout, SidebarGeometry};
-use asrs_js::string::JsString;
+use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{Clock, Rng, SetClock, V8MathRandom};
 use asrs_js::value::{JsValue, ToJs};
 use asrs_live::rlog::{Ipc, MainCall, MainContext, RlogMain};
@@ -39,7 +39,10 @@ use asrs_live::{ManualClock, TimerQueue, TunedValue};
 use asrs_log::log::{Log, LogError, SerializedLog};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
+use asrs_model::preferences::Preferences;
 use asrs_model::selection::Selection;
+use asrs_model::tab_controller::{TabCommand, TabRenderer};
+use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
 use asrs_parity::json::{self, Json};
 use asrs_parity::live::{ServerHost, Session};
@@ -112,6 +115,51 @@ impl HubView for View {
 
     fn source_list_dom(&mut self) -> &mut dyn asrs_model::source_list::SourceListDom {
         asrs_model::source_list::Undisplayed::dom()
+    }
+
+    fn tab_renderer(
+        &self,
+        kind: TabType,
+        preferences: Option<&Preferences>,
+        _is_battery: bool,
+    ) -> Option<Box<dyn TabRenderer<HubPage>>> {
+        (kind == TabType::Field3d).then(|| {
+            Box::new(Field3dStub {
+                implementation: preferences.is_some(),
+                state: JsValue::Null,
+            }) as Box<dyn TabRenderer<HubPage>>
+        })
+    }
+}
+
+/// `Field3dRenderer` over oracle/src/dom/field3dStub.ts, which saves what it restored.
+struct Field3dStub {
+    implementation: bool,
+    state: JsValue,
+}
+
+impl TabRenderer<HubPage> for Field3dStub {
+    fn save_state(&self, _: &HubPage) -> JsValue {
+        match self.implementation {
+            true => self.state.clone(),
+            false => JsValue::Null,
+        }
+    }
+
+    fn restore_state(&mut self, _: &mut HubPage, state: &JsValue) -> Result<(), JsError> {
+        if !state.is_null() {
+            self.state = state.clone();
+        }
+        Ok(())
+    }
+
+    fn aspect_ratio(&self, _: &HubPage) -> Option<f64> {
+        None
+    }
+
+    fn render(&mut self, page: &mut HubPage, _: &dyn TabCommand) -> Result<(), JsError> {
+        self.implementation |= page.preferences().is_some();
+        Ok(())
     }
 }
 
@@ -475,6 +523,13 @@ impl HubHost for Host {
     }
 
     fn exception(&mut self, task: &'static str, error: String) {
+        // hubSession.ts records a rejection as `${e.name}: ${e.message}`, env.ts a thrown string
+        // as itself.
+        let error = match error.strip_prefix(": ") {
+            Some(_) if task == "unhandledRejection" => "undefined: undefined".to_owned(),
+            Some(text) => text.to_owned(),
+            None => error,
+        };
         self.emit(vec![
             ("exception", cve_str(task)),
             ("error", cve_str(&error)),
@@ -791,6 +846,15 @@ impl Runner {
                     cve(&JsValue::String(progress)),
                 ])
             }
+            "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]" =>
+            {
+                let sidebar = self.hub.sidebar();
+                let width = asrs_js::number::to_string(sidebar.applied_width());
+                Value::Array(vec![
+                    cve_str(&format!("{width}px")),
+                    cve_str(flag(Some(sidebar.sidebar_shown()))),
+                ])
+            }
             WATCH_GLOW => {
                 let last = self.read_glow();
                 let value = glow_value(&last);
@@ -1053,7 +1117,7 @@ fn replay(spec: &Path) -> Result<(Vec<Emit>, Vec<String>), String> {
         ("show-when-ready", JsValue::Undefined),
         (
             "set-preferences",
-            asrs_model::preferences::Preferences::default().to_js(),
+            ToJs::to_js(&Preferences::default()),
         ),
         ("set-active-satellites", JsValue::Array(Vec::new())),
     ];

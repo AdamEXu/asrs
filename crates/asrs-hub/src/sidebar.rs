@@ -6,13 +6,15 @@
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
+use std::rc::Rc;
 
 use asrs_js::collation::locale_compare_numeric;
 use asrs_js::json;
 use asrs_js::math::{abs, floor, max2, min2, rem, round};
 use asrs_js::number;
+use asrs_js::ops;
 use asrs_js::sort::{array_sort, code_unit_cmp};
-use asrs_js::string::JsString;
+use asrs_js::string::{JsError, JsString};
 use asrs_js::time::Clock;
 use asrs_js::value::{JsObject, JsValue};
 use asrs_live::{Thrown, TunedValue};
@@ -20,9 +22,8 @@ use asrs_log::log::log_util::{TYPE_KEY, get_value_at};
 use asrs_log::log::{Log, LogFieldTree, LoggableType, StructuredType, search_fields};
 use asrs_log::realm::JsRealm;
 use asrs_log::util::arrays_equal;
-use asrs_model::hub_state::SidebarState;
 use asrs_model::selection::{Selection, SelectionMode};
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 
 use crate::custom_schemas;
 use crate::drag::{Drag, DragItem, DragPayload};
@@ -368,7 +369,7 @@ struct TextState {
     first_update: bool,
     last_value: Option<JsString>,
     last_char_count: Option<usize>,
-    last_sidebar_width: f64,
+    last_sidebar_width: Rc<JsValue>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -508,14 +509,86 @@ pub enum RowValue {
     },
 }
 
+/// A value's place in upstream's `expandedFields` `Set`. Two objects are never the same value,
+/// so an object is keyed by its position in the restored list.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum ExpandedKey {
+    Undefined,
+    Null,
+    Bool(bool),
+    Number(u64),
+    String(JsString),
+    Object(usize),
+}
+
+impl ExpandedKey {
+    fn new(value: &JsValue, position: usize) -> ExpandedKey {
+        match value {
+            JsValue::Undefined => ExpandedKey::Undefined,
+            JsValue::Null => ExpandedKey::Null,
+            JsValue::Bool(b) => ExpandedKey::Bool(*b),
+            JsValue::Number(n) => ExpandedKey::Number((n + 0.0).to_bits()),
+            JsValue::String(s) => ExpandedKey::String(s.clone()),
+            _ => ExpandedKey::Object(position),
+        }
+    }
+}
+
+/// `new Set(value)` for a value parsed from JSON.
+fn expanded_set(value: &JsValue) -> Result<IndexMap<ExpandedKey, JsValue>, JsError> {
+    let items = match value {
+        JsValue::Undefined | JsValue::Null => Vec::new(),
+        JsValue::Array(items) => items.clone(),
+        JsValue::String(s) => char::decode_utf16(s.units().iter().copied())
+            .map(|c| {
+                JsValue::String(match c {
+                    Ok(c) => JsString::from(c.to_string()),
+                    Err(lone) => JsString::from_units(vec![lone.unpaired_surrogate()]),
+                })
+            })
+            .collect(),
+        other => {
+            let what = match other {
+                JsValue::Object(_) => "object".to_owned(),
+                other => format!("{} {}", other.type_of(), ops::to_string(other)),
+            };
+            return Err(JsError::type_error(format!(
+                "{what} is not iterable (cannot read property Symbol(Symbol.iterator))"
+            )));
+        }
+    };
+    Ok(items
+        .into_iter()
+        .enumerate()
+        .map(|(i, item)| (ExpandedKey::new(&item, i), item))
+        .collect())
+}
+
+fn numeric(width: &JsValue) -> f64 {
+    ops::to_number(width).unwrap_or(f64::NAN)
+}
+
+fn negated(width: &JsValue) -> f64 {
+    match -numeric(width) {
+        n if n.is_nan() => f64::NAN,
+        n => n,
+    }
+}
+
+/// `this.sidebarWidth === lastSidebarWidth`: an object is only the same until it is replaced.
+fn same_width(a: &Rc<JsValue>, b: &Rc<JsValue>) -> bool {
+    ops::strict_equals(&**a, &**b) || (Rc::ptr_eq(a, b) && matches!(**a, JsValue::Array(_) | JsValue::Object(_)))
+}
+
 pub struct Sidebar {
     get_filenames: Box<dyn Fn() -> Vec<JsString>>,
     sidebar_handle_active: bool,
-    sidebar_width: f64,
+    /// Whatever number, string or object a layout held; upstream applies JS operators to it.
+    sidebar_width: Rc<JsValue>,
     field_count: usize,
     is_tuning_mode: bool,
     last_field_keys: Vec<JsString>,
-    expanded_fields: IndexSet<JsString>,
+    expanded_fields: IndexMap<ExpandedKey, JsValue>,
     active_fields: IndexSet<JsString>,
     select_group: Vec<JsString>,
     search_key: Option<JsString>,
@@ -548,11 +621,11 @@ impl Sidebar {
         Sidebar {
             get_filenames: Box::new(get_filenames),
             sidebar_handle_active: false,
-            sidebar_width: DEFAULT_SIDEBAR_WIDTH,
+            sidebar_width: Rc::new(JsValue::Number(DEFAULT_SIDEBAR_WIDTH)),
             field_count: 0,
             is_tuning_mode: false,
             last_field_keys: Vec::new(),
-            expanded_fields: IndexSet::new(),
+            expanded_fields: IndexMap::new(),
             active_fields: IndexSet::new(),
             select_group: Vec::new(),
             search_key: None,
@@ -606,45 +679,49 @@ impl Sidebar {
     }
 
     /// `saveState`.
-    pub fn save_state(&self) -> SidebarState {
-        SidebarState {
-            width: self.sidebar_width,
-            expanded: self.expanded_fields.iter().cloned().collect(),
-        }
+    pub fn save_state(&self) -> JsValue {
+        let expanded = self.expanded_fields.values().cloned().collect();
+        ops::object([
+            ("width", (*self.sidebar_width).clone()),
+            ("expanded", JsValue::Array(expanded)),
+        ])
     }
 
-    /// `restoreState`.
+    /// `restoreState` with the raw `sidebar` member of a `HubState`. What it throws leaves
+    /// whatever it had already restored.
     pub fn restore_state(
         &mut self,
         env: &mut SidebarEnv<'_>,
-        state: &SidebarState,
-    ) -> EventOutcome {
-        let expanded_set: IndexSet<JsString> = state.expanded.iter().cloned().collect();
-        let expanded_equal = self.expanded_fields.len() == expanded_set.len()
+        state: &JsValue,
+    ) -> Result<EventOutcome, JsError> {
+        let width = ops::get(state, "width")?;
+        let expanded = expanded_set(&ops::get(state, "expanded")?)?;
+        let expanded_equal = self.expanded_fields.len() == expanded.len()
             && self
                 .expanded_fields
-                .iter()
-                .all(|k| expanded_set.contains(k));
-        self.sidebar_width = state.width;
-        self.expanded_fields = expanded_set;
-        if !expanded_equal && let Err(outcome) = self.refresh(env, true) {
-            return outcome;
-        }
-        EventOutcome::Ok
+                .keys()
+                .all(|k| !matches!(k, ExpandedKey::Object(_)) && expanded.contains_key(k));
+        self.sidebar_width = Rc::new(width);
+        self.expanded_fields = expanded;
+        Ok(match expanded_equal {
+            true => EventOutcome::Ok,
+            false => self.refresh(env, true).err().unwrap_or(EventOutcome::Ok),
+        })
     }
 
     /// `toggleVisible`.
     pub fn toggle_visible(&mut self) {
-        if self.sidebar_width == 0.0 {
-            self.sidebar_width = DEFAULT_SIDEBAR_WIDTH;
-        } else {
-            self.sidebar_width *= -1.0;
-        }
+        let width = match *self.sidebar_width {
+            JsValue::Number(0.0) => DEFAULT_SIDEBAR_WIDTH,
+            ref width => negated(width),
+        };
+        self.sidebar_width = Rc::new(JsValue::Number(width));
     }
 
-    /// `--side-bar-width`, `Math.max(sidebarWidth, 0)`.
+    /// `--side-bar-width`, `Math.max(sidebarWidth, 0)`; a restored width that is no number
+    /// makes it `NaN`.
     pub fn applied_width(&self) -> f64 {
-        max2(self.sidebar_width, 0.0)
+        max2(numeric(&self.sidebar_width), 0.0)
     }
 
     /// `--show-side-bar`.
@@ -667,6 +744,7 @@ impl Sidebar {
             return;
         }
         let mut width = client_x;
+        let shown = self.width_is_positive();
         if width > 500.0 {
             width = 500.0;
         }
@@ -674,13 +752,12 @@ impl Sidebar {
             width = 160.0;
         }
         if width < 80.0 {
-            if self.sidebar_width > 0.0 {
-                width = 0.0;
-            } else {
-                width = self.sidebar_width;
+            if !shown {
+                return;
             }
+            width = 0.0;
         }
-        self.sidebar_width = width;
+        self.sidebar_width = Rc::new(JsValue::Number(width));
     }
 
     /// The field labels' `window` `mousemove` listeners, which run after hub.ts's `dragMove`,
@@ -983,11 +1060,12 @@ impl Sidebar {
     ) -> Attempt<()> {
         self.nodes[id].expanded = expanded;
         if expanded {
+            let title = self.nodes[id].full_title.clone();
             self.expanded_fields
-                .insert(self.nodes[id].full_title.clone());
+                .insert(ExpandedKey::String(title.clone()), JsValue::String(title));
         } else {
             self.expanded_fields
-                .shift_remove(&self.nodes[id].full_title.clone());
+                .shift_remove(&ExpandedKey::String(self.nodes[id].full_title.clone()));
         }
         if !self.nodes[id].children_materialized {
             self.nodes[id].children_materialized = true;
@@ -1498,17 +1576,17 @@ impl Sidebar {
                     .and_then(|t| get_value_at::<JsString>(&env.log.borrow(), &full_key, t, None));
                 if !state.first_update
                     && value == state.last_value
-                    && self.sidebar_width == state.last_sidebar_width
+                    && same_width(&self.sidebar_width, &state.last_sidebar_width)
                 {
                     return;
                 }
                 state.first_update = false;
                 state.last_value = value.clone();
-                state.last_sidebar_width = self.sidebar_width;
+                state.last_sidebar_width = self.sidebar_width.clone();
                 let value_str = match value {
                     None => JsString::new(),
                     Some(v) => {
-                        let max_characters = round(self.sidebar_width * 0.03);
+                        let max_characters = round(numeric(&self.sidebar_width) * 0.03);
                         if (v.len() as f64) > max_characters {
                             let mut truncated = v.substring(0.0, Some(max_characters - 1.0));
                             truncated.push_str(&js("\u{2026}"));
@@ -1551,7 +1629,7 @@ impl Sidebar {
     /// `getActiveFields`: `activeFieldCallbacks` in registration order, each reading its row's
     /// rect.
     pub fn get_active_fields(&mut self, env: &mut SidebarEnv<'_>) -> IndexSet<JsString> {
-        if self.sidebar_width <= 0.0 {
+        if !self.width_is_positive() {
             return IndexSet::new();
         }
         let display = self.dfs_index_map();
@@ -1920,7 +1998,8 @@ impl Sidebar {
             self.search_callbacks.push(SearchCallback::Expand(id));
             self.expand_for_search(env, id, now)?;
             self.nodes[id].expand_listeners = true;
-            if self.expanded_fields.contains(&self.nodes[id].full_title) {
+            let title = ExpandedKey::String(self.nodes[id].full_title.clone());
+            if self.expanded_fields.contains_key(&title) {
                 self.set_expanded(env, id, true, now)?;
             }
         }
@@ -2074,16 +2153,12 @@ impl Sidebar {
         &self.tuning_value_cache
     }
 
-    pub fn expanded_fields(&self) -> &IndexSet<JsString> {
-        &self.expanded_fields
-    }
-
     pub fn field_count(&self) -> usize {
         self.field_count
     }
 
-    pub fn sidebar_width(&self) -> f64 {
-        self.sidebar_width
+    fn width_is_positive(&self) -> bool {
+        numeric(&self.sidebar_width) > 0.0
     }
 
     pub fn shadow_shown(&self) -> bool {

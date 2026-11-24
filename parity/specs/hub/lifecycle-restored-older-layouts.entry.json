@@ -1,0 +1,876 @@
+{
+  "entry": "hubSession",
+  "inputs": [
+    "logs/match.csv"
+  ],
+  "fixture": {
+    "seed": 4242,
+    "steps": [
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/match.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": [
+              "/Drive"
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "path": "INDEX.md"
+              },
+              {
+                "type": 1,
+                "legendHeight": 200,
+                "legends": {
+                  "left": {
+                    "lockedRange": null,
+                    "unitConversion": {
+                      "type": null,
+                      "factor": 1
+                    },
+                    "fields": [
+                      {
+                        "key": "/Drive/Velocity",
+                        "color": "#2b66a2",
+                        "show": true
+                      }
+                    ]
+                  },
+                  "discrete": {
+                    "fields": []
+                  },
+                  "right": {
+                    "lockedRange": null,
+                    "unitConversion": {
+                      "type": null,
+                      "factor": 1
+                    },
+                    "fields": []
+                  }
+                },
+                "title": "Line Graph"
+              },
+              {
+                "type": 2,
+                "fields": [
+                  "/Drive/Velocity"
+                ],
+                "title": "Table"
+              },
+              {
+                "type": 3,
+                "field": null,
+                "title": "Console"
+              },
+              {
+                "type": 4,
+                "fields": [
+                  "/Drive/Velocity",
+                  null,
+                  null
+                ],
+                "selectionType": "full",
+                "selectionRangeMin": 0,
+                "selectionRangeMax": 10,
+                "measurementType": "independent",
+                "measurementSampling": "fixed",
+                "measurementSamplingPeriod": 20,
+                "histogramMin": 0,
+                "histogramMax": 10,
+                "histogramStep": 1,
+                "title": "Statistics"
+              },
+              {
+                "type": 5,
+                "uuid": "abc",
+                "fields": [
+                  null
+                ],
+                "listFields": [
+                  []
+                ],
+                "options": {
+                  "game": "2024 Field",
+                  "unitDistance": "meters",
+                  "unitRotation": "radians",
+                  "origin": "auto",
+                  "size": 0.75,
+                  "allianceBumpers": "auto",
+                  "orientation": "red, blue"
+                },
+                "configHidden": false,
+                "visualizer": null,
+                "title": "Odometry"
+              },
+              {
+                "type": 9,
+                "uuid": "def",
+                "fields": [
+                  null,
+                  null
+                ],
+                "listFields": [
+                  []
+                ],
+                "options": {
+                  "maxSpeed": 5
+                },
+                "configHidden": true,
+                "visualizer": null,
+                "title": "Swerve"
+              },
+              {
+                "type": 12,
+                "title": "Metadata"
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "v3.2.1"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": [
+              "/Drive"
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "#/",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "Line Graph",
+                "controller": {
+                  "leftSources": [
+                    {
+                      "type": "stepped",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#2b66a2",
+                        "size": "normal"
+                      }
+                    }
+                  ],
+                  "rightSources": [],
+                  "discreteSources": [
+                    {
+                      "type": "stripes",
+                      "logKey": "/DriverStation/Enabled",
+                      "logType": "Boolean",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "leftLockedRange": null,
+                  "rightLockedRange": null,
+                  "leftUnitConversion": {
+                    "type": null,
+                    "factor": 1
+                  },
+                  "rightUnitConversion": {
+                    "type": null,
+                    "factor": 1
+                  },
+                  "leftFilter": 0,
+                  "rightFilter": 0
+                },
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "v4.1.6-line-graph"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": [
+              "/Drive"
+            ]
+          },
+          "tabs": {
+            "selected": 2,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "#/",
+                "controlsHeight": 0
+              },
+              {
+                "type": 2,
+                "title": "Odometry",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "robot",
+                      "logKey": "/Odometry/Robot",
+                      "logType": "Pose2d",
+                      "visible": true,
+                      "options": {}
+                    }
+                  ],
+                  "game": "2025 Field",
+                  "bumpers": "auto",
+                  "origin": "blue",
+                  "orientation": 0,
+                  "size": 30
+                },
+                "controllerUUID": "odo",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 6,
+                "title": "Statistics",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "independent",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#2b66a2"
+                      }
+                    }
+                  ],
+                  "timeRange": "full",
+                  "rangeMin": 0,
+                  "rangeMax": 10,
+                  "stepSize": 1
+                },
+                "controllerUUID": "stats",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 7,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "video",
+                "renderer": null,
+                "controlsHeight": 85
+              },
+              {
+                "type": 8,
+                "title": "",
+                "controller": [
+                  "None",
+                  "None",
+                  "None",
+                  "None",
+                  "None",
+                  "None"
+                ],
+                "controllerUUID": "joy",
+                "renderer": null,
+                "controlsHeight": 85
+              },
+              {
+                "type": 11,
+                "title": "",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "plus",
+                      "logKey": "/Vision/Points",
+                      "logType": "NumberArray",
+                      "visible": true,
+                      "options": {
+                        "size": "medium",
+                        "groupSize": "1"
+                      }
+                    }
+                  ],
+                  "width": 640,
+                  "height": 480,
+                  "orientation": "+X,-Y",
+                  "origin": "center"
+                },
+                "controllerUUID": "points",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 12,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "meta",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "v4.1.6-others"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": [
+              "/Drive"
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "#/",
+                "controlsHeight": 0
+              },
+              {
+                "type": 2,
+                "title": "Odometry",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "robot",
+                      "logKey": "/Odometry/Robot",
+                      "logType": "Pose2d",
+                      "visible": true,
+                      "options": {}
+                    },
+                    {
+                      "type": "robotLegacy",
+                      "logKey": "/Odometry/Old",
+                      "logType": "NumberArray",
+                      "visible": true,
+                      "options": {
+                        "format": "Pose2d",
+                        "units": "radians"
+                      }
+                    },
+                    {
+                      "type": "ghost",
+                      "logKey": "/Odometry/Ghost",
+                      "logType": "Pose2d",
+                      "visible": true,
+                      "options": {
+                        "color": "#00ff00"
+                      }
+                    }
+                  ],
+                  "game": "2025 Field",
+                  "bumpers": "blue",
+                  "origin": "auto",
+                  "orientation": 3,
+                  "size": 24
+                },
+                "controllerUUID": "odo",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "v4.1.6-odometry-legacy"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": [
+              "/Drive"
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "#/",
+                "controlsHeight": 0
+              },
+              {
+                "type": 3,
+                "title": "3D Field",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "robot",
+                      "logKey": "/Odometry/Robot",
+                      "logType": "Pose2d",
+                      "visible": true,
+                      "options": {
+                        "model": "KitBot"
+                      }
+                    },
+                    {
+                      "type": "swerveStates",
+                      "logKey": "/Drive/States",
+                      "logType": "SwerveModuleState[]",
+                      "visible": true,
+                      "options": {
+                        "color": "#ff0000",
+                        "arrangement": "0,1,2,3"
+                      }
+                    }
+                  ],
+                  "game": "2025 Field",
+                  "origin": "blue"
+                },
+                "controllerUUID": "td",
+                "renderer": {
+                  "cameraIndex": -1,
+                  "orbitFov": 50,
+                  "cameraPosition": [
+                    0,
+                    1,
+                    2
+                  ],
+                  "cameraTarget": [
+                    0,
+                    0,
+                    0
+                  ]
+                },
+                "controlsHeight": 200
+              },
+              {
+                "type": 4,
+                "title": "",
+                "controller": [],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "v4.1.6-3d"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": [
+              "/Drive"
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "#/",
+                "controlsHeight": 0
+              },
+              {
+                "type": 9,
+                "title": "Swerve",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "states",
+                      "logKey": "/Drive/States",
+                      "logType": "SwerveModuleState[]",
+                      "visible": true,
+                      "options": {
+                        "color": "#ff0000",
+                        "arrangement": "0,1,2,3"
+                      }
+                    },
+                    {
+                      "type": "chassisSpeeds",
+                      "logKey": "/Drive/Speeds",
+                      "logType": "ChassisSpeeds",
+                      "visible": true,
+                      "options": {
+                        "color": "#ff0000"
+                      }
+                    },
+                    {
+                      "type": "rotation",
+                      "logKey": "/Drive/Rotation",
+                      "logType": "Rotation2d",
+                      "visible": true,
+                      "options": {}
+                    }
+                  ],
+                  "maxSpeed": 4.5,
+                  "sizeX": 0.7,
+                  "sizeY": 0.7,
+                  "orientation": 1
+                },
+                "controllerUUID": "sw",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "v4.1.6-swerve"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": [
+              "/Drive"
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "#/",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "Line Graph",
+                "controller": {
+                  "leftSources": [
+                    {
+                      "type": "stepped",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#2b66a2",
+                        "size": "normal"
+                      }
+                    }
+                  ],
+                  "rightSources": [],
+                  "discreteSources": [
+                    {
+                      "type": "stripes",
+                      "logKey": "/DriverStation/Enabled",
+                      "logType": "Boolean",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "leftLockedRange": null,
+                  "rightLockedRange": null,
+                  "leftUnitConversion": {
+                    "autoTarget": null,
+                    "preset": null
+                  },
+                  "rightUnitConversion": {
+                    "autoTarget": null,
+                    "preset": null
+                  },
+                  "leftFilter": 0,
+                  "rightFilter": 0
+                },
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 2,
+                "title": "2D Field",
+                "controller": {
+                  "sources": [
+                    {
+                      "type": "robot",
+                      "logKey": "/Odometry/Robot",
+                      "logType": "Pose2d",
+                      "visible": true,
+                      "options": {
+                        "bumpers": ""
+                      }
+                    }
+                  ],
+                  "field": "2025 Field",
+                  "orientation": 0,
+                  "size": "large"
+                },
+                "controllerUUID": "f2",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 5,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "con",
+                "renderer": {
+                  "highlight": true
+                },
+                "controlsHeight": 0
+              },
+              {
+                "type": 10,
+                "title": "",
+                "controller": [
+                  {
+                    "type": "mechanism",
+                    "logKey": "/Mechanism",
+                    "logType": "Mechanism2d",
+                    "visible": true,
+                    "options": {}
+                  }
+                ],
+                "controllerUUID": "mech",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 12,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "meta",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "v26.0.2"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": [
+              "/Drive"
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "#/",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": {
+                  "leftSources": [
+                    {
+                      "type": "points",
+                      "logKey": "/Drive/Velocity",
+                      "logType": "Number",
+                      "visible": true,
+                      "options": {
+                        "color": "#2b66a2",
+                        "size": "normal"
+                      }
+                    }
+                  ],
+                  "rightSources": [],
+                  "discreteSources": [
+                    {
+                      "type": "stripes",
+                      "logKey": "/DriverStation/Enabled",
+                      "logType": "Boolean",
+                      "visible": true,
+                      "options": {
+                        "color": "#e5b31b"
+                      }
+                    }
+                  ],
+                  "leftLockedRange": null,
+                  "rightLockedRange": null,
+                  "leftUnitConversion": {
+                    "autoTarget": null,
+                    "preset": null
+                  },
+                  "rightUnitConversion": {
+                    "autoTarget": null,
+                    "preset": null
+                  },
+                  "leftFilter": 0,
+                  "rightFilter": 0
+                },
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "v26.0.2-points-size"
+      }
+    ],
+    "ignoreMain": [
+      "save-state",
+      "update-touch-bar-slider",
+      "save-type-memory"
+    ]
+  }
+}

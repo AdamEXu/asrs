@@ -21,6 +21,7 @@ use asrs_formats::historical::{
 };
 use asrs_formats::worker::{Abort, DecodeWorker, Request, Response};
 use asrs_js::number;
+use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{Clock, Rng};
 use asrs_js::value::{JsObject, JsValue, ToJs};
@@ -34,7 +35,6 @@ use asrs_log::realm::JsRealm;
 use asrs_log::util::{calc_mock_progress, clamp_value, scale_value};
 use asrs_model::assets::AdvantageScopeAssets;
 use asrs_model::build_constants::{DISTRIBUTION, Distribution, IS_LITE};
-use asrs_model::hub_state::SidebarState;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::{Selection, TimeSupplier};
@@ -1932,22 +1932,17 @@ impl HubModel {
     /// `saveState()`.
     pub fn save_state(&self) -> JsValue {
         let mut o = JsObject::new();
-        o.insert("sidebar", self.sidebar.save_state().to_js());
+        o.insert("sidebar", self.sidebar.save_state());
         o.insert("tabs", self.tabs.save_state(&self.page));
         JsValue::Object(o)
     }
 
     /// `restoreState(state)`.
     fn restore_state(&mut self, state: &JsValue) -> Result<(), TabsError> {
-        let sidebar = state.get("sidebar").cloned().unwrap_or_default();
-        let Some(sidebar) = SidebarState::from_js(&sidebar) else {
-            return Err(TabsError::Unmodeled(
-                "restore-state with a sidebar of another shape",
-            ));
-        };
-        let outcome = self.with_sidebar(|s, env| s.restore_state(env, &sidebar));
+        let sidebar = ops::get(state, "sidebar")?;
+        let outcome = self.with_sidebar(|s, env| s.restore_state(env, &sidebar))?;
         sidebar_result(outcome)?;
-        let tabs = state.get("tabs").cloned().unwrap_or_default();
+        let tabs = ops::get(state, "tabs")?;
         self.tabs.restore_state(&mut self.page, &tabs)
     }
 
