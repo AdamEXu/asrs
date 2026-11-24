@@ -1377,7 +1377,7 @@ for focused text inputs, webviews and the scenario's mask selectors, the canvas 
 list, and a `timing` object that differs between runs), `<name>.canvas-<i>.png` (`getImageData`
 on each visible 2D canvas) and `<name>.gl-<i>.png`. Each GL entry names its render mode (`mode`:
 `standard`, `low-power` or `cinematic`, read from the context's `powerPreference`, which
-`Field3dRendererImpl` sets from the mode alone), and gate 4 picks its rule from it. On the `app`
+`Field3dRendererImpl` sets from the mode alone), and gate 4 requires the same one of the port. On the `app`
 page the capture also waits for the next `save-state` and writes its data as
 `<name>.hub-state.json` (`JSON.stringify`, compared byte for byte) and records
 `selection.getTimelineRange()` as `timelineRange` (compared within 1e-9 of the span: Chromium

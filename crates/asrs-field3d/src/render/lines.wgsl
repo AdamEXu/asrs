@@ -107,6 +107,12 @@ fn fs_fat_line_aux(in: FatLineOut) -> AuxOut {
     return out;
 }
 
+@fragment
+fn fs_fat_line_aux_samples(in: FatLineOut) -> AuxSamplesOut {
+    round_cap_discard(in.uv);
+    return aux_samples(draw.extra.y * 2u);
+}
+
 struct BasicOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) color: vec4<f32>,
@@ -158,4 +164,9 @@ fn fs_basic_aux() -> AuxOut {
     out.opaque_id = draw.extra.y * 2u;
     out.transparent_id = draw.extra.y * 2u;
     return out;
+}
+
+@fragment
+fn fs_basic_aux_samples() -> AuxSamplesOut {
+    return aux_samples(draw.extra.y * 2u);
 }
