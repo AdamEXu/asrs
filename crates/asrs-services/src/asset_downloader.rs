@@ -11,6 +11,7 @@ use asrs_js::time::{LocalZone, to_locale_time_string};
 use asrs_js::value::JsValue;
 
 use crate::asset_loader::AssetFolders;
+use crate::content_encoding::decode_body;
 use crate::download_deps::{
     disposition_filename, ext_name_mime, filenamify, url_parse_lax, url_path_basename,
 };
@@ -28,6 +29,39 @@ pub const GITHUB_ASSET_TAG_FRC6328: &str = "frc-6328-assets-v2";
 pub const REQUIRED_SPACE_GB: f64 = 8.0;
 pub const FAILURE_TIMEOUT_MS: f64 = 30.0 * 1000.0;
 pub const SUCCESS_TIMEOUT_MS: f64 = 6.0 * 60.0 * 60.0 * 1000.0;
+
+/// `is-retry-allowed`'s blacklist.
+const NO_RETRY: [&str; 29] = [
+    "ENOTFOUND",
+    "ENETUNREACH",
+    "UNABLE_TO_GET_ISSUER_CERT",
+    "UNABLE_TO_GET_CRL",
+    "UNABLE_TO_DECRYPT_CERT_SIGNATURE",
+    "UNABLE_TO_DECRYPT_CRL_SIGNATURE",
+    "UNABLE_TO_DECODE_ISSUER_PUBLIC_KEY",
+    "CERT_SIGNATURE_FAILURE",
+    "CRL_SIGNATURE_FAILURE",
+    "CERT_NOT_YET_VALID",
+    "CERT_HAS_EXPIRED",
+    "CRL_NOT_YET_VALID",
+    "CRL_HAS_EXPIRED",
+    "ERROR_IN_CERT_NOT_BEFORE_FIELD",
+    "ERROR_IN_CERT_NOT_AFTER_FIELD",
+    "ERROR_IN_CRL_LAST_UPDATE_FIELD",
+    "ERROR_IN_CRL_NEXT_UPDATE_FIELD",
+    "OUT_OF_MEM",
+    "DEPTH_ZERO_SELF_SIGNED_CERT",
+    "SELF_SIGNED_CERT_IN_CHAIN",
+    "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+    "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+    "CERT_CHAIN_TOO_LONG",
+    "CERT_REVOKED",
+    "INVALID_CA",
+    "PATH_LENGTH_EXCEEDED",
+    "INVALID_PURPOSE",
+    "CERT_UNTRUSTED",
+    "CERT_REJECTED",
+];
 
 const FETCH_TIMEOUT_MS: f64 = 5000.0;
 const DISK_FAIL_STATUS: &str = "Not enough disk space. Trying again soon.";
@@ -60,7 +94,8 @@ pub enum FetchOutcome {
     Response { status: u16, body: Option<Vec<u8>> },
     /// `fetch` rejects at once.
     NetworkError,
-    /// No response ever arrives; only the abort signal ends the call.
+    /// No response yet: [`AssetDownloader::fetched`] delivers it, unless the abort signal ends the
+    /// call first.
     Hang,
 }
 
@@ -81,11 +116,26 @@ pub enum HttpOutcome {
         headers: Vec<(String, String)>,
         body: Vec<u8>,
     },
+    /// The connection ends inside the body: cleanly, which got waits on for good, or with the
+    /// error of this code, which it retries.
+    Truncated {
+        status: u16,
+        headers: Vec<(String, String)>,
+        body: Vec<u8>,
+        code: Option<String>,
+    },
+    /// The body is not what its `content-encoding` says.
+    Undecodable,
     /// The connection drops before a response (`ECONNRESET`).
     Reset,
-    /// The request never completes.
+    /// The request fails before a response with this `error.code`.
+    Error(String),
+    /// No outcome yet: [`AssetDownloader::answered`] delivers it, if there ever is one.
     Hang,
 }
+
+pub type FetchId = u64;
+pub type RequestId = usize;
 
 /// A rejected promise from the host; upstream catches it without looking at the reason.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -97,9 +147,14 @@ pub trait DownloadHost {
     /// rejection.
     fn free_space(&mut self, path: &str) -> Result<f64, Rejected>;
 
-    fn fetch(&mut self, request: &FetchRequest) -> FetchOutcome;
+    fn fetch(&mut self, id: FetchId, request: &FetchRequest) -> FetchOutcome;
 
-    fn request(&mut self, request: &HttpRequest) -> HttpOutcome;
+    fn request(&mut self, id: RequestId, request: &HttpRequest) -> HttpOutcome;
+
+    /// `Date.now()` with the timers' clock at `clock_ms`.
+    fn now(&mut self, clock_ms: f64) -> f64 {
+        clock_ms
+    }
 
     /// `Math.random()`, which got's retry backoff adds as noise.
     fn random(&mut self) -> f64;
@@ -131,6 +186,9 @@ struct Download {
     target: String,
     generation: u64,
     settled: bool,
+    /// The response got gave `download`, and what arrived of its body before the connection
+    /// failed.
+    cut: Option<(Vec<(String, String)>, Vec<u8>)>,
 }
 
 enum TimerKind {
@@ -239,6 +297,33 @@ impl AssetDownloader {
         self.clock = to_ms;
     }
 
+    /// The outcome of a [`DownloadHost::fetch`] that answered [`FetchOutcome::Hang`].
+    pub fn fetched(
+        &mut self,
+        id: FetchId,
+        outcome: FetchOutcome,
+        fs: &dyn Fs,
+        host: &mut dyn DownloadHost,
+        zone: &impl LocalZone,
+    ) {
+        if id == self.abort_seq {
+            self.settle_fetch(outcome, fs, host, zone);
+        }
+    }
+
+    /// The outcome of a [`DownloadHost::request`] that answered [`HttpOutcome::Hang`].
+    pub fn answered(
+        &mut self,
+        id: RequestId,
+        outcome: HttpOutcome,
+        fs: &dyn Fs,
+        host: &mut dyn DownloadHost,
+    ) {
+        if self.downloads.get(id).is_some_and(|dl| !dl.settled) {
+            self.settle_request(id, outcome, fs, host);
+        }
+    }
+
     /// Every pending timer, in any order.
     pub fn timers(&self) -> Vec<Timer> {
         self.timers
@@ -305,7 +390,7 @@ impl AssetDownloader {
         };
         self.abort_seq = self.push_timer(FETCH_TIMEOUT_MS, TimerKind::AbortFetch);
         self.fetch_pending = true;
-        let outcome = host.fetch(&request);
+        let outcome = host.fetch(self.abort_seq, &request);
         self.settle_fetch(outcome, fs, host, zone);
     }
 
@@ -344,7 +429,7 @@ impl AssetDownloader {
         };
         self.status = format!(
             "Download started at {}. Please wait a few minutes for the download to complete.",
-            to_locale_time_string(self.clock, zone)
+            to_locale_time_string(host.now(self.clock), zone)
         );
         self.targets = infos.iter().map(|i| i.target.clone()).collect();
         self.generation += 1;
@@ -468,6 +553,7 @@ impl AssetDownloader {
             target: info.target.clone(),
             generation: self.generation,
             settled: false,
+            cut: None,
         });
         self.pending += 1;
         self.issue_request(index, fs, host);
@@ -494,57 +580,102 @@ impl AssetDownloader {
                 ),
             ],
         };
-        match host.request(&request) {
-            HttpOutcome::Hang => {}
-            HttpOutcome::Reset => {
-                self.downloads[di].retries += 1;
-                if self.downloads[di].retries > 2 {
-                    self.fail_download(di);
-                } else {
-                    let delay = f64::from(1u32 << self.downloads[di].retries) * 1000.0
-                        + host.random() * 100.0;
-                    self.push_timer(delay, TimerKind::Retry(di));
-                }
-            }
+        let outcome = host.request(di, &request);
+        self.settle_request(di, outcome, fs, host);
+    }
+
+    fn settle_request(
+        &mut self,
+        di: usize,
+        outcome: HttpOutcome,
+        fs: &dyn Fs,
+        host: &mut dyn DownloadHost,
+    ) {
+        let (status, headers, body, cut) = match outcome {
+            HttpOutcome::Hang => return,
+            HttpOutcome::Reset => return self.retry(di, "ECONNRESET", host),
+            HttpOutcome::Error(code) => return self.retry(di, &code, host),
+            HttpOutcome::Undecodable => return self.fail_download(di),
             HttpOutcome::Response {
                 status,
                 headers,
                 body,
-            } => {
-                let location = headers
-                    .iter()
-                    .find(|(name, _)| name == "location")
-                    .map(|(_, v)| v.clone());
-                if let Some(location) = location
-                    .filter(|_| matches!(status, 300 | 301 | 302 | 303 | 304 | 305 | 307 | 308))
-                {
-                    if self.downloads[di].redirects >= 10 {
-                        self.fail_download(di);
-                        return;
-                    }
-                    self.downloads[di].redirects += 1;
-                    let bytes: Vec<u8> =
-                        location.chars().map(|c| (c as u32 & 0xff) as u8).collect();
-                    let location = String::from_utf8_lossy(&bytes).into_owned();
-                    let mut base = self.downloads[di].url.clone();
-                    base.protocol = Some(self.downloads[di].protocol.clone());
-                    match legacy_url::resolve(&legacy_url::format(&base), &location)
-                        .and_then(|r| legacy_url::parse(&r, false))
-                    {
-                        Ok(url) => {
-                            self.downloads[di].protocol = url.protocol.clone().unwrap_or_default();
-                            self.downloads[di].url = url;
-                            self.issue_request(di, fs, host);
-                        }
-                        Err(Invalid) => self.fail_download(di),
-                    }
-                } else if (200..=299).contains(&status) || status == 304 {
-                    self.complete_download(di, &headers, &body, fs, host);
-                } else {
-                    self.fail_download(di);
+            } => (status, headers, body, None),
+            HttpOutcome::Truncated {
+                status,
+                headers,
+                body,
+                code,
+            } => (status, headers, body, Some(code)),
+        };
+        let location = headers
+            .iter()
+            .find(|(name, _)| name == "location")
+            .map(|(_, v)| v.clone());
+        if let Some(location) =
+            location.filter(|_| matches!(status, 300 | 301 | 302 | 303 | 304 | 305 | 307 | 308))
+        {
+            if self.downloads[di].redirects >= 10 {
+                self.fail_download(di);
+                return;
+            }
+            self.downloads[di].redirects += 1;
+            let bytes: Vec<u8> = location.chars().map(|c| (c as u32 & 0xff) as u8).collect();
+            let location = String::from_utf8_lossy(&bytes).into_owned();
+            let mut base = self.downloads[di].url.clone();
+            base.protocol = Some(self.downloads[di].protocol.clone());
+            match legacy_url::resolve(&legacy_url::format(&base), &location)
+                .and_then(|r| legacy_url::parse(&r, false))
+            {
+                Ok(url) => {
+                    self.downloads[di].protocol = url.protocol.clone().unwrap_or_default();
+                    self.downloads[di].url = url;
+                    self.issue_request(di, fs, host);
+                }
+                Err(Invalid) => self.fail_download(di),
+            }
+            return;
+        }
+        if !(200..=299).contains(&status) && status != 304 {
+            self.fail_download(di);
+            return;
+        }
+        let encoding = headers
+            .iter()
+            .find(|(name, _)| name == "content-encoding")
+            .map(|(_, v)| v.as_str());
+        let Ok(mut body) = decode_body(encoding, body) else {
+            self.fail_download(di);
+            return;
+        };
+        let (headers, body) = match self.downloads[di].cut.take() {
+            None => (headers, body),
+            Some((first, mut partial)) => {
+                partial.append(&mut body);
+                (first, partial)
+            }
+        };
+        match cut {
+            None => self.complete_download(di, &headers, &body, fs, host),
+            Some(code) => {
+                self.downloads[di].cut = Some((headers, body));
+                if let Some(code) = code {
+                    self.retry(di, &code, host);
                 }
             }
         }
+    }
+
+    /// got's `retries`, with `is-retry-allowed`.
+    fn retry(&mut self, di: usize, code: &str, host: &mut dyn DownloadHost) {
+        self.downloads[di].retries += 1;
+        let retries = self.downloads[di].retries;
+        if retries > 2 || NO_RETRY.contains(&code) {
+            self.fail_download(di);
+            return;
+        }
+        let delay = f64::from(1u32 << retries) * 1000.0 + host.random() * 100.0;
+        self.push_timer(delay, TimerKind::Retry(di));
     }
 
     fn complete_download(

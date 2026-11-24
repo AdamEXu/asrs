@@ -10,8 +10,8 @@ use asrs_js::time::NamedZone;
 use asrs_parity::vectors::check_records;
 use asrs_parity::{Json, Record, Utf16String};
 use asrs_services::asset_downloader::{
-    AssetDownloader, Distribution, DownloadHost, FetchOutcome, FetchRequest, HttpOutcome,
-    HttpRequest, Rejected, Timer,
+    AssetDownloader, Distribution, DownloadHost, FetchId, FetchOutcome, FetchRequest, HttpOutcome,
+    HttpRequest, Rejected, RequestId, Timer,
 };
 use asrs_services::asset_loader::AssetFolders;
 use asrs_services::fs::MemFs;
@@ -132,14 +132,14 @@ impl DownloadHost for Host {
         self.free.ok_or(Rejected)
     }
 
-    fn fetch(&mut self, request: &FetchRequest) -> FetchOutcome {
+    fn fetch(&mut self, _: FetchId, request: &FetchRequest) -> FetchOutcome {
         self.fetch_log.push(request.clone());
         self.fetches
             .pop_front()
             .unwrap_or(FetchOutcome::NetworkError)
     }
 
-    fn request(&mut self, request: &HttpRequest) -> HttpOutcome {
+    fn request(&mut self, _: RequestId, request: &HttpRequest) -> HttpOutcome {
         self.request_log.push(request.clone());
         self.serves
             .get_mut(&request.url)

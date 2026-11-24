@@ -33,7 +33,7 @@ fn u64le(buf: &[u8], at: usize) -> u64 {
     u64::from(u32le(buf, at + 4)) * 0x1_0000_0000 + u64::from(u32le(buf, at))
 }
 
-fn crc32(data: &[u8]) -> u32 {
+pub(crate) fn crc32(data: &[u8]) -> u32 {
     let mut table = [0u32; 256];
     for (i, e) in table.iter_mut().enumerate() {
         let mut c = i as u32;

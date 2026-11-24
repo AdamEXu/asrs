@@ -8,8 +8,8 @@ use std::path::{Path, PathBuf};
 
 use asrs_js::time::NamedZone;
 use asrs_services::asset_downloader::{
-    AssetDownloader, Distribution, DownloadHost, FetchOutcome, FetchRequest, HttpOutcome,
-    HttpRequest, Rejected,
+    AssetDownloader, Distribution, DownloadHost, FetchId, FetchOutcome, FetchRequest, HttpOutcome,
+    HttpRequest, Rejected, RequestId,
 };
 use asrs_services::asset_loader::AssetFolders;
 use asrs_services::fs::RealFs;
@@ -26,7 +26,7 @@ impl DownloadHost for Host {
         Ok(1e12)
     }
 
-    fn fetch(&mut self, _: &FetchRequest) -> FetchOutcome {
+    fn fetch(&mut self, _: FetchId, _: &FetchRequest) -> FetchOutcome {
         let body = format!(
             r#"[{{"tag_name":"default-assets-v2","assets":[{{"name":"Field2d_X.zip","browser_download_url":"{ASSET_URL}"}}]}}]"#
         );
@@ -36,7 +36,7 @@ impl DownloadHost for Host {
         }
     }
 
-    fn request(&mut self, request: &HttpRequest) -> HttpOutcome {
+    fn request(&mut self, _: RequestId, request: &HttpRequest) -> HttpOutcome {
         assert_eq!(request.url, ASSET_URL);
         HttpOutcome::Response {
             status: 200,
