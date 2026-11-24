@@ -296,7 +296,7 @@ async fn serve_http(
             key.eq_ignore_ascii_case(name).then(|| value.trim())
         })
     };
-    let host = header("host").unwrap_or_default().to_owned();
+    let host = header("host").expect("a Host header").to_owned();
     let path = head.split(' ').nth(1).unwrap_or("/").to_owned();
     if header("upgrade").is_some() {
         return serve_ws(id, stream, format!("ws://{host}{path}"), events, shared).await;
@@ -327,12 +327,14 @@ async fn serve_ws(
     shared: &Shared,
 ) {
     let choose = |request: &Request, mut response: Response| {
-        let protocols = request
-            .headers()
-            .get("Sec-WebSocket-Protocol")
-            .and_then(|v| v.to_str().ok())
-            .map(|v| v.split(", ").map(str::to_owned).collect())
-            .unwrap_or_default();
+        let requested = request.headers().get("Sec-WebSocket-Protocol");
+        let protocols = match requested {
+            Some(list) => {
+                let list = list.to_str().expect("subprotocol names");
+                list.split(", ").map(str::to_owned).collect()
+            }
+            None => Vec::new(),
+        };
         let opened = ClientEvent::WsOpen { id, url, protocols };
         let reply = with(shared, |state| state.client(opened));
         let Some(ServerEvent::WsAccept { protocol, .. }) = reply.first() else {

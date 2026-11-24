@@ -623,7 +623,7 @@ fn sent_text(seen: &[ClientEvent]) -> Vec<Json> {
             } => json::parse(text).ok(),
             _ => None,
         })
-        .flat_map(|list| list.as_array().map(<[Json]>::to_vec).unwrap_or_default())
+        .flat_map(|list| list.as_array().expect("a list").to_vec())
         .collect()
 }
 
