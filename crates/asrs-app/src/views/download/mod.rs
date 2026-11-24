@@ -347,6 +347,7 @@ impl DownloadWindow {
     ) -> Div {
         let button = IconButton::new(id, Symbol::named(icon).expect("download icon"))
             .size(BUTTON_SIZE as f32, BUTTON_SIZE as f32)
+            .title(if id == EXIT { "Cancel" } else { "Download" })
             .blurred(self.page.blurred())
             .track_focus(focus)
             .on_click(cx.listener(move |view, _, _, cx| {

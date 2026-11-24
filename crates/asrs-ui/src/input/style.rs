@@ -67,6 +67,8 @@ pub struct FieldStyle {
     /// `::-webkit-search-cancel-button` restyled as `symbols/cancel.svg`, one `em` square.
     pub cancel_button: bool,
     pub cancel_filter: &'static str,
+    /// Whether a number input has `::-webkit-inner-spin-button`.
+    pub spin_button: bool,
 }
 
 const UA_PADDING: [f32; 4] = [1.0, 2.0, 1.0, 2.0];
@@ -85,6 +87,7 @@ impl FieldStyle {
         focus_background: None,
         cancel_button: false,
         cancel_filter: "",
+        spin_button: true,
     };
 
     /// `input.side-bar-search` in `hub.css`.
@@ -110,6 +113,7 @@ impl FieldStyle {
             } else {
                 ""
             },
+            spin_button: false,
         }
     }
 
@@ -124,6 +128,7 @@ impl FieldStyle {
             },
             placeholder_opacity: 0.6,
             focus_background: Some(0xffffaaff),
+            spin_button: false,
             ..FieldStyle::NATIVE
         }
     }
@@ -132,6 +137,7 @@ impl FieldStyle {
     pub fn setting_block() -> FieldStyle {
         FieldStyle {
             align: Align::Center,
+            spin_button: false,
             ..FieldStyle::NATIVE
         }
     }

@@ -22,6 +22,7 @@ use asrs_ui::platform;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, snap_remainder};
 use asrs_ui::theme::Appearance;
+use asrs_ui::tooltip::titled;
 
 use super::layout::{
     self, BUTTON_BOTTOM, BUTTON_SIZE, CONFIRM_RIGHT, ControlHeights, EXIT_RIGHT, HELP_RIGHT,
@@ -443,6 +444,11 @@ impl PromptWindow {
     ) -> Div {
         let button = IconButton::new(id, Symbol::named(icon).expect("prompt icon"))
             .size(BUTTON_SIZE as f32, BUTTON_SIZE as f32)
+            .title(match id {
+                EXIT => "Cancel",
+                _ if self.page.has_help() => "Export",
+                _ => "Confirm",
+            })
             .blurred(self.page.blurred())
             .track_focus(focus)
             .on_click(cx.listener(move |view, _, window, cx| view.click(f, window, cx)));
@@ -513,8 +519,40 @@ impl PromptWindow {
             .h(px(BUTTON_SIZE as f32));
         div()
             .child(probed("div.help-div", boxed))
-            .child(link)
+            .child(titled("Open export documentation", link))
             .into_any_element()
+    }
+}
+
+/// The `title` of the control with this id, in whichever page has it.
+fn control_title(id: &str) -> &'static str {
+    match id {
+        "max" => "Maximum value",
+        "min" => "Minimum value",
+        "fov" => "Set camera field of view (degrees)",
+        "name" => "Enter tab name",
+        "unitType" => "Select unit dimension type",
+        "fromUnit" => "Select unit to convert from",
+        "toUnit" => "Select unit to convert to",
+        "extraFactor" => "Enter custom scale factor (multiplier)",
+        "theme" => "Select the application theme",
+        "coordinateSystem" => "Select the 3D coordinate system origin and orientation",
+        "timestamps" => "Select how timestamps are displayed",
+        "tbaApiKey" => "Enter your API key for The Blue Alliance",
+        "robotAddress" => "Enter the IP address or hostname of the robot",
+        "remotePath" => "Enter the path to log files on the robot",
+        "liveSubscribeMode" => "Select live data subscription mode",
+        "liveDiscard" => "Select how long to retain live data before discarding",
+        "publishFilter" => "Enter prefixes for NetworkTables publishing, separated by commas",
+        "field3dModeAc" => "Select the default 3D rendering mode",
+        "field3dModeBattery" => "Select the 3D rendering mode when running on battery",
+        "field3dAntialiasing" => "Toggle 3D antialiasing",
+        "format" => "Select export format",
+        "samplingMode" => "Select timestamp sampling mode",
+        "samplingPeriod" => "Enter sampling period in milliseconds",
+        "prefixes" => "Enter field prefixes to export, separated by commas (optional)",
+        "includeGenerated" => "Select whether to include generated fields in the export",
+        other => unreachable!("no control {other}"),
     }
 }
 
@@ -626,7 +664,8 @@ impl PromptWindow {
                 ("select", s.clone().into_any_element())
             }
         };
-        probed(id, positioned(bounds).child(control)).into_any_element()
+        let title = control_title(self.fields[i].id);
+        probed(id, titled(title, positioned(bounds).child(control))).into_any_element()
     }
 }
 
