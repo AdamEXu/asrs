@@ -26,9 +26,11 @@ use asrs_ui::platform;
 use asrs_ui::progress::progress;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle};
+use asrs_ui::scroll::{self, Extent, Request, Scrollbars, Step, scrollbars};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, MONOSPACE_FAMILY};
 
 use crate::views::frame::wheel_of;
+use crate::views::scrollers::smooth;
 use crate::windows::{self, SingletonOpening, WindowId};
 use line::InlineRun;
 use loading::Loading;
@@ -71,6 +73,9 @@ pub struct DownloadWindow {
     start: Start,
     offset: f64,
     wheel: WheelScroll,
+    bars: Scrollbars,
+    /// Whether the list has `mouse_press_node`.
+    pressed: bool,
     scale: f32,
     frames_since: Instant,
     loading: Loading,
@@ -112,6 +117,8 @@ impl DownloadWindow {
             start: Start::Document,
             offset: 0.0,
             wheel: WheelScroll::default(),
+            bars: Scrollbars::default(),
+            pressed: false,
             scale: window.scale_factor(),
             frames_since: cx.background_executor().now(),
             loading: Loading::default(),
@@ -274,9 +281,51 @@ impl DownloadWindow {
                         cx.stop_propagation();
                     }
                 }
-                _ => {}
+                _ => {
+                    if let Some(step) = scroll::step(&event.keystroke) {
+                        if view.scroll_key(step, window, cx) {
+                            cx.stop_propagation();
+                        }
+                    }
+                }
             });
         })
+    }
+
+    /// A key that scrolls, which the list gets with the focus or the last press.
+    fn scroll_key(&mut self, step: Step, window: &Window, cx: &mut Context<'_, Self>) -> bool {
+        let list = match self.active(window) {
+            Some(id) => id == LIST,
+            None => self.pressed,
+        };
+        if !list || !self.page.scrolls() {
+            return false;
+        }
+        let (client, max) = ([0.0, self.list_height], [0.0, self.max_scroll()]);
+        let [_, by] = step.delta(client, max, f64::from(self.scale));
+        self.smooth(by, cx);
+        true
+    }
+
+    fn smooth(&mut self, by: f64, cx: &mut Context<'_, Self>) {
+        let now = self.frame_time(cx);
+        let (offset, max) = ([0.0, self.offset], [0.0, self.max_scroll()]);
+        let wheel = smooth([0.0, by]);
+        self.wheel
+            .wheel(wheel, now, offset, max, [f64::INFINITY; 2]);
+        cx.notify();
+    }
+
+    fn bar(&mut self, request: Request, cx: &mut Context<'_, Self>) {
+        match request {
+            Request::Press => self.pressed = true,
+            Request::To([_, to]) => {
+                self.wheel.stop();
+                self.scroll_to(to);
+            }
+            Request::By([_, by]) => self.smooth(by, cx),
+        }
+        cx.notify();
     }
 
     /// Enter's click on the focused button; false when neither has focus.
@@ -567,6 +616,7 @@ impl DownloadWindow {
             .relative()
             .size_full()
             .overflow_hidden()
+            .capture_any_mouse_down(cx.listener(|view, _, _, _| view.pressed = true))
             .on_scroll(cx.listener(Self::scrolled))
             .child(content);
         if self.page.loading() {
@@ -576,6 +626,18 @@ impl DownloadWindow {
         }
         if self.page.loading() || self.wheel.animating() {
             window.request_animation_frame();
+        }
+        if self.page.scrolls() {
+            let extent = Extent {
+                content: [0.0, self.content_height()],
+                offset: [0.0, self.scroll_top()],
+                axes: [false, true],
+                dark: appearance == Appearance::Dark,
+            };
+            let view = cx.entity().downgrade();
+            list = list.child(scrollbars(&self.bars, extent, move |request, _, cx| {
+                let _ = view.update(cx, |view, cx| view.bar(request, cx));
+            }));
         }
         let shadow = inset_shadow(appearance);
         let mut boxed = div()
@@ -713,6 +775,7 @@ impl Render for DownloadWindow {
         div()
             .id("download")
             .track_focus(&self.body)
+            .capture_any_mouse_down(cx.listener(|view, _, _, _| view.pressed = false))
             .on_mouse_down(MouseButton::Left, cx.listener(Self::mouse_down))
             .relative()
             .size_full()

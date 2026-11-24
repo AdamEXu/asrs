@@ -26,7 +26,7 @@ use asrs_ui::text::{Measurer, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 use asrs_ui::tooltip::{covering, titled, untitled};
 
-use asrs_ui::scroll::{Request, scrollbars};
+use asrs_ui::scroll::{Extent, Request, scrollbars};
 
 use crate::hub::Hub;
 use crate::views::frame::wheel_of;
@@ -834,7 +834,10 @@ impl SidebarView {
         let results = cx.entity().downgrade();
         let results_bars = scrollbars(
             &self.results_scroll.bars,
-            self.results_scroll.extent(),
+            Extent {
+                dark,
+                ..self.results_scroll.extent()
+            },
             move |request, window, cx| {
                 let scale = f64::from(window.scale_factor());
                 let _ = results.update(cx, |view, cx| {
