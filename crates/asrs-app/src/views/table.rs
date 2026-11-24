@@ -349,6 +349,7 @@ fn cell_block(
             start: 0,
         }],
         font: style.font,
+        truncates: false,
     }
 }
 

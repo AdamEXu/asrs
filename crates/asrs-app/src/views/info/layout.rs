@@ -12,6 +12,7 @@ use asrs_tabs::info::beta_welcome::CHECKBOXES;
 use asrs_tabs::info::source_list_help::HelpItem;
 use asrs_tabs::info::{BetaWelcome, License};
 use asrs_ui::input::style::CONTROL_FONT;
+use asrs_ui::selection::Place;
 use asrs_ui::selection::geometry::{Block, Line, Piece};
 use asrs_ui::text::TextStyle;
 use asrs_ui::theme::FONT_FAMILY;
@@ -65,6 +66,7 @@ impl TextBlock {
         Block {
             lines: lines.collect(),
             font: self.style.font,
+            truncates: false,
         }
     }
 
@@ -197,6 +199,7 @@ impl Paragraphs {
         Block {
             lines,
             font: style.font,
+            truncates: false,
         }
     }
 
@@ -433,7 +436,179 @@ fn help_item(
     }
 }
 
+/// A block of the help page's text.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HelpBlock {
+    pub text: String,
+    pub block: Block,
+    pub origin: [Lu; 2],
+    pub place: Place,
+}
+
+/// What a vertical stretch of the help page has for the pointer: `from..` its bottom, the last
+/// block included.
+#[derive(Clone, Debug, PartialEq)]
+pub struct HelpBand {
+    pub bottom: Lu,
+    /// The block at each of its parts, left to right, with the part's right edge.
+    pub parts: Vec<(Lu, usize)>,
+    /// The blocks of the table it is in.
+    pub table: Option<(LuRect, Range<usize>)>,
+    /// The right edge of the icon before its text.
+    pub icon: Option<Lu>,
+}
+
+/// The help page's text in document order.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct HelpText {
+    pub blocks: Vec<HelpBlock>,
+    pub bands: Vec<HelpBand>,
+    /// The block after each item's icon, with the icon's box.
+    pub icons: Vec<(usize, LuRect)>,
+}
+
+const ICON_SIZE: f64 = 24.0;
+
+impl HelpText {
+    pub fn new(
+        typesetter: &mut Typesetter,
+        items: &[HelpItem],
+        layout: &HelpLayout,
+        scale: f32,
+    ) -> HelpText {
+        let mut out = HelpText::default();
+        let whole = Lu::MAX;
+        let line = Place {
+            newline_before: true,
+            newline_after: true,
+            gap: 1,
+            ..Place::default()
+        };
+        for (item, placed) in items.iter().zip(&layout.items) {
+            let [x, y, w, h] = placed.icon;
+            let side = length(ICON_SIZE, scale);
+            let icon = [x + (w - side) / 2, y + (h - side) / 2, side, side];
+            out.icons.push((out.blocks.len(), icon));
+            out.bands.push(HelpBand {
+                bottom: placed.header[1] + placed.header[3],
+                parts: vec![(whole, out.blocks.len())],
+                table: None,
+                icon: Some(x + w),
+            });
+            out.blocks.push(HelpBlock {
+                text: item.title.clone(),
+                block: placed.title_block(typesetter, &item.title, scale),
+                origin: [placed.title[0], placed.title[1]],
+                place: Place {
+                    after_other: true,
+                    gap: 2,
+                    ..line
+                },
+            });
+            let push = |out: &mut HelpText, rect: &LuRect, block: &TextBlock| {
+                out.bands.push(HelpBand {
+                    bottom: rect[1] + rect[3],
+                    parts: vec![(whole, out.blocks.len())],
+                    table: None,
+                    icon: None,
+                });
+                out.blocks.push(HelpBlock::new(block, line));
+            };
+            if let Some((rect, block)) = &placed.warning {
+                push(&mut out, rect, block);
+            }
+            if let Some((rect, rows)) = &placed.table {
+                let first = out.blocks.len();
+                for (r, row) in rows.iter().enumerate() {
+                    let index = out.blocks.len();
+                    let name_right = row.name_cell[0] + row.name_cell[2];
+                    out.bands.push(HelpBand {
+                        bottom: row.row[1] + row.row[3],
+                        parts: vec![(name_right, index), (whole, index + 1)],
+                        table: Some((*rect, first..first + 2 * rows.len())),
+                        icon: None,
+                    });
+                    out.blocks.push(HelpBlock::new(
+                        &row.name,
+                        Place {
+                            cell: true,
+                            tab: r > 0,
+                            newline_before: true,
+                            gap: 1,
+                            ..Place::default()
+                        },
+                    ));
+                    out.blocks.push(HelpBlock::new(
+                        &row.values,
+                        Place {
+                            cell: true,
+                            tab: true,
+                            newline_after: true,
+                            gap: 1,
+                            ..Place::default()
+                        },
+                    ));
+                }
+            }
+            push(&mut out, &placed.sources, &placed.sources_text);
+        }
+        out
+    }
+}
+
+impl HelpBlock {
+    fn new(block: &TextBlock, place: Place) -> HelpBlock {
+        HelpBlock {
+            text: block.flow.text.clone(),
+            block: block.block(),
+            origin: block.origin,
+            place,
+        }
+    }
+}
+
 impl HelpItemLayout {
+    /// `div.type-title`'s line, for selecting.
+    fn title_block(&self, typesetter: &mut Typesetter, title: &str, scale: f32) -> Block {
+        let style = help_title_style();
+        let width = Some(self.title[2]);
+        let layout = dom::layout(typesetter.backend.as_mut(), &style, title, width, scale);
+        let line = layout.lines.first();
+        let fragments = line.into_iter().flat_map(|line| {
+            let cut = line.cut_at.is_some();
+            let kept = move |f: &&dom::Fragment| !cut || f.text != dom::ELLIPSIS;
+            line.fragments.iter().filter(kept)
+        });
+        let mut from = 0;
+        let pieces = fragments.map(|f| {
+            let start = from;
+            from += f.text.len();
+            Piece {
+                range: start..from,
+                node: 0,
+                x: f.x,
+                width: f.width,
+                font: style.font,
+                tabs: false,
+            }
+        });
+        let pieces = pieces.collect();
+        let lines = line.map(|line| Line {
+            top: line.top,
+            height: line.height,
+            box_top: line.baseline - layout.ascent,
+            box_height: layout.ascent + layout.descent,
+            pieces,
+            newline: None,
+            start: 0,
+        });
+        Block {
+            lines: lines.into_iter().collect(),
+            font: style.font,
+            truncates: true,
+        }
+    }
+
     /// The line boxes `Range.getClientRects()` gives for `div.type-title`'s text: the whole
     /// text's, and where an ellipsis cuts it, what is left.
     pub fn title_rects(&self, typesetter: &mut Typesetter, title: &str, scale: f32) -> Vec<LuRect> {

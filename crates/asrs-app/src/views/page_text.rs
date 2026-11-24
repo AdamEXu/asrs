@@ -138,13 +138,13 @@ impl PlacedBlock<'_> {
 }
 
 /// What a tab's text is drawn selected with.
-pub(super) struct Selected {
+pub(crate) struct Selected {
     pub range: Range<Position>,
     pub colors: SelectionColors,
 }
 
 impl Selected {
-    pub fn paint(
+    pub(super) fn paint(
         &self,
         grid: Grid,
         block: &PlacedBlock<'_>,
@@ -478,10 +478,21 @@ pub(crate) fn edit_command(event: &KeyDownEvent) -> Option<EditCommand> {
     }
 }
 
-/// How far `LayoutBox::Autoscroll` scrolls a box for the pointer's pixel to show.
+/// `kAutoscrollBeltSize` in device px.
+const AUTOSCROLL_BELT: f64 = 20.0;
+
+/// How far a frame of `AutoscrollController`'s animation scrolls a box: a pointer less than a
+/// belt from its edge counts as a belt further out, and its pixel is scrolled into view.
 pub(crate) fn autoscroll_by([left, top, w, h]: [f64; 4], [x, y]: [f64; 2], scale: f64) -> [f64; 2] {
-    let pixel = 1.0 / scale;
+    let (pixel, belt) = (1.0 / scale, AUTOSCROLL_BELT / scale);
     [(x, left, left + w), (y, top, top + h)].map(|(at, from, to)| {
+        let at = if at < from + belt {
+            at - belt
+        } else if at > to - belt {
+            at + belt
+        } else {
+            at
+        };
         if at < from {
             at - from
         } else if at + pixel > to {

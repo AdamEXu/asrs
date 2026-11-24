@@ -38,11 +38,13 @@ pub struct Line {
 }
 
 /// A block's lines, top to bottom.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Block {
     pub lines: Vec<Line>,
     /// The font of the block's `<br>`s.
     pub font: FontSpec,
+    /// `text-overflow: ellipsis` (`ShouldTruncateOverflowingText`).
+    pub truncates: bool,
 }
 
 /// `[x, y, width, height]` in device `LayoutUnit`s.
@@ -194,7 +196,7 @@ impl Block {
                 let in_end = end_node == Some(piece.node);
                 let continues = (!in_start || from <= e) && (!in_end || e < to);
                 let last = p + 1 == line.pieces.len() && line.newline.is_none();
-                let wrap = continues && last;
+                let wrap = continues && last && !self.truncates;
                 let (a, b) = (from.clamp(s, e), to.clamp(s, e));
                 if a >= b {
                     continue;

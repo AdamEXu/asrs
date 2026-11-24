@@ -4,14 +4,19 @@ use std::time::Instant;
 
 use asrs_canvas::text::dom::{LineHeight, Lu, WhiteSpace};
 use asrs_model::scroll_sensor::{Wheel, WheelScroll, assign_scroll_offset};
+use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::gpui::{
-    App, Context, Div, InteractiveElement, Keystroke, ParentElement, Render, ScrollEvent, Stateful,
-    Styled, Window, div, px,
+    App, Context, CursorStyle, DispatchPhase, Div, InteractiveElement, KeyDownEvent, Keystroke,
+    MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Render, Rgba, ScrollEvent,
+    Stateful, Styled, Window, canvas, div, px,
 };
 use asrs_ui::parity::{Recorder, TextRun, record_text};
+use asrs_ui::platform::EditCommand;
+use asrs_ui::selection;
 use asrs_ui::text::{Align, Text, TextStyle, snap_remainder};
 
 use super::layout::{LuRect, TextBlock, snapped};
+use super::text::{self, DocumentText, PageText};
 use crate::views::cell_text::css;
 use crate::views::frame::wheel_of;
 
@@ -43,7 +48,7 @@ impl PageScroll {
         }
     }
 
-    fn now(&self, cx: &App) -> f64 {
+    pub fn now(&self, cx: &App) -> f64 {
         let elapsed = cx.background_executor().now() - self.started;
         elapsed.as_secs_f64() * 1000.0
     }
@@ -65,6 +70,11 @@ impl PageScroll {
     /// `document.documentElement.scrollTop`.
     pub fn top(&self) -> f64 {
         assign_scroll_offset(self.offset, self.max, f64::from(self.scale))
+    }
+
+    pub fn scroll_by(&mut self, by: f64) {
+        self.wheel.stop();
+        self.offset = (self.top() + by).clamp(0.0, self.max);
     }
 
     fn scroll(&mut self, wheel: Wheel, client: f64, cx: &App) {
@@ -115,15 +125,65 @@ impl PageScroll {
 
 pub trait ScrolledPage: Render {
     fn scroll(&mut self) -> &mut PageScroll;
+
+    fn text(&mut self) -> &mut PageText;
+
+    /// The document's text that can be selected, once it is laid out.
+    fn document_text(&self, window: &Window) -> Option<Box<dyn DocumentText>>;
 }
 
 /// The page's root element, which scrolls the document.
-pub fn root<V: ScrolledPage>(id: &'static str, cx: &mut Context<'_, V>) -> Stateful<Div> {
-    div()
-        .id(id)
-        .relative()
+pub fn root<V: ScrolledPage>(
+    id: &'static str,
+    view: &mut V,
+    cx: &mut Context<'_, V>,
+) -> Stateful<Div> {
+    let entity = cx.entity().downgrade();
+    // Window listeners: a press that leaves the window keeps delivering moves and its release.
+    let listeners = canvas(
+        |_, _, _| {},
+        move |_, _, window, _| {
+            let view = entity.clone();
+            window.on_mouse_event(move |event: &MouseDownEvent, phase, window, cx| {
+                if phase == DispatchPhase::Bubble {
+                    let _ = view.update(cx, |view, cx| text::mouse_down(view, event, window, cx));
+                }
+            });
+            let view = entity.clone();
+            window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
+                if phase == DispatchPhase::Bubble {
+                    let at = [event.position.x, event.position.y];
+                    let at = at.map(|v| mouse_client(f32::from(v)));
+                    let _ = view.update(cx, |view, cx| text::mouse_move(view, at, window, cx));
+                }
+            });
+            let view = entity.clone();
+            window.on_mouse_event(move |event: &MouseUpEvent, phase, window, cx| {
+                if phase == DispatchPhase::Bubble {
+                    let at = [event.position.x, event.position.y];
+                    let at = at.map(|v| mouse_client(f32::from(v)));
+                    let _ = view.update(cx, |view, cx| text::mouse_up(view, at, window, cx));
+                }
+            });
+        },
+    );
+    let mut root = div().id(id);
+    if view.text().cursor() {
+        root = root.cursor(CursorStyle::IBeam);
+    }
+    root.relative()
         .size_full()
         .overflow_hidden()
+        .child(listeners.absolute().size_full())
+        .on_action(cx.listener(|view, _: &selection::Copy, window, cx| {
+            text::run(view, EditCommand::Copy, window, cx)
+        }))
+        .on_action(cx.listener(|view, _: &selection::SelectAll, window, cx| {
+            text::run(view, EditCommand::SelectAll, window, cx)
+        }))
+        .on_key_down(cx.listener(|view, event: &KeyDownEvent, window, cx| {
+            text::key_down(view, event, window, cx)
+        }))
         .on_scroll(cx.listener(|view, event: &ScrollEvent, _, cx| {
             view.scroll().wheel(event, cx);
             cx.notify();
@@ -166,6 +226,14 @@ impl Placer {
     /// The part of a box's position that snapping dropped, in CSS px.
     pub fn remainder(&self, [x, y, ..]: LuRect) -> [f64; 2] {
         [x, y - self.scrolled].map(|v| css(v - snapped(v), self.scale))
+    }
+
+    /// The boxes a selection paints.
+    pub fn selection(&self, rects: Vec<LuRect>, color: Rgba) -> Vec<Div> {
+        rects
+            .into_iter()
+            .map(|rect| self.place(rect).bg(color))
+            .collect()
     }
 
     /// A line's piece of text in its box.
@@ -242,4 +310,13 @@ pub fn recording(cx: &App) -> bool {
 pub fn device_width(window: &Window) -> Lu {
     let width = f64::from(f32::from(window.viewport_size().width));
     asrs_js::math::round(width * f64::from(window.scale_factor())) as Lu * 64
+}
+
+/// `over` with an opacity on the opaque `under`.
+pub fn mix(over: u32, under: u32, opacity: f64) -> u32 {
+    [16, 8, 0].into_iter().fold(0, |out, shift| {
+        let channel = |color: u32| f64::from(color >> shift & 0xff);
+        let mixed = channel(over) * opacity + channel(under) * (1.0 - opacity);
+        out | (mixed.round() as u32) << shift
+    })
 }

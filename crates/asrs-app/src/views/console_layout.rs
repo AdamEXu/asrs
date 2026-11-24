@@ -143,6 +143,7 @@ impl Cell {
         geometry::Block {
             lines: lines.collect(),
             font,
+            truncates: false,
         }
     }
 }

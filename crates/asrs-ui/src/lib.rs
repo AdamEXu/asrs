@@ -8,7 +8,7 @@ pub mod gpui {
         HoverListenerMode, Hsla, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent,
         KeyboardButton, Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseExitEvent,
         MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, PlatformInput, Point, Render,
-        RenderImage, Result, ScrollDelta, ScrollEvent, ScrollHandle, SharedString, Stateful,
+        RenderImage, Result, Rgba, ScrollDelta, ScrollEvent, ScrollHandle, SharedString, Stateful,
         StatefulInteractiveElement, Styled, Subscription, Task, TitlebarOptions, TouchPhase,
         WeakEntity, Window, WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind,
         WindowOptions, anchored, application, canvas, deferred, div, fill, linear_color_stop,

@@ -1,24 +1,31 @@
 //! The source lists' Help window's page (`www/sourceListHelp.html`).
 
+use std::borrow::Cow;
 use std::rc::Rc;
 
+use asrs_canvas::text::TextBackend;
 use asrs_canvas::text::dom::Lu;
 use asrs_js::color::hex_rgb;
 use asrs_tabs::info::SourceListHelp;
 use asrs_tabs::info::source_list_help::{HelpItem, ThemeColors};
 use asrs_ui::gpui::{
     App, Context, Div, FocusHandle, Focusable, InteractiveElement, IntoElement, KeyDownEvent,
-    ParentElement, Render, Styled, Window, div, rgb,
+    ParentElement, Render, Rgba, Styled, Window, div, rgb,
 };
 use asrs_ui::icon::{Icon, IconSource};
 use asrs_ui::parity::probed;
+use asrs_ui::selection::{Caret, Document, Hit, Place, Position};
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::Text;
 use asrs_ui::theme::Appearance;
 
-use super::layout::{HelpItemLayout, HelpLayout, LuRect, TextBlock, Typesetter, help_title_style};
-use super::page::{self, PageScroll, Placer, ScrolledPage};
+use super::layout::{
+    HelpItemLayout, HelpLayout, HelpText, LuRect, TextBlock, Typesetter, help_title_style,
+};
+use super::page::{self, PageScroll, Placer, ScrolledPage, mix};
+use super::text::{self, DocumentText, PageText};
 use crate::views::cell_text::css;
+use crate::views::page_text::Selected;
 
 const PARENT_WARNING: u32 = 0xff6600;
 const SOURCES_OPACITY: f32 = 0.6;
@@ -27,8 +34,9 @@ pub struct SourceListHelpPage {
     help: SourceListHelp,
     typesetter: Typesetter,
     /// The layout at a width and scale.
-    layout: Option<(Lu, f32, Rc<HelpLayout>)>,
+    layout: Option<(Lu, f32, Rc<HelpLayout>, Rc<HelpText>)>,
     scroll: PageScroll,
+    text: PageText,
     focus: FocusHandle,
 }
 
@@ -41,6 +49,7 @@ impl SourceListHelpPage {
             typesetter: Typesetter::default(),
             layout: None,
             scroll: PageScroll::new(cx),
+            text: PageText::default(),
             focus,
         }
     }
@@ -49,15 +58,19 @@ impl SourceListHelpPage {
         &self.help
     }
 
-    fn laid_out(&mut self, window: &Window) -> Rc<HelpLayout> {
+    fn laid_out(&mut self, window: &Window) -> (Rc<HelpLayout>, Rc<HelpText>) {
         let (width, scale) = (page::device_width(window), window.scale_factor());
         match &self.layout {
-            Some((w, s, layout)) if (*w, *s) == (width, scale) => layout.clone(),
+            Some((w, s, layout, text)) if (*w, *s) == (width, scale) => {
+                (layout.clone(), text.clone())
+            }
             _ => {
                 let t = &mut self.typesetter;
-                let layout = Rc::new(HelpLayout::new(t, self.help.items(), width, scale));
-                self.layout = Some((width, scale, layout.clone()));
-                layout
+                let items = self.help.items();
+                let layout = Rc::new(HelpLayout::new(t, items, width, scale));
+                let text = Rc::new(HelpText::new(t, items, &layout, scale));
+                self.layout = Some((width, scale, layout.clone(), text.clone()));
+                (layout, text)
             }
         }
     }
@@ -76,11 +89,73 @@ fn icon(item: &HelpItem, appearance: Appearance) -> Option<Icon> {
     Some(Icon::new(source, ""))
 }
 
+struct HelpDocument(Rc<HelpText>);
+
+impl Document for HelpDocument {
+    fn len(&self) -> usize {
+        self.0.blocks.len()
+    }
+
+    fn text(&self, block: usize) -> Cow<'_, str> {
+        Cow::Borrowed(&self.0.blocks[block].text)
+    }
+
+    fn place(&self, block: usize) -> Place {
+        self.0.blocks[block].place
+    }
+}
+
+impl DocumentText for HelpDocument {
+    fn document(&self) -> &dyn Document {
+        self
+    }
+
+    fn hit(&self, at @ [x, y]: [Lu; 2], backend: &mut dyn TextBackend, scale: f32) -> Hit {
+        let bands = &self.0.bands;
+        let band = bands.partition_point(|band| band.bottom <= y);
+        let Some(band) = bands.get(band).or(bands.last()) else {
+            return text::unselectable(0);
+        };
+        if band.icon.is_some_and(|right| x < right) {
+            return text::unselectable(band.parts[0].1);
+        }
+        if let Some(([left, _, width, _], cells)) = &band.table
+            && !(*left..=left + width).contains(&x)
+        {
+            let before = x - left <= width / 2;
+            let block = if before { cells.start } else { cells.end - 1 };
+            let end = self.0.blocks[block].text.len();
+            let offset = if before { 0 } else { end };
+            return Hit {
+                caret: Some(Caret::new(Position { block, offset })),
+                selectable: true,
+                text: false,
+            };
+        }
+        let part = band.parts.iter().find(|(right, _)| x < *right);
+        let index = part.unwrap_or(&band.parts[0]).1;
+        let block = &self.0.blocks[index];
+        text::caret_in(
+            (index, &block.block),
+            &block.text,
+            at,
+            block.origin,
+            backend,
+            scale,
+        )
+    }
+}
+
 struct Painter<'a> {
     placer: Placer,
     appearance: Appearance,
     scale: f32,
     boxes: Vec<Div>,
+    /// The boxes the selection paints behind each block.
+    selection: Vec<Vec<LuRect>>,
+    selected: Option<Rgba>,
+    /// The block painted next.
+    next: usize,
     cx: &'a mut App,
 }
 
@@ -92,6 +167,14 @@ impl Painter<'_> {
     fn probe(&mut self, id: &'static str, rect: LuRect) {
         self.boxes
             .push(div().child(probed(id, self.placer.place(rect))));
+    }
+
+    /// The selection behind the next block.
+    fn behind(&mut self) -> Vec<Div> {
+        let rects = std::mem::take(&mut self.selection[self.next]);
+        self.next += 1;
+        let color = self.selected.unwrap_or_default();
+        self.placer.selection(rects, color)
     }
 
     fn item(&mut self, item: &HelpItem, layout: &HelpItemLayout) {
@@ -106,6 +189,8 @@ impl Painter<'_> {
             let icon = self.placer.place(layout.icon).child(icon.subpixel(dx, dy));
             self.boxes.push(icon);
         }
+        let behind = self.behind();
+        self.boxes.extend(behind);
         let [_, dy] = self.placer.remainder(layout.title);
         let title = Text::new(item.title.clone(), help_title_style())
             .color(theme.text)
@@ -117,12 +202,16 @@ impl Painter<'_> {
         )));
         if let Some((rect, block)) = &layout.warning {
             self.probe("div.parent-warning", *rect);
+            let behind = self.behind();
+            self.boxes.extend(behind);
             let text = self.text(block, |_| PARENT_WARNING);
             self.boxes.extend(text);
         }
         if let Some((rect, rows)) = &layout.table {
             self.probe("table.options", *rect);
             for (row, option) in rows.iter().zip(&item.options) {
+                let behind = [self.behind(), self.behind()];
+                self.boxes.extend(behind.into_iter().flatten());
                 let name = self.text(&row.name, |_| theme.text);
                 let appearance = self.appearance;
                 let values = self.text(&row.values, |i| {
@@ -133,9 +222,19 @@ impl Painter<'_> {
             }
         }
         self.probe("div.source-types", layout.sources);
-        let text = self.text(&layout.sources_text, |_| theme.text);
-        self.boxes
-            .extend(text.into_iter().map(|line| line.opacity(SOURCES_OPACITY)));
+        let behind = self.behind();
+        if behind.is_empty() {
+            let text = self.text(&layout.sources_text, |_| theme.text);
+            let text = text.into_iter().map(|line| line.opacity(SOURCES_OPACITY));
+            self.boxes.extend(text);
+        } else {
+            // The opacity is the group's: what is behind the text does not show through it.
+            let behind = behind.into_iter().map(|rect| rect.opacity(SOURCES_OPACITY));
+            self.boxes.extend(behind);
+            let blended = mix(theme.text, theme.background, SOURCES_OPACITY.into());
+            let text = self.text(&layout.sources_text, |_| blended);
+            self.boxes.extend(text);
+        }
     }
 }
 
@@ -149,25 +248,58 @@ impl ScrolledPage for SourceListHelpPage {
     fn scroll(&mut self) -> &mut PageScroll {
         &mut self.scroll
     }
+
+    fn text(&mut self) -> &mut PageText {
+        &mut self.text
+    }
+
+    fn document_text(&self, _: &Window) -> Option<Box<dyn DocumentText>> {
+        let (.., text) = self.layout.as_ref()?;
+        Some(Box::new(HelpDocument(text.clone())))
+    }
 }
 
 impl Render for SourceListHelpPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
-        let layout = self.laid_out(window);
+        let (layout, text) = self.laid_out(window);
         self.scroll.lay_out(layout.height, window, cx);
+        text::autoscroll(self, window, cx);
         let appearance = Appearance::of(window, cx);
+        let scale = window.scale_factor();
+        let doc = HelpDocument(text.clone());
+        let selected = self.text.selected(&doc, window, cx);
+        let placer = Placer::new(&self.scroll);
+        let selection = text.blocks.iter().enumerate().map(|(i, block)| {
+            selected.as_ref().map_or_else(Vec::new, |s| {
+                let at = (i, &block.block);
+                self.text
+                    .rects(&s.range, at, &block.text, block.origin, scale)
+            })
+        });
         let mut painter = Painter {
-            placer: Placer::new(&self.scroll),
+            placer,
             appearance,
-            scale: window.scale_factor(),
+            scale,
             boxes: Vec::new(),
+            selection: selection.collect(),
+            selected: selected.as_ref().map(|s| s.colors.rgba()),
+            next: 0,
             cx,
         };
         for (item, layout) in self.help.items().iter().zip(&layout.items) {
             painter.item(item, layout);
         }
-        let boxes = painter.boxes;
-        page::root("source-list-help", cx)
+        let mut boxes = painter.boxes;
+        // A selected image is tinted.
+        if let Some(Selected { range, colors }) = &selected {
+            let whole = self.text.whole(&doc);
+            let covered = |(block, _): &&(usize, LuRect)| {
+                whole || (range.start.block < *block && *block <= range.end.block)
+            };
+            let icons = text.icons.iter().filter(covered).map(|(_, rect)| *rect);
+            boxes.extend(placer.selection(icons.collect(), colors.rgba()));
+        }
+        page::root("source-list-help", self, cx)
             .track_focus(&self.focus)
             .on_key_down(cx.listener(|view, event: &KeyDownEvent, _, cx| {
                 if view.scroll.key(&event.keystroke, cx) {

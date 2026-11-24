@@ -159,6 +159,7 @@ impl CellText {
         Block {
             lines,
             font: style.font,
+            truncates: false,
         }
     }
 

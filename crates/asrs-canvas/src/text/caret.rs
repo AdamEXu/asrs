@@ -35,7 +35,7 @@ pub fn carets(
 /// The advance of a space in device px.
 pub fn space_width(backend: &mut dyn TextBackend, font: &FontSpec, scale: f32) -> f32 {
     backend.set_device_scale(scale);
-    backend.shape(font, " ", scale).width * scale
+    backend.space_width(font, scale)
 }
 
 /// The stretch between the word boundaries around the character at byte `at` of `text`.
