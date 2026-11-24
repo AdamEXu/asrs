@@ -447,3 +447,9 @@ pub fn change_scale(number: u32, scale: u32) {
 pub fn screen_image(x: i32, y: i32, width: i32, height: i32) -> Option<WindowImage> {
     imp::probe::screen_image(x, y, width, height)
 }
+
+/// Electron's `minimize`, `maximize`, `unmaximize` or `restore` of the window with this handle.
+#[cfg(windows)]
+pub fn show_window(number: u32, state: &str) {
+    imp::probe::show_window(number, state);
+}

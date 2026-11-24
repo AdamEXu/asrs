@@ -15,9 +15,9 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
 use windows::Win32::UI::WindowsAndMessaging::{
     FindWindowW, GWL_EXSTYLE, GetCursorPos, GetMenuItemCount, GetMenuItemInfoW, GetWindowLongPtrW,
     HMENU, IsWindowVisible, MENUITEMINFOW, MFS_CHECKED, MFS_DISABLED, MFT_SEPARATOR, MIIM_BITMAP,
-    MIIM_FTYPE, MIIM_ID, MIIM_STATE, MIIM_STRING, MIIM_SUBMENU, MINMAXINFO, SendMessageW,
-    SetCursorPos, USER_DEFAULT_SCREEN_DPI, WM_DPICHANGED, WM_GETMINMAXINFO, WM_SIZING,
-    WS_EX_TOPMOST,
+    MIIM_FTYPE, MIIM_ID, MIIM_STATE, MIIM_STRING, MIIM_SUBMENU, MINMAXINFO, SW_MAXIMIZE,
+    SW_MINIMIZE, SW_RESTORE, SendMessageW, SetCursorPos, ShowWindow, USER_DEFAULT_SCREEN_DPI,
+    WM_DPICHANGED, WM_GETMINMAXINFO, WM_SIZING, WS_EX_TOPMOST,
 };
 use windows::core::{PWSTR, w};
 
@@ -134,6 +134,16 @@ pub fn change_scale(number: u32, scale: u32) {
             Some(LPARAM(&raw const rect as isize)),
         );
     }
+}
+
+pub fn show_window(number: u32, state: &str) {
+    let command = match state {
+        "minimize" => SW_MINIMIZE,
+        "maximize" => SW_MAXIMIZE,
+        _ => SW_RESTORE,
+    };
+    // SAFETY: a closed window makes the call fail.
+    let _ = unsafe { ShowWindow(handle(number), command) };
 }
 
 /// The screen's pixels in device px.

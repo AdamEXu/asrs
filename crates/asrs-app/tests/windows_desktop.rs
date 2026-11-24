@@ -83,6 +83,10 @@ app.whenReady().then(() => {
       await wait(1200);
       seen.push(win.isVisible());
       out("visible " + JSON.stringify(seen));
+    } else if (request.op === "state") {
+      win[request.to](...(request.args ?? []));
+      await wait(1500);
+      out("state " + JSON.stringify([...win.getContentSize(), ...Object.values(win.getBounds())]));
     } else if (request.op === "wheel") {
       await win.webContents.executeJavaScript(
         "window.__wheel = []; window.addEventListener('wheel', (e) => window.__wheel.push([e.deltaX, e.deltaY, e.deltaMode])); true"
@@ -497,6 +501,68 @@ app.whenReady().then(() => {
         electron.request(cx, r#"{"op":"close"}"#, "closed").await;
         cx.update(|cx| windows::close(cx, id));
         sleep(cx, 400).await;
+    }
+
+    /// `getContentSize()` and `getBounds()` through every window state, which `state.json` gets.
+    async fn states(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
+        const STEPS: [&str; 8] = [
+            "minimize",
+            "restore",
+            "maximize",
+            "minimize",
+            "restore",
+            "unmaximize",
+            "minimize",
+            "restore",
+        ];
+        for kind in [WindowKind::Hub, WindowKind::Satellite] {
+            let hub = kind == WindowKind::Hub;
+            let rect = Rect {
+                x: 160.0,
+                y: 160.0,
+                width: if hub { 800.0 } else { 200.0 },
+                height: if hub { 400.0 } else { 100.0 },
+            };
+            let opened = cx.update(|cx| match kind {
+                WindowKind::Hub => windows::open_hub(cx, Some(rect), blank),
+                _ => windows::open_satellite(cx, "m", SatellitePlacement::Saved(rect), blank),
+            });
+            let id = opened.expect("open window").0;
+            let handle = handle_of(cx, id);
+            sleep(cx, 1200).await;
+            let number = with_window(cx, handle, |w| probe::window_number(w)).expect("window id");
+            let request = format!(
+                r#"{{"op":"open","hub":{hub},"options":{{"x":160,"y":160,"width":{},"height":{},"minWidth":{},"minHeight":{},"resizable":true}}}}"#,
+                rect.width, rect.height, rect.width, rect.height
+            );
+            electron.numbers(cx, &request, "open ").await;
+            for (step, to) in STEPS.into_iter().enumerate() {
+                probe::show_window(number, to);
+                let request = format!(r#"{{"op":"state","to":"{to}"}}"#);
+                let theirs = electron.numbers(cx, &request, "state ").await;
+                let content =
+                    with_window(cx, handle, |w| probe::content_size(w)).expect("content size");
+                let bounds = cx
+                    .update(|cx| Windows::manager(cx).bounds(id))
+                    .expect("bounds");
+                let ours = [
+                    content.0,
+                    content.1,
+                    bounds.x,
+                    bounds.y,
+                    bounds.width,
+                    bounds.height,
+                ];
+                report.check(
+                    &format!("{kind:?} state {step} {to}"),
+                    ours == theirs[..],
+                    format!("ours {ours:?}, Electron {theirs:?}"),
+                );
+            }
+            electron.request(cx, r#"{"op":"close"}"#, "closed").await;
+            cx.update(|cx| windows::close(cx, id));
+            sleep(cx, 400).await;
+        }
     }
 
     async fn wheel(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
@@ -1134,6 +1200,11 @@ app.whenReady().then(() => {
                     .expect("hub")
                     .0;
                 sleep(cx, 1500).await;
+                if std::env::var_os("ASRS_STATES_ONLY").is_some() {
+                    states(cx, &electron, &mut report).await;
+                    println!("{} passed, {} failed", report.passed, report.failed.len());
+                    std::process::exit(0);
+                }
                 captions(cx, &electron, &mut report).await;
                 menus(cx, &mut report, hub).await;
                 lists(cx, &mut report, hub).await;
@@ -1141,6 +1212,7 @@ app.whenReady().then(() => {
                 wheel(cx, &electron, &mut report).await;
                 aspects(cx, &electron, &mut report).await;
                 sizes(cx, &electron, &mut report, hub).await;
+                states(cx, &electron, &mut report).await;
                 drop(electron);
                 own_window(cx, &mut report).await;
                 println!(
