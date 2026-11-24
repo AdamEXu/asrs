@@ -1,0 +1,271 @@
+{
+  "about": "Focus rings (#355) in the active hub: the console tab's buttons, pressed and after keys",
+  "actions": [
+    {
+      "open": [
+        "app:console"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 5,
+              "title": "Output",
+              "controller": null,
+              "controllerUUID": "console00000000000000000000000000",
+              "renderer": {
+                "highlight": false
+              },
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        2.5
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 152
+    },
+    {
+      "mouse": "move",
+      "x": 100,
+      "y": 156
+    },
+    {
+      "mouse": "move",
+      "x": 420,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 340
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 340
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 420
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 382,
+      "y": 103
+    },
+    {
+      "mouse": "down",
+      "x": 382,
+      "y": 103
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "jump-pressed",
+      "probes": [
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "jump-key",
+      "probes": [
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 871,
+      "y": 103
+    },
+    {
+      "mouse": "down",
+      "x": 871,
+      "y": 103
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "export-pressed",
+      "probes": [
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "export-key",
+      "probes": [
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 899,
+      "y": 103
+    },
+    {
+      "mouse": "down",
+      "x": 899,
+      "y": 103
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 620
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "highlight-pressed",
+      "probes": [
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button"
+      ]
+    },
+    {
+      "key": "9",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 50
+    },
+    {
+      "key": "F9"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "capture": "highlight-key",
+      "probes": [
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button"
+      ]
+    },
+    {
+      "focus": false
+    },
+    {
+      "wait": 50
+    },
+    {
+      "capture": "inactive",
+      "probes": [
+        "button.console-table-jump-button",
+        "button.export-button",
+        "button.highlight-button"
+      ]
+    }
+  ]
+}

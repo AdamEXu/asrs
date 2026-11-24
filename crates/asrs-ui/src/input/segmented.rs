@@ -5,13 +5,14 @@ use gpui_kit::{
     Window, canvas, div, px, rgb,
 };
 
+use crate::focus;
 use crate::icon::{IconSource, Placement, paint_icon};
 use crate::input::style::{
     SPLIT_BADGE, SPLIT_BADGE_OPACITY, SPLIT_BADGE_RADIUS, SPLIT_ICON_FRACTION, SPLIT_RADIUS,
     SplitStyle,
 };
 use crate::text::{Align, FontSpec, LineHeight, Text, TextStyle};
-use crate::theme::{Appearance, chains};
+use crate::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, chains};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Segment {
@@ -134,6 +135,7 @@ impl RenderOnce for SegmentedControl {
             .w(px(self.size.0))
             .h(px(self.size.1));
         let shift = self.subpixel * scale;
+        let mut ring = None;
         for (i, (segment, [x, _, w, h])) in self.segments.into_iter().zip(boxes).enumerate() {
             let x = x + shift;
             let left = (x + 0.5).floor();
@@ -152,12 +154,33 @@ impl RenderOnce for SegmentedControl {
                 style.border
             };
             let radius = px(SPLIT_RADIUS);
+            let focused = focus
+                .get(i)
+                .is_some_and(|handle| focus::focus_visible(handle, window, cx));
+            let inner = px(if focused { FOCUS_RING_RADIUS } else { 0.0 });
             let corners = Corners {
-                top_left: if i == 0 { radius } else { px(0.0) },
-                bottom_left: if i == 0 { radius } else { px(0.0) },
-                top_right: if i + 1 == count { radius } else { px(0.0) },
-                bottom_right: if i + 1 == count { radius } else { px(0.0) },
+                top_left: if i == 0 { radius } else { inner },
+                bottom_left: if i == 0 { radius } else { inner },
+                top_right: if i + 1 == count { radius } else { inner },
+                bottom_right: if i + 1 == count { radius } else { inner },
             };
+            if focused {
+                let outset = px(FOCUS_RING_WIDTH);
+                ring = Some(
+                    div()
+                        .absolute()
+                        .left(px(left / scale) - outset)
+                        .top(-outset)
+                        .w(px((right - left) / scale) + outset * 2.0)
+                        .h(px(h / scale) + outset * 2.0)
+                        .border(outset)
+                        .border_color(rgb(self.appearance.theme().focus_ring))
+                        .rounded_tl(corners.top_left + outset)
+                        .rounded_bl(corners.bottom_left + outset)
+                        .rounded_tr(corners.top_right + outset)
+                        .rounded_br(corners.bottom_right + outset),
+                );
+            }
             let (cw, ch) = (w - 2.0 * border, h - 2.0 * border);
             let content = match segment {
                 Segment::Badge(label) => {
@@ -300,6 +323,6 @@ impl RenderOnce for SegmentedControl {
                     .child(content),
             );
         }
-        root
+        root.children(ring)
     }
 }

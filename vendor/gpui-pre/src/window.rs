@@ -1217,6 +1217,63 @@ enum InputModality {
     Touch,
 }
 
+/// What Blink's `:focus-visible` depends on besides the focus itself.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+struct FocusVisibility {
+    had_keyboard_event: bool,
+    last_focus_from_mouse: bool,
+    cause: FocusCause,
+}
+
+/// The input being dispatched, if a focus change during it is that input's.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+enum FocusCause {
+    #[default]
+    Script,
+    Press,
+    Tab,
+}
+
+impl FocusVisibility {
+    fn begin(&mut self, event: &PlatformInput, held: Modifiers, capslock: Capslock) {
+        let keyboard = match event {
+            PlatformInput::KeyDown(event) => {
+                if event.keystroke.key == "tab" {
+                    self.cause = FocusCause::Tab;
+                }
+                Some(event.keystroke.modifiers)
+            }
+            PlatformInput::ModifiersChanged(event) => {
+                let pressed = event.modifiers.shift && !held.shift || event.capslock != capslock;
+                pressed.then_some(event.modifiers)
+            }
+            PlatformInput::MouseDown(_) => {
+                self.cause = FocusCause::Press;
+                None
+            }
+            _ => None,
+        };
+        if keyboard.is_some_and(|m| !(m.control || m.alt || m.platform)) {
+            self.had_keyboard_event = true;
+        }
+    }
+
+    fn focus_changed(&mut self, focused: bool) {
+        match self.cause {
+            FocusCause::Script => {}
+            FocusCause::Press => {
+                self.had_keyboard_event = false;
+                self.last_focus_from_mouse |= focused;
+            }
+            FocusCause::Tab => self.last_focus_from_mouse = false,
+        }
+    }
+
+    fn visible(&self) -> bool {
+        self.had_keyboard_event || !self.last_focus_from_mouse
+    }
+}
+
 /// Holds the state for a specific window.
 pub struct Window {
     pub(crate) handle: AnyWindowHandle,
@@ -1284,6 +1341,7 @@ pub struct Window {
     #[cfg(feature = "profiler")]
     pub(crate) window_profiler: profiler::WindowProfiler,
     last_input_modality: InputModality,
+    focus_visibility: FocusVisibility,
     touch_gestures: TouchGestureRecognizer,
     touch_prediction_enabled: bool,
     long_press_timer: Option<Task<()>>,
@@ -2404,6 +2462,7 @@ impl Window {
             #[cfg(feature = "profiler")]
             window_profiler: profiler::WindowProfiler::new(handle.window_id())?,
             last_input_modality: InputModality::Mouse,
+            focus_visibility: FocusVisibility::default(),
             touch_gestures: TouchGestureRecognizer::new(
                 cx.platform
                     .gestures()
@@ -2625,6 +2684,7 @@ impl Window {
         }
 
         self.focus = Some(handle.id);
+        self.focus_visibility.focus_changed(true);
         self.focus_generation = self.focus_generation.wrapping_add(1);
         self.clear_pending_keystrokes(cx);
 
@@ -2640,6 +2700,7 @@ impl Window {
         }
 
         if self.focus.is_some() {
+            self.focus_visibility.focus_changed(false);
             self.focus_generation = self.focus_generation.wrapping_add(1);
         }
         self.focus = None;
@@ -3643,6 +3704,12 @@ impl Window {
     /// This is used for focus-visible styling to show focus indicators only for keyboard navigation.
     pub fn last_input_was_keyboard(&self) -> bool {
         self.last_input_modality == InputModality::Keyboard
+    }
+
+    /// Whether the focused element of an active window matches Blink's `:focus-visible`: the
+    /// focus did not come from a press, or a key without Control, Alt or Cmd came since.
+    pub fn focus_visible(&self) -> bool {
+        self.focus_visibility.visible()
     }
 
     /// Returns whether the last input event came from a touch screen.
@@ -5878,7 +5945,10 @@ impl Window {
             PlatformInput::Touch(_) => InputModality::Touch,
             _ => self.last_input_modality,
         };
-        if self.last_input_modality != old_modality {
+        let was_focus_visible = self.focus_visible();
+        self.focus_visibility
+            .begin(&event, self.modifiers, self.capslock);
+        if self.last_input_modality != old_modality || self.focus_visible() != was_focus_visible {
             self.refresh();
         }
 
@@ -6009,6 +6079,7 @@ impl Window {
         } else if let Some(touch_event) = event.touch_event() {
             self.dispatch_touch_event(touch_event, cx);
         }
+        self.focus_visibility.cause = FocusCause::Script;
         if let PlatformInput::LongPress(long_press) = &event {
             match long_press.phase {
                 crate::TouchPhase::Started if !self.default_prevented => {

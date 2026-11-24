@@ -17,6 +17,7 @@ use gpui_kit::{
 
 use tiny_skia::{Color, Paint, Rect, Transform};
 
+use crate::focus;
 use crate::input::skia;
 use crate::input::style::{
     CONTROL_FONT, DISABLED_BACKGROUND, DISABLED_BORDER, LIGHTEN_LAYER, NATIVE_BORDER,
@@ -26,6 +27,7 @@ use crate::platform::{self, SelectMenu, SelectMenuItem, SelectMenuItemKind};
 use crate::selection;
 use crate::selection::colors::SelectionColors;
 use crate::text::{self, LineHeight, Overflow, TextStyle, WhiteSpace};
+use crate::theme::Appearance;
 
 /// One of the select's list items as the popup shows it.
 #[derive(Clone, Debug, PartialEq)]
@@ -709,9 +711,12 @@ impl<M: SelectModel> Select<M> {
 }
 
 impl<M: SelectModel> Render for Select<M> {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
         let (width, height) = self.size;
         let state = self.state();
+        // Blink's `MayTriggerVirtualKeyboard` holds for a select, so a press shows the ring too.
+        let ring = focus::has_focus(&self.focus, window, cx);
+        let appearance = Appearance::of(window, cx);
         let label = self.model.shown_text();
         let subpixel = self.subpixel;
         let size = self.size;
@@ -742,7 +747,7 @@ impl<M: SelectModel> Render for Select<M> {
                 .on_mouse_down(MouseButton::Left, cx.listener(Self::mouse_down))
                 .on_key_down(cx.listener(Self::key_down));
         }
-        root
+        root.children(ring.then(|| focus::outline(appearance)))
     }
 }
 
