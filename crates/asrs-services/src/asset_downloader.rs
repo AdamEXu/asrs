@@ -690,8 +690,8 @@ impl AssetDownloader {
         match cut {
             None => self.complete_download(di, &headers, &body, fs, host),
             Some(code) => {
-                self.downloads[di].cut = Some((headers, body));
                 if let Some(code) = code {
+                    self.downloads[di].cut = Some((headers, body));
                     self.retry(di, &code, host);
                 }
             }
@@ -847,6 +847,7 @@ impl AssetDownloader {
 
     fn fail_download(&mut self, di: usize) {
         self.downloads[di].settled = true;
+        self.downloads[di].cut = None;
         if self.downloads[di].generation != self.generation || self.check_failed {
             return;
         }
@@ -884,4 +885,71 @@ enum SpawnResult {
     Issued,
     SyncFail,
     AsyncFail,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::fs::MemFs;
+    use asrs_js::time::NamedZone;
+
+    const URL: &str = "https://github.com/Field2d_A.zip";
+
+    struct Cuts(Option<&'static str>);
+
+    impl DownloadHost for Cuts {
+        fn free_space(&mut self, _: &str) -> Result<f64, Rejected> {
+            Ok(1e12)
+        }
+
+        fn fetch(&mut self, _: FetchId, _: &FetchRequest) -> FetchOutcome {
+            let body = format!(
+                r#"[{{"tag_name":"{GITHUB_ASSET_TAG_DEFAULT}","assets":[{{"name":"Field2d_A.zip","browser_download_url":"{URL}"}}]}}]"#
+            );
+            FetchOutcome::Response {
+                status: 200,
+                body: Some(body.into_bytes()),
+            }
+        }
+
+        fn request(&mut self, _: RequestId, _: &HttpRequest) -> HttpOutcome {
+            HttpOutcome::Truncated {
+                status: 200,
+                headers: Vec::new(),
+                body: vec![0; 1024],
+                code: self.0.map(str::to_owned),
+            }
+        }
+
+        fn random(&mut self) -> f64 {
+            0.0
+        }
+
+        fn assets_updated(&mut self) -> Result<(), Rejected> {
+            Ok(())
+        }
+    }
+
+    fn kept(code: Option<&'static str>, until_ms: f64) -> Vec<usize> {
+        let folders = AssetFolders::new(PathStyle::Posix, "/fake/userData", "/bundled");
+        let mut downloader = AssetDownloader::new(&folders, Distribution::Frc6328);
+        let zone = NamedZone::get("UTC").expect("zone");
+        let fs = MemFs::default();
+        let mut host = Cuts(code);
+        downloader.start(0.0, &fs, &mut host, &zone);
+        downloader.advance(until_ms, &fs, &mut host, &zone);
+        let partial = |dl: &Download| dl.cut.as_ref().map_or(0, |(_, body)| body.len());
+        downloader.downloads.iter().map(partial).collect()
+    }
+
+    #[test]
+    fn a_partial_body_is_kept_only_for_a_retry() {
+        let reset = Some("ECONNRESET");
+        assert_eq!(kept(reset, 1_999.0), [1024]);
+        assert_eq!(kept(reset, 2_000.0), [2048]);
+        assert_eq!(kept(reset, 6_000.0), [0]);
+        assert_eq!(kept(reset, 36_000.0), [0, 1024]);
+        assert_eq!(kept(Some("ENETUNREACH"), 0.0), [0]);
+        assert_eq!(kept(None, 100_000.0), [0]);
+    }
 }

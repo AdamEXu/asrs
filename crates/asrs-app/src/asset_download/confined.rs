@@ -38,7 +38,11 @@ impl Confined {
         let normalized = normalize(path);
         let path_in_root = Path::new(&normalized)
             .strip_prefix(&self.root)
-            .is_ok_and(|rest| rest.components().next().is_some());
+            .is_ok_and(|rest| {
+                let names: Vec<_> = rest.iter().map(|name| name.to_string_lossy()).collect();
+                let named = |name: &str| !cfg!(windows) || is_plain_windows_name(name);
+                !names.is_empty() && names.iter().all(|name| named(name))
+            });
         if !path_in_root || !self.resolves_inside(Path::new(&normalized), last) {
             return refused("outside the automatic assets folder");
         }
@@ -60,6 +64,23 @@ impl Confined {
             .and_then(|found| std::fs::canonicalize(found).ok())
             .is_some_and(|found: PathBuf| found.starts_with(&root))
     }
+}
+
+/// Whether Windows takes the name for a file of that name: not a device, a drive, a stream, or a
+/// name whose end it drops.
+fn is_plain_windows_name(name: &str) -> bool {
+    let stem = name.split('.').next().unwrap_or_default().trim_end();
+    let stem = stem.to_uppercase();
+    let device = match stem.as_str() {
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$" => true,
+        stem => ["COM", "LPT"].iter().any(|port| {
+            let mut number = stem.strip_prefix(port).unwrap_or_default().chars();
+            let digit = number.next();
+            digit.is_some_and(|c| c.is_ascii_digit() || "\u{b9}\u{b2}\u{b3}".contains(c))
+                && number.next().is_none()
+        }),
+    };
+    !device && !name.contains(':') && !name.ends_with(['.', ' '])
 }
 
 fn normalize(path: &str) -> String {
@@ -242,6 +263,69 @@ mod tests {
         let fs = temp.fs(true);
         refuses_everything(&fs, &temp, &temp.path("autoAssets/Robot_B"));
         assert!(!temp.0.join("autoAssets/Robot_B").exists());
+    }
+
+    #[test]
+    fn windows_devices_streams_and_dropped_endings_are_not_plain_names() {
+        for name in [
+            "NUL",
+            "nul",
+            "Con",
+            "AUX.txt",
+            "nul .tar.gz",
+            "PRN.",
+            "COM1",
+            "lpt9.json",
+            "com0",
+            "COM\u{b9}",
+            "LPT\u{b3}.x",
+            "CONIN$",
+            "conout$",
+            "C:",
+            "C:evil",
+            "file:stream",
+            "config.json::$DATA",
+            "x.",
+            "x ",
+            "...",
+            ".. ",
+            "x. .",
+        ] {
+            assert!(!is_plain_windows_name(name), "{name:?}");
+        }
+        for name in [
+            "Robot_A",
+            "Robot_A_download",
+            "config.json",
+            "NULL",
+            "COM",
+            "COM10",
+            "LPTX",
+            "COM1x",
+            "a.nul",
+            ".hidden",
+            "CONsole",
+            "Field3d_2025 Reefscape",
+            "x..y",
+        ] {
+            assert!(is_plain_windows_name(name), "{name:?}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_names_that_are_not_files_are_refused() {
+        let temp = Temp::new("confined-windows");
+        let fs = temp.fs(false);
+        for name in [
+            "NUL",
+            "Robot_A/COM1",
+            "Robot_A/file:stream",
+            "C:evil",
+            "Robot_B. ",
+        ] {
+            refuses_everything(&fs, &temp, &temp.path(&format!("autoAssets/{name}")));
+        }
     }
 
     #[cfg(unix)]

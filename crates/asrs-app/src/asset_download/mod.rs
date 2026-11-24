@@ -117,7 +117,7 @@ pub fn start(config: Config, cx: &mut App) {
     #[cfg(feature = "parity")]
     let timers = Arc::<Mutex<Vec<Timer>>>::default();
     let stopped = Arc::new(AtomicBool::new(false));
-    let net = Net::new();
+    let net = Net::new(config.api.starts_with("https:"));
     let worker = {
         let status = status.clone();
         let host = Host {

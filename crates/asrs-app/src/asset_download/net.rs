@@ -33,7 +33,8 @@ pub(super) struct Net {
 }
 
 impl Net {
-    pub(super) fn new() -> Net {
+    /// `https_only`: upstream follows a redirect from https to http; here that request fails.
+    pub(super) fn new(https_only: bool) -> Net {
         let provider = Arc::new(rustls::crypto::ring::default_provider());
         let tls = TlsConfig::builder()
             .root_certs(RootCerts::PlatformVerifier)
@@ -44,6 +45,7 @@ impl Net {
             .max_redirects(0)
             .max_idle_connections(0)
             .proxy(None)
+            .https_only(https_only)
             .tls_config(tls)
             .build();
         Net {
@@ -297,7 +299,7 @@ mod tests {
 
     fn get(answer: impl FnOnce(TcpStream) + Send + 'static) -> (HttpOutcome, String) {
         let (address, server) = serve(answer);
-        let outcome = Net::new().request(&HttpRequest {
+        let outcome = Net::new(false).request(&HttpRequest {
             url: format!("http://{address}/a%20b.zip?q=1"),
             method: "GET".to_owned(),
             headers: vec![
@@ -309,7 +311,7 @@ mod tests {
     }
 
     fn fetch(url: String, timeout_ms: f64) -> FetchOutcome {
-        Net::new().fetch(&FetchRequest {
+        Net::new(false).fetch(&FetchRequest {
             url,
             method: "GET".to_owned(),
             headers: vec![("pragma".to_owned(), "no-cache".to_owned())],
@@ -438,13 +440,37 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
         let url = format!("http://{}/", listener.local_addr().expect("address"));
         drop(listener);
-        let outcome = Net::new().request(&HttpRequest {
+        let outcome = Net::new(false).request(&HttpRequest {
             url: url.clone(),
             method: "GET".to_owned(),
             headers: Vec::new(),
         });
         assert_eq!(outcome, HttpOutcome::Error("ECONNREFUSED".to_owned()));
         assert_eq!(fetch(url, 60_000.0), FetchOutcome::NetworkError);
+    }
+
+    #[test]
+    fn cleartext_is_refused_before_it_is_sent() {
+        let url = || {
+            let (address, _) = serve(|stream| {
+                send(&stream, b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n[]");
+            });
+            format!("http://{address}/")
+        };
+        let net = Net::new(true);
+        let outcome = net.request(&HttpRequest {
+            url: url(),
+            method: "GET".to_owned(),
+            headers: Vec::new(),
+        });
+        assert_eq!(outcome, HttpOutcome::Error("EPROTO".to_owned()));
+        let outcome = net.fetch(&FetchRequest {
+            url: url(),
+            method: "GET".to_owned(),
+            headers: Vec::new(),
+            timeout_ms: 60_000.0,
+        });
+        assert_eq!(outcome, FetchOutcome::NetworkError);
     }
 
     #[test]
@@ -493,7 +519,7 @@ mod tests {
             &b""[..],
             b"HTTP/1.1 200 OK\r\nContent-Length: 100\r\n\r\nhalf",
         ] {
-            let net = Net::new();
+            let net = Net::new(false);
             let (ready, waiting) = std::sync::mpsc::channel();
             let (address, server) = serve(move |stream| {
                 send(&stream, sent);

@@ -8,7 +8,7 @@ use miniz_oxide::inflate::core::inflate_flags::{
 use miniz_oxide::inflate::core::{DecompressorOxide, decompress};
 
 use crate::Invalid;
-use crate::zip::crc32;
+use crate::zip::{MAX_UNPACKED, crc32};
 
 /// What inflating a stream came to.
 enum Step {
@@ -25,28 +25,33 @@ pub(crate) fn decode_body(encoding: Option<&str>, body: Vec<u8>) -> Result<Vec<u
         return Ok(body);
     }
     let mut out = Vec::new();
+    decode_within(&body, MAX_UNPACKED as usize, &mut out)?;
+    Ok(out)
+}
+
+fn decode_within(body: &[u8], limit: usize, out: &mut Vec<u8>) -> Result<(), Invalid> {
     if body.len() < 2 || body[..2] != [0x1f, 0x8b] {
-        inflate(&body, TINFL_FLAG_PARSE_ZLIB_HEADER, &mut out)?;
-        return Ok(out);
+        inflate(body, TINFL_FLAG_PARSE_ZLIB_HEADER, limit, out)?;
+        return Ok(());
     }
-    let mut rest = body.as_slice();
+    let mut rest = body;
     loop {
-        match gunzip(rest, &mut out)? {
-            Step::Short => return Ok(out),
+        match gunzip(rest, limit, out)? {
+            Step::Short => return Ok(()),
             Step::End(used) => rest = &rest[used..],
         }
         if rest.first().is_none_or(|&b| b == 0) {
-            return Ok(out);
+            return Ok(());
         }
     }
 }
 
-fn gunzip(data: &[u8], out: &mut Vec<u8>) -> Result<Step, Invalid> {
+fn gunzip(data: &[u8], limit: usize, out: &mut Vec<u8>) -> Result<Step, Invalid> {
     let Some(body) = gzip_header(data)? else {
         return Ok(Step::Short);
     };
     let start = out.len();
-    let Step::End(used) = inflate(&data[body..], 0, out)? else {
+    let Step::End(used) = inflate(&data[body..], 0, limit, out)? else {
         return Ok(Step::Short);
     };
     let trailer = body + used;
@@ -101,7 +106,7 @@ fn gzip_header(data: &[u8]) -> Result<Option<usize>, Invalid> {
     Ok((at <= data.len()).then_some(at))
 }
 
-fn inflate(data: &[u8], flags: u32, out: &mut Vec<u8>) -> Result<Step, Invalid> {
+fn inflate(data: &[u8], flags: u32, limit: usize, out: &mut Vec<u8>) -> Result<Step, Invalid> {
     let flags = flags | TINFL_FLAG_HAS_MORE_INPUT | TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF;
     let mut state = Box::<DecompressorOxide>::default();
     let start = out.len();
@@ -114,6 +119,9 @@ fn inflate(data: &[u8], flags: u32, out: &mut Vec<u8>) -> Result<Step, Invalid> 
             decompress(&mut state, &data[input..], &mut out[start..], output, flags);
         input += read;
         output += written;
+        if start + output > limit {
+            return Err(Invalid);
+        }
         let step = match status {
             TINFLStatus::HasMoreOutput => continue,
             TINFLStatus::Done => Ok(Step::End(input)),
@@ -122,5 +130,23 @@ fn inflate(data: &[u8], flags: u32, out: &mut Vec<u8>) -> Result<Step, Invalid> 
         };
         out.truncate(start + output);
         return step;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_body_unpacks_to_its_limit_and_no_further() {
+        let data = vec![7; 100_000];
+        let packed = miniz_oxide::deflate::compress_to_vec_zlib(&data, 6);
+        let unpacked = |limit| {
+            let mut out = Vec::new();
+            decode_within(&packed, limit, &mut out).map(|()| out)
+        };
+        assert!(unpacked(data.len()) == Ok(data.clone()));
+        assert!(unpacked(data.len() - 1) == Err(Invalid));
+        assert!(unpacked(0) == Err(Invalid));
     }
 }
