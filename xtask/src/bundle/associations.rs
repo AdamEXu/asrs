@@ -46,8 +46,14 @@ pub fn extensions() -> impl Iterator<Item = &'static str> {
     ASSOCIATIONS.iter().map(|a| a.extension)
 }
 
-pub fn mime_types(separator: &str) -> String {
-    let types: Vec<&str> = ASSOCIATIONS.iter().map(|a| a.mime).collect();
+/// The types of the Linux desktop entry. An entry cannot be an alternate: without another program
+/// for exactly this type, the one that names it is its default. So CSV files are left out.
+pub fn desktop_types(separator: &str) -> String {
+    let types: Vec<&str> = ASSOCIATIONS
+        .iter()
+        .map(|a| a.mime)
+        .filter(|mime| *mime != CSV)
+        .collect();
     types.join(separator)
 }
 

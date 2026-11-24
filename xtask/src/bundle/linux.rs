@@ -6,7 +6,7 @@ use std::process::Command;
 use flate2::Compression;
 use flate2::write::GzEncoder;
 
-use super::associations::{mime_package, mime_types};
+use super::associations::{desktop_types, mime_package};
 use super::{Bundle, at, copy, copy_tree, run_tool, write};
 use crate::{Result, oracle, sha256_hex, workspace_root};
 
@@ -45,7 +45,10 @@ pub fn package(bundle: &Bundle) -> Result {
     let text = fs::read_to_string(&installer).map_err(at(&installer))?;
     let installed = stage.join("install.sh");
     copy(&installer, &installed)?;
-    write(&installed, &text.replace("@MIME_LIST@", &mime_types(" ")))?;
+    write(
+        &installed,
+        &text.replace("@MIME_LIST@", &desktop_types(" ")),
+    )?;
 
     let tarball = bundle.out.join(format!("{}.tar.gz", bundle.file_stem()));
     tar_gz(&stage, &bundle.file_stem(), &tarball)?;
@@ -61,7 +64,7 @@ fn integration(share: &Path, exec: &str) -> Result {
         &share.join("applications/asrs.desktop"),
         &entry
             .replace("@EXEC@", exec)
-            .replace("@MIME_TYPES@", &(mime_types(";") + ";")),
+            .replace("@MIME_TYPES@", &(desktop_types(";") + ";")),
     )?;
     write(
         &share.join("mime/packages/net.adamxu.asrs.xml"),

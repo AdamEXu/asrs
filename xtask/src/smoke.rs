@@ -584,6 +584,9 @@ impl Smoke {
         if !text.contains(&exec) {
             return Err(format!("no {exec} in {text}"));
         }
+        if text.contains("text/csv") {
+            return Err("the menu entry can become the default for CSV files".to_owned());
+        }
         run_tool(Command::new("desktop-file-validate").arg(&entry))?;
         let log = workspace_root().join(LOG);
         let gio = |args: &[&str]| -> Result<String> {

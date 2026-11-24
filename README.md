@@ -46,8 +46,9 @@ documentation instead.
 The packages carry the workspace's version. They are unsigned; `asrs.app` is signed ad hoc with
 the hardened runtime and `packaging/macos/entitlements.plist`, as a Developer ID signature would
 be. asrs registers as an alternate program for `.wpilog`, `.wpilogxz`, `.rlog`, `.revlog`,
-`.csv`, `.dslog` and `.dsevents` files and never as their default, except that the system may
-treat it as one where nothing else opens the type. The icon in `packaging/icons` is a placeholder.
+`.dslog` and `.dsevents` files, so they open in it only where the user picks it or nothing else
+opens them. On macOS and Windows it is also offered for `.csv` files, in a way that does not make it
+their default anywhere; Linux has no such way, so there it is not. The icon in `packaging/icons` is a placeholder.
 `--no-docs` leaves out the documentation, which may not be published yet (#310).
 
 `asrs --self-test [<image> <left> <top> <width> <height>]` checks a package without a window.
