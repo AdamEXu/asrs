@@ -440,8 +440,14 @@ impl Frame {
         };
         let side = ((if pressed { 7.0 } else { 9.0 }) * scale).ceil();
         let rows = (side / 2.0).ceil();
-        let outward = if axis == 0 { [-1.0, 1.0][end] } else { 0.0 };
-        let top = ((6.0 + outward) * scale).floor() + [0.0, bar.track - bar.button][end];
+        // `NativeThemeFluent::GetArrowRect` without its icon font, and `PathForArrow` in it.
+        let outward = scale.round() * [-1.0, 1.0][end];
+        let square = ((bar.button - side) / 2.0).floor() + outward;
+        let height = (side / 2.0).floor() + 1.0;
+        let below = if axis == 1 { 1.0 } else { 0.0 };
+        let base = square + side - (height / 2.0).floor() + below;
+        let start = [base - rows, 2.0 * square + side - base][end];
+        let top = start + [0.0, bar.track - bar.button][end];
         let thickness = self.style.thickness() * scale;
         for row in 0..rows as usize {
             let wide = if end == 0 {
