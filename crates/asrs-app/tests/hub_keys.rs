@@ -83,6 +83,12 @@ impl Page<'_> {
         })
     }
 
+    /// Where a click on the jump button would now go.
+    fn jump_to(&mut self, value: &str) {
+        let value = JsString::from(value);
+        self.table(|table| table.dom().borrow_mut().jump_input.set_value(value));
+    }
+
     fn scroll_top(&mut self) -> f64 {
         self.table(|table| table.dom().borrow_mut().layout.scroll()[1])
     }
@@ -168,6 +174,7 @@ fn main() {
     space_toggles_playback(&mut page, "the body", true);
 
     page.click(JUMP_BUTTON);
+    page.jump_to("15");
     let top = page.scroll_top();
     space_toggles_playback(&mut page, "a button", true);
     assert_eq!(page.scroll_top(), top, "Space also clicked the button");
