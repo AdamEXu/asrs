@@ -131,10 +131,12 @@ fn generate(paths: &Paths, args: &[String]) -> Result {
 
 fn run_specs(paths: &Paths, specs: &[&Spec], mode: Mode) -> Result {
     oracle::build_harness(paths)?;
-    vectors::sync_entry_inputs(paths, mode != Mode::Write)?;
+    if mode == Mode::Write {
+        vectors::sync_entry_inputs(paths, false)?;
+    }
     let entry_hashes = vectors::entry_hashes(
         &paths.oracle_src,
-        &vectors::read_entry_inputs(&paths.oracle_src.join(vectors::ENTRY_INPUTS))?,
+        &vectors::read_entry_inputs(&paths.dist.join(vectors::ENTRY_INPUTS))?,
     )?;
     let mut failures = Vec::new();
     for spec in specs {
@@ -196,9 +198,6 @@ fn manifest_path(root: &Path, name: &str) -> PathBuf {
     synthetic_dir(root).join(format!("{name}{MANIFEST_SUFFIX}"))
 }
 
-/// The generator hash covers only the corpus entry's own inputs, as recorded in
-/// `oracle/inputs.json` (the same graph the vectors' generator hashes use), so an oracle edit
-/// outside the entry's dependencies does not restale the manifest.
 fn generator_hash(entry_hashes: &[(String, String)], spec: &Spec) -> Result<String> {
     let Some((_, entry_hash)) = entry_hashes.iter().find(|(name, _)| name == &spec.entry) else {
         return Err(format!(

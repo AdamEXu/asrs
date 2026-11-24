@@ -114,13 +114,14 @@ jobs:
           key: ${{ matrix.target }}
       - name: Build
         run: cargo build --workspace --all-targets --locked
-      # The descriptor table check runs the generator on the protobufjs the oracle installs;
-      # CI skips the oracle install, so install the lockfile's protobufjs alone where it looks.
+      # CI skips the oracle install, so this puts upstream's locked protobufjs where the
+      # descriptor table generator looks for it.
       - name: Install protobufjs for the descriptor table check
-        run: >
-          npm install --prefix target/oracle/upstream --no-save --ignore-scripts
-          --no-audit --no-fund
-          "protobufjs@$(node -p "require('./reference/AdvantageScope/package-lock.json').packages['node_modules/protobufjs'].version")"
+        run: |
+          rm -rf target/oracle/upstream
+          node oracle/tools/pinnedInstall.cjs reference/AdvantageScope/package-lock.json target/oracle/upstream protobufjs
+          cd target/oracle/upstream
+          npm ci --ignore-scripts --no-audit --no-fund
       - name: Layout, vendored gpui crates and generated tables
         run: |
           cargo xtask layout
