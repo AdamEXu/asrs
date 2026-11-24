@@ -1,0 +1,12 @@
+{
+ "entry": "genLiveNet",
+ "inputs": [
+  "../../../../oracle/src/genLiveNetMain.ts"
+ ],
+ "fixture": {
+  "ports": [
+   0,
+   12000
+  ]
+ }
+}

@@ -1,0 +1,708 @@
+{
+  "entry": "hubSession",
+  "inputs": [
+    "logs/match.csv"
+  ],
+  "fixture": {
+    "seed": 4242,
+    "steps": [
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/match.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": "length",
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "selected-length",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "selected-length"
+      },
+      {
+        "main": "toggle-controls"
+      },
+      {
+        "main": "set-robot-mode-visible",
+        "data": {
+          "showRobotMode": true
+        }
+      },
+      {
+        "main": "edit-axis",
+        "data": {
+          "legend": "left",
+          "lockedRange": null,
+          "unitConversion": {
+            "autoTarget": null,
+            "preset": null
+          },
+          "filter": 0
+        }
+      },
+      {
+        "main": "clear-axis",
+        "data": "left"
+      },
+      {
+        "main": "set-3d-camera",
+        "data": 1
+      },
+      {
+        "main": "edit-fov",
+        "data": 50
+      },
+      {
+        "main": "set-2d-camera",
+        "data": 1
+      },
+      {
+        "main": "new-satellite"
+      },
+      {
+        "main": "add-table-range",
+        "data": {
+          "controllerUUID": "tb",
+          "rendererUUID": "r",
+          "range": [
+            0,
+            1
+          ]
+        }
+      },
+      {
+        "main": "close-tab",
+        "data": false
+      },
+      {
+        "main": "close-tab",
+        "data": true
+      },
+      {
+        "main": "move-tab",
+        "data": 1
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "commands-length"
+      },
+      {
+        "main": "shift-tab",
+        "data": 1
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "shifted-length"
+      },
+      {
+        "main": "new-tab",
+        "data": 5
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "added-length"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": "push",
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "selected-push",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "selected-push"
+      },
+      {
+        "main": "toggle-controls"
+      },
+      {
+        "main": "set-robot-mode-visible",
+        "data": {
+          "showRobotMode": true
+        }
+      },
+      {
+        "main": "edit-axis",
+        "data": {
+          "legend": "left",
+          "lockedRange": null,
+          "unitConversion": {
+            "autoTarget": null,
+            "preset": null
+          },
+          "filter": 0
+        }
+      },
+      {
+        "main": "clear-axis",
+        "data": "left"
+      },
+      {
+        "main": "set-3d-camera",
+        "data": 1
+      },
+      {
+        "main": "edit-fov",
+        "data": 50
+      },
+      {
+        "main": "set-2d-camera",
+        "data": 1
+      },
+      {
+        "main": "new-satellite"
+      },
+      {
+        "main": "add-table-range",
+        "data": {
+          "controllerUUID": "tb",
+          "rendererUUID": "r",
+          "range": [
+            0,
+            1
+          ]
+        }
+      },
+      {
+        "main": "close-tab",
+        "data": false
+      },
+      {
+        "main": "close-tab",
+        "data": true
+      },
+      {
+        "main": "move-tab",
+        "data": 1
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "commands-push"
+      },
+      {
+        "main": "shift-tab",
+        "data": 1
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "shifted-push"
+      },
+      {
+        "main": "new-tab",
+        "data": 5
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "added-push"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": "__proto__",
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "selected-__proto__",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "selected-__proto__"
+      },
+      {
+        "main": "toggle-controls"
+      },
+      {
+        "main": "set-robot-mode-visible",
+        "data": {
+          "showRobotMode": true
+        }
+      },
+      {
+        "main": "edit-axis",
+        "data": {
+          "legend": "left",
+          "lockedRange": null,
+          "unitConversion": {
+            "autoTarget": null,
+            "preset": null
+          },
+          "filter": 0
+        }
+      },
+      {
+        "main": "clear-axis",
+        "data": "left"
+      },
+      {
+        "main": "set-3d-camera",
+        "data": 1
+      },
+      {
+        "main": "edit-fov",
+        "data": 50
+      },
+      {
+        "main": "set-2d-camera",
+        "data": 1
+      },
+      {
+        "main": "new-satellite"
+      },
+      {
+        "main": "add-table-range",
+        "data": {
+          "controllerUUID": "tb",
+          "rendererUUID": "r",
+          "range": [
+            0,
+            1
+          ]
+        }
+      },
+      {
+        "main": "close-tab",
+        "data": false
+      },
+      {
+        "main": "close-tab",
+        "data": true
+      },
+      {
+        "main": "move-tab",
+        "data": 1
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "commands-__proto__"
+      },
+      {
+        "main": "shift-tab",
+        "data": 1
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "shifted-__proto__"
+      },
+      {
+        "main": "new-tab",
+        "data": 5
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "added-__proto__"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": "constructor",
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "selected-constructor",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "selected-constructor"
+      },
+      {
+        "main": "toggle-controls"
+      },
+      {
+        "main": "set-robot-mode-visible",
+        "data": {
+          "showRobotMode": true
+        }
+      },
+      {
+        "main": "edit-axis",
+        "data": {
+          "legend": "left",
+          "lockedRange": null,
+          "unitConversion": {
+            "autoTarget": null,
+            "preset": null
+          },
+          "filter": 0
+        }
+      },
+      {
+        "main": "clear-axis",
+        "data": "left"
+      },
+      {
+        "main": "set-3d-camera",
+        "data": 1
+      },
+      {
+        "main": "edit-fov",
+        "data": 50
+      },
+      {
+        "main": "set-2d-camera",
+        "data": 1
+      },
+      {
+        "main": "new-satellite"
+      },
+      {
+        "main": "add-table-range",
+        "data": {
+          "controllerUUID": "tb",
+          "rendererUUID": "r",
+          "range": [
+            0,
+            1
+          ]
+        }
+      },
+      {
+        "main": "close-tab",
+        "data": false
+      },
+      {
+        "main": "close-tab",
+        "data": true
+      },
+      {
+        "main": "move-tab",
+        "data": 1
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "commands-constructor"
+      },
+      {
+        "main": "shift-tab",
+        "data": 1
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "shifted-constructor"
+      },
+      {
+        "main": "new-tab",
+        "data": 5
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "added-constructor"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": "missing",
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "selected-missing",
+                "controller": [],
+                "controllerUUID": "tb",
+                "renderer": null,
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 40
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "selected-missing"
+      },
+      {
+        "main": "toggle-controls"
+      },
+      {
+        "main": "set-robot-mode-visible",
+        "data": {
+          "showRobotMode": true
+        }
+      },
+      {
+        "main": "edit-axis",
+        "data": {
+          "legend": "left",
+          "lockedRange": null,
+          "unitConversion": {
+            "autoTarget": null,
+            "preset": null
+          },
+          "filter": 0
+        }
+      },
+      {
+        "main": "clear-axis",
+        "data": "left"
+      },
+      {
+        "main": "set-3d-camera",
+        "data": 1
+      },
+      {
+        "main": "edit-fov",
+        "data": 50
+      },
+      {
+        "main": "set-2d-camera",
+        "data": 1
+      },
+      {
+        "main": "new-satellite"
+      },
+      {
+        "main": "add-table-range",
+        "data": {
+          "controllerUUID": "tb",
+          "rendererUUID": "r",
+          "range": [
+            0,
+            1
+          ]
+        }
+      },
+      {
+        "main": "close-tab",
+        "data": false
+      },
+      {
+        "main": "close-tab",
+        "data": true
+      },
+      {
+        "main": "move-tab",
+        "data": 1
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "commands-missing"
+      },
+      {
+        "main": "shift-tab",
+        "data": 1
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "shifted-missing"
+      },
+      {
+        "main": "new-tab",
+        "data": 5
+      },
+      {
+        "capture": [
+          "state"
+        ],
+        "label": "added-missing"
+      }
+    ],
+    "ignoreMain": [
+      "save-state",
+      "update-touch-bar-slider",
+      "save-type-memory"
+    ]
+  }
+}

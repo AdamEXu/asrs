@@ -677,8 +677,9 @@ microtasks) at level n gets n + 1, an interval rises a level per repeat, and a d
 is raised to 4 ms when the creating level is above 5, so a `setTimeout(0)` in a fresh
 `setInterval` callback waits 4 ms from the sixth repeat on (measured in Electron 39).
 `requestIdleCallback` fires at its `timeout`, `requestAnimationFrame` 16 ms later and
-`AbortSignal.timeout` at its delay, all as level-0 delayed tasks in the timers' due-time order;
-Chromium's ordering of those against short DOM timers at an equal due time differs (#204). IPC
+`AbortSignal.timeout` at its delay, all as level-0 delayed tasks in the timers' due-time order. At
+an equal due time, timers with a delay from 1 to 31 ms run before longer ones, the delayed tasks and
+timers without a delay (`live/net/timers`; how late Chromium's wake-ups make them is not modelled). IPC
 between the renderer and the emulated main process is a delivery with no delay.
 
 Client traffic reaches the server `latencyMs` after it is sent and server traffic reaches the
@@ -702,11 +703,22 @@ where an event has none, in the order things happen.
 |---|---|
 | client | `ws-open` ([url, [protocols]]), `ws-send` (string or bytes), `ws-close`, `http-get` (url), `http-abort`, `tcp-open` ([host, port]), `tcp-send` (bytes), `tcp-close` |
 | server | `ws-accept` (protocol, `""` for none), `ws-reject`, `ws-push` (string or bytes), `ws-drop`, `http-reply` ([status, body]), `http-refuse`, `tcp-accept`, `tcp-refuse`, `tcp-push` (bytes), `tcp-drop` |
-| app | `status` (the status callback's value), `output` ([log index, the time supplier's value]), `main` ([name, data] for main messages other than RLOG's), `dump` ([log index, canonical dump]), `throw` (a client op threw, as a string), `nt4` (an `nt4-client` callback: `["announce" \| "unannounce" \| "properties", uid, name, type, properties]`, `["data", uid, name, timestamp, value]`, `["connect"]`, `["disconnect"]`) |
+| app | `status` (the status callback's value), `output` ([log index, the time supplier's value]), `main` ([name, data] for main messages other than RLOG's), `dump` ([log index, canonical dump]), `throw` (a client op threw, as a string), `uncaught` (`live-rlog-start` threw in the main process), `nt4` (an `nt4-client` callback: `["announce" \| "unannounce" \| "properties", uid, name, type, properties]`, `["data", uid, name, timestamp, value]`, `["connect"]`, `["disconnect"]`) |
 
 Log indexes number the distinct `Log` objects in the order the harness first sees them; 0 is
 the hub's initial log. TCP chunk boundaries are recorded as written, but only the byte stream
 is protocol-relevant.
+
+### Live network vectors
+
+`live/net/*` (`src/genLiveNet.ts`, with `src/genLiveNetMain.ts` as its Electron main process) records
+what the sources' browser calls do in a page with the hub's origin and content security policy.
+`--host-resolver-rules` sends every host and port to one loopback server, so nothing leaves the
+machine whatever the URL says. `urls` builds each source's URLs from every address and records what
+the call settled with and the request that reached the server. `ports` is the ports requests never
+reach. `bodies` is what `Response.text()` and `Response.json()` read: Blink strips one BOM where
+Node's fetch strips two. `timers` is the order in which timers that fall due together ran, the one
+most of the trials agree on; generation fails when fewer than `share` of them do. `crates/asrs-live/tests/live_net.rs` and `timer_order.rs` replay them.
 
 ### Rust side
 
@@ -1420,7 +1432,7 @@ Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-fi
 the folder of a clip `src/app/clips.ts` draws into `inputs/`, as `video-data`'s `imgFolder`, dispatched on the hub's
 `messagePort`, e.g. `new-tab`, `restore-state`), `{"eval": js}`,
 `{"selection": [method, ...args]}`,
-`{"mouse": "move"|"down"|"up"|"click", "x", "y", "modifiers": [...]}`,
+`{"mouse": "move"|"down"|"up"|"click"|"leave", "x", "y", "modifiers": [...]}`,
 `{"wheel": {"x", "y", "deltaX", "deltaY", "wheelTicksX", "wheelTicksY", "precise"}}`,
 `{"key": keyCode, "modifiers": [...]}` (`commandOrControl` is Cmd on macOS and Ctrl elsewhere), `{"dialog": button index | file name | null}` (queued
 answer for the next dialog; a name ending in `/` is a folder that exists), `{"menu": [label, ...]}` (clicks the item at that label path of the
@@ -1440,6 +1452,10 @@ alert, an alert or progress text that starts so, or that much of its progress ba
 clipboard, written to `files/clipboard/<name>.txt`),
 `{"focus": boolean}` (whether the window's page counts as active and focused, through
 `Emulation.setFocusEmulationEnabled`; false until then; windows opened later need their own),
+`{"traverse": name, "count"?: n, "back"?: boolean}` (presses Tab, or Shift+Tab, `n` times and writes
+`document.activeElement` after each, or as it is, to `files/focus/<name>.json`: what it is, whether
+Tab reaches it, its box, its ring and an input's value and selection; `pixel` compares them),
+`{"hover": name}` (the hub's hovered time, written to `files/hover/<name>.json`),
 `{"wait": ms}`, `{"idle": true}` and
 `{"capture": name, "probes": [selectors], "masks": [selectors]}`.
 

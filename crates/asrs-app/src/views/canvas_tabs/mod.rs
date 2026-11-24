@@ -16,7 +16,9 @@ use asrs_hub::hub::{HubModel, HubPage};
 use asrs_hub::tabs::TabRef;
 use asrs_js::math;
 use asrs_model::tab_type::TabType;
-use asrs_ui::gpui::{AnyElement, App, Context, Div, Styled, Window, div, px};
+use asrs_ui::gpui::{
+    AnyElement, App, Bounds, Context, Div, FocusHandle, Pixels, Styled, Window, div, px,
+};
 use asrs_ui::theme::Appearance;
 
 use super::frame::{FrameHost, HubFrame};
@@ -39,6 +41,11 @@ pub struct CanvasTabViews {
 }
 
 impl CanvasTabViews {
+    /// Scrolls the settings panel that holds the focused element, at `bounds`, to it.
+    pub fn scroll_to(&self, focused: &FocusHandle, bounds: Bounds<Pixels>, window: &Window) {
+        self.settings.scroll_to(focused, bounds, window);
+    }
+
     fn retain(&mut self, live: &HashSet<usize>, cx: &mut App) {
         let mut dropped = Vec::new();
         self.swerve.retain(|key, view| {

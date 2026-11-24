@@ -111,6 +111,11 @@ fn len(n: usize) -> JsValue {
     JsValue::Number(n as f64)
 }
 
+/// Whether `tabList[key]` is a member every array has.
+fn inherited(key: &JsValue) -> bool {
+    ops::has_key(&JsValue::Array(Vec::new()), &ops::to_string(key)).unwrap_or(false)
+}
+
 /// `a + b`. Inputs come from a restored layout's JSON, so the BigInt `TypeError`
 /// `ops::add` can raise is unreachable; `NaN` is the inert fallback.
 fn add(a: &JsValue, b: &JsValue) -> JsValue {
@@ -326,6 +331,8 @@ struct Tab<Cx: ?Sized> {
     renderer: Box<dyn TabRenderer<Cx>>,
     uuid: JsValue,
     controls_height: JsValue,
+    /// Added once the page's own frame loop had started.
+    late: bool,
 }
 
 /// The mutable halves of one tab and the `controller.UUID` `Tabs` owns: control events
@@ -464,6 +471,7 @@ pub struct Tabs<Cx: ?Sized> {
     tabs: Vec<Tab<Cx>>,
     selected: JsValue,
     bar: Vec<Rc<RefCell<TitleElement>>>,
+    bar_builds: u64,
     active_satellites: Vec<JsValue>,
     controls_handle_active: bool,
     last_handle_click: f64,
@@ -475,6 +483,7 @@ pub struct Tabs<Cx: ?Sized> {
     messages: Vec<NamedMessage<HubToMain>>,
     bar_sensor: ScrollSensor,
     shadows: [Option<&'static str>; 2],
+    started: bool,
 }
 
 impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
@@ -485,6 +494,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             tabs: Vec::new(),
             selected: num(0.0),
             bar: Vec::new(),
+            bar_builds: 0,
             active_satellites: Vec::new(),
             controls_handle_active: false,
             last_handle_click: 0.0,
@@ -499,6 +509,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             messages: Vec::new(),
             bar_sensor: ScrollSensor::default(),
             shadows: [None, None],
+            started: false,
         }
     }
 
@@ -520,6 +531,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             renderer: parts.renderer,
             uuid: JsValue::String(parts.uuid),
             controls_height: num(0.0),
+            late: false,
         }];
         self.selected = num(0.0);
         Ok(())
@@ -542,6 +554,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
             })
             .and_then(|()| tabs.set_selected(cx, &num(1.0)));
         debug_assert!(start.is_ok());
+        tabs.started = true;
         tabs
     }
 
@@ -609,6 +622,17 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         (out, errors)
     }
 
+    /// One run of the source lists' frame loops: those of the tabs the constructor added, which
+    /// run before `periodic`, or the `late` ones, which run after it.
+    pub fn source_list_frames(&mut self, cx: &mut Cx, late: bool) -> Vec<JsError> {
+        let mut errors = Vec::new();
+        for tab in self.tabs.iter_mut().filter(|tab| tab.late == late) {
+            tab.controller
+                .source_list_input(cx, ListInput::Frame, &mut errors);
+        }
+        errors
+    }
+
     /// The frame callbacks every tab's renderer requested itself.
     pub fn animation_frame(&mut self, cx: &mut Cx) -> Vec<JsError> {
         self.tabs
@@ -643,6 +667,12 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         self.bar.iter().map(|e| e.borrow())
     }
 
+    /// How often `updateElements()` took the titles out of the bar, which takes their focus, and
+    /// put them back.
+    pub fn bar_builds(&self) -> u64 {
+        self.bar_builds
+    }
+
     pub fn controls(&self) -> ControlsView {
         self.controls
     }
@@ -670,8 +700,32 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         std::mem::take(&mut self.messages)
     }
 
-    fn lookup_selected(&self, property: &str) -> Result<usize> {
-        self.selected_index().ok_or_else(|| missing(property))
+    /// `tabList[selectedTab][property]`'s tab; `None` is a property every array has, such as
+    /// `length`, whose value has none of a tab's members.
+    fn lookup_selected(&self, property: &str) -> Result<Option<usize>> {
+        match self.selected_index() {
+            Some(i) => Ok(Some(i)),
+            None if inherited(&self.selected) => Ok(None),
+            None => Err(missing(property)),
+        }
+    }
+
+    /// `tabList[selectedTab].controller[property]`'s tab.
+    fn selected_controller(&self, property: &str) -> Result<usize> {
+        self.lookup_selected("controller")?
+            .ok_or_else(|| missing(property))
+    }
+
+    /// A write to a member of `tabList[selectedTab]` that is no tab: strict mode throws for the
+    /// number `length`, and the prototype's functions take it.
+    fn write_selected(&self, property: &str) -> Result {
+        match ops::to_string(&self.selected) == JsString::from("length") {
+            true => Err(type_error(format!(
+                "Cannot create property '{property}' on number '{}'",
+                self.tabs.len()
+            ))),
+            false => Ok(()),
+        }
     }
 
     fn last_index(&self) -> JsValue {
@@ -684,7 +738,9 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         if lt(&self.selected, &num(0.0)) || ge(&self.selected, &len(self.tabs.len())) {
             return Ok(());
         }
-        let i = self.lookup_selected("type")?;
+        let Some(i) = self.lookup_selected("type")? else {
+            return self.write_selected("controlsHeight");
+        };
         let tab = &mut self.tabs[i];
         let fixed = fixed_for_value(&tab.type_value);
         let mut applied = math::min2(math::max2(to_number(&tab.controls_height), 0.0), available);
@@ -714,6 +770,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
 
     fn update_elements(&mut self, cx: &Cx) -> Result {
         self.bar = self.tabs.iter().map(|t| t.element.clone()).collect();
+        self.bar_builds += 1;
         for (i, tab) in self.tabs.iter_mut().enumerate() {
             let selected = ops::strict_equals(&len(i), &self.selected);
             let mut element = tab.element.borrow_mut();
@@ -728,7 +785,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
     }
 
     fn update_timeline_visibility(&mut self, cx: &Cx) -> Result {
-        let i = self.lookup_selected("controller")?;
+        let i = self.selected_controller("showTimeline")?;
         self.show_timeline = Some(self.tabs[i].controller.show_timeline(cx));
         Ok(())
     }
@@ -827,7 +884,9 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
     }
 
     pub fn toggle_controls_visible(&mut self, cx: &Cx) -> Result {
-        let i = self.lookup_selected("type")?;
+        let Some(i) = self.lookup_selected("type")? else {
+            return self.write_selected("controlsHeight");
+        };
         let tab = &mut self.tabs[i];
         let fixed = fixed_for_value(&tab.type_value);
         tab.controls_height = if ops::strict_equals(&tab.controls_height, &num(0.0)) {
@@ -884,6 +943,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
                 renderer: parts.renderer,
                 uuid: JsValue::String(parts.uuid),
                 controls_height: num(controls_height),
+                late: self.started,
             },
         );
         self.selected = add(&self.selected, &num(1.0));
@@ -893,7 +953,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
     /// `newSatellite()`: asks main for a satellite showing the selected tab.
     pub fn new_satellite(&mut self) -> Result {
         if ge(&self.selected, &num(0.0)) {
-            let i = self.lookup_selected("controller")?;
+            let i = self.selected_controller("UUID")?;
             let mut o = JsObject::new();
             o.insert("uuid", self.tabs[i].uuid.clone());
             o.insert("type", self.tabs[i].type_value.clone());
@@ -913,11 +973,14 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         }
         let force = ops::to_boolean(force);
         let i = ops::list_index(index, self.tabs.len()).ok_or_else(|| {
-            missing(if force {
-                "rendererElement"
-            } else {
-                "controller"
-            })
+            match (force, inherited(index)) {
+                (false, false) => missing("controller"),
+                (false, true) => missing("UUID"),
+                (true, false) => missing("rendererElement"),
+                (true, true) => type_error(
+                    "Failed to execute 'removeChild' on 'Node': parameter 1 is not of type 'Node'.",
+                ),
+            }
         })?;
         if !force && self.tabs[i].uuid.is_null() {
             return Ok(());
@@ -1014,7 +1077,9 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
     /// The controller of the selected tab, when that tab is a `kind` tab (`editAxis`,
     /// `clearAxis`, `setRobotModeVisible`, `isUnlockedVideoSelected`).
     pub fn selected_controller_as<T: 'static>(&mut self, kind: TabType) -> Result<Option<&mut T>> {
-        let i = self.lookup_selected("type")?;
+        let Some(i) = self.lookup_selected("type")? else {
+            return Ok(None);
+        };
         let tab = &mut self.tabs[i];
         Ok(if tab.kind == Some(kind) {
             tab.controller.downcast_mut::<T>()
@@ -1026,7 +1091,9 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
     /// The renderer of the selected tab, when that tab is a `kind` tab (`set3DCamera`,
     /// `set2DCamera`, `setFov`).
     pub fn selected_renderer_as<T: 'static>(&mut self, kind: TabType) -> Result<Option<&mut T>> {
-        let i = self.lookup_selected("type")?;
+        let Some(i) = self.lookup_selected("type")? else {
+            return Ok(None);
+        };
         let tab = &mut self.tabs[i];
         Ok(if tab.kind == Some(kind) {
             tab.renderer.downcast_mut::<T>()
@@ -1038,7 +1105,9 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
     /// The selected tab's renderer when that tab is a `kind` tab, as `Tabs.set3DCamera` and
     /// `Tabs.setFov` reach it.
     pub fn selected_renderer(&mut self, kind: TabType) -> Result<Option<&mut dyn TabRenderer<Cx>>> {
-        let i = self.lookup_selected("type")?;
+        let Some(i) = self.lookup_selected("type")? else {
+            return Ok(None);
+        };
         let tab = &mut self.tabs[i];
         Ok(if tab.kind == Some(kind) {
             Some(tab.renderer.as_mut())
@@ -1077,7 +1146,7 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         for i in 0..self.tabs.len() {
             let tab = &self.tabs[i];
             if tab.kind == Some(TabType::Table) && ops::strict_equals(&tab.uuid, controller_uuid) {
-                let s = self.lookup_selected("controller")?;
+                let s = self.selected_controller("addRendererRange")?;
                 if self.tabs[s].kind != Some(TabType::Table) {
                     return Err(type_error(
                         "this.tabList[this.selectedTab].controller.addRendererRange is not a function",

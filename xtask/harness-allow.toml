@@ -412,12 +412,6 @@ rule = "no-tally"
 reason = "check_trace compares whole lines up to the longer of the two traces"
 
 [[allow]]
-file = "crates/asrs-live/tests/support/mod.rs"
-function = "column"
-rule = "default-slot"
-reason = "a column of another type has no values, and the dump it goes into is compared"
-
-[[allow]]
 file = "crates/asrs-log/tests/search_vectors.rs"
 function = "search_queries"
 rule = "default-slot"

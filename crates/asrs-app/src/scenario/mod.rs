@@ -45,6 +45,8 @@ pub enum MouseKind {
     Down,
     Up,
     Click,
+    /// The pointer leaves the window.
+    Leave,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -136,6 +138,14 @@ pub enum Action {
     Copy(String),
     /// Whether the windows count as active.
     Focus(bool),
+    /// Presses Tab this many times and keeps what had the focus after each, or what has it now.
+    Traverse {
+        name: String,
+        count: usize,
+        back: bool,
+    },
+    /// Keeps the hub's hovered time.
+    Hover(String),
     Capture {
         name: String,
         probes: Vec<String>,
@@ -235,7 +245,7 @@ const TOP_KEYS: [&str; 11] = [
     "actions",
     "about",
 ];
-const ACTION_KEYS: [&str; 20] = [
+const ACTION_KEYS: [&str; 22] = [
     "main",
     "open",
     "eval",
@@ -255,6 +265,8 @@ const ACTION_KEYS: [&str; 20] = [
     "role",
     "copy",
     "focus",
+    "traverse",
+    "hover",
     "capture",
 ];
 
@@ -343,6 +355,7 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
                 Some("down") => MouseKind::Down,
                 Some("up") => MouseKind::Up,
                 Some("click") => MouseKind::Click,
+                Some("leave") => MouseKind::Leave,
                 other => return Err(format!("unknown {kind} action {other:?}")),
             },
             x: number(action, "x", None)?,
@@ -423,6 +436,15 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
                 .as_bool()
                 .ok_or_else(|| format!("{kind} is not a boolean"))?,
         ),
+        "traverse" => Action::Traverse {
+            name: text().ok_or("traverse is not a name")?,
+            count: number(action, "count", Some(0.0))? as usize,
+            back: action
+                .get("back")
+                .and_then(JsValue::as_bool)
+                .unwrap_or(false),
+        },
+        "hover" => Action::Hover(text().ok_or("hover is not a name")?),
         "capture" => {
             let name = text().ok_or("capture is not a name")?;
             Action::Capture {

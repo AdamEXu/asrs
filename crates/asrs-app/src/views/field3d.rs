@@ -46,7 +46,7 @@ use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FOCUS_RING_WIDTH, FONT_FAMILY, chains};
 use asrs_ui::tooltip::{titled, untitled};
 
-use super::frame::{FrameHost, HubFrame};
+use super::frame::{FrameHost, HubFrame, SETTINGS_SECTION};
 use super::select::FormSelect;
 use crate::main_process::app_root;
 
@@ -1313,7 +1313,8 @@ impl<H: FrameHost> HubFrame<H> {
             );
         });
 
-        let mut title = |text: &str, top: f64| {
+        let mut title = |text: &'static str, top: f64, window: &mut Window| {
+            let place = focus::place((text, key), window, cx);
             let (w, _) = text::measure(cx, &title_style(), text, scale);
             let x = layout_unit((width - w) / 2.0);
             let (abs_x, abs_y) = ((settings[0] + 1.0 + x) as f32, (controls[1] + top) as f32);
@@ -1321,14 +1322,15 @@ impl<H: FrameHost> HubFrame<H> {
                 .absolute()
                 .left(px(x as f32))
                 .top(px(top as f32))
+                .track_focus(&place)
                 .child(
                     Text::new(text.to_owned(), title_style())
                         .color(theme.text)
                         .subpixel(snap_remainder(abs_x, scale), snap_remainder(abs_y, scale)),
                 )
         };
-        let field_title = title("Field", 5.0);
-        let xr_title = title("XR", 5.0 + TITLE_HEIGHT + FIELD_INPUT_HEIGHT);
+        let field_title = title("Field", 5.0, window);
+        let xr_title = title("XR", 5.0 + TITLE_HEIGHT + FIELD_INPUT_HEIGHT, window);
 
         let split_w = width * 0.8;
         let button_w = split_w * 0.6;
@@ -1406,7 +1408,8 @@ impl<H: FrameHost> HubFrame<H> {
             .w(px(select_w as f32))
             .h(px(SELECT_HEIGHT as f32))
             .child(select);
-        let block = local(settings, controls)
+        let place = focus::place(("field-3d-settings", key), window, cx);
+        let block = focus::section(local(settings, controls), SETTINGS_SECTION, &place)
             .border_l_1()
             .border_color(rgb(if dark { 0x000000 } else { 0xdddddd }))
             .overflow_hidden()

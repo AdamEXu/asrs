@@ -1,0 +1,448 @@
+{
+  "entry": "dom",
+  "backend": "blink",
+  "fixture": {
+    "window": {
+      "width": 1100,
+      "height": 650,
+      "devicePixelRatio": 1
+    },
+    "geometry": "real",
+    "seed": 6,
+    "version": {
+      "platform": "darwin",
+      "platformRelease": "27.0.0",
+      "platformArch": "arm64",
+      "appVersion": "4.0.0"
+    },
+    "steps": [
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 220,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "number"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": "250",
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "string"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": [
+              260
+            ],
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "array"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": null,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "null"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": -200,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "negative"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 1000000,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "huge"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 5000,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "wide"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": "abc",
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "text"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": {},
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "object"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "lg",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "missing"
+      },
+      {
+        "main": "set-version",
+        "data": {
+          "platform": "win32",
+          "platformRelease": "10.0.22631",
+          "platformArch": "x64",
+          "appVersion": "4.0.0"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "missing-win32"
+      },
+      {
+        "main": "set-version",
+        "data": {
+          "platform": "linux",
+          "platformRelease": "6.8.0",
+          "platformArch": "x64",
+          "appVersion": "4.0.0"
+        }
+      },
+      {
+        "capture": [
+          {
+            "kind": "eval",
+            "expr": "/*frame:layout*/ window.__oracleQuiet(() => { const root = document.documentElement.style; return [[\"--side-bar-width\", \"--show-side-bar\", \"--tab-controls-height\", \"--show-tab-controls\", \"--show-timeline\", \"--show-lock-buttons\", \"--show-update-button\", \"--show-feedback-button\", \"--show-loading-glow\", \"--loading-glow-progress\"].map((v) => root.getPropertyValue(v)), document.body.className, document.body.style.cursor, [\"div.title-bar\", \"div.title-bar-text\", \"div.title-bar-menu\", \"button.update\", \"button.feedback\", \"button.play\", \"button.pause\", \"button.lock\", \"button.unlock\", \"button.close\", \"button.popup\", \"button.add-tab\", \"div.side-bar-background\", \"div.side-bar-shadow\", \"div.viewer-background\", \"div.side-bar-handle\", \"div.loading-glow\", \"div.side-bar\", \"div.viewer\", \"div.tab-bar\", \"div.tab-bar-shadow-left\", \"div.tab-bar-shadow-right\", \"div.tab-bar-scroll\", \"div.renderer-content\", \"div.controls-content\", \"div.controls-handle\", \"div.timeline\", \"div.fps\"].map((s) => { const e = document.querySelector(s); const r = e.getBoundingClientRect(); return [s, e.hidden, r.x, r.y, r.width, r.height]; }), [document.getElementById(\"dragItem\").hidden, document.getElementById(\"dragItem\").style.left, document.getElementById(\"dragItem\").style.top]]; })"
+          }
+        ],
+        "label": "missing-linux"
+      }
+    ]
+  }
+}

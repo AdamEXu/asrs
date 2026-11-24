@@ -1,0 +1,1358 @@
+{
+  "about": "Tab and Shift+Tab (#375, #369) through the hub's frame: tab controls, search field and tab titles, the tab bar scrolling to the focused title, Enter and Space, and where the order starts after presses",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 3,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Graph number 1",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "graph1x0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            },
+            {
+              "type": 1,
+              "title": "Graph number 2",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "graph2x0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            },
+            {
+              "type": 1,
+              "title": "Graph number 3",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "graph3x0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            },
+            {
+              "type": 1,
+              "title": "Graph number 4",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "graph4x0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            },
+            {
+              "type": 1,
+              "title": "Graph number 5",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "graph5x0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            },
+            {
+              "type": 1,
+              "title": "Graph number 6",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "graph6x0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            },
+            {
+              "type": 1,
+              "title": "Graph number 7",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "graph7x0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            },
+            {
+              "type": 1,
+              "title": "Graph number 8",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "graph8x0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "all",
+      "count": 34
+    },
+    {
+      "traverse": "all-back",
+      "count": 34,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "to-title",
+      "count": 3
+    },
+    {
+      "capture": "title",
+      "probes": [
+        ".tab-bar",
+        ".side-bar"
+      ]
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "title-entered",
+      "count": 0
+    },
+    {
+      "traverse": "title-entered-next",
+      "count": 2
+    },
+    {
+      "capture": "title-selected",
+      "probes": [
+        ".tab-bar"
+      ]
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "title-entered-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "to-end",
+      "count": 10
+    },
+    {
+      "capture": "scrolled",
+      "probes": [
+        ".tab-bar"
+      ]
+    },
+    {
+      "key": "Space"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "title-space",
+      "count": 0
+    },
+    {
+      "capture": "title-space",
+      "probes": [
+        ".tab-bar"
+      ]
+    },
+    {
+      "key": "Space"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "search",
+      "count": 1
+    },
+    {
+      "key": "Tab",
+      "modifiers": [
+        "control"
+      ]
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "control",
+      "count": 0
+    },
+    {
+      "key": "Tab",
+      "modifiers": [
+        "commandOrControl"
+      ]
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "command",
+      "count": 0
+    },
+    {
+      "key": "Tab",
+      "modifiers": [
+        "alt"
+      ]
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "alt",
+      "count": 0
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "close",
+      "count": 3,
+      "back": true
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "closed",
+      "count": 0
+    },
+    {
+      "traverse": "closed-next",
+      "count": 1
+    },
+    {
+      "capture": "closed",
+      "probes": [
+        ".tab-bar"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "play",
+      "count": 4,
+      "back": true
+    },
+    {
+      "capture": "play",
+      "probes": []
+    },
+    {
+      "key": "Space"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "playing",
+      "count": 0
+    },
+    {
+      "traverse": "playing-next",
+      "count": 1
+    },
+    {
+      "key": "Space"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "paused",
+      "count": 0
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "play-enter",
+      "count": 4,
+      "back": true
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "play-entered",
+      "count": 0
+    },
+    {
+      "traverse": "pause",
+      "count": 1
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "pause-entered",
+      "count": 0
+    },
+    {
+      "traverse": "pause-entered-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 620
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 620
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "side-bar",
+      "count": 0
+    },
+    {
+      "traverse": "side-bar-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 620
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 620
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 620
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "side-bar-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 180
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 180
+    },
+    {
+      "mouse": "up",
+      "x": 90,
+      "y": 180
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "field",
+      "count": 0
+    },
+    {
+      "traverse": "field-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 90,
+      "y": 180
+    },
+    {
+      "mouse": "down",
+      "x": 90,
+      "y": 180
+    },
+    {
+      "mouse": "up",
+      "x": 90,
+      "y": 180
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "field-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 44
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 44
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 44
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "tab-bar",
+      "count": 0
+    },
+    {
+      "traverse": "tab-bar-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 44
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 44
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 44
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "tab-bar-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 110
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 110
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 110
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "timeline",
+      "count": 0
+    },
+    {
+      "traverse": "timeline-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 110
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 110
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 110
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "timeline-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Graph number 1",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "graph1x0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "canvas",
+      "count": 0
+    },
+    {
+      "traverse": "canvas-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "canvas-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 450
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 450
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 450
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "handle",
+      "count": 0
+    },
+    {
+      "traverse": "handle-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 450
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 450
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 450
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "handle-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    }
+  ]
+}

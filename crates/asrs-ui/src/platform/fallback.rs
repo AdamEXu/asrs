@@ -145,6 +145,10 @@ pub(super) fn popup_window_opened(
 
 pub(super) fn close_popup_menu(_window: &Window) {}
 
+pub(super) fn menu_takes_keys(_window: &Window) -> bool {
+    false
+}
+
 pub(super) fn native_menu_label(label: &str) -> String {
     label.to_owned()
 }

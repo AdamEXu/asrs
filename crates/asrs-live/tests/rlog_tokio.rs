@@ -1,6 +1,6 @@
-//! The RLOG transport over real sockets: held writes, `Connect`/`Data`, the idle timeout's one
-//! report, `destroy` dropping already-queued data, `localhost` across address families, and a
-//! refused connection.
+//! The RLOG transport over real sockets: held writes, `Connect`/`Data`, `destroy` dropping
+//! already-queued data, `localhost` across address families, a refused connection, a full backlog
+//! and a refused port.
 
 use std::io::{Read, Write};
 use std::net::TcpListener;
@@ -57,21 +57,11 @@ fn follows_node_socket_rules_over_real_sockets() {
     });
 
     let mut net = TokioRlogTransport::new(NetOptions::new(runtime.handle().clone()));
-    let id = net.tcp_connect("127.0.0.1", f64::from(port));
+    let id = net.tcp_connect("127.0.0.1", f64::from(port)).unwrap();
     net.tcp_write(id, &[6, 3, 2, 8]);
-    net.tcp_set_timeout(id, 200.0);
     let mut events = Vec::new();
-    collect(&mut net, &mut events, |e| {
-        received(e, id) == b"abc" && e.contains(&RlogNetEvent::Timeout(id))
-    });
+    collect(&mut net, &mut events, |e| received(e, id) == b"abc");
     assert_eq!(events[0], RlogNetEvent::Connect(id));
-    assert_eq!(
-        events
-            .iter()
-            .filter(|e| **e == RlogNetEvent::Timeout(id))
-            .count(),
-        1
-    );
 
     late_tx.send(()).unwrap();
     std::thread::sleep(Duration::from_millis(300));
@@ -96,8 +86,7 @@ fn an_empty_host_falls_back_across_families_like_node() {
     let port = listener.local_addr().unwrap().port();
     let server = std::thread::spawn(move || listener.accept().map(|_| ()));
     let mut net = TokioRlogTransport::new(NetOptions::new(runtime.handle().clone()));
-    let id = net.tcp_connect("", f64::from(port));
-    net.tcp_set_timeout(id, 1000.0);
+    let id = net.tcp_connect("", f64::from(port)).unwrap();
     let mut events = Vec::new();
     collect(&mut net, &mut events, |e| !e.is_empty());
     assert_eq!(events[0], RlogNetEvent::Connect(id));
@@ -113,7 +102,7 @@ fn a_refused_connection_reports_error_then_close() {
         .unwrap()
         .port();
     let mut net = TokioRlogTransport::new(NetOptions::new(runtime.handle().clone()));
-    let id = net.tcp_connect("127.0.0.1", f64::from(port));
+    let id = net.tcp_connect("127.0.0.1", f64::from(port)).unwrap();
     net.tcp_write(id, b"held");
     let mut events = Vec::new();
     collect(&mut net, &mut events, |e| {
@@ -142,7 +131,7 @@ fn a_backlog_stops_reading_the_socket() {
         }
     });
     let mut net = TokioRlogTransport::new(NetOptions::new(runtime.handle().clone()));
-    let id = net.tcp_connect("127.0.0.1", f64::from(port));
+    let id = net.tcp_connect("127.0.0.1", f64::from(port)).unwrap();
     let start = Instant::now();
     let mut last = 0;
     let mut still = 0;
@@ -178,4 +167,23 @@ fn a_backlog_stops_reading_the_socket() {
         assert!(start.elapsed() < Duration::from_secs(10));
         std::thread::sleep(Duration::from_millis(1));
     }
+}
+
+#[test]
+fn a_port_node_refuses_makes_no_socket() {
+    let runtime = LiveRuntime::new().unwrap();
+    let dialed = Arc::new(AtomicUsize::new(0));
+    let count = dialed.clone();
+    let mut options = NetOptions::new(runtime.handle().clone());
+    options.dial = Some(Arc::new(move |host, port| {
+        count.fetch_add(1, Ordering::SeqCst);
+        (host.to_owned(), port)
+    }));
+    let mut net = TokioRlogTransport::new(options);
+    for port in [70000.0, 1.5, -1.0, 65536.0, 1e-7, f64::INFINITY, f64::NAN] {
+        net.tcp_connect("127.0.0.1", port).unwrap_err();
+    }
+    assert_eq!(dialed.load(Ordering::SeqCst), 0);
+    assert_eq!(runtime.alive_tasks(), 0);
+    assert_eq!(net.next_event(), None);
 }

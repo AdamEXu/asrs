@@ -4,7 +4,7 @@ use gpui_kit::{
     rgb,
 };
 
-use crate::focus::{FocusRing, TransformedOutline};
+use crate::focus::{Activate, FocusRing, TransformedOutline};
 use crate::icon::{Icon, IconFit, IconSource};
 use crate::theme::{Appearance, BUTTON_RADIUS, FOCUS_RING_RADIUS, IconTint};
 use crate::tooltip::titled;
@@ -205,7 +205,7 @@ impl RenderOnce for IconButton {
                 .hover(move |s| s.bg(rgb(hover)))
                 .active(move |s| s.bg(rgb(active)));
             if let Some(handler) = self.on_click {
-                button = button.on_click(handler);
+                button = button.on_activate(handler);
             }
         }
         match self.title {

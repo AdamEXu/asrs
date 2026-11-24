@@ -1,0 +1,320 @@
+{
+  "about": "Tab (#375) through the console tab: jump field, buttons and filter, with Enter and presses",
+  "actions": [
+    {
+      "open": [
+        "app:console"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 5,
+              "title": "Output",
+              "controller": "/Console",
+              "controllerUUID": "console0000000000000000000000000",
+              "renderer": {
+                "highlight": false
+              },
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "all",
+      "count": 18
+    },
+    {
+      "traverse": "all-back",
+      "count": 18,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "highlight",
+      "count": 8
+    },
+    {
+      "capture": "highlight",
+      "probes": [
+        "button.highlight-button"
+      ]
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "highlighted",
+      "count": 0
+    },
+    {
+      "traverse": "filter",
+      "count": 1
+    },
+    {
+      "key": "a"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "filtered",
+      "count": 1
+    },
+    {
+      "capture": "filtered",
+      "probes": [
+        "input.filter"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "rows",
+      "count": 0
+    },
+    {
+      "traverse": "rows-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "rows-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 103
+    },
+    {
+      "mouse": "down",
+      "x": 460,
+      "y": 103
+    },
+    {
+      "mouse": "up",
+      "x": 460,
+      "y": 103
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "header",
+      "count": 0
+    },
+    {
+      "traverse": "header-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 460,
+      "y": 103
+    },
+    {
+      "mouse": "down",
+      "x": 460,
+      "y": 103
+    },
+    {
+      "mouse": "up",
+      "x": 460,
+      "y": 103
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "header-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "to-delete",
+      "count": 6
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "deleted",
+      "count": 0
+    },
+    {
+      "traverse": "deleted-next",
+      "count": 1
+    }
+  ]
+}

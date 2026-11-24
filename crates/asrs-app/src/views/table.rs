@@ -25,10 +25,11 @@ use asrs_tabs::table::view::{TableRow, TableView};
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
+use asrs_ui::focus::{self, ScrollAxis};
 use asrs_ui::gpui::{
-    AnyElement, App, AppContext, Context, Div, Entity, Focusable, InteractiveElement, IntoElement,
-    MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, SharedString, Styled,
-    Subscription, Window, div, px, rgb,
+    AnyElement, App, AppContext, Context, Div, Entity, FocusHandle, Focusable, InteractiveElement,
+    IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent,
+    SharedString, Styled, Subscription, Window, div, px, rgb,
 };
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, TextField};
 use asrs_ui::parity::probed;
@@ -494,6 +495,10 @@ pub struct TableViews {
     over_body: bool,
     button_pressed: bool,
     pressed_row: Option<usize>,
+    /// The header cells' buttons, with their column's left and width.
+    deletes: Vec<(FocusHandle, [f64; 2])>,
+    /// Where Tab goes on from in the header cells.
+    cell_places: Vec<FocusHandle>,
 }
 
 fn renderer_key(renderer: &TableRenderer) -> JsString {
@@ -629,7 +634,9 @@ impl<H: FrameHost> HubFrame<H> {
         let dark = appearance == Appearance::Dark;
         let mut root = div().absolute().left_0().top_0().size_full();
         root = root.child(hand_icon(rect, hand, dark, grid));
-        root = root.child(self.table_body(&view, &dom, jump, rect, appearance, grid, selected, cx));
+        root = root.child(self.table_body(
+            &view, &dom, jump, rect, appearance, grid, selected, window, cx,
+        ));
         let dom = dom.borrow();
         if let (false, Some(left)) = (dom.drag_highlight_hidden, dom.drag_highlight_left) {
             root = root.child(
@@ -643,7 +650,7 @@ impl<H: FrameHost> HubFrame<H> {
 
     #[expect(clippy::too_many_arguments)]
     fn table_body(
-        &self,
+        &mut self,
         view: &TableView,
         dom: &Rc<RefCell<TableDom>>,
         jump: Entity<TextField<FormNumber>>,
@@ -651,8 +658,16 @@ impl<H: FrameHost> HubFrame<H> {
         appearance: Appearance,
         grid: Grid,
         selected: Option<Selected>,
+        window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
+        let shown_key = self.table.shown.as_ref().map(|s| s.key.clone());
+        let place = |part: &str, window: &mut Window, cx: &mut Context<'_, Self>| {
+            let id = SharedString::from(format!("table-{part}-{shown_key:?}"));
+            focus::place(id, window, cx)
+        };
+        let container_place = place("container", window, cx);
+        let rows_place = place("rows", window, cx);
         let palette = Palette::of(appearance);
         let header_palette = HeaderPalette::of(appearance);
         let text_color = appearance.theme().text;
@@ -809,13 +824,20 @@ impl<H: FrameHost> HubFrame<H> {
             ));
         }
         let blurred = !self.host().hub(cx).is_focused();
-        // `updateFields` replaces every header cell, which drops the focus of one's button.
+        // `updateFields` replaces every header cell after the first, which drops the focus of one's
+        // button. Tab goes on from before them.
         let mut headers = DefaultHasher::new();
         for field in &view.headers {
             (&field.text.to_string_lossy(), field.available).hash(&mut headers);
         }
         let headers = headers.finish();
-        let mut header = div().absolute().inset_0();
+        let columns_place = place("columns", window, cx);
+        let mut header = div()
+            .absolute()
+            .inset_0()
+            .child(focus::hidden(&columns_place).tab_group().tab_index(2));
+        let mut deletes = Vec::new();
+        let mut cell_places = Vec::new();
         for (index, field) in view.headers.iter().enumerate() {
             let column = index + 1;
             let [left, w] = columns[column];
@@ -830,8 +852,12 @@ impl<H: FrameHost> HubFrame<H> {
             let key_width = math::max2(w - cell_border - KEY_LEFT - key_right, 0.0);
             let key_left = left + KEY_LEFT;
             let key = field.text.to_string_lossy();
+            let place = format!("table-key-{shown_key:?}-{headers:x}-{index}");
+            let place = focus::place(SharedString::from(place), window, cx);
+            cell_places.push(place.clone());
             let mut key_box = grid
                 .place([key_left, y, key_width, KEY_HEIGHT])
+                .track_focus(&place)
                 .overflow_hidden();
             key_box = key_box.child(
                 Text::new(key, key_style("left"))
@@ -843,6 +869,8 @@ impl<H: FrameHost> HubFrame<H> {
             let mut th = div()
                 .absolute()
                 .inset_0()
+                .tab_group()
+                .tab_index(column as isize + 1)
                 .child(header_cell(grid, cell, !last, border, &header_palette))
                 .child(titled(field.title.to_string_lossy(), grid.place(cell)))
                 .child(untitled(key_box));
@@ -865,10 +893,14 @@ impl<H: FrameHost> HubFrame<H> {
                     left + w - cell_border - CLOSE_RIGHT - BUTTON,
                     y + BUTTON_TOP,
                 ];
-                let id = format!("table-close-{headers:x}-{index}");
+                let id = format!("table-close-{shown_key:?}-{headers:x}-{index}");
+                let delete = focus::place(SharedString::from(format!("{id}-focus")), window, cx);
+                cell_places.push(delete.clone());
+                deletes.push((delete.clone(), [left, w - cell_border]));
                 let button = IconButton::new(SharedString::from(id), symbol("close.svg"))
                     .title("")
                     .blurred(blurred)
+                    .track_focus(&delete)
                     .on_click(cx.listener(move |frame, _, _, cx| frame.table_close(index, cx)));
                 th = th.child(grid.button(button, at));
                 probes = probes.child(probed(
@@ -881,7 +913,8 @@ impl<H: FrameHost> HubFrame<H> {
         let first_cell = [first[0], y, first[1], header_height];
         let [jx, jy, jw, jh] = JUMP_INPUT;
         let jump_at = [first[0] + jx, y + jy, jw, jh];
-        let button = IconButton::new("table-jump", symbol("verticalalignbottom.svg"))
+        let jump_id = SharedString::from(format!("table-jump-{shown_key:?}"));
+        let button = IconButton::new(jump_id, symbol("verticalalignbottom.svg"))
             .blurred(blurred)
             .title("Go to timestamp")
             .on_click(cx.listener(|frame, _, _, cx| frame.table_jump(cx)));
@@ -894,16 +927,21 @@ impl<H: FrameHost> HubFrame<H> {
                 border,
                 &header_palette,
             ))
-            .child(titled(
-                "Go to timestamp",
-                grid.place(jump_at)
-                    .on_mouse_down_out({
-                        let jump = jump.clone();
-                        move |_, window, cx| jump.update(cx, |field, cx| field.blur(window, cx))
-                    })
-                    .child(jump),
-            ))
-            .child(grid.button(button, button_at));
+            .child(
+                div()
+                    .absolute()
+                    .inset_0()
+                    .tab_group()
+                    .tab_index(1)
+                    .child(titled("Go to timestamp", grid.place(jump_at).child(jump)))
+                    .child(grid.button(button, button_at)),
+            );
+        self.table.deletes = deletes;
+        let gone: Vec<FocusHandle> = std::mem::replace(&mut self.table.cell_places, cell_places)
+            .into_iter()
+            .filter(|place| !self.table.cell_places.contains(place))
+            .collect();
+        self.focus_removed(&gone, &columns_place);
         probes = probes
             .child(probed("input.data-table-jump-input", grid.place(jump_at)))
             .child(probed(
@@ -913,6 +951,7 @@ impl<H: FrameHost> HubFrame<H> {
 
         div()
             .id("data-table-container")
+            .track_focus(&container_place)
             .absolute()
             .left_0()
             .top_0()
@@ -925,6 +964,10 @@ impl<H: FrameHost> HubFrame<H> {
             )
             .on_scroll(
                 cx.listener(|frame, event: &ScrollEvent, _, cx| frame.table_wheel(event, cx)),
+            )
+            .child(
+                grid.place([x, y, width, rows_top + rows_height - y])
+                    .track_focus(&focus::last(&rows_place)),
             )
             .child(probes)
             .child(cells)
@@ -954,6 +997,26 @@ impl<H: FrameHost> HubFrame<H> {
             let mut dom = renderer.dom().borrow_mut();
             let [left, top] = dom.layout.scroll();
             dom.layout.scroll_to([left + by[0], top + by[1]]);
+        });
+    }
+
+    /// Scrolls the table to the focused header button.
+    pub(super) fn scroll_table(&mut self, focused: &FocusHandle, cx: &mut App) {
+        let mut deletes = self.table.deletes.iter();
+        let Some((_, [left, width])) = deletes.find(|(delete, _)| delete == focused).cloned()
+        else {
+            return;
+        };
+        self.table_input(cx, |renderer, _| {
+            let mut dom = renderer.dom().borrow_mut();
+            let layout = &mut dom.layout;
+            let button = left + width - CLOSE_RIGHT - BUTTON - layout.container.x;
+            let visible = layout.container.width;
+            let by = focus::reveal(ScrollAxis::Horizontal, visible, [button, BUTTON]);
+            if by != 0.0 {
+                let [x, y] = layout.scroll();
+                layout.scroll_to([x + by, y]);
+            }
         });
     }
 

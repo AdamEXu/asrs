@@ -78,9 +78,7 @@ use asrs_model::preferences::{CoordinateSystemPreference, Preferences, Timestamp
 use asrs_model::selection::{Selection, SelectionMode, TimeSupplier};
 use asrs_model::source_list::Undisplayed;
 use asrs_model::source_list::{Env, ItemView, Length, SourceList};
-use asrs_model::source_list_config::{
-    SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
-};
+use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::{TabController, TabRenderer};
 use asrs_parity::Value;
 use asrs_parity::vectors::{Record, load, vectors_dir};
@@ -251,7 +249,7 @@ impl Selection for ScriptedSelection {
 
 struct Host {
     log: RefCell<Log>,
-    memory: SourceListTypeMemory,
+    memory: JsValue,
     selection: ScriptedSelection,
     preferences: Option<Preferences>,
     assets: Option<AdvantageScopeAssets>,
@@ -434,7 +432,10 @@ fn list_dump(list: &SourceList, log: &Log) -> JsValue {
     let mut o = JsObject::new();
     o.insert("title", list.title().to_js());
     o.insert("state", list.state().to_js());
-    o.insert("displayed", list.displayed_state(log).to_js());
+    o.insert(
+        "displayed",
+        list.displayed_state(log).expect("modeled items").to_js(),
+    );
     o.insert("stopped", list.is_stopped().to_js());
     let hand = if list.hand_icon_shown() {
         ["0.15", "opacity 1s ease-in 1s"]
@@ -534,7 +535,7 @@ impl Harness {
         Harness {
             host: Host {
                 log: RefCell::new(Log::new(true)),
-                memory: JsObject::new(),
+                memory: JsValue::Object(JsObject::new()),
                 selection: ScriptedSelection::default(),
                 preferences: None,
                 assets: None,
@@ -1326,8 +1327,8 @@ impl Harness {
             }
             "remove" => {
                 let i = index(at(&args, 1))?;
-                controller.source_list_mut().remove(i);
-                None
+                let removed = controller.source_list_mut().remove(i);
+                removed.err().map(|e| e.to_string())
             }
             "promptType" | "contextMenu" | "typeResponse" | "clearClick" | "clearResponse"
             | "mouseDown" | "mouseUp" | "mouseMove" | "itemDrag" | "fieldDrag"
@@ -1374,9 +1375,7 @@ impl Harness {
             return self.apply_log(&ops);
         }
         if record.field("slTypeMemory").is_some() {
-            let value = js(record, "slTypeMemory")?;
-            self.host.memory = SourceListTypeMemoryEntry::memory_from_js(&value)
-                .ok_or("slTypeMemory does not parse")?;
+            self.host.memory = js(record, "slTypeMemory")?;
             return Ok(());
         }
         if record.string("main").is_some() {
@@ -1409,7 +1408,7 @@ impl Harness {
         }
         if record.field("slMemory").is_some() {
             let expected = encode(&js(record, "slMemory")?);
-            let actual = encode(&self.host.memory.to_js());
+            let actual = encode(&self.host.memory);
             if expected != actual {
                 return Err(format!(
                     "type memory\n upstream {expected}\n port     {actual}"
