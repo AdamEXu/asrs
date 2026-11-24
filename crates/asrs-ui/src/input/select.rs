@@ -511,7 +511,7 @@ impl<M: SelectModel> Focusable for Select<M> {
 
 impl<M: SelectModel> Select<M> {
     pub fn new(model: M, window: &mut Window, cx: &mut Context<'_, Self>) -> Self {
-        let focus = cx.focus_handle();
+        let focus = cx.focus_handle().tab_stop(true);
         cx.on_focus(&focus, window, |_, _, cx| cx.emit(SelectEvent::Focus))
             .detach();
         cx.on_blur(&focus, window, |this, window, cx| {
@@ -743,7 +743,6 @@ impl<M: SelectModel> Render for Select<M> {
         if !self.disabled {
             root = root
                 .track_focus(&self.focus)
-                .tab_index(0)
                 .on_mouse_down(MouseButton::Left, cx.listener(Self::mouse_down))
                 .on_key_down(cx.listener(Self::key_down));
         }

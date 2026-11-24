@@ -1,0 +1,701 @@
+{
+  "about": "Tab (#375) through the 2D and 3D field tabs: order, presses, the switchers by Enter and Space",
+  "prefs": {
+    "coordinateSystem": "wall-blue"
+  },
+  "userData": {
+    "userAssets/Field2d_Rings/config.json": {
+      "name": "Rings",
+      "sourceUrl": "https://example.com/",
+      "isFTC": false,
+      "coordinateSystem": "center-red",
+      "topLeft": [
+        20,
+        20
+      ],
+      "bottomRight": [
+        700,
+        300
+      ],
+      "widthInches": 648,
+      "heightInches": 324
+    },
+    "userAssets/Field2d_Rings/image.png": {
+      "$file": "assets/parity-pad.png"
+    }
+  },
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 2,
+              "title": "Field",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "heatmap",
+                    "logKey": "/Odometry/Robot3d",
+                    "logType": "Pose3d",
+                    "visible": true,
+                    "options": {
+                      "timeRange": "full"
+                    }
+                  }
+                ],
+                "field": "FRC:Rings",
+                "orientation": 0,
+                "size": "large"
+              },
+              "controllerUUID": "field000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        3.25
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "all",
+      "count": 24
+    },
+    {
+      "traverse": "all-back",
+      "count": 24,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "link",
+      "count": 10
+    },
+    {
+      "capture": "link",
+      "probes": [
+        ".field-2d-settings"
+      ]
+    },
+    {
+      "traverse": "orientation",
+      "count": 1
+    },
+    {
+      "capture": "orientation",
+      "probes": [
+        ".field-2d-settings"
+      ]
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "rotated",
+      "count": 0
+    },
+    {
+      "capture": "rotated",
+      "probes": [
+        ".field-2d-settings"
+      ]
+    },
+    {
+      "key": "Space"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "rotated-again",
+      "count": 0
+    },
+    {
+      "capture": "rotated-again",
+      "probes": [
+        ".field-2d-settings"
+      ]
+    },
+    {
+      "key": "Space"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "size",
+      "count": 3
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "sized",
+      "count": 0
+    },
+    {
+      "capture": "sized",
+      "probes": [
+        ".field-2d-settings"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "canvas",
+      "count": 0
+    },
+    {
+      "traverse": "canvas-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 250
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "canvas-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 465
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 465
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 465
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "list-title",
+      "count": 0
+    },
+    {
+      "traverse": "list-title-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 400,
+      "y": 465
+    },
+    {
+      "mouse": "down",
+      "x": 400,
+      "y": 465
+    },
+    {
+      "mouse": "up",
+      "x": 400,
+      "y": 465
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "list-title-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 497
+    },
+    {
+      "mouse": "down",
+      "x": 500,
+      "y": 497
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 497
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "key",
+      "count": 0
+    },
+    {
+      "traverse": "key-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 497
+    },
+    {
+      "mouse": "down",
+      "x": 500,
+      "y": 497
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 497
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "key-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 600
+    },
+    {
+      "mouse": "down",
+      "x": 500,
+      "y": 600
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 600
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "list-empty",
+      "count": 0
+    },
+    {
+      "traverse": "list-empty-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 600
+    },
+    {
+      "mouse": "down",
+      "x": 500,
+      "y": 600
+    },
+    {
+      "mouse": "up",
+      "x": 500,
+      "y": 600
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "list-empty-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 980,
+      "y": 525
+    },
+    {
+      "mouse": "down",
+      "x": 980,
+      "y": 525
+    },
+    {
+      "mouse": "up",
+      "x": 980,
+      "y": 525
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "setting-title",
+      "count": 0
+    },
+    {
+      "traverse": "setting-title-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 980,
+      "y": 525
+    },
+    {
+      "mouse": "down",
+      "x": 980,
+      "y": 525
+    },
+    {
+      "mouse": "up",
+      "x": 980,
+      "y": 525
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "setting-title-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 870,
+      "y": 500
+    },
+    {
+      "mouse": "down",
+      "x": 870,
+      "y": 500
+    },
+    {
+      "mouse": "up",
+      "x": 870,
+      "y": 500
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "setting-blank",
+      "count": 0
+    },
+    {
+      "traverse": "setting-blank-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 870,
+      "y": 500
+    },
+    {
+      "mouse": "down",
+      "x": 870,
+      "y": 500
+    },
+    {
+      "mouse": "up",
+      "x": 870,
+      "y": 500
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "setting-blank-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 3,
+              "title": "3D",
+              "controller": {
+                "sources": [],
+                "game": "FRC:Evergreen"
+              },
+              "controllerUUID": "3d000000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "three",
+      "count": 14
+    },
+    {
+      "traverse": "three-back",
+      "count": 14,
+      "back": true
+    }
+  ]
+}

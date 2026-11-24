@@ -5,8 +5,8 @@
 //! global is installed; elsewhere [`Probed`] is a plain wrapper.
 
 use gpui_kit::{
-    AnyElement, App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, IntoElement,
-    LayoutId, Pixels, SharedString, Window,
+    AnyElement, App, Bounds, Element, ElementId, FocusHandle, Global, GlobalElementId,
+    InspectorElementId, IntoElement, LayoutId, Pixels, SharedString, Window,
 };
 
 /// `[x, y, width, height]` in CSS px of the window content.
@@ -59,7 +59,7 @@ pub struct Recorder {
     pub gl: Vec<GlDump>,
 }
 
-impl gpui_kit::Global for Recorder {}
+impl Global for Recorder {}
 
 fn with(cx: &mut App, f: impl FnOnce(&mut Recorder)) {
     if cfg!(feature = "parity") && cx.has_global::<Recorder>() {
@@ -78,6 +78,22 @@ pub const FOCUSED_INPUT: &str = "focused text input";
 /// A region gate 5 masks on both sides, such as a focused text input and its caret.
 pub fn record_mask(cx: &mut App, reason: &str, bounds: Bounds<Pixels>) {
     with(cx, |r| r.masks.push((reason.to_owned(), rect_of(bounds))));
+}
+
+/// The focused text input's `value`, and its selection in UTF-16 where its type has one.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FocusedInput {
+    pub handle: FocusHandle,
+    pub value: String,
+    pub selection: Option<[usize; 2]>,
+}
+
+impl Global for FocusedInput {}
+
+pub fn record_focused_input(cx: &mut App, input: impl FnOnce() -> FocusedInput) {
+    if cfg!(feature = "parity") {
+        cx.set_global(input());
+    }
 }
 
 pub fn record_text(cx: &mut App, run: TextRun) {

@@ -18,9 +18,9 @@ use asrs_services::windows::{Rect, WindowSystem};
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
     AnyWindowHandle, App, AppContext, ClipboardItem, Context, Entity, IntoElement, KeyUpEvent,
-    Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
-    PlatformInput, Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div,
-    point, px, rgb, size,
+    Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent,
+    MouseUpEvent, ParentElement, PlatformInput, Render, ScrollDelta, ScrollEvent, Styled,
+    TouchPhase, Window, WindowHandle, div, point, px, rgb, size,
 };
 use asrs_ui::parity::Recorder;
 use asrs_ui::platform::dialog::{Reply, Script};
@@ -64,13 +64,16 @@ under inputs/); --probes defaults to probes.json beside the scenario directory;
 automatic folders of each variant's userData/; --licenses is the licenses.json the Licenses window
 lists; --work-area is the primary display's work area origin on the Electron driver's host, which
 places its window 16 px inside it (default 0,0), at one scale or at every scale;
---robot is where the scenario's robot listens on 127.0.0.1;
+--robot is where the scenario's robot listens on 127.0.0.1; --no-captures renders no captures;
 --tooltips writes the tooltips (<name>.tooltips.json) at each capture the reference has, as the
 Electron driver does, and captures nothing else.";
 
 /// A tick of the page: one animation frame and this much executor time, which the page's `Date`
 /// and its scroll sensors' frame clock both run on.
 const FRAME: Duration = Duration::from_millis(16);
+
+/// What a frame of a wait takes when nothing is captured.
+const COARSE_FRAME: Duration = Duration::from_millis(64);
 const IDLE_TIMEOUT: Duration = Duration::from_secs(60);
 /// Long enough for a satellite's last state to reach `state.json`.
 const SAVE_SETTLE: Duration = Duration::from_millis(1500);
@@ -158,6 +161,7 @@ struct Options {
     licenses: Option<PathBuf>,
     work_areas: Vec<(Option<u32>, (f64, f64))>,
     robot: Option<u16>,
+    no_captures: bool,
     tooltips: Option<PathBuf>,
 }
 
@@ -166,6 +170,7 @@ fn options(args: &[String]) -> Result<Options, String> {
     let (mut bundled_assets, mut licenses) = (None, None);
     let mut work_areas = Vec::new();
     let mut robot = None;
+    let mut no_captures = false;
     let mut tooltips = None;
     let (mut scales, mut themes) = (Vec::new(), Vec::new());
     let mut iter = args.iter();
@@ -180,6 +185,7 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--probes" => probes = Some(PathBuf::from(value()?)),
             "--bundled-assets" => bundled_assets = Some(PathBuf::from(value()?)),
             "--licenses" => licenses = Some(PathBuf::from(value()?)),
+            "--no-captures" => no_captures = true,
             "--robot" => robot = Some(value()?.parse().map_err(|_| "--robot is a port")?),
             "--tooltips" => tooltips = Some(PathBuf::from(value()?)),
             "--work-area" => {
@@ -211,6 +217,7 @@ fn options(args: &[String]) -> Result<Options, String> {
         licenses,
         work_areas,
         robot,
+        no_captures,
         tooltips,
     })
 }
@@ -244,7 +251,14 @@ pub fn run(args: &[String]) -> Result<(), String> {
         .to_owned();
     let text = std::fs::read_to_string(&options.scenario)
         .map_err(|e| format!("{}: {e}", options.scenario.display()))?;
-    let scenario = Scenario::parse(&name, &text)?;
+    let mut scenario = Scenario::parse(&name, &text)?;
+    if options.no_captures {
+        for action in &mut scenario.actions {
+            if matches!(action, Action::Capture { .. }) {
+                *action = Action::Idle;
+            }
+        }
+    }
     let probes_file = match &options.probes {
         Some(file) => file.clone(),
         None => options
@@ -301,6 +315,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 scale,
                 theme,
                 dir: &dir,
+                wait_frame: match options.no_captures {
+                    true => COARSE_FRAME,
+                    false => FRAME,
+                },
                 window: None,
                 prompt: None,
                 hub: None,
@@ -350,6 +368,7 @@ struct Variant<'a> {
     scale: u32,
     theme: Theme,
     dir: &'a Path,
+    wait_frame: Duration,
     window: Option<AnyWindowHandle>,
     /// The prompt window input and captures go to until it closes.
     prompt: Option<AnyWindowHandle>,
@@ -685,8 +704,12 @@ impl Variant<'_> {
 
     /// One animation frame, `FRAME` of executor time, and everything that then runs.
     fn tick(&mut self) -> Result<(), String> {
+        self.tick_by(FRAME)
+    }
+
+    fn tick_by(&mut self, frame: Duration) -> Result<(), String> {
         self.adopt_satellites()?;
-        self.headless.context().advance_clock(FRAME);
+        self.headless.context().advance_clock(frame);
         for window in self.open_windows() {
             self.headless
                 .context()
@@ -912,6 +935,15 @@ impl Variant<'_> {
             Button::Right => MouseButton::Right,
             Button::Middle => MouseButton::Middle,
         };
+        if matches!(kind, MouseKind::Down | MouseKind::Click) {
+            // An open menu has the pointer on a desktop and closes at a press outside it.
+            let window = self.active();
+            self.headless
+                .context()
+                .update_window(window, |_, window, _| platform::close_popup_menu(window))
+                .map_err(|e| e.to_string())?;
+            self.settle();
+        }
         let down = PlatformInput::MouseDown(MouseDownEvent {
             button,
             position,
@@ -939,6 +971,11 @@ impl Variant<'_> {
                 self.dispatch(up)?;
                 self.pressed = None;
             }
+            MouseKind::Leave => self.dispatch(PlatformInput::MouseExited(MouseExitEvent {
+                position,
+                pressed_button: self.pressed,
+                modifiers,
+            }))?,
             MouseKind::Click => {
                 self.dispatch(down)?;
                 self.dispatch(up)?;
@@ -972,6 +1009,30 @@ impl Variant<'_> {
             self.dispatch(PlatformInput::KeyUp(KeyUpEvent { keystroke }))?;
         }
         Ok(())
+    }
+
+    fn traverse(&mut self, name: &str, count: usize, back: bool) -> Result<(), String> {
+        let mut records = String::new();
+        for _ in 0..count.max(1) {
+            if count > 0 {
+                let shift = back.then(|| "shift".to_owned());
+                self.key("Tab", shift.as_slice())?;
+                self.tick()?;
+                self.tick()?;
+                self.tick()?;
+            }
+            let window = self.active();
+            let focused = self
+                .headless
+                .context()
+                .update_window(window, |_, window, cx| capture::focused(window, cx))
+                .map_err(|e| e.to_string())?;
+            records += &focused;
+            records.push('\n');
+        }
+        let folder = self.dir.join("files/focus");
+        std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+        std::fs::write(folder.join(format!("{name}.json")), records).map_err(|e| e.to_string())
     }
 
     fn edit(&mut self, command: EditCommand) -> Result<(), String> {
@@ -1015,8 +1076,8 @@ impl Variant<'_> {
                 let deadline = Duration::from_secs_f64(ms / 1000.0);
                 let mut waited = Duration::ZERO;
                 while waited < deadline {
-                    self.tick()?;
-                    waited += FRAME;
+                    self.tick_by(self.wait_frame)?;
+                    waited += self.wait_frame;
                 }
             }
             Action::Idle => self.wait_idle()?,
@@ -1108,9 +1169,31 @@ impl Variant<'_> {
                 std::fs::write(folder.join(format!("{name}.txt")), copied)
                     .map_err(|e| e.to_string())?;
             }
+            Action::Traverse { name, count, back } => self.traverse(name, *count, *back)?,
+            Action::Hover(name) => {
+                let hovered =
+                    self.with_hub(|hub, _, _| hub.model().page().selection().get_hovered_time())?;
+                let folder = self.dir.join("files/hover");
+                std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+                let hovered = hovered.map_or("null".to_owned(), asrs_js::number::to_string);
+                std::fs::write(folder.join(format!("{name}.json")), hovered + "\n")
+                    .map_err(|e| e.to_string())?;
+            }
             Action::Focus(active) => {
-                let active = ForcedActive(*active);
-                self.headless.context().update(|cx| cx.set_global(active));
+                let forced = ForcedActive(*active);
+                self.headless.context().update(|cx| cx.set_global(forced));
+                let window = self.active();
+                // GPUI gives an inactive window no focus events, and upstream's page gets them. An
+                // active one draws its editor's selection, which captures do not compare.
+                let traverses = |action: &Action| matches!(action, Action::Traverse { .. });
+                let traversed = self.scenario.actions.iter().any(traverses);
+                if *active && traversed && window == self.window() {
+                    self.headless
+                        .context()
+                        .update_window(window, |_, window, _| window.activate_window())
+                        .map_err(|e| e.to_string())?;
+                    self.settle();
+                }
                 self.tick()?;
             }
             Action::Capture {

@@ -1,3 +1,4 @@
+// Modified by asrs: see patches/gpui-pre-0.3.12.patch in the asrs repository.
 //! Div is the central, reusable element that most GPUI trees will be built from.
 //! It functions as a container for other elements, and provides a number of
 //! useful features for laying out and styling its children as well as binding
@@ -2612,6 +2613,11 @@ impl Interactivity {
                                         // to the first item in the whole window instead of its own.
                                         if let Some(focus_handle) = &self.tracked_focus_handle {
                                             window.next_frame.tab_stops.insert(focus_handle);
+                                            window
+                                                .next_frame
+                                                .focus_bounds
+                                                .entry(focus_handle.id)
+                                                .or_insert(bounds);
                                         }
                                         if let Some(hitbox) = hitbox {
                                             #[cfg(debug_assertions)]

@@ -22,6 +22,8 @@ use asrs_ui::gpui::{
     KeyDownEvent, KeyUpEvent, Keystroke, MouseButton, MouseDownEvent, MouseUpEvent, PlatformInput,
     point, px,
 };
+use asrs_ui::platform::{PopupEntry, PopupMenu};
+use asrs_ui::{input, platform};
 use hub_page::Page;
 
 const KEY: &str = "/Value";
@@ -31,6 +33,9 @@ const JUMP_BUTTON: (f32, f32) = (82.0, 15.0);
 const BODY: (f32, f32) = (400.0, 412.0);
 /// In the window.
 const SLIDER: (f32, f32) = (800.0, 582.0);
+const SEARCH: (f32, f32) = (150.0, 87.0);
+const TITLE_BAR: (f32, f32) = (600.0, 20.0);
+const CANVAS: (f32, f32) = (700.0, 412.0);
 
 impl Page<'_> {
     fn press(&mut self, key: &'static str) {
@@ -49,14 +54,19 @@ impl Page<'_> {
         self.click_at((container.x as f32 + x, container.y as f32 + y));
     }
 
-    fn click_at(&mut self, (x, y): (f32, f32)) {
-        let position = point(px(x), px(y));
+    fn press_at(&mut self, button: MouseButton, (x, y): (f32, f32)) {
         self.dispatch(PlatformInput::MouseDown(MouseDownEvent {
-            button: MouseButton::Left,
-            position,
+            button,
+            position: point(px(x), px(y)),
             click_count: 1,
             ..MouseDownEvent::default()
         }));
+        self.frames(1);
+    }
+
+    fn click_at(&mut self, (x, y): (f32, f32)) {
+        let position = point(px(x), px(y));
+        self.press_at(MouseButton::Left, (x, y));
         self.dispatch(PlatformInput::MouseUp(MouseUpEvent {
             button: MouseButton::Left,
             position,
@@ -151,6 +161,62 @@ fn slider_value(page: &mut Page<'_>) -> f64 {
     })
 }
 
+fn in_input(page: &mut Page<'_>) -> bool {
+    let window = page.window.into();
+    page.headless
+        .context()
+        .update_window(window, |_, window, _| input::focused(window))
+        .expect("window")
+}
+
+/// Electron gives the page no events over `-webkit-app-region: drag`, which only macOS's hub has
+/// here.
+fn title_bar_keeps_the_focus(page: &mut Page<'_>) {
+    page.click_at(SEARCH);
+    assert!(in_input(page), "a press focuses the search field");
+    // GPUI's test window panics when it is moved, which the left button does.
+    page.press_at(MouseButton::Right, TITLE_BAR);
+    assert!(in_input(page), "the title bar is not the page's");
+    page.click_at(CANVAS);
+    assert!(
+        !in_input(page),
+        "a press on the page blurs the search field"
+    );
+}
+
+/// Chromium sends the keys of a window to the menu that popped up for it.
+fn tab_goes_to_an_open_menu(page: &mut Page<'_>) {
+    page.click_at(SEARCH);
+    page.press("tab");
+    assert!(!in_input(page), "Tab leaves the search field");
+    page.click_at(SEARCH);
+    let window = page.window.into();
+    page.headless
+        .context()
+        .update_window(window, |_, window, cx| {
+            let item = PopupEntry::new("Item");
+            platform::popup_menu(
+                window,
+                cx,
+                PopupMenu::new().entry(item),
+                100,
+                120,
+                |_, _| {},
+            );
+        })
+        .expect("window");
+    page.frames(2);
+    page.press("tab");
+    assert!(in_input(page), "Tab with a menu open is the menu's");
+    page.headless
+        .context()
+        .update_window(window, |_, window, _| platform::close_popup_menu(window))
+        .expect("window");
+    page.frames(2);
+    page.press("tab");
+    assert!(!in_input(page), "Tab once the menu closed");
+}
+
 fn main() {
     if !cfg!(any(target_os = "macos", target_os = "linux")) {
         println!("hub keys: skipped, no headless renderer on this platform");
@@ -173,6 +239,12 @@ fn main() {
     page.click(BODY);
     space_toggles_playback(&mut page, "the body", true);
 
+    if cfg!(target_os = "macos") {
+        title_bar_keeps_the_focus(&mut page);
+    }
+    if cfg!(target_os = "linux") {
+        tab_goes_to_an_open_menu(&mut page);
+    }
     page.click(JUMP_BUTTON);
     page.jump_to("15");
     let top = page.scroll_top();

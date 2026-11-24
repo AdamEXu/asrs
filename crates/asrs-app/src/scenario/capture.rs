@@ -5,8 +5,10 @@ use std::path::Path;
 
 use asrs_js::value::{JsObject, JsValue};
 use asrs_ui::capture::Capture;
-use asrs_ui::parity::{Recorder, Rect};
+use asrs_ui::gpui::{App, Window};
+use asrs_ui::parity::{FocusedInput, Recorder, Rect};
 use asrs_ui::platform::dialog::{FileFilter, MessageBoxType, Shown};
+use asrs_ui::{focus, input};
 
 use super::{Action, COLUMNS, PATCH, Page, Scenario, Theme, patch_colours};
 
@@ -132,8 +134,46 @@ pub fn kind(action: &Action) -> &'static str {
         Action::SelectAll => "role",
         Action::Copy(_) => "copy",
         Action::Focus(_) => "focus",
+        Action::Traverse { .. } => "traverse",
+        Action::Hover(_) => "hover",
         Action::Capture { .. } => "capture",
     }
+}
+
+/// What `focused()` of `oracle/src/app/page.ts` keeps of `document.activeElement`, less what it is.
+pub fn focused(window: &Window, cx: &App) -> String {
+    let focused = window
+        .tab_order()
+        .into_iter()
+        .find(|handle| handle.tab_stop && handle.is_focused(window));
+    let bounds = focused
+        .as_ref()
+        .and_then(|handle| window.focus_bounds(handle));
+    let (Some(handle), Some(bounds)) = (focused, bounds) else {
+        return "null".to_owned();
+    };
+    let ring = !input::focused(window) && focus::focus_visible(&handle, window, cx);
+    let [x, y, w, h] = [
+        bounds.origin.x,
+        bounds.origin.y,
+        bounds.size.width,
+        bounds.size.height,
+    ]
+    .map(f32::from);
+    let input = match cx.try_global::<FocusedInput>() {
+        Some(input) if input.handle == handle => {
+            let value = asrs_js::json::stringify(&JsValue::string(&input.value))
+                .ok()
+                .flatten()
+                .unwrap_or_default();
+            let selection = input.selection.map_or(String::new(), |[start, end]| {
+                format!(r#","selection":[{start},{end}]"#)
+            });
+            format!(r#","value":{value}{selection}"#)
+        }
+        _ => String::new(),
+    };
+    format!(r#"{{"rect":[{x},{y},{w},{h}],"ring":{ring}{input}}}"#)
 }
 
 pub fn write(path: &Path, text: &str) -> Result<(), String> {
