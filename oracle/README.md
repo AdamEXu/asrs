@@ -1237,6 +1237,20 @@ the timers are set to, and a step has no values from its hold on, so a run is re
 delays differ by platform (macOS reads `NSScrollerButtonDelay` and `NSScrollerButtonPeriod`). The
 entry's generator hash also covers `spinButtonsMain` (`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
 
+## Scroller vectors
+
+`scroll/*` (`src/scrollers.ts`, with `src/scrollersMain.ts` as its Electron main process) is trusted
+keys, wheel events and scrollbar presses, through the DevTools protocol, on a scroller in an
+offscreen page that emulates focus. The fixture runs once per style, scale and theme; a step is
+`{"name", "markup", "ops"}` and the ops and the records are described in `scrollersMain.ts`. On
+macOS the style and `"jump"` (a press on a track goes there) are `AppleShowScrollBars` and
+`AppleScrollerPagingBehavior` in the argument domain of the recorder's own process, whatever the
+user's preferences are; elsewhere the only style is Fluent. A key's `commands` are the editing
+commands AppKit's key bindings send with it. Offsets and settled pixels reproduce; how far a press
+held on a track goes can differ by a frame, and fade times are rounded to 100 ms.
+`crates/asrs-app/tests/scroll_vectors.rs` replays the vectors. The entry's generator hash also
+covers `scrollersMain` (`BORROWED_INPUTS` in `xtask/src/vectors.rs`).
+
 ## Tooltip recordings
 
 `cargo xtask app tooltips` runs scenarios of `parity/scenarios` with `appMain --tooltips` on macOS.
