@@ -130,7 +130,7 @@
       "pointer": "wheel",
       "x": 620,
       "y": 105,
-      "unitsY": -40
+      "unitsY": 40
     },
     {
       "wait": 500
@@ -149,7 +149,7 @@
       "pointer": "wheel",
       "x": 620,
       "y": 105,
-      "unitsY": -40
+      "unitsY": 40
     },
     {
       "wait": 500
@@ -158,7 +158,7 @@
       "pointer": "wheel",
       "x": 620,
       "y": 105,
-      "unitsY": 40
+      "unitsY": -40
     },
     {
       "wait": 500
@@ -167,16 +167,7 @@
       "pointer": "wheel",
       "x": 560,
       "y": 105,
-      "unitsY": -40
-    },
-    {
-      "wait": 500
-    },
-    {
-      "pointer": "wheel",
-      "x": 700,
-      "y": 105,
-      "unitsY": -80
+      "unitsY": 80
     },
     {
       "wait": 500
