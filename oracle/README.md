@@ -1440,6 +1440,9 @@ alert, an alert or progress text that starts so, or that much of its progress ba
 clipboard, written to `files/clipboard/<name>.txt`),
 `{"focus": boolean}` (whether the window's page counts as active and focused, through
 `Emulation.setFocusEmulationEnabled`; false until then; windows opened later need their own),
+`{"traverse": name, "count"?: n, "back"?: boolean}` (presses Tab, or Shift+Tab, `n` times and writes
+`document.activeElement` after each, or as it is, to `files/focus/<name>.json`: what it is, whether
+Tab reaches it, its box and its ring; `pixel` compares the box and the ring),
 `{"wait": ms}`, `{"idle": true}` and
 `{"capture": name, "probes": [selectors], "masks": [selectors]}`.
 
