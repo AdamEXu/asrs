@@ -60,4 +60,6 @@ try {
 } finally {
   fs.rmSync(scratch, { recursive: true, force: true });
 }
-process.stdout.write(JSON.stringify({ op: "config", platform, scenario: "electron" }) + "\n" + built, () => process.exit(0));
+// Electron's main process starts its output with an empty line on Windows.
+const records = built.split("\n").filter((line) => line.trim() !== "");
+process.stdout.write([JSON.stringify({ op: "config", platform, scenario: "electron" }), ...records].join("\n") + "\n", () => process.exit(0));
