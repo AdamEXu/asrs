@@ -3,16 +3,17 @@
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::path::PathBuf;
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Mutex, OnceLock, PoisonError};
 
 use rustybuzz::ttf_parser::Tag;
 use windows::Win32::Graphics::DirectWrite::{
     DWRITE_FONT_AXIS_VALUE, DWRITE_FONT_METRICS, DWRITE_FONT_SIMULATIONS,
     DWRITE_FONT_SIMULATIONS_BOLD, DWRITE_FONT_SIMULATIONS_NONE, DWRITE_FONT_SIMULATIONS_OBLIQUE,
     DWRITE_FONT_STRETCH_NORMAL, DWRITE_FONT_STYLE_ITALIC, DWRITE_FONT_STYLE_NORMAL,
-    DWRITE_FONT_WEIGHT, DWRITE_FONT_WEIGHT_REGULAR, IDWriteFont, IDWriteFontFace, IDWriteFontFace2,
-    IDWriteFontFace5, IDWriteFontFace7, IDWriteFontFamily, IDWriteFontFile, IDWriteFontFileStream,
-    IDWriteLocalFontFileLoader,
+    DWRITE_FONT_WEIGHT, DWRITE_FONT_WEIGHT_REGULAR, IDWriteFactory2, IDWriteFactory5,
+    IDWriteFactory6, IDWriteFont, IDWriteFontFace, IDWriteFontFace2, IDWriteFontFace5,
+    IDWriteFontFace7, IDWriteFontFamily, IDWriteFontFile, IDWriteFontFileStream,
+    IDWriteInMemoryFontFileLoader, IDWriteLocalFontFileLoader,
 };
 use windows::core::Interface;
 
@@ -119,7 +120,7 @@ fn strike_sizes(eblc: Option<&[u8]>, ebsc: Option<&[u8]>) -> Vec<u16> {
 }
 
 impl Typeface {
-    pub fn new(font: &IDWriteFont) -> Option<Typeface> {
+    pub fn new(factory: &IDWriteFactory2, font: &IDWriteFont) -> Option<Typeface> {
         // SAFETY: plain COM calls on live objects; `GetMetrics` writes the struct it is given.
         let (face, metrics, weight, style, family) = unsafe {
             let face = font.CreateFontFace().ok()?;
@@ -128,7 +129,10 @@ impl Typeface {
             let family = family_name(&font.GetFontFamily().ok()?);
             (face, metrics, font.GetWeight(), font.GetStyle(), family)
         };
-        let (data, path) = font_data(&face)?;
+        let FontFile { data, path, memory } = font_data(factory, &face)?;
+        let face = memory
+            .and_then(|file| private_face(factory, &face, file))
+            .unwrap_or(face);
         // SAFETY: plain COM calls on a live face.
         let (index, glyph_count) = unsafe { (face.GetIndex(), face.GetGlyphCount()) };
         let mut shaper = rustybuzz::Face::from_slice(data, index)?;
@@ -226,7 +230,7 @@ pub fn family_name(family: &IDWriteFontFamily) -> String {
     }
 }
 
-fn variations(face: &IDWriteFontFace) -> Vec<rustybuzz::Variation> {
+fn axis_values(face: &IDWriteFontFace) -> Vec<DWRITE_FONT_AXIS_VALUE> {
     let Ok(face) = face.cast::<IDWriteFontFace5>() else {
         return Vec::new();
     };
@@ -241,28 +245,84 @@ fn variations(face: &IDWriteFontFace) -> Vec<rustybuzz::Variation> {
             return Vec::new();
         }
         values
-            .iter()
-            .map(|v| rustybuzz::Variation {
-                tag: Tag::from_bytes(&v.axisTag.0.to_le_bytes()),
-                value: v.value,
-            })
-            .collect()
     }
 }
 
-struct Mapped {
-    data: &'static [u8],
-    path: Option<PathBuf>,
-    _stream: IDWriteFontFileStream,
+fn variations(face: &IDWriteFontFace) -> Vec<rustybuzz::Variation> {
+    axis_values(face)
+        .iter()
+        .map(|v| rustybuzz::Variation {
+            tag: Tag::from_bytes(&v.axisTag.0.to_le_bytes()),
+            value: v.value,
+        })
+        .collect()
 }
 
-// SAFETY: the stream is only kept, never called again.
-unsafe impl Send for Mapped {}
+/// The face over the process's own copy of its file. For local files DirectWrite takes scaled
+/// outlines from the Font Cache service, whose points round differently from the ones it scales
+/// itself. Chromium's sandboxed renderers get font files from the browser process
+/// (`DWriteFontProxy`) and never see the service.
+fn private_face(
+    factory: &IDWriteFactory2,
+    face: &IDWriteFontFace,
+    file: IDWriteFontFile,
+) -> Option<IDWriteFontFace> {
+    let axes = axis_values(face);
+    // SAFETY: plain COM calls on live objects.
+    unsafe {
+        let (index, simulations) = (face.GetIndex(), face.GetSimulations());
+        if axes.is_empty() {
+            return factory
+                .CreateFontFace(face.GetType(), &[Some(file)], index, simulations)
+                .ok();
+        }
+        let factory: IDWriteFactory6 = factory.cast().ok()?;
+        factory
+            .CreateFontFaceReference(&file, index, simulations, &axes)
+            .and_then(|reference| reference.CreateFontFace())
+            .and_then(|face| face.cast())
+            .ok()
+    }
+}
+
+fn memory_file(
+    factory: &IDWriteFactory2,
+    data: &'static [u8],
+    stream: &IDWriteFontFileStream,
+) -> Option<IDWriteFontFile> {
+    static LOADER: OnceLock<Option<IDWriteInMemoryFontFileLoader>> = OnceLock::new();
+    let loader = LOADER.get_or_init(|| {
+        // SAFETY: plain COM calls on live objects. The loader is registered once with the shared
+        // factory and stays.
+        unsafe {
+            let factory: IDWriteFactory5 = factory.cast().ok()?;
+            let loader = factory.CreateInMemoryFontFileLoader().ok()?;
+            factory.RegisterFontFileLoader(&loader).ok()?;
+            Some(loader)
+        }
+    });
+    let length = u32::try_from(data.len()).ok()?;
+    // SAFETY: `data` is never released, and DirectWrite holds `stream` for it.
+    unsafe {
+        loader
+            .as_ref()?
+            .CreateInMemoryFontFileReference(factory, data.as_ptr().cast(), length, stream)
+            .ok()
+    }
+}
+
+#[derive(Clone)]
+struct FontFile {
+    data: &'static [u8],
+    path: Option<PathBuf>,
+    memory: Option<IDWriteFontFile>,
+}
 
 /// A font file's bytes: DirectWrite's own mapping, held once per process because faces borrow it
 /// forever.
-fn font_data(face: &IDWriteFontFace) -> Option<(&'static [u8], Option<PathBuf>)> {
-    static FILES: Mutex<Option<HashMap<Vec<u8>, Mapped>>> = Mutex::new(None);
+fn font_data(factory: &IDWriteFactory2, face: &IDWriteFontFace) -> Option<FontFile> {
+    static FILES: Mutex<Option<HashMap<Vec<u8>, (FontFile, IDWriteFontFileStream)>>> =
+        Mutex::new(None);
     // SAFETY: the reference key, the path and the mapped fragment are read for the lengths
     // DirectWrite reports. The fragment is never released and its stream is kept, so the mapping
     // outlives every borrow.
@@ -276,8 +336,8 @@ fn font_data(face: &IDWriteFontFace) -> Option<(&'static [u8], Option<PathBuf>)>
         let id = std::slice::from_raw_parts(key.cast::<u8>(), length as usize).to_vec();
         let mut known = FILES.lock().unwrap_or_else(PoisonError::into_inner);
         let known = known.get_or_insert_default();
-        if let Some(file) = known.get(&id) {
-            return Some((file.data, file.path.clone()));
+        if let Some((file, _)) = known.get(&id) {
+            return Some(file.clone());
         }
         let loader = file.GetLoader().ok()?;
         let path = loader
@@ -296,15 +356,13 @@ fn font_data(face: &IDWriteFontFace) -> Option<(&'static [u8], Option<PathBuf>)>
             .ReadFileFragment(&mut start, 0, size, &mut context)
             .ok()?;
         let data = std::slice::from_raw_parts(start.cast::<u8>().cast_const(), size as usize);
-        known.insert(
-            id,
-            Mapped {
-                data,
-                path: path.clone(),
-                _stream: stream,
-            },
-        );
-        Some((data, path))
+        let file = FontFile {
+            memory: memory_file(factory, data, &stream),
+            data,
+            path,
+        };
+        known.insert(id, (file.clone(), stream));
+        Some(file)
     }
 }
 
@@ -360,6 +418,8 @@ fn has_bitmap_data(font: &IDWriteFont) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use super::super::DirectWrite;
+    use super::super::settings::TextSettings;
     use super::*;
 
     #[test]
@@ -368,6 +428,35 @@ mod tests {
         assert_eq!(gasp_ranges(&table), Some((1, vec![(8, 10), (0xffff, 15)])));
         assert_eq!(gasp_ranges(&[0, 2, 0, 0]), None);
         assert_eq!(gasp_ranges(&[0, 1, 0, 1, 0, 8]), None);
+    }
+
+    fn is_local(face: &IDWriteFontFace) -> bool {
+        let (mut count, mut files) = (1, [None]);
+        // SAFETY: plain COM calls on live objects; `files` has room for the one file.
+        let loader = unsafe {
+            face.GetFiles(&mut count, Some(files.as_mut_ptr())).unwrap();
+            files[0].take().unwrap().GetLoader().unwrap()
+        };
+        loader.cast::<IDWriteLocalFontFileLoader>().is_ok()
+    }
+
+    #[test]
+    fn faces_bypass_the_font_cache_service() {
+        let mut backend = DirectWrite::with_settings(Some(TextSettings::DEFAULT)).unwrap();
+        for family in ["Arial", "Segoe UI", "Segoe UI Emoji", "Bahnschrift"] {
+            let Some(typeface) = backend.match_family(family, 700.0, false) else {
+                continue;
+            };
+            let face = &backend.typefaces[typeface].face;
+            assert!(!is_local(face), "{family}");
+            if family == "Bahnschrift" {
+                let weight = u32::from_le_bytes(*b"wght");
+                let axes = axis_values(face);
+                let weight = axes.iter().find(|v| v.axisTag.0 == weight);
+                assert_eq!(weight.unwrap().value, 700.0);
+            }
+        }
+        assert!(!backend.typefaces.is_empty());
     }
 
     #[test]

@@ -150,7 +150,7 @@ impl DirectWrite {
     }
 
     fn typeface(&mut self, font: &IDWriteFont) -> Option<usize> {
-        let typeface = Typeface::new(font)?;
+        let typeface = Typeface::new(&self.factory, font)?;
         // SAFETY: a plain COM call on a live face.
         let index = unsafe { typeface.face.GetIndex() };
         // SAFETY: as above.
