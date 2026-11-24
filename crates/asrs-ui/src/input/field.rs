@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use gpui_kit::base::input::{Input, InputEvent, InputState, MoveDown, MoveUp, Paste};
 use gpui_kit::{
-    AnyWindowHandle, App, AppContext, Context, Entity, EntityInputHandler, EventEmitter,
+    AnyWindowHandle, App, AppContext, ClipboardItem, Context, Entity, EntityInputHandler, EventEmitter,
     FocusHandle, Focusable, Hsla, InteractiveElement, IntoElement, MouseButton, ParentElement,
     Render, SharedString, StatefulInteractiveElement, Styled, Subscription, WeakEntity, Window,
     canvas, div, px, rgba,
@@ -14,6 +14,7 @@ use crate::icon::{IconSource, Placement, paint_icon};
 use crate::input::model::{FieldModel, FieldValue};
 use crate::input::native::paint_text_field;
 use crate::input::style::{DISABLED_TEXT, FieldStyle, Frame, device_border};
+use crate::selection;
 use crate::symbols::Symbol;
 use crate::text::{self, LineHeight, Overflow, Text, TextStyle, WhiteSpace};
 
@@ -397,6 +398,17 @@ impl<M: FieldModel> TextField<M> {
         });
     }
 
+    /// The Edit menu's Copy; the editor handles the keys.
+    fn copy(&mut self, _: &selection::Copy, _: &mut Window, cx: &mut Context<'_, Self>) {
+        let editor = self.editor.read(cx);
+        let selected = editor.selected_range();
+        let text = editor.value();
+        if !selected.is_empty() {
+            let copied = ClipboardItem::new_string(text[selected].to_owned());
+            cx.write_to_clipboard(copied);
+        }
+    }
+
     /// `HandleKeydownEventForSpinButton`.
     fn arrow_key(&mut self, up: bool, window: &mut Window, cx: &mut Context<'_, Self>) {
         if self.kind != FieldKind::Number {
@@ -521,6 +533,11 @@ impl<M: FieldModel> Render for TextField<M> {
             .id("text-field")
             .key_context(super::CONTEXT)
             .capture_action(cx.listener(Self::paste))
+            .on_action(cx.listener(Self::copy))
+            .on_action(cx.listener(|this, _: &selection::SelectAll, window, cx| {
+                let editor = this.editor.clone();
+                editor.update(cx, |editor, cx| editor.select_all(window, cx));
+            }))
             .capture_action(cx.listener(|this, _: &MoveUp, window, cx| {
                 this.arrow_key(true, window, cx);
             }))

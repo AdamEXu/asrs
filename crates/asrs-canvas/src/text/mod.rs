@@ -1,4 +1,5 @@
 pub mod cache;
+pub mod caret;
 pub mod coverage;
 pub mod dom;
 pub mod flow;

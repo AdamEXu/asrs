@@ -5,6 +5,8 @@
 //! inline item of its own. `white-space` is `normal` (collapsed) or `break-spaces`, where every
 //! space takes room and may end a line. Text is left to right.
 
+use std::ops::Range;
+
 use super::TextBackend;
 use super::dom::{
     LineHeight, Lu, Style, align_offset, boundaries, extend_with_fallbacks, line_leading,
@@ -18,6 +20,8 @@ use super::line_break::LineBreaks;
 pub struct Piece {
     pub item: usize,
     pub text: String,
+    /// Its bytes in [`Flow::text`].
+    pub range: Range<usize>,
     /// From the content box's left edge.
     pub x: Lu,
     pub width: Lu,
@@ -36,6 +40,8 @@ pub struct Line {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Flow {
+    /// The nodes' text joined, white space collapsed as the block's is.
+    pub text: String,
     pub lines: Vec<Line>,
     /// The widest line.
     pub width: Lu,
@@ -120,6 +126,7 @@ pub fn layout(
         Joined::collapsed(items)
     };
     let mut flow = Flow {
+        text: String::new(),
         lines: Vec::new(),
         width: 0,
         height: 0,
@@ -155,6 +162,7 @@ pub fn layout(
             line.pieces.push(Piece {
                 item,
                 text: text.to_owned(),
+                range: from..to,
                 x: line.width,
                 width,
             });
@@ -171,6 +179,7 @@ pub fn layout(
         flow.width = flow.width.max(line.width);
         flow.lines.push(line);
     }
+    flow.text = joined.text;
     flow
 }
 
@@ -183,7 +192,7 @@ fn line_ranges(
     break_spaces: bool,
     available: Option<Lu>,
     scale: f32,
-) -> Vec<std::ops::Range<usize>> {
+) -> Vec<Range<usize>> {
     let text = joined.text.as_str();
     let len = text.len();
     let Some(available) = available.filter(|_| len > 0) else {

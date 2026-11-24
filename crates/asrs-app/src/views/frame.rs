@@ -37,6 +37,7 @@ use asrs_ui::input;
 use asrs_ui::menu;
 use asrs_ui::parity::{Probed, probed};
 use asrs_ui::platform;
+use asrs_ui::selection;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, MONOSPACE_FAMILY};
@@ -48,6 +49,7 @@ use super::field_2d::Field2dViews;
 use super::field3d::{Field3dViews, key_code};
 use super::line_graph::LineGraphViews;
 use super::metadata::MetadataView;
+use super::page_text::PageSelection;
 use super::source_list::{self, ListsGeometry};
 use super::statistics::StatisticsViews;
 use super::tab_bar::{self, TabBarGeometry};
@@ -201,6 +203,7 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) statistics: StatisticsViews,
     pub(super) metadata: MetadataView,
     pub(super) video: VideoViews,
+    pub(super) text: PageSelection,
 }
 
 /// The timeline overlay's view of one pointer position: the client x relative to the overlay
@@ -328,6 +331,7 @@ impl<H: FrameHost> HubFrame<H> {
             statistics: StatisticsViews::default(),
             metadata: MetadataView::default(),
             video: VideoViews::default(),
+            text: PageSelection::default(),
         }
     }
 
@@ -388,6 +392,9 @@ impl<H: FrameHost> HubFrame<H> {
         }
         self.field3d_key_down(event, editable, cx);
         self.console_key_down(event, editable, window, cx);
+        if !editable {
+            self.text_key_down(event, cx);
+        }
     }
 
     fn key_up(&mut self, event: &KeyUpEvent, window: &mut Window, cx: &mut Context<'_, Self>) {
@@ -434,9 +441,20 @@ impl<H: FrameHost> HubFrame<H> {
         })
     }
 
-    fn mouse_move(&mut self, event: &MouseMoveEvent, cx: &mut Context<'_, Self>) {
+    /// The timeline's client box while it shows.
+    pub(super) fn timeline_rect(&self) -> Option<[f64; 4]> {
+        self.timeline_rect
+    }
+
+    fn mouse_move(
+        &mut self,
+        event: &MouseMoveEvent,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
+        self.text_mouse_move([x, y], window, cx);
         self.source_list_mouse_move(x, y, cx);
         self.table_mouse_move(x, y, event.pressed_button.is_some(), cx);
         self.console_mouse_move(x, y, cx);
@@ -484,6 +502,7 @@ impl<H: FrameHost> HubFrame<H> {
     fn mouse_up(&mut self, event: &MouseUpEvent, cx: &mut Context<'_, Self>) {
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
+        self.text_mouse_up(event.button, [x, y], cx);
         self.table_mouse_up(event, x, y, cx);
         self.console_mouse_up(event, x, y, cx);
         let shell = &mut self.shell;
@@ -870,6 +889,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
         self.shell.fps_mut().frame(now, show_fps);
         self.line_graph_timers(cx);
         self.field3d_frame(window, cx);
+        self.text_autoscroll(window, cx);
         if show_fps {
             window.request_animation_frame();
         }
@@ -951,9 +971,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
             |_, _, _| {},
             move |_, _, window, _| {
                 let frame = entity.clone();
-                window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
+                window.on_mouse_event(move |event: &MouseMoveEvent, phase, window, cx| {
                     if phase == DispatchPhase::Bubble {
-                        let _ = frame.update(cx, |frame, cx| frame.mouse_move(event, cx));
+                        let _ = frame.update(cx, |frame, cx| frame.mouse_move(event, window, cx));
                     }
                 });
                 let frame = entity.clone();
@@ -981,6 +1001,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
                         let _ = frame.update(cx, |frame, cx| {
                             frame.console_window_mouse_down(x, y, window, cx);
                             frame.statistics_window_mouse_down(x, y, window, cx);
+                            frame.text_mouse_down(event, window, cx);
                         });
                     }
                 });
@@ -1000,6 +1021,10 @@ impl<H: FrameHost> Render for HubFrame<H> {
             })
             .relative()
             .size_full()
+            .on_action(cx.listener(|frame, _: &selection::Copy, _, cx| frame.copy_text(cx)))
+            .on_action(cx.listener(|frame, _: &selection::SelectAll, _, cx| {
+                frame.select_all_text(cx)
+            }))
             .child(window_listeners);
         if !satellite {
             root = root.on_drop(
@@ -1010,6 +1035,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
             BodyCursor::ColResize => root.cursor(CursorStyle::ResizeColumn),
             BodyCursor::RowResize => root.cursor(CursorStyle::ResizeRow),
             BodyCursor::Grabbing => root.cursor(CursorStyle::ClosedHand),
+            BodyCursor::Unset | BodyCursor::Initial if self.text.text_cursor() => {
+                root.cursor(CursorStyle::IBeam)
+            }
             BodyCursor::Unset | BodyCursor::Initial => root,
         };
 
@@ -1132,7 +1160,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 {
                     renderer = renderer.child(statistics);
                 }
-                if let Some(metadata) = self.metadata_element(rect, appearance, scale, cx) {
+                if let Some(metadata) = self.metadata_element(rect, appearance, scale, window, cx) {
                     renderer = renderer.child(metadata);
                 }
                 if let Some(tab) = self.canvas_tab_element(rect, appearance, scale, window, cx) {

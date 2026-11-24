@@ -128,6 +128,9 @@ pub fn kind(action: &Action) -> &'static str {
         Action::AppMenu { .. } => "appMenu",
         Action::Prompt { .. } | Action::Hub => "prompt",
         Action::Download(_) => "download",
+        Action::SelectAll => "role",
+        Action::Copy(_) => "copy",
+        Action::Focus(_) => "focus",
         Action::Capture { .. } => "capture",
     }
 }

@@ -15,6 +15,7 @@ pub mod line_graph;
 pub mod metadata;
 pub mod metadata_layout;
 pub mod number;
+pub mod page_text;
 pub mod prompts;
 pub mod range;
 pub mod satellite_host;

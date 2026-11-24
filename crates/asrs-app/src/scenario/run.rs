@@ -17,13 +17,14 @@ use asrs_services::window_manager::Platform;
 use asrs_services::windows::{Rect, WindowSystem};
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
-    AnyWindowHandle, App, AppContext, Context, Entity, IntoElement, KeyUpEvent, Keystroke,
+    AnyWindowHandle, App, AppContext, ClipboardItem, Context, Entity, IntoElement, KeyUpEvent, Keystroke,
     Modifiers, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
     PlatformInput, Render, ScrollDelta, ScrollEvent, Styled, TouchPhase, Window, WindowHandle, div,
     point, px, rgb, size,
 };
 use asrs_ui::parity::Recorder;
-use asrs_ui::platform;
+use asrs_ui::platform::{self, EditCommand};
+use asrs_ui::selection::colors::ForcedActive;
 use asrs_ui::platform::dialog::{Reply, Script};
 use asrs_ui::theme::ThemeSource;
 
@@ -40,7 +41,7 @@ use crate::licenses::LicensesFile;
 use crate::main_process::{BetaTime, MainProcess, process_platform};
 use crate::menus::app_menu;
 use crate::menus::bridge::{MenuAction, ScriptedMenu};
-use crate::menus::dispatch::dispatch;
+use crate::menus::dispatch::{dispatch, run_edit};
 use crate::menus::model::{Command, MenuItem};
 use crate::satellite::{Satellite, SatelliteEvent};
 use crate::views::field3d::WwwRoot;
@@ -245,7 +246,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
     };
     let probes = Probes::load(&probes_file)?;
     let mut headless = HeadlessCapture::new(Arc::new(())).map_err(|e| e.to_string())?;
-    headless.context().update(windows::init);
+    headless.context().update(|cx| {
+        windows::init(cx);
+        cx.set_global(ForcedActive(false));
+    });
     if let Some(file) = options.licenses.clone() {
         headless
             .context()
@@ -925,6 +929,17 @@ impl Variant<'_> {
         Ok(())
     }
 
+    fn edit(&mut self, command: EditCommand) -> Result<(), String> {
+        let window = self.active();
+        self.headless
+            .context()
+            .update_window(window, |_, window, cx| run_edit(command, window, cx))
+            .map_err(|e| e.to_string())?;
+        self.settle();
+        self.tick()?;
+        self.tick()
+    }
+
     fn perform(&mut self, action: &Action) -> Result<(), String> {
         match action {
             Action::Main { name, data } => {
@@ -1016,6 +1031,26 @@ impl Variant<'_> {
             Action::Prompt { page, index, size } => self.switch_prompt(*page, *index, *size)?,
             Action::Hub => self.switch_to_hub()?,
             Action::Download(shows) => self.wait_download(shows)?,
+            Action::SelectAll => self.edit(EditCommand::SelectAll)?,
+            Action::Copy(name) => {
+                self.headless.context().update(|cx| {
+                    cx.write_to_clipboard(ClipboardItem::new_string(String::new()));
+                });
+                self.edit(EditCommand::Copy)?;
+                let copied = self.headless.context().update(|cx| {
+                    let item = cx.read_from_clipboard();
+                    item.and_then(|item| item.text()).unwrap_or_default()
+                });
+                let folder = self.dir.join("files/clipboard");
+                std::fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
+                std::fs::write(folder.join(format!("{name}.txt")), copied)
+                    .map_err(|e| e.to_string())?;
+            }
+            Action::Focus(active) => {
+                let active = ForcedActive(*active);
+                self.headless.context().update(|cx| cx.set_global(active));
+                self.tick()?;
+            }
             Action::Capture {
                 name,
                 probes,

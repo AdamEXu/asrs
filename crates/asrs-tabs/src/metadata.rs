@@ -164,6 +164,7 @@ pub struct MetadataTable {
 pub struct MetadataRenderer {
     last_data_string: String,
     table: MetadataTable,
+    builds: u64,
 }
 
 impl MetadataRenderer {
@@ -174,6 +175,11 @@ impl MetadataRenderer {
 
     pub fn table(&self) -> &MetadataTable {
         &self.table
+    }
+
+    /// How many times the rows' elements were built.
+    pub fn builds(&self) -> u64 {
+        self.builds
     }
 
     /// `render(command)`.
@@ -188,6 +194,7 @@ impl MetadataRenderer {
             return Ok(());
         }
         self.last_data_string = data_string;
+        self.builds += 1;
 
         self.table.columns.clear();
         self.table.rows.clear();

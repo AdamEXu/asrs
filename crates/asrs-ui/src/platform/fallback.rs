@@ -2,7 +2,7 @@ use std::path::Path;
 
 use gpui_kit::{App, Bounds, Pixels, ScrollEvent, Window};
 
-use super::{MenuPath, PopupMenu, WheelDelta};
+use super::{EditCommand, MenuPath, PopupMenu, SystemSelection, WheelDelta};
 
 pub(super) fn init() {}
 
@@ -35,6 +35,16 @@ pub(super) fn popup_menu(
     on_close: impl FnOnce(Option<MenuPath>, &mut App) + 'static,
 ) {
     cx.defer(move |cx| on_close(None, cx));
+}
+
+pub(super) fn install_edit_commands(_: &mut App, _: impl Fn(EditCommand, &mut App) + 'static) {}
+
+pub(super) fn selection_colors(_dark: bool) -> SystemSelection {
+    SystemSelection {
+        active: 0x1e90ff,
+        inactive: 0xc8c8c8,
+        text: None,
+    }
 }
 
 pub(super) fn select_popup(

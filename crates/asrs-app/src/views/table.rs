@@ -3,6 +3,7 @@
 //! [`TableLayout`](asrs_tabs::table::layout::TableLayout), which answers the renderer's and the
 //! controller's layout reads.
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
@@ -16,7 +17,10 @@ use asrs_model::scroll_sensor::WheelScroll;
 use asrs_model::source_list::Rect;
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
-use asrs_tabs::table::view::TableView;
+use asrs_canvas::text::TextBackend;
+use asrs_canvas::text::dom;
+use asrs_tabs::table::layout::TableLayout;
+use asrs_tabs::table::view::{TableRow, TableView};
 use asrs_tabs::table::{TableController, TableDom, TableRenderer};
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
@@ -27,14 +31,20 @@ use asrs_ui::gpui::{
 };
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, TextField};
 use asrs_ui::parity::probed;
-use asrs_ui::text::{self, Text, TextStyle, snap_remainder};
+use asrs_ui::selection::geometry::{Block, Line, Piece};
+use asrs_ui::selection::{Caret, Document, Hit, Place, Position};
+use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY};
 
+use super::cell_text::following;
 use super::frame::{FrameHost, HubFrame, wheel_of};
 use super::large_table::{
     BUTTON, Grid, HandFade, HeaderPalette, hand_icon, header_cell, line_through, plain, symbol,
 };
 use super::number::FormNumber;
+use super::page_text::{
+    Owner, PageText, PlacedBlock, Selected, beside_table, device, unselectable,
+};
 
 const FIRST_COLUMN_MIN: f64 = 97.0;
 const COLUMN_MIN: f64 = 175.0;
@@ -245,6 +255,209 @@ fn column_widths(
         .collect()
 }
 
+/// The shown rows' cells in document order.
+struct TableText<'a> {
+    rows: Vec<&'a TableRow>,
+    columns: usize,
+}
+
+impl<'a> TableText<'a> {
+    fn new(view: &'a TableView) -> TableText<'a> {
+        TableText {
+            rows: view.rows.iter().filter(|row| !row.hidden).collect(),
+            columns: 1 + view.headers.len(),
+        }
+    }
+}
+
+impl Document for TableText<'_> {
+    fn len(&self) -> usize {
+        self.rows.len() * self.columns
+    }
+
+    fn text(&self, block: usize) -> Cow<'_, str> {
+        let cell = self.rows[block / self.columns].cells.get(block % self.columns);
+        collapsed(cell.map_or("", String::as_str))
+    }
+
+    fn place(&self, block: usize) -> Place {
+        let last = (block + 1).is_multiple_of(self.columns);
+        Place {
+            cell: true,
+            tab: block > 0,
+            newline_before: false,
+            newline_after: last,
+            closed: last,
+            after_other: false,
+            gap: 1,
+        }
+    }
+}
+
+/// What `white-space: nowrap` renders of a text node.
+fn collapsed(text: &str) -> Cow<'_, str> {
+    let plain = !text.contains([' ', '\t', '\n', '\r', '\u{c}']);
+    if plain {
+        Cow::Borrowed(text)
+    } else {
+        Cow::Owned(dom::collapse(text, WhiteSpace::NoWrap).swap_remove(0))
+    }
+}
+
+/// A cell's one line.
+fn cell_block(
+    cell: &Cell,
+    text: &str,
+    bold: bool,
+    scale: f64,
+    backend: &mut dyn TextBackend,
+) -> Block {
+    let style = cell_style(bold);
+    let (ascent, descent, height) = dom::line_metrics(backend, &style, scale as f32);
+    let half = dom::LU_PER_PX * 2;
+    let leading = (height - ascent - descent).div_euclid(half) * dom::LU_PER_PX;
+    let mut from = 0;
+    let pieces: Vec<Piece> = cell
+        .pieces
+        .iter()
+        .enumerate()
+        .map(|(i, (piece, dx))| {
+            let range = following(text, from, collapsed(piece).as_ref());
+            from = range.end;
+            let to = cell.pieces.get(i + 1).map_or(cell.width, |next| next.1);
+            let x = device(*dx, scale);
+            Piece {
+                range,
+                node: 0,
+                x,
+                width: device(to, scale) - x,
+                font: style.font,
+                tabs: false,
+            }
+        })
+        .collect();
+    Block {
+        lines: vec![Line {
+            top: 0,
+            height,
+            box_top: leading,
+            box_height: ascent + descent,
+            pieces: if text.is_empty() { Vec::new() } else { pieces },
+            newline: None,
+            start: 0,
+        }],
+        font: style.font,
+    }
+}
+
+/// Where the cells' text is.
+struct CellPlaces {
+    /// Client left and width of each column.
+    columns: Vec<[f64; 2]>,
+    rows_top: f64,
+    row_height: f64,
+    border: f64,
+}
+
+impl CellPlaces {
+    fn new(layout: &mut TableLayout) -> CellPlaces {
+        let columns = (0..layout.columns.len())
+            .map(|i| [layout.column_left(i), layout.columns[i]])
+            .collect();
+        CellPlaces {
+            columns,
+            rows_top: layout.row_top(0),
+            row_height: layout.row_height(),
+            border: layout.border_px(),
+        }
+    }
+
+    /// Where a cell's text of a width starts.
+    fn text_origin(&self, row: usize, column: usize, width: f64) -> [f64; 2] {
+        let [left, w] = self.columns[column];
+        let border = if column + 1 == self.columns.len() {
+            0.0
+        } else {
+            self.border
+        };
+        let x = if column == 0 {
+            left + w - border - CELL_PADDING - width
+        } else {
+            left + CELL_PADDING
+        };
+        let top = self.rows_top + row as f64 * self.row_height;
+        [x, top + CELL_PADDING]
+    }
+
+    /// The column at a client x; the first is over the others.
+    fn column_at(&self, x: f64) -> usize {
+        let over = |c: &[f64; 2]| x < c[0] + c[1];
+        if self.columns.first().is_some_and(over) {
+            return 0;
+        }
+        let column = self.columns.iter().position(over);
+        column.unwrap_or(self.columns.len().saturating_sub(1))
+    }
+}
+
+struct TablePage<'a> {
+    doc: TableText<'a>,
+    dom: &'a Rc<RefCell<TableDom>>,
+    cells: &'a Cells,
+    container: [f64; 4],
+}
+
+impl PageText for TablePage<'_> {
+    fn document(&self) -> &dyn Document {
+        &self.doc
+    }
+
+    fn scroller(&self) -> [f64; 4] {
+        self.container
+    }
+
+    fn hit(&self, at @ [x, y]: [f64; 2], backend: &mut dyn TextBackend) -> Hit {
+        let mut dom = self.dom.borrow_mut();
+        let layout = &mut dom.layout;
+        let table = layout.table_rect();
+        if y < self.container[1] + layout.header_height() && x < table.right() {
+            return unselectable(&self.doc, 0);
+        }
+        if x < table.left() || x >= table.right() || y >= table.bottom() || self.doc.is_empty() {
+            return beside_table(&self.doc, x, [table.x, table.width]);
+        }
+        let places = CellPlaces::new(layout);
+        let scale = layout.device_pixel_ratio;
+        let row = math::floor((y - places.rows_top) / places.row_height);
+        let row = (row.max(0.0) as usize).min(self.doc.rows.len() - 1);
+        let column = places.column_at(x);
+        let index = row * self.doc.columns + column;
+        let text = self.doc.text(index);
+        let cached = |text: &String| self.cells.texts[usize::from(column == 0)].get(text);
+        let cell = self.doc.rows[row].cells.get(column).and_then(cached);
+        let Some(cell) = cell.filter(|_| !text.is_empty()) else {
+            return Hit {
+                caret: Some(Caret::new(Position {
+                    block: index,
+                    offset: 0,
+                })),
+                selectable: true,
+                text: false,
+            };
+        };
+        let block = cell_block(&cell.cell, &text, column == 0, scale, backend);
+        let origin = places.text_origin(row, column, cell.cell.width);
+        let placed = PlacedBlock {
+            index,
+            block: &block,
+            text: &text,
+            origin: origin.map(|v| device(v, scale)),
+            scale,
+        };
+        placed.hit(at, backend)
+    }
+}
+
 #[derive(Default)]
 struct TabView {
     jump: Option<(Entity<TextField<FormNumber>>, Subscription)>,
@@ -405,11 +618,14 @@ impl<H: FrameHost> HubFrame<H> {
             origin: [x, y],
             scale: f64::from(scale),
         };
+        let owner = Owner::Table(shown.key.clone());
+        let selected =
+            (self.text).selected(&owner, &TableText::new(&view), appearance, window, cx);
         let jump = self.jump_field(&shown, &view, window, cx);
         let dark = appearance == Appearance::Dark;
         let mut root = div().absolute().left_0().top_0().size_full();
         root = root.child(hand_icon(rect, hand, dark, grid));
-        root = root.child(self.table_body(&view, &dom, jump, rect, appearance, grid, cx));
+        root = root.child(self.table_body(&view, &dom, jump, rect, appearance, grid, selected, cx));
         let dom = dom.borrow();
         if let (false, Some(left)) = (dom.drag_highlight_hidden, dom.drag_highlight_left) {
             root = root.child(
@@ -430,6 +646,7 @@ impl<H: FrameHost> HubFrame<H> {
         rect: [f64; 4],
         appearance: Appearance,
         grid: Grid,
+        selected: Option<Selected>,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
         let palette = Palette::of(appearance);
@@ -444,7 +661,9 @@ impl<H: FrameHost> HubFrame<H> {
             .collect();
         let border = layout.border_px();
         let (header_height, row_height) = (layout.header_height(), layout.row_height());
-        let rows: Vec<_> = view.rows.iter().filter(|row| !row.hidden).collect();
+        let doc = TableText::new(view);
+        let rows = &doc.rows;
+        let places = CellPlaces::new(layout);
         let rows_top = layout.row_top(0);
         let rows_height = rows.len() as f64 * row_height;
         let first = columns[0];
@@ -488,37 +707,6 @@ impl<H: FrameHost> HubFrame<H> {
                     *layer = out;
                 }
             }
-            if !visible && !cfg!(feature = "parity") {
-                continue;
-            }
-            for (column, text) in row.cells.iter().take(count).enumerate() {
-                let bold = column == 0;
-                let Some(cell) = measured(text, bold).filter(|_| !text.is_empty()) else {
-                    continue;
-                };
-                let [left, w] = columns[column];
-                let cell_border = if column + 1 == count { 0.0 } else { border };
-                let text_left = if bold {
-                    left + w - cell_border - CELL_PADDING - cell.width
-                } else {
-                    left + CELL_PADDING
-                };
-                for (i, (piece, dx)) in cell.pieces.iter().enumerate() {
-                    let from = text_left + dx;
-                    let to = cell.pieces.get(i + 1).map_or(cell.width, |next| next.1);
-                    let cut = cell.pieces.len() > 1;
-                    if cut && (text_left + to < x || from >= x + width) {
-                        continue;
-                    }
-                    let at = [from, top + CELL_PADDING];
-                    let element = grid.text(plain(piece, cell_style(bold), text_color), at);
-                    if bold {
-                        first_cells = first_cells.child(element);
-                    } else {
-                        cells = cells.child(element);
-                    }
-                }
-            }
         }
         if rows_height > 0.0 {
             for (column, [left, w]) in columns.iter().enumerate().take(count - 1) {
@@ -530,6 +718,55 @@ impl<H: FrameHost> HubFrame<H> {
                     first_cells = first_cells.child(line);
                 } else {
                     cells = cells.child(line);
+                }
+            }
+        }
+        for (i, row) in rows.iter().enumerate() {
+            let top = rows_top + i as f64 * row_height;
+            let visible = top < y + height && top + row_height > y;
+            if !visible && !cfg!(feature = "parity") {
+                continue;
+            }
+            for (column, text) in row.cells.iter().take(count).enumerate() {
+                let bold = column == 0;
+                let Some(cell) = measured(text, bold).filter(|_| !text.is_empty()) else {
+                    continue;
+                };
+                let origin = places.text_origin(i, column, cell.width);
+                let text_left = origin[0];
+                let index = i * count + column;
+                let covered = |s: &&Selected| {
+                    (s.range.start.block..=s.range.end.block).contains(&index) && visible
+                };
+                if let Some(selected) = selected.as_ref().filter(covered) {
+                    let backend = &mut **self.text.backend();
+                    let text = doc.text(index);
+                    let block = cell_block(cell, &text, bold, grid.scale, backend);
+                    let placed = PlacedBlock {
+                        index,
+                        block: &block,
+                        text: &text,
+                        origin: origin.map(|v| device(v, grid.scale)),
+                        scale: grid.scale,
+                    };
+                    let layer = if bold { &mut first_cells } else { &mut cells };
+                    let drawn = std::mem::replace(layer, div());
+                    *layer = selected.paint(grid, &placed, backend, drawn);
+                }
+                for (k, (piece, dx)) in cell.pieces.iter().enumerate() {
+                    let from = text_left + dx;
+                    let to = cell.pieces.get(k + 1).map_or(cell.width, |next| next.1);
+                    let cut = cell.pieces.len() > 1;
+                    if cut && (text_left + to < x || from >= x + width) {
+                        continue;
+                    }
+                    let at = [from, top + CELL_PADDING];
+                    let element = grid.text(plain(piece, cell_style(bold), text_color), at);
+                    if bold {
+                        first_cells = first_cells.child(element);
+                    } else {
+                        cells = cells.child(element);
+                    }
                 }
             }
         }
@@ -663,6 +900,31 @@ impl<H: FrameHost> HubFrame<H> {
 }
 
 impl<H: FrameHost> HubFrame<H> {
+    /// The displayed table's text that can be selected.
+    pub(super) fn table_text<'a>(
+        &'a self,
+        cx: &'a App,
+    ) -> Option<(Owner, Box<dyn PageText + 'a>)> {
+        let (_, renderer) = displayed(self.host().hub(cx))?;
+        let shown = self.table.shown.as_ref()?;
+        let page = TablePage {
+            doc: TableText::new(renderer.view()),
+            dom: renderer.dom(),
+            cells: &self.table.tabs.get(&shown.key)?.cells,
+            container: shown.container,
+        };
+        Some((Owner::Table(shown.key.clone()), Box::new(page)))
+    }
+
+    /// `AutoscrollController`'s scrolling of the container.
+    pub(super) fn table_scroll_by(&mut self, by: [f64; 2], cx: &mut App) {
+        self.table_input(cx, |renderer, _| {
+            let mut dom = renderer.dom().borrow_mut();
+            let [left, top] = dom.layout.scroll();
+            dom.layout.scroll_to([left + by[0], top + by[1]]);
+        });
+    }
+
     fn jump_field(
         &mut self,
         shown: &Shown,

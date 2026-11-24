@@ -11,14 +11,7 @@ use objc2::{
     AllocAnyThread, DefinedClass, MainThreadMarker, MainThreadOnly, define_class, ffi, msg_send,
     sel,
 };
-use objc2_app_kit::{
-    NSApplication, NSAutoresizingMaskOptions, NSBitmapImageRep, NSControlStateValueOff,
-    NSControlStateValueOn, NSDocumentController, NSEvent, NSEventMask, NSEventModifierFlags,
-    NSEventType, NSFont, NSFontAttributeName, NSImage, NSLineBreakMode, NSMenu, NSMenuItem,
-    NSMutableParagraphStyle, NSParagraphStyleAttributeName, NSPopUpButtonCell, NSTextAlignment,
-    NSUserInterfaceLayoutDirection, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
-    NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowOrderingMode, NSWritingDirection,
-};
+use objc2_app_kit::{NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication, NSAutoresizingMaskOptions, NSBitmapImageRep, NSColor, NSColorSpace, NSControlStateValueOff, NSControlStateValueOn, NSDocumentController, NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSFont, NSFontAttributeName, NSImage, NSLineBreakMode, NSMenu, NSMenuItem, NSMutableParagraphStyle, NSParagraphStyleAttributeName, NSPopUpButtonCell, NSTextAlignment, NSUserInterfaceLayoutDirection, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowOrderingMode, NSWritingDirection};
 use objc2_core_foundation::{CFData, CGRect};
 use objc2_core_graphics::{
     CGBitmapInfo, CGColorRenderingIntent, CGColorSpace, CGDataProvider, CGImage, CGImageAlphaInfo,
@@ -32,10 +25,7 @@ use objc2_quartz_core::CAMetalLayer;
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 
 use super::probe::GpuiDelta;
-use super::{
-    MenuPath, PopupEntry, PopupItem, PopupMenu, SWATCH_SIZE, SelectMenu, SelectMenuItemKind,
-    WheelDelta,
-};
+use super::{EditCommand, MenuPath, PopupEntry, PopupItem, PopupMenu, SWATCH_SIZE, SelectMenu, SelectMenuItemKind, SystemSelection, WheelDelta};
 
 pub(super) mod dialog;
 pub(super) mod window;
@@ -788,6 +778,108 @@ pub(super) fn set_application_menu(
     let ns_menu = build_menu(mtm, menu, &target, &[]);
     NSApplication::sharedApplication(mtm).setMainMenu(Some(&ns_menu));
     true
+}
+
+thread_local! {
+    static EDIT_COMMAND: RefCell<Option<Box<dyn Fn(EditCommand)>>> = const { RefCell::new(None) };
+}
+
+unsafe extern "C-unwind" fn copy_command(_: &AnyObject, _: Sel, _: Option<&AnyObject>) {
+    run_edit_command(EditCommand::Copy);
+}
+
+unsafe extern "C-unwind" fn select_all_command(_: &AnyObject, _: Sel, _: Option<&AnyObject>) {
+    run_edit_command(EditCommand::SelectAll);
+}
+
+fn run_edit_command(command: EditCommand) {
+    EDIT_COMMAND.with_borrow(|handler| {
+        if let Some(handler) = handler {
+            handler(command);
+        }
+    });
+}
+
+/// Gives the application's delegate, which ends the responder chain, `copy:` and `selectAll:`.
+pub(super) fn install_edit_commands(
+    cx: &mut App,
+    on_command: impl Fn(EditCommand, &mut App) + 'static,
+) {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return;
+    };
+    let cx = cx.to_async();
+    let on_command = std::rc::Rc::new(on_command);
+    EDIT_COMMAND.set(Some(Box::new(move |command| {
+        let on_command = on_command.clone();
+        cx.spawn(async move |cx| cx.update(|cx| on_command(command, cx)))
+            .detach();
+    })));
+    let Some(delegate) = NSApplication::sharedApplication(mtm).delegate() else {
+        return;
+    };
+    // SAFETY: `class` takes no arguments and returns a class pointer.
+    let class: &AnyClass = unsafe { msg_send![&*delegate, class] };
+    type Command = unsafe extern "C-unwind" fn(&AnyObject, Sel, Option<&AnyObject>);
+    let commands: [(Sel, Command); 2] = [
+        (sel!(copy:), copy_command),
+        (sel!(selectAll:), select_all_command),
+    ];
+    for (selector, command) in commands {
+        // SAFETY: the implementations' signature is the `v@:@` of an action method, and
+        // `class_addMethod` leaves an existing method untouched.
+        unsafe {
+            ffi::class_addMethod(
+                ptr::from_ref(class).cast_mut(),
+                selector,
+                std::mem::transmute::<Command, Imp>(command),
+                c"v@:@".as_ptr(),
+            );
+        }
+    }
+}
+
+fn srgb(color: &NSColor) -> u32 {
+    let Some(color) = color.colorUsingColorSpace(&NSColorSpace::sRGBColorSpace()) else {
+        return 0;
+    };
+    let channel = |v: f64| (v.clamp(0.0, 1.0) * 255.0).round() as u32;
+    channel(color.redComponent()) << 16
+        | channel(color.greenComponent()) << 8
+        | channel(color.blueComponent())
+}
+
+/// `WebSandboxSupportMac::GetSystemColor`'s `kSelectedTextBackground` and
+/// `kSecondarySelectedControl`.
+pub(super) fn selection_colors(dark: bool) -> SystemSelection {
+    // SAFETY: AppKit's constant names.
+    let name = unsafe {
+        if dark {
+            NSAppearanceNameDarkAqua
+        } else {
+            NSAppearanceNameAqua
+        }
+    };
+    let colors = std::rc::Rc::new(Cell::new((0, 0)));
+    let read = {
+        let colors = colors.clone();
+        RcBlock::new(move || {
+            colors.set((
+                srgb(&NSColor::selectedTextBackgroundColor()),
+                srgb(&NSColor::unemphasizedSelectedContentBackgroundColor()),
+            ));
+        })
+    };
+    match NSAppearance::appearanceNamed(name) {
+        Some(appearance) => appearance.performAsCurrentDrawingAppearance(&read),
+        None => read.call(()),
+    }
+    let (active, inactive) = colors.get();
+    SystemSelection {
+        active,
+        inactive,
+        text: None,
+    }
 }
 
 fn perform_on_run_loop(job: impl FnOnce() + 'static) {

@@ -2,6 +2,7 @@
 //! device `LayoutUnit`s from the page's top left corner.
 
 use std::collections::HashMap;
+use std::ops::Range;
 use std::rc::Rc;
 
 use asrs_canvas::text::dom::{self, Align, Lu};
@@ -11,6 +12,7 @@ use asrs_tabs::info::beta_welcome::CHECKBOXES;
 use asrs_tabs::info::source_list_help::HelpItem;
 use asrs_tabs::info::{BetaWelcome, License};
 use asrs_ui::input::style::CONTROL_FONT;
+use asrs_ui::selection::geometry::{Block, Line, Piece};
 use asrs_ui::text::TextStyle;
 use asrs_ui::theme::FONT_FAMILY;
 
@@ -38,6 +40,34 @@ pub struct TextBlock {
 }
 
 impl TextBlock {
+    /// The text's lines, for selecting.
+    pub fn block(&self) -> Block {
+        let lines = self.flow.lines.iter().map(|line| Line {
+            top: line.top,
+            height: line.height,
+            box_top: line.box_top,
+            box_height: self.flow.box_height,
+            pieces: line
+                .pieces
+                .iter()
+                .map(|piece| Piece {
+                    range: piece.range.clone(),
+                    node: piece.item,
+                    x: piece.x,
+                    width: piece.width,
+                    font: self.style.font,
+                    tabs: false,
+                })
+                .collect(),
+            newline: None,
+            start: 0,
+        });
+        Block {
+            lines: lines.collect(),
+            font: self.style.font,
+        }
+    }
+
     /// The boxes of the text node `item`, one per line it is on.
     pub fn rects(&self, item: usize) -> Vec<LuRect> {
         let [x, y] = self.origin;
@@ -101,6 +131,10 @@ pub struct ParagraphLine {
     /// The index of the text node among its siblings, `<br>`s not counted.
     pub part: usize,
     pub text: String,
+    /// Its bytes in [`Paragraphs::text`].
+    pub range: Range<usize>,
+    pub top: Lu,
+    pub height: Lu,
     /// The text box's top, from the block's.
     pub box_top: Lu,
     pub width: Lu,
@@ -109,6 +143,11 @@ pub struct ParagraphLine {
 /// Text nodes with `<br>`s between them under `white-space: break-spaces`.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Paragraphs {
+    /// The text nodes, with `\n` for each `<br>`.
+    pub text: String,
+    /// Lines with only a `<br>`: its byte in the text, and the line's top.
+    blank: Vec<(usize, Lu)>,
+    strut: Lu,
     pub lines: Vec<ParagraphLine>,
     pub height: Lu,
     pub box_height: Lu,
@@ -123,19 +162,66 @@ impl Paragraphs {
         &self.lines[first..last.max(first)]
     }
 
+    /// The lines that overlap `from..to`, for selecting.
+    pub fn block(&self, style: &TextStyle, from: Lu, to: Lu) -> Block {
+        let lines = self.lines_between(from, to).iter().map(|line| Line {
+            top: line.top,
+            height: line.height,
+            box_top: line.box_top,
+            box_height: self.box_height,
+            pieces: vec![Piece {
+                range: line.range.clone(),
+                node: line.part,
+                x: 0,
+                width: line.width,
+                font: style.font,
+                tabs: false,
+            }],
+            newline: (self.text.as_bytes().get(line.range.end) == Some(&b'\n'))
+                .then_some(line.range.end),
+            start: 0,
+        });
+        let first = self.blank.partition_point(|b| b.1 + self.strut <= from);
+        let last = self.blank.partition_point(|b| b.1 < to).max(first);
+        let blank = self.blank[first..last].iter().map(|&(newline, top)| Line {
+            top,
+            height: self.strut,
+            box_top: top,
+            box_height: self.strut,
+            pieces: Vec::new(),
+            newline: Some(newline),
+            start: 0,
+        });
+        let mut lines: Vec<Line> = lines.chain(blank).collect();
+        lines.sort_by_key(|line| line.top);
+        Block {
+            lines,
+            font: style.font,
+        }
+    }
+
     fn new(typesetter: &mut Typesetter, style: &TextStyle, parts: &[String], width: Lu) -> Self {
         let backend = typesetter.backend.as_mut();
         let scale = typesetter.scale;
         let (ascent, descent, strut) = dom::line_metrics(backend, style, scale);
         let mut out = Paragraphs {
+            text: String::new(),
+            blank: Vec::new(),
+            strut,
             lines: Vec::new(),
             height: 0,
             box_height: ascent + descent,
         };
         for (part, text) in parts.iter().enumerate() {
+            if part > 0 {
+                out.text.push('\n');
+            }
+            let from = out.text.len();
+            out.text.push_str(text);
             if text.is_empty() {
                 // A `<br>` before the block's end starts no line.
                 if part + 1 < parts.len() {
+                    out.blank.push((from, out.height));
                     out.height += strut;
                 }
                 continue;
@@ -146,6 +232,9 @@ impl Paragraphs {
                     out.lines.push(ParagraphLine {
                         part,
                         text: piece.text,
+                        range: from + piece.range.start..from + piece.range.end,
+                        top: out.height + line.top,
+                        height: line.height,
                         box_top: out.height + line.box_top,
                         width: piece.width,
                     });
