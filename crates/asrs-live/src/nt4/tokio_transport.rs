@@ -2,24 +2,29 @@
 //! [`TokioTransport::next_event`] applies the browser's `readyState` rules to one event at a
 //! time on the foreground thread, so each sees the state the previous one left behind.
 //!
-//! `fetch` is [`crate::http`]'s GET, settling once the response headers are in. A server that selects no subprotocol fails the handshake (tungstenite's rule),
-//! where Chromium would open with an empty `protocol`; NT4 servers always select one.
+//! `fetch` is [`crate::http`]'s GET, settling once the response headers are in, or the whole body
+//! in a [`TokioTransport::with_bodies`]. A server that selects none of the requested
+//! subprotocols fails the handshake (tungstenite's rule), where Chromium would open with an empty
+//! `protocol`; NT4 servers always select one.
+//!
+//! Dropping the transport closes its sockets as a page that navigates away does: a closing
+//! handshake the server has five seconds to answer.
 
 use std::collections::{BTreeMap, VecDeque};
 use std::time::Duration;
 
 use futures_util::{SinkExt, StreamExt};
 use tokio::net::TcpStream;
-use tokio::runtime::Handle;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
-use tokio::task::JoinHandle;
+use tokio::sync::oneshot;
 use tokio_tungstenite::tungstenite::Message;
 use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::HeaderValue;
 
 use super::transport::{NetEvent, Nt4Transport, ReadyState, SocketId, WsMessage};
-use crate::channel::{EventReceiver, EventSender, event_channel};
+use crate::channel::{EventReceiver, EventSender, event_channel_notifying};
 use crate::http::{FetchTasks, FetchTransport, RequestId, host_port, percent_encode};
+use crate::net_options::{Backlog, NetOptions, Waiting};
 use crate::thrown::Thrown;
 
 const CLOSE_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
@@ -32,25 +37,49 @@ enum Command {
 struct Socket {
     state: ReadyState,
     commands: UnboundedSender<Command>,
-    task: JoinHandle<()>,
+    /// Gone once the socket is closing: what it still has to send gets five seconds.
+    open: Option<oneshot::Sender<()>>,
+}
+
+struct Event {
+    event: NetEvent,
+    _waiting: Option<Waiting>,
+}
+
+impl From<NetEvent> for Event {
+    fn from(event: NetEvent) -> Self {
+        Event {
+            event,
+            _waiting: None,
+        }
+    }
 }
 
 pub struct TokioTransport {
-    handle: Handle,
-    events_tx: EventSender<NetEvent>,
-    events_rx: EventReceiver<NetEvent>,
-    pending: VecDeque<NetEvent>,
+    options: NetOptions,
+    events_tx: EventSender<Event>,
+    events_rx: EventReceiver<Event>,
+    pending: VecDeque<Event>,
     next_id: u32,
     sockets: BTreeMap<u32, Socket>,
     requests: FetchTasks,
 }
 
 impl TokioTransport {
-    pub fn new(handle: Handle) -> Self {
-        let (events_tx, events_rx) = event_channel();
+    pub fn new(options: NetOptions) -> Self {
+        Self::build(options, false)
+    }
+
+    /// A transport whose `fetch` settles once the whole body is in, for sources that read it.
+    pub fn with_bodies(options: NetOptions) -> Self {
+        Self::build(options, true)
+    }
+
+    fn build(options: NetOptions, read_body: bool) -> Self {
+        let (events_tx, events_rx) = event_channel_notifying(options.notify.clone());
         Self {
-            requests: FetchTasks::new(handle.clone(), false),
-            handle,
+            requests: FetchTasks::new(options.clone(), read_body),
+            options,
             events_tx,
             events_rx,
             pending: VecDeque::new(),
@@ -73,8 +102,8 @@ impl TokioTransport {
                 Some(event) => event,
                 None => self.events_rx.try_recv()?,
             };
-            if self.admit(&event) {
-                return Some(event);
+            if self.admit(&event.event) {
+                return Some(event.event);
             }
         }
     }
@@ -115,14 +144,6 @@ impl TokioTransport {
     }
 }
 
-impl Drop for TokioTransport {
-    fn drop(&mut self) {
-        for socket in self.sockets.values() {
-            socket.task.abort();
-        }
-    }
-}
-
 fn invalid_url(url: &str) -> Thrown {
     Thrown::error(
         "SyntaxError",
@@ -145,16 +166,22 @@ impl Nt4Transport for TokioTransport {
         }
         let id = self.next_id();
         let (commands, rx) = unbounded_channel();
-        let events = self.events_tx.clone();
-        let task = self
-            .handle
-            .spawn(run_socket(SocketId(id), request, host, port, rx, events));
+        let (open, closing) = oneshot::channel();
+        let connection = Connection {
+            id: SocketId(id),
+            request,
+            address: self.options.dial(&host, port),
+            commands: rx,
+            closing,
+            events: self.events_tx.clone(),
+        };
+        self.options.handle.spawn(run_socket(connection));
         self.sockets.insert(
             id,
             Socket {
                 state: ReadyState::Connecting,
                 commands,
-                task,
+                open: Some(open),
             },
         );
         Ok(SocketId(id))
@@ -185,6 +212,7 @@ impl Nt4Transport for TokioTransport {
             && matches!(s.state, ReadyState::Connecting | ReadyState::Open)
         {
             s.state = ReadyState::Closing;
+            s.open = None;
             let _ = s.commands.send(Command::Close);
         }
     }
@@ -193,8 +221,9 @@ impl Nt4Transport for TokioTransport {
 impl FetchTransport for TokioTransport {
     fn fetch(&mut self, url: &str) -> RequestId {
         let id = RequestId(self.next_id());
-        self.requests
-            .spawn(id, url, &self.events_tx, NetEvent::Fetch);
+        self.requests.spawn(id, url, &self.events_tx, |event| {
+            NetEvent::Fetch(event).into()
+        });
         id
     }
 
@@ -210,17 +239,27 @@ fn to_message(data: WsMessage) -> Message {
     }
 }
 
-async fn run_socket(
+struct Connection {
     id: SocketId,
     request: tokio_tungstenite::tungstenite::handshake::client::Request,
-    host: String,
-    port: u16,
-    mut commands: UnboundedReceiver<Command>,
-    events: EventSender<NetEvent>,
-) {
-    let fail = |events: &EventSender<NetEvent>| {
-        let _ = events.send(NetEvent::WsError(id));
-        let _ = events.send(NetEvent::WsClose(id));
+    address: (String, u16),
+    commands: UnboundedReceiver<Command>,
+    closing: oneshot::Receiver<()>,
+    events: EventSender<Event>,
+}
+
+async fn run_socket(connection: Connection) {
+    let Connection {
+        id,
+        request,
+        address: (host, port),
+        mut commands,
+        closing,
+        events,
+    } = connection;
+    let fail = |events: &EventSender<Event>| {
+        let _ = events.send(NetEvent::WsError(id).into());
+        let _ = events.send(NetEvent::WsClose(id).into());
     };
     let connect = async {
         let stream = TcpStream::connect((host.as_str(), port)).await.ok()?;
@@ -240,34 +279,50 @@ async fn run_socket(
         .and_then(|v| v.to_str().ok())
         .unwrap_or_default()
         .to_owned();
-    let _ = events.send(NetEvent::WsOpen(id, protocol));
+    let _ = events.send(NetEvent::WsOpen(id, protocol).into());
     let (mut sink, mut stream) = ws.split();
-    loop {
-        tokio::select! {
-            message = stream.next() => match message {
-                Some(Ok(Message::Text(text))) => {
-                    let _ = events.send(NetEvent::WsMessage(id, WsMessage::Text(text.as_str().to_owned())));
-                }
-                Some(Ok(Message::Binary(bytes))) => {
-                    let _ = events.send(NetEvent::WsMessage(id, WsMessage::Binary(bytes.to_vec())));
-                }
-                Some(Ok(_)) => {}
-                Some(Err(_)) | None => break,
-            },
-            command = commands.recv() => match command {
-                Some(Command::Send(data)) => {
-                    if sink.send(to_message(data)).await.is_err() {
-                        break;
-                    }
-                }
-                Some(Command::Close) | None => {
-                    let _ = sink.close().await;
-                    let drain = async { while let Some(Ok(_)) = stream.next().await {} };
-                    let _ = tokio::time::timeout(CLOSE_HANDSHAKE_TIMEOUT, drain).await;
-                    break;
-                }
-            },
+    let backlog = Backlog::new();
+    let receive = async {
+        while let Some(Ok(message)) = stream.next().await {
+            let message = match message {
+                Message::Text(text) => WsMessage::Text(text.as_str().to_owned()),
+                Message::Binary(bytes) => WsMessage::Binary(bytes.to_vec()),
+                _ => continue,
+            };
+            let bytes = match &message {
+                WsMessage::Text(text) => text.len(),
+                WsMessage::Binary(bytes) => bytes.len(),
+            };
+            let waiting = backlog.reserve(bytes).await;
+            let _ = events.send(Event {
+                event: NetEvent::WsMessage(id, message),
+                _waiting: waiting,
+            });
         }
+    };
+    let send = async {
+        while let Some(Command::Send(data)) = commands.recv().await {
+            if sink.send(to_message(data)).await.is_err() {
+                return false;
+            }
+        }
+        true
+    };
+    let stalled = async {
+        let _ = closing.await;
+        tokio::time::sleep(CLOSE_HANDSHAKE_TIMEOUT).await;
+    };
+    let closed_here = tokio::select! {
+        () = receive => false,
+        closed_here = send => closed_here,
+        () = stalled => false,
+    };
+    if closed_here {
+        let close = async {
+            let _ = sink.close().await;
+            while let Some(Ok(_)) = stream.next().await {}
+        };
+        let _ = tokio::time::timeout(CLOSE_HANDSHAKE_TIMEOUT, close).await;
     }
-    let _ = events.send(NetEvent::WsClose(id));
+    let _ = events.send(NetEvent::WsClose(id).into());
 }

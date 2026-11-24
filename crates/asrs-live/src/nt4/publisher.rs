@@ -6,6 +6,7 @@
 //! of `periodic` are reported and swallowed, as the browser does for interval callbacks.
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 
 use asrs_js::string::JsString;
 use asrs_js::value::{JsObject, JsValue};
@@ -234,9 +235,10 @@ impl Nt4Publisher {
                 self.published_topics.insert(topic.clone(), None);
             }
         }
+        let still_published: HashSet<&JsString> = topics_to_publish.iter().collect();
         let published: Vec<JsString> = self.published_topics.keys().cloned().collect();
         for topic in &published {
-            if !topics_to_publish.contains(topic) {
+            if !still_published.contains(topic) {
                 self.client.unpublish_topic(&topic.slice(3.0, None), cx)?;
                 self.published_topics.remove_key(topic);
             }
