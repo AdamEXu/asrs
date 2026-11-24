@@ -188,6 +188,15 @@ struct ImageSource {
 #[derive(Clone, Default)]
 pub struct ShadeCache {
     entries: Vec<Shade>,
+    levels: Vec<ImageLevel>,
+}
+
+/// A mip level cc's decode cache holds.
+#[derive(Clone)]
+struct ImageLevel {
+    image: Arc<Pixmap>,
+    mip: Mip,
+    pixels: Arc<Pixmap>,
 }
 
 #[derive(Clone)]
@@ -202,7 +211,7 @@ struct Shade {
 struct ShadeKey {
     shader: image::Shader,
     mip: Option<Mip>,
-    runs: Vec<image::Run>,
+    runs: image::Runs,
 }
 
 impl ShadeCache {
@@ -222,6 +231,34 @@ impl ShadeCache {
             pixels,
             used: true,
         });
+    }
+
+    /// `GetDecodedImageForDraw`: a level is made out of the smallest one of the same part that
+    /// is already there and large enough (`FindCachedCandidate`), so it depends on the sizes the
+    /// image was drawn at before.
+    fn level(&mut self, image: &Arc<Pixmap>, mip: Mip) -> Option<Arc<Pixmap>> {
+        let candidate = self
+            .levels
+            .iter()
+            .filter(|l| {
+                Arc::ptr_eq(&l.image, image)
+                    && l.mip.src == mip.src
+                    && l.mip.size[0] >= mip.size[0]
+                    && l.mip.size[1] >= mip.size[1]
+            })
+            .min_by_key(|l| l.mip.size);
+        let pixels = match candidate {
+            Some(level) if level.mip == mip => return Some(level.pixels.clone()),
+            Some(level) => mip.build(&level.pixels)?,
+            None => mip.build(&mip.part(image)?)?,
+        };
+        let pixels = Arc::new(pixels);
+        self.levels.push(ImageLevel {
+            image: image.clone(),
+            mip,
+            pixels: pixels.clone(),
+        });
+        Some(pixels)
     }
 
     fn next_frame(mut self) -> ShadeCache {
@@ -458,6 +495,10 @@ impl<'a> Raster<'a> {
     pub fn take_shades(&mut self) -> ShadeCache {
         let mut shades = std::mem::take(&mut self.shades);
         shades.entries.retain(|e| e.used);
+        shades.levels.retain(|l| {
+            let mut images = self.images.values();
+            images.any(|source| Arc::ptr_eq(&source.pixmap, &l.image))
+        });
         shades
     }
 
@@ -1071,13 +1112,21 @@ impl<'a> Raster<'a> {
         let Some(source) = self.source(fill, 256) else {
             return;
         };
-        let mut spans = Spans::new(self.pixmap.width(), self.pixmap.height());
-        let (bounds, force_rle) = match &self.state.clip {
-            None => (self.canvas_rect(), false),
-            Some(clip) => (clip.bounds(), clip.force_rle()),
-        };
-        aaa::fill_path_clipped(path, bounds, force_rle, even_odd, &mut spans);
+        let spans = self.path_spans(path, even_odd);
         self.paint_spans(&spans, &source);
+    }
+
+    /// The blits `SkDraw::drawDevPath` makes to fill a device path.
+    fn path_spans(&self, path: &SkPath, even_odd: bool) -> Spans {
+        let mut spans = Spans::new(self.pixmap.width(), self.pixmap.height());
+        if dev_path_drawable(path) {
+            let (bounds, force_rle) = match &self.state.clip {
+                None => (self.canvas_rect(), false),
+                Some(clip) => (clip.bounds(), clip.force_rle()),
+            };
+            aaa::fill_path_clipped(path, bounds, force_rle, even_odd, &mut spans);
+        }
+        spans
     }
 
     fn canvas_rect(&self) -> [i32; 4] {
@@ -1537,11 +1586,7 @@ impl<'a> Raster<'a> {
             }
         }
         let device = self.rect_path(rect).to_sk(Some(&self.state.ctm));
-        let mut spans = Spans::new(w, h);
-        if dev_path_drawable(&device) {
-            aaa::fill_path(&device, w, h, false, &mut spans);
-        }
-        Some(spans)
+        Some(self.path_spans(&device, false))
     }
 
     fn rect_coverage(&self, rect: [f32; 4], anti_alias: bool) -> Option<Coverage> {
@@ -1895,8 +1940,8 @@ impl<'a> Raster<'a> {
         let total = self.state.ctm.concat(&matrix);
         let alpha = self.state.alpha as f32;
         let (w, h) = (self.pixmap.width(), self.pixmap.height());
-        let level = || match mip {
-            Some(mip) => mip.build(&pixmap).map(Arc::new),
+        let level = |shades: &mut ShadeCache| match mip {
+            Some(mip) => shades.level(&pixmap, mip),
             None => Some(pixmap.clone()),
         };
         if as_bitmap && let Some(at) = image::sprite(&total, part, linear, anti_alias) {
@@ -1908,9 +1953,9 @@ impl<'a> Raster<'a> {
                 if let Some(clip) = clip {
                     spans = clip.apply(spans);
                 }
-                let runs = image::runs(&spans);
+                let runs = image::Runs::new(&spans);
                 let alpha = image::alpha_u8(alpha);
-                if let Some(image) = level() {
+                if let Some(image) = level(&mut self.shades) {
                     image::blit_sprite(&mut self.pixmap, &image, part, at, alpha, &runs);
                 }
                 return;
@@ -1921,12 +1966,7 @@ impl<'a> Raster<'a> {
         };
         let spans = if as_bitmap && !self.state.ctm.rect_stays_rect() {
             let path = self.rect_path([0.0, 0.0, part[2] as f32, part[3] as f32]);
-            let device = path.to_sk(Some(&total));
-            let mut spans = Spans::new(w, h);
-            if dev_path_drawable(&device) {
-                aaa::fill_path(&device, w, h, false, &mut spans);
-            }
-            Some(spans)
+            Some(self.path_spans(&path.to_sk(Some(&total)), false))
         } else {
             self.rect_spans([dst.left, dst.top, dst.right, dst.bottom], anti_alias)
         };
@@ -1936,10 +1976,12 @@ impl<'a> Raster<'a> {
         if let Some(clip) = &self.state.clip {
             spans = clip.apply(spans);
         }
-        let runs = image::runs(&spans);
-        let shade = || level().map(|image| Arc::new(shader.shade(&image, &runs)));
+        let runs = image::Runs::new(&spans);
+        let shade = |shades: &mut ShadeCache| {
+            level(shades).map(|image| Arc::new(shader.shade(&image, &runs)))
+        };
         let pixels = if shader.is_translate() {
-            shade()
+            shade(&mut self.shades)
         } else {
             let key = ShadeKey {
                 shader,
@@ -1947,7 +1989,7 @@ impl<'a> Raster<'a> {
                 runs: runs.clone(),
             };
             self.shades.get(&pixmap, &key).or_else(|| {
-                let pixels = shade()?;
+                let pixels = shade(&mut self.shades)?;
                 self.shades.insert(&pixmap, key, pixels.clone());
                 Some(pixels)
             })

@@ -89,29 +89,36 @@ impl Mip {
         }
     }
 
-    /// The part's pixels at the level: `SkPixmap::scalePixels` with linear filtering and the
-    /// nearest mip.
-    pub fn build(&self, image: &Pixmap) -> Option<Pixmap> {
+    /// The part itself.
+    pub fn part(&self, image: &Pixmap) -> Option<Pixmap> {
         let [x, y, width, height] = self.src;
-        let mut pixels = if [x, y, width, height] == [0, 0, image.width(), image.height()] {
-            image.clone()
-        } else {
-            let mut part = Pixmap::new(width, height)?;
-            let row = width as usize * 4;
-            for line in 0..height as usize {
-                let from = ((y as usize + line) * image.width() as usize + x as usize) * 4;
-                part.data_mut()[line * row..(line + 1) * row]
-                    .copy_from_slice(&image.data()[from..from + row]);
-            }
-            part
-        };
-        for _ in 0..mip_level(self.size, [width, height]) {
-            if pixels.width() == 1 && pixels.height() == 1 {
+        if [x, y, width, height] == [0, 0, image.width(), image.height()] {
+            return Some(image.clone());
+        }
+        let mut part = Pixmap::new(width, height)?;
+        let row = width as usize * 4;
+        for line in 0..height as usize {
+            let from = ((y as usize + line) * image.width() as usize + x as usize) * 4;
+            part.data_mut()[line * row..(line + 1) * row]
+                .copy_from_slice(&image.data()[from..from + row]);
+        }
+        Some(part)
+    }
+
+    /// The level out of the part, or out of a level of it at least as large:
+    /// `SkPixmap::scalePixels` with linear filtering and the nearest mip.
+    pub fn build(&self, from: &Pixmap) -> Option<Pixmap> {
+        let base = [from.width(), from.height()];
+        let mut pixels = None;
+        for _ in 0..mip_level(self.size, base) {
+            let smaller = downsample(pixels.as_ref().unwrap_or(from))?;
+            let last = (smaller.width(), smaller.height()) == (1, 1);
+            pixels = Some(smaller);
+            if last {
                 break;
             }
-            pixels = downsample(&pixels)?;
         }
-        scale_pixels(&pixels, [width, height], self.size)
+        scale_pixels(pixels.as_ref().unwrap_or(from), base, self.size)
     }
 }
 

@@ -6,7 +6,7 @@
 
 use tiny_skia::Pixmap;
 
-use crate::blit::Spans;
+use crate::blit::{Kind, Spans};
 use crate::hairline::P;
 use crate::matrix::Matrix;
 use crate::skpath::Rect;
@@ -123,11 +123,11 @@ impl Shader {
     }
 
     /// The shader's pixels for every run in `runs`.
-    pub fn shade(&self, image: &Pixmap, runs: &[Run]) -> Vec<Pixel> {
+    pub fn shade(&self, image: &Pixmap, runs: &Runs) -> Vec<Pixel> {
         let bitmap = Bitmap::new(image, self.part);
         let mode = self.mode();
-        let mut out = Vec::with_capacity(runs.iter().map(|r| r.len as usize).sum());
-        for run in runs {
+        let mut out = Vec::with_capacity(runs.runs.iter().map(|r| r.len as usize).sum());
+        for run in &runs.runs {
             match &mode {
                 Mode::Legacy(legacy) => legacy.span(&bitmap, run, &mut out),
                 Mode::Pipeline(stages) => stages.span(&bitmap, run, &mut out),
@@ -137,51 +137,72 @@ impl Shader {
     }
 
     /// Blends shaded `runs` in order.
-    pub fn blend(&self, pixmap: &mut Pixmap, runs: &[Run], pixels: &[Pixel]) {
+    pub fn blend(&self, pixmap: &mut Pixmap, runs: &Runs, pixels: &[Pixel]) {
         let legacy = legacy_shader_can_handle(&self.inverse);
-        let mut pixels = pixels.iter();
-        for run in runs {
-            for d in row_mut(pixmap, run.x, run.y, run.len) {
-                let Some(&s) = pixels.next() else {
-                    return;
+        let (mut pixels, mut masks) = (pixels.iter(), runs.masks.iter());
+        for run in &runs.runs {
+            let row = row_mut(pixmap, run.x, run.y, run.len);
+            for (d, &s) in row.iter_mut().zip(pixels.by_ref()) {
+                let coverage = match run.coverage {
+                    Some(c) => c,
+                    None => masks.next().copied().unwrap_or(0),
                 };
                 *d = match (legacy, run.coverage) {
-                    (true, 255) => src_over(s, *d),
-                    (true, c) => blend_argb32(s, *d, c),
-                    (false, c) => lowp_src_over(s, *d, c),
+                    (false, _) => lowp_src_over(s, *d, coverage),
+                    (true, None) => blend_mask(s, *d, coverage),
+                    (true, Some(255)) => src_over(s, *d),
+                    (true, Some(_)) => blend_argb32(s, *d, coverage),
                 };
             }
         }
     }
 }
 
-/// Pixels side by side that one shader call covers, at one coverage.
+/// Pixels side by side that one shader call covers: at one coverage, or at a mask's.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Run {
     pub x: i32,
     pub y: i32,
     pub len: u32,
-    pub coverage: u8,
+    pub coverage: Option<u8>,
 }
 
-/// The shader calls a blitter makes for `spans`.
-pub fn runs(spans: &Spans) -> Vec<Run> {
-    let mut out = Vec::new();
-    for (x, y, coverage) in spans.iter() {
-        let mut x = x;
-        for group in coverage.chunk_by(|a, b| a == b) {
-            if group[0] != 0 {
-                out.push(Run {
+/// The shader calls a blitter makes, and the coverage of those for masks.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Runs {
+    runs: Vec<Run>,
+    masks: Vec<u8>,
+}
+
+impl Runs {
+    pub fn new(spans: &Spans) -> Runs {
+        let mut out = Runs::default();
+        for (x, y, coverage, kind) in spans.iter_kinds() {
+            if kind == Kind::Mask {
+                out.runs.push(Run {
                     x,
                     y,
-                    len: group.len() as u32,
-                    coverage: group[0],
+                    len: coverage.len() as u32,
+                    coverage: None,
                 });
+                out.masks.extend_from_slice(coverage);
+                continue;
             }
-            x += group.len() as i32;
+            let mut x = x;
+            for group in coverage.chunk_by(|a, b| a == b) {
+                if group[0] != 0 {
+                    out.runs.push(Run {
+                        x,
+                        y,
+                        len: group.len() as u32,
+                        coverage: Some(group[0]),
+                    });
+                }
+                x += group.len() as i32;
+            }
         }
+        out
     }
-    out
 }
 
 fn row_mut(pixmap: &mut Pixmap, x: i32, y: i32, len: u32) -> &mut [Pixel] {
@@ -196,13 +217,13 @@ pub fn blit_sprite(
     part: Part,
     at: (i32, i32),
     alpha: u8,
-    runs: &[Run],
+    runs: &Runs,
 ) {
     if alpha == 0 {
         return;
     }
     let bitmap = Bitmap::new(image, part);
-    for run in runs {
+    for run in &runs.runs {
         let (sx, sy) = (run.x - at.0, run.y - at.1);
         for (i, d) in row_mut(pixmap, run.x, run.y, run.len)
             .iter_mut()
@@ -243,6 +264,13 @@ fn blend_argb32(s: Pixel, d: Pixel, alpha: u8) -> Pixel {
     let inverse = 0xffff - u32::from(s[3]) * scale;
     let inverse = (inverse + (inverse >> 8)) >> 8;
     zip(s, d, |s, d| (s * scale + d * inverse) >> 8)
+}
+
+/// `blend_row_A8`.
+fn blend_mask(s: Pixel, d: Pixel, coverage: u8) -> Pixel {
+    let s = s.map(|v| ((u32::from(v) * (u32::from(coverage) + 1)) >> 8) as u8);
+    let inverse = 256 - u32::from(s[3]);
+    zip(s, d, |s, d| s + ((d * inverse) >> 8))
 }
 
 /// The raster pipeline's `div255`, exact with NEON only.
@@ -583,7 +611,7 @@ pub fn scale_pixels(level: &Pixmap, base: [u32; 2], size: [u32; 2]) -> Option<Pi
             x: 0,
             y,
             len: size[0],
-            coverage: 255,
+            coverage: Some(255),
         };
         stages.span(&bitmap, &run, &mut pixels);
     }
