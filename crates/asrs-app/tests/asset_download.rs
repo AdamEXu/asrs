@@ -481,6 +481,7 @@ fn failures_in_a_fresh_home() {
     }
     app.server.reply(RELEASES, Reply::Stall(b"[]".to_vec()));
     app.skip(FAILURE_MS);
+    app.until("the stalled request", |app| app.server.count(RELEASES) == 5);
     app.until_timer(5_000.0..=5_000.0);
     app.skip(5_000.0);
     fails(&mut app);
