@@ -5,17 +5,20 @@ pub mod gpui {
         Action, AnyElement, AnyWindowHandle, App, AppContext, Application, AsyncApp,
         BackgroundExecutor, Bounds, BoxShadow, ClickEvent, ClipboardItem, Context, Corners,
         CursorStyle, DispatchPhase, Div, Entity, EventEmitter, ExternalPaths, FocusHandle,
-        Focusable, Global, HoverListenerMode, Hsla, InteractiveElement, IntoElement, KeyDownEvent,
-        KeyUpEvent, KeyboardButton, Keystroke, Modifiers, MouseButton, MouseDownEvent,
-        MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels, PlatformInput, Point,
-        Render, RenderImage, Result, Rgba, ScrollDelta, ScrollEvent, ScrollHandle, SharedString,
-        Stateful, StatefulInteractiveElement, Styled, Subscription, Task, TitlebarOptions,
-        TouchPhase, WeakEntity, Window, WindowBackgroundAppearance, WindowBounds, WindowHandle,
-        WindowKind, WindowOptions, anchored, application, canvas, deferred, div, fill,
-        linear_color_stop, linear_gradient, point, px, rgb, rgba, size,
+        Focusable, Global, HitboxBehavior, HoverListenerMode, Hsla, InteractiveElement,
+        IntoElement, KeyDownEvent, KeyUpEvent, KeyboardButton, Keystroke, Modifiers, MouseButton,
+        MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
+        PlatformInput, Point, Render, RenderImage, Result, Rgba, ScrollDelta, ScrollEvent,
+        ScrollHandle, SharedString, Stateful, StatefulInteractiveElement, Styled, Subscription,
+        Task, TitlebarOptions, TouchDragEvent, TouchPhase, WeakEntity, Window,
+        WindowBackgroundAppearance, WindowBounds, WindowHandle, WindowKind, WindowOptions,
+        anchored, application, canvas, deferred, div, fill, linear_color_stop, linear_gradient,
+        point, px, rgb, rgba, size,
     };
     #[cfg(feature = "parity")]
-    pub use gpui_kit::{HeadlessAppContext, NoopTextSystem, TestAppContext, WindowVisibility};
+    pub use gpui_kit::{
+        HeadlessAppContext, NoopTextSystem, TestAppContext, TouchEvent, TouchId, WindowVisibility,
+    };
 }
 
 pub mod button;
