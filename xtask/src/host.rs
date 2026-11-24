@@ -1283,7 +1283,8 @@ fn display_profile() -> Json {
                     "(Get-ItemProperty 'HKCU:/Control Panel/Desktop').{name}"
                 ))
             };
-            let dwrite = "[string](Get-Item C:/Windows/System32/DWrite.dll).VersionInfo.FileVersionRaw";
+            let dwrite =
+                "[string](Get-Item C:/Windows/System32/DWrite.dll).VersionInfo.FileVersionRaw";
             let profiles = "(Get-ChildItem C:/Windows/System32/spool/drivers/color -Filter *.ic* | Select-Object -ExpandProperty Name) -join ','";
             let tuner = "(Get-ChildItem HKCU:/Software/Microsoft/Avalon.Graphics -ErrorAction SilentlyContinue | Select-Object -ExpandProperty PSChildName) -join ','";
             let mut fields = vec![
