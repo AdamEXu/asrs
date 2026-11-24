@@ -1098,11 +1098,34 @@ mod tests {
                 [1941.59375, 2015.390625],
                 [2641.25, 2746.515625, 2851.78125, 2957.046875, 3062.3125],
             ),
+            (
+                1.25,
+                577.0,
+                6.359375,
+                217.375,
+                [385.8125, 454.328125, 522.84375, 57.6875],
+                [641.375, 448.625],
+                [737.34375, 781.203125, 825.0625, 868.921875, 912.78125],
+            ),
+            (
+                3.0,
+                1136.0,
+                15.265625,
+                1025.390625,
+                [951.109375, 1274.875, 1598.625, 272.625],
+                [2042.390625, 2250.59375],
+                [2859.65625, 2964.921875, 3070.1875, 3175.453125, 3280.71875],
+            ),
         ];
         for (scale, width, space, source, sources, timeline, transport) in recorded {
             let layout = ControlsLayout::new([300.0, 565.0, width, 85.0], 5, space / scale, scale);
             let px = |v: f64| device(v, scale);
+            let pixels = |v: f64| math::floor(v + 0.5);
             assert_eq!(px(layout.source[2]), source);
+            assert_eq!(
+                layout.sources.map(|b| px(snap(b[0] + b[2], scale))),
+                [0, 1, 2].map(|i| pixels(sources[i] + sources[3]))
+            );
             assert_eq!(layout.sources.map(|b| px(b[0])), sources[..3]);
             assert_eq!(px(layout.sources[0][2]), sources[3]);
             assert_eq!([0, 2].map(|i| px(layout.timeline[i])), timeline);
@@ -1110,7 +1133,7 @@ mod tests {
             assert_eq!(lefts.clone().map(px).collect::<Vec<_>>(), transport);
             assert_eq!(
                 lefts.map(|v| px(snap(v, scale))).collect::<Vec<_>>(),
-                transport.map(|v| math::floor(v + 0.5))
+                transport.map(pixels)
             );
         }
     }
