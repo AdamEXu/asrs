@@ -24,8 +24,9 @@ pub(super) enum JsDefault {
     /// `util.emptyObject`.
     EmptyObject,
     Long(Long),
-    /// A function reached through `Object.prototype` (an enum default named `toString`).
-    Function,
+    /// A function reached through `Object.prototype` (an enum default named `toString`);
+    /// the string is the member name, which is also the function's `.name`.
+    Function(JsString),
     /// An enum's `valuesById`, reached as `values.__proto__`.
     Object(JsObject<JsString>),
 }
@@ -59,7 +60,7 @@ impl JsDefault {
     /// The value `d.x = <JSON.stringify(typeDefault)>` assigns in generated `toObject` code.
     pub fn json_literal(&self) -> JsValue {
         match self {
-            JsDefault::Undefined | JsDefault::Function => JsValue::Undefined,
+            JsDefault::Undefined | JsDefault::Function(_) => JsValue::Undefined,
             JsDefault::Null => JsValue::Null,
             JsDefault::Bool(b) => JsValue::Bool(*b),
             JsDefault::Number(x) if !x.is_finite() => JsValue::Null,
@@ -225,6 +226,7 @@ fn is_decimal_key(u: &[u16]) -> bool {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum Val {
+    Undefined,
     Num(f64),
     Bool(bool),
     Str(JsString),
@@ -235,11 +237,37 @@ pub(super) enum Val {
     Map(JsObject<Val>),
 }
 
-/// A decoded message: its type and its own enumerable properties in JS order.
+/// The non-message value `decode` is writing fields onto when the merge target `m.x`
+/// resolves to a truthy non-message value: `own` holds the props written so far plus the
+/// value's enumerable own props, and these variants keep the value's prototype reads
+/// (`Array.isArray`, `.length`, `push`, the `Array`/`Object` prototype members).
+#[derive(Clone, Debug, PartialEq)]
+pub(super) enum Foreign {
+    /// A JS array: elements are `own`'s index-keyed props.
+    Array,
+    /// A `Long` instance (`low`, `high`, `unsigned` are `own` props).
+    Long,
+    /// A plain object (its entries are `own` props).
+    Object,
+    /// A `Uint8Array` (elements are `own` index props).
+    Bytes,
+    /// A function: `.name` and `.length` resolve to its name and arity.
+    Function { name: JsString, arity: f64 },
+    /// A primitive: property reads box to the wrapper prototype, property writes throw.
+    Scalar(Val),
+}
+
+/// A decoded message: its type, its own enumerable properties in JS order, the own
+/// non-enumerable `$unknowns` property `util.makeProp` defines, and the non-message
+/// object it stands in for when `decode` merges into a truthy `m.x`.
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Message {
     pub ty: NodeId,
     pub own: JsObject<Val>,
+    /// `util.makeProp(m, "$unknowns", false)`: own and writable but invisible to
+    /// `Object.keys`. `Some` once `makeProp` has run; `Val::Undefined` until assigned.
+    pub hidden: Option<Val>,
+    pub foreign: Option<Foreign>,
 }
 
 /// A `bytes` field's string default: base64 when it looks like base64, UTF-8 otherwise.

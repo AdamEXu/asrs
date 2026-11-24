@@ -11,7 +11,7 @@ use asrs_js::value::JsValue;
 
 use super::LoggableType;
 use super::log_core::{Log, child_key_js};
-use super::log_field::LogField;
+use super::log_field::{LogField, StructuredType};
 use super::log_key_utils::apply_key_prefix;
 use super::log_value_sets::RawValue;
 use super::merge_calculator::get_merge_offset;
@@ -122,14 +122,16 @@ impl Log {
         key: &JsString,
         timestamp: f64,
         data: &JsValue,
-        schema_types: impl Iterator<Item = (&'a JsString, JsString)>,
+        schema_types: impl Iterator<Item = (&'a JsString, JsValue)>,
     ) -> Result<(), LogError> {
         self.put_unknown_struct(key, timestamp, data, false)?;
         for (child, schema_type) in schema_types {
             let full_child_key = child_key_js(key, child);
             self.create_blank_field(&full_child_key, LoggableType::Empty);
             self.process_timestamp(&full_child_key, timestamp);
-            self.set_structured_type(&full_child_key, Some(schema_type));
+            // `setStructuredType(fullChildKey, decodedData.schemaTypes[child])`, verbatim:
+            // a photonstruct field without a type token stores `undefined`.
+            self.set_structured_type_value(&full_child_key, StructuredType::from_js(&schema_type));
         }
         Ok(())
     }
@@ -171,7 +173,10 @@ impl Log {
                 key,
                 timestamp,
                 &decoded.data,
-                decoded.schema_types.iter().map(|(k, v)| (k, v.clone())),
+                decoded
+                    .schema_types
+                    .iter()
+                    .map(|(k, v)| (k, JsValue::String(v.clone()))),
             ),
             Err(DecodeError::NeverCompletes) => Err(LogError::NeverCompletes),
             Err(_) => {
@@ -207,20 +212,12 @@ impl Log {
         self.set_generated_parent(key);
         self.set_structured_type(key, Some(schema_type.clone()));
         match self.photon_decoder.decode(schema_type, &value) {
-            Ok(decoded) => {
-                let mut schema_types = Vec::with_capacity(decoded.schema_types.len());
-                for (child, ty) in decoded.schema_types.iter() {
-                    match ty {
-                        JsValue::String(ty) => schema_types.push((child, ty.clone())),
-                        _ => {
-                            return Err(LogError::Unmodeled(
-                                "a photonstruct field without a type token sets an undefined structured type",
-                            ));
-                        }
-                    }
-                }
-                self.put_decoded(key, timestamp, &decoded.data, schema_types.into_iter())
-            }
+            Ok(decoded) => self.put_decoded(
+                key,
+                timestamp,
+                &decoded.data,
+                decoded.schema_types.iter().map(|(k, v)| (k, v.clone())),
+            ),
             Err(_) => {
                 self.queued_structs.push(QueuedStructure {
                     key: key.clone(),
@@ -272,7 +269,10 @@ impl Log {
                 key,
                 timestamp,
                 &decoded.data,
-                decoded.schema_types.iter().map(|(k, v)| (k, v.clone())),
+                decoded
+                    .schema_types
+                    .iter()
+                    .map(|(k, v)| (k, JsValue::String(v.clone()))),
             ),
             Err(ProtoError::Unmodeled(what)) => Err(LogError::Unmodeled(what)),
             Err(_) => {

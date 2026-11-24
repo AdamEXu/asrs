@@ -11,7 +11,7 @@ use asrs_js::value::{JsObject, JsValue};
 use indexmap::IndexSet;
 
 use super::LoggableType;
-use super::log_field::{LogField, SerializedLogField};
+use super::log_field::{LogField, SerializedLogField, StructuredType};
 use super::log_field_tree::LogFieldTree;
 use super::log_key_utils::{PHOTON_PREFIX, STRUCT_PREFIX, get_schema_type, split_log_key};
 use super::log_value_sets::{LogValue, LogValueSet, LogValueSetAny, RawValue};
@@ -489,14 +489,26 @@ impl Log {
     }
 
     pub fn get_structured_type(&self, key: &JsString) -> Option<&JsString> {
-        self.fields.get_key(key)?.structured_type.as_ref()
+        self.fields.get_key(key)?.structured_type.as_named()
     }
 
-    pub fn set_structured_type(&mut self, key: &JsString, ty: Option<JsString>) {
+    /// `getStructuredType` verbatim: the stored value, `null` when the key is not a field.
+    pub fn get_structured_type_value(&self, key: &JsString) -> StructuredType {
+        self.fields
+            .get_key(key)
+            .map_or(StructuredType::Null, |f| f.structured_type.clone())
+    }
+
+    /// `setStructuredType(key, type)` verbatim; `putPhotonStruct` stores `undefined`.
+    pub fn set_structured_type_value(&mut self, key: &JsString, ty: StructuredType) {
         if let Some(field) = self.fields.get_units_mut(key.units()) {
             field.structured_type = ty;
             self.changed_fields.insert(key.clone());
         }
+    }
+
+    pub fn set_structured_type(&mut self, key: &JsString, ty: Option<JsString>) {
+        self.set_structured_type_value(key, StructuredType::from_named(ty));
     }
 
     pub fn get_wpilib_type(&self, key: &JsString) -> Option<&JsString> {

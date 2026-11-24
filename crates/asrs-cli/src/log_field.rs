@@ -3,6 +3,7 @@ use std::sync::Arc;
 use asrs_js::string::JsString;
 use asrs_log::log::{
     LogField, LogValue, LogValueSet, LogValueSetAny, LogValues, LoggableType, SerializedLogField,
+    StructuredType,
 };
 use asrs_parity::{Response, Utf16String, Value};
 
@@ -56,6 +57,27 @@ pub fn type_string(v: &Value) -> Result<Option<JsString>, String> {
     match v {
         Value::Null => Ok(None),
         other => js_string(other).map(Some),
+    }
+}
+
+/// A `structuredType` member value: `string | null` normally, but `putPhotonStruct` and a
+/// serialized field can carry `undefined` or anything else verbatim.
+pub fn structured_type(v: &Value) -> Result<StructuredType, String> {
+    match v {
+        Value::Null => Ok(StructuredType::Null),
+        Value::Undefined => Ok(StructuredType::Undefined),
+        Value::String(_) => js_string(v).map(StructuredType::Named),
+        other => crate::js_json::to_js(other).map(StructuredType::Other),
+    }
+}
+
+/// `field.structuredType` as the CVE-1 value: `undefined` encodes as `{"u":null}`.
+pub fn structured_type_value(t: &StructuredType) -> Value {
+    match t {
+        StructuredType::Null => Value::Null,
+        StructuredType::Undefined => Value::Undefined,
+        StructuredType::Named(s) => string_value(s),
+        StructuredType::Other(v) => crate::js_json::from_js(v),
     }
 }
 
@@ -194,7 +216,7 @@ pub fn serialized_value(s: &SerializedLogField) -> Value {
         ("type", Value::number(f64::from(s.get_type() as u8))),
         ("timestamps", numbers(&s.timestamps)),
         ("values", values_value(&s.values)),
-        ("structuredType", optional_string(&s.structured_type)),
+        ("structuredType", structured_type_value(&s.structured_type)),
         ("wpilibType", optional_string(&s.wpilib_type)),
         ("metadataString", string_value(&s.metadata_string)),
         ("stripingReference", Value::Bool(s.striping_reference)),
@@ -263,7 +285,7 @@ fn run(args: &[Value]) -> Result<Value, String> {
             "clear" => field.clear_before_time(number(&functions::arg(op, 1))?),
             "meta" => {
                 field.wpilib_type = type_string(&functions::arg(op, 1))?;
-                field.structured_type = type_string(&functions::arg(op, 2))?;
+                field.structured_type = structured_type(&functions::arg(op, 2))?;
                 field.metadata_string = js_string(&functions::arg(op, 3))?;
             }
             "reload" => field = LogField::from_serialized(field.to_serialized()),

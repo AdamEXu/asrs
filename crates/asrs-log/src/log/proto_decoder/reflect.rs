@@ -893,7 +893,7 @@ fn enum_value_lookup(data: &EnumData, name: &JsString) -> JsDefault {
         return JsDefault::Object(data.values_by_id.clone());
     }
     if is_object_prototype_name(name) {
-        return JsDefault::Function;
+        return JsDefault::Function(name.clone());
     }
     JsDefault::Undefined
 }

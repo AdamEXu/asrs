@@ -6,11 +6,59 @@ use std::ops::Range;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use asrs_js::string::JsString;
+use asrs_js::value::JsValue;
 
 use super::LoggableType;
 use super::log_key_utils::is_child_log;
 use super::log_value_sets::{LogValue, LogValueSet, LogValueSetAny, LogValues, RawValue};
 use crate::util::{lower_bound, upper_bound};
+
+/// `fields[key].structuredType`: `string | null` normally, but `putPhotonStruct` stores
+/// `undefined` verbatim for a field whose declaration had no type token, and
+/// `fromSerialized` restores whatever it was handed.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum StructuredType {
+    #[default]
+    Null,
+    Undefined,
+    Named(JsString),
+    /// Any other value `setStructuredType` or `fromSerialized` received.
+    Other(JsValue),
+}
+
+impl StructuredType {
+    /// The type name when it is a string; `x?.startsWith(...)` on any other value is
+    /// `undefined`, which every consumer treats as absent.
+    pub fn as_named(&self) -> Option<&JsString> {
+        match self {
+            StructuredType::Named(s) => Some(s),
+            _ => None,
+        }
+    }
+
+    pub fn from_named(ty: Option<JsString>) -> Self {
+        ty.map_or(StructuredType::Null, StructuredType::Named)
+    }
+
+    pub fn from_js(v: &JsValue) -> Self {
+        match v {
+            JsValue::Undefined => StructuredType::Undefined,
+            JsValue::Null => StructuredType::Null,
+            JsValue::String(s) => StructuredType::Named(s.clone()),
+            other => StructuredType::Other(other.clone()),
+        }
+    }
+
+    /// The value `getStructuredType` returns.
+    pub fn to_js(&self) -> JsValue {
+        match self {
+            StructuredType::Null => JsValue::Null,
+            StructuredType::Undefined => JsValue::Undefined,
+            StructuredType::Named(s) => JsValue::String(s.clone()),
+            StructuredType::Other(v) => v.clone(),
+        }
+    }
+}
 
 /// One field: parallel timestamp and value columns, sorted ascending by timestamp.
 ///
@@ -20,7 +68,7 @@ use crate::util::{lower_bound, upper_bound};
 pub struct LogField {
     timestamps: Arc<Vec<f64>>,
     values: LogValues,
-    pub structured_type: Option<JsString>,
+    pub structured_type: StructuredType,
     /// The original type string from WPILOG or NT4.
     pub wpilib_type: Option<JsString>,
     pub metadata_string: JsString,
@@ -36,7 +84,7 @@ pub struct LogField {
 pub struct SerializedLogField {
     pub timestamps: Arc<Vec<f64>>,
     pub values: LogValues,
-    pub structured_type: Option<JsString>,
+    pub structured_type: StructuredType,
     pub wpilib_type: Option<JsString>,
     pub metadata_string: JsString,
     pub striping_reference: bool,
@@ -69,7 +117,7 @@ impl LogField {
         LogField {
             timestamps: Arc::default(),
             values: LogValues::new(ty),
-            structured_type: None,
+            structured_type: StructuredType::Null,
             wpilib_type: None,
             metadata_string: JsString::new(),
             type_warning: false,
@@ -328,7 +376,7 @@ impl LogField {
             return;
         }
         let child_log = T::TYPE == LoggableType::Raw
-            && is_child_log(self.wpilib_type.as_ref(), self.structured_type.as_ref());
+            && is_child_log(self.wpilib_type.as_ref(), self.structured_type.as_named());
         let Some(column) = T::column_mut(&mut self.values) else {
             return;
         };

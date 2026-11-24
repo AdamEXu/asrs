@@ -944,6 +944,16 @@ fn optional_string(s: &Option<JsString>) -> Value {
     s.as_ref().map_or(Value::Null, string_value)
 }
 
+fn structured_type_value(t: &asrs_log::log::StructuredType) -> Value {
+    use asrs_log::log::StructuredType::*;
+    match t {
+        Null => Value::Null,
+        Undefined => Value::Undefined,
+        Named(s) => string_value(s),
+        Other(_) => Value::Undefined,
+    }
+}
+
 fn numbers(xs: &[f64]) -> Value {
     Value::Array(xs.iter().map(|&x| Value::number(x)).collect())
 }
@@ -989,7 +999,7 @@ fn serialized_field_value(s: &asrs_log::log::SerializedLogField) -> Value {
         ("type", Value::number(f64::from(s.get_type() as u8))),
         ("timestamps", numbers(&s.timestamps)),
         ("values", values),
-        ("structuredType", optional_string(&s.structured_type)),
+        ("structuredType", structured_type_value(&s.structured_type)),
         ("wpilibType", optional_string(&s.wpilib_type)),
         ("metadataString", string_value(&s.metadata_string)),
         ("stripingReference", Value::Bool(s.striping_reference)),

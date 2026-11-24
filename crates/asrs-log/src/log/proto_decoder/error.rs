@@ -41,6 +41,26 @@ pub enum ProtoError {
     InvalidNestedObject,
     /// A call on a value that is not a function, e.g. `extendedType.get is not a function`.
     NotAFunction(&'static str),
+    /// `<expr> is not a function` where the expression is a computed member path like
+    /// `m.$unknowns.push` or `m["a b"].push`.
+    DynNotAFunction(JsString),
+    /// `m.x = v` or `m.x[k] = v` on a primitive (`Cannot create property 'x' on number '5'`).
+    CannotCreate {
+        name: JsString,
+        on: JsString,
+    },
+    /// `undefined[k] = v` or `null[k] = v` (`Cannot set properties of undefined (setting 'k')`).
+    CannotSet {
+        on: &'static str,
+        name: JsString,
+    },
+    /// `Object.defineProperty` on a primitive (`util.makeProp` on a scalar merge target).
+    DefinePrimitive,
+    /// `Cannot read properties of undefined|null (reading '<name>')` for a dynamic name.
+    ReadProp {
+        nullish: &'static str,
+        name: JsString,
+    },
     ReadUndefined(&'static str),
     ReadNull(&'static str),
     CannotConvertToObject,
@@ -83,6 +103,11 @@ impl ProtoError {
             | NegativeFieldId
             | InvalidNestedObject
             | NotAFunction(_)
+            | DynNotAFunction(_)
+            | CannotCreate { .. }
+            | CannotSet { .. }
+            | DefinePrimitive
+            | ReadProp { .. }
             | ReadUndefined(_)
             | ReadNull(_)
             | CannotConvertToObject
@@ -128,6 +153,25 @@ impl ProtoError {
             NegativeFieldId => cat(&[S("id must be a non-negative integer")]),
             InvalidNestedObject => cat(&[S("object must be a valid nested object")]),
             NotAFunction(expr) => cat(&[S(expr), S(" is not a function")]),
+            DynNotAFunction(expr) => cat(&[J(expr), S(" is not a function")]),
+            CannotCreate { name, on } => {
+                cat(&[S("Cannot create property '"), J(name), S("' on "), J(on)])
+            }
+            CannotSet { on, name } => cat(&[
+                S("Cannot set properties of "),
+                S(on),
+                S(" (setting '"),
+                J(name),
+                S("')"),
+            ]),
+            DefinePrimitive => cat(&[S("Object.defineProperty called on non-object")]),
+            ReadProp { nullish, name } => cat(&[
+                S("Cannot read properties of "),
+                S(nullish),
+                S(" (reading '"),
+                J(name),
+                S("')"),
+            ]),
             ReadUndefined(prop) => cat(&[
                 S("Cannot read properties of undefined (reading '"),
                 S(prop),
