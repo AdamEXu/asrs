@@ -60,7 +60,7 @@ under inputs/); --probes defaults to probes.json beside the scenario directory;
 automatic folders of each variant's userData/; --licenses is the licenses.json the Licenses window
 lists; --work-area is the primary display's work area origin on the Electron driver's host, which
 places its window 16 px inside it (default 0,0), at one scale or at every scale;
---robot is where the scenario's robot listens on 127.0.0.1.";
+--robot is where the scenario's robot listens on 127.0.0.1; --no-captures renders no captures.";
 
 /// A tick of the page: one animation frame and this much executor time, which the page's `Date`
 /// and its scroll sensors' frame clock both run on.
@@ -152,6 +152,7 @@ struct Options {
     licenses: Option<PathBuf>,
     work_areas: Vec<(Option<u32>, (f64, f64))>,
     robot: Option<u16>,
+    no_captures: bool,
 }
 
 fn options(args: &[String]) -> Result<Options, String> {
@@ -159,6 +160,7 @@ fn options(args: &[String]) -> Result<Options, String> {
     let (mut bundled_assets, mut licenses) = (None, None);
     let mut work_areas = Vec::new();
     let mut robot = None;
+    let mut no_captures = false;
     let (mut scales, mut themes) = (Vec::new(), Vec::new());
     let mut iter = args.iter();
     while let Some(arg) = iter.next() {
@@ -172,6 +174,7 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--probes" => probes = Some(PathBuf::from(value()?)),
             "--bundled-assets" => bundled_assets = Some(PathBuf::from(value()?)),
             "--licenses" => licenses = Some(PathBuf::from(value()?)),
+            "--no-captures" => no_captures = true,
             "--robot" => robot = Some(value()?.parse().map_err(|_| "--robot is a port")?),
             "--work-area" => {
                 let text = value()?;
@@ -202,6 +205,7 @@ fn options(args: &[String]) -> Result<Options, String> {
         licenses,
         work_areas,
         robot,
+        no_captures,
     })
 }
 
@@ -234,7 +238,14 @@ pub fn run(args: &[String]) -> Result<(), String> {
         .to_owned();
     let text = std::fs::read_to_string(&options.scenario)
         .map_err(|e| format!("{}: {e}", options.scenario.display()))?;
-    let scenario = Scenario::parse(&name, &text)?;
+    let mut scenario = Scenario::parse(&name, &text)?;
+    if options.no_captures {
+        for action in &mut scenario.actions {
+            if matches!(action, Action::Capture { .. }) {
+                *action = Action::Idle;
+            }
+        }
+    }
     let probes_file = match &options.probes {
         Some(file) => file.clone(),
         None => options

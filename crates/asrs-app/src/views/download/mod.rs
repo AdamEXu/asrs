@@ -259,9 +259,11 @@ impl DownloadWindow {
                         cx.stop_propagation();
                     }
                 }
-                "tab" if !modifiers.control && !modifiers.alt && !modifiers.platform => {
-                    view.tab(modifiers.shift, window, cx);
-                    cx.stop_propagation();
+                "tab" => {
+                    if let Some(back) = focus::tab_key(&event.keystroke) {
+                        view.tab(back, window, cx);
+                        cx.stop_propagation();
+                    }
                 }
                 "a" if !modifiers.shift => {
                     let command = match view.page.platform() {

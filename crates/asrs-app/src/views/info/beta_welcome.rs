@@ -97,11 +97,12 @@ impl BetaWelcomePage {
             if window.window_handle() != handle {
                 return;
             }
-            let modifiers = event.keystroke.modifiers;
             let _ = this.update(cx, |view, cx| match event.keystroke.key.as_str() {
-                "tab" if !modifiers.control && !modifiers.alt && !modifiers.platform => {
-                    view.tab(modifiers.shift, window, cx);
-                    cx.stop_propagation();
+                "tab" => {
+                    if let Some(back) = focus::tab_key(&event.keystroke) {
+                        view.tab(back, window, cx);
+                        cx.stop_propagation();
+                    }
                 }
                 key @ ("space" | "enter") => {
                     let Some(control) = view.active(window) else {

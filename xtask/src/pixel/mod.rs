@@ -477,6 +477,7 @@ pub(crate) fn compare_variant(
     let masks = platform_masks(&platform)?;
     let names = capture_names(reference)?;
     let mut results = vec![compare_files(label, reference, port)?];
+    results.extend(compare_focus(label, reference, port)?);
     for extra in capture_names(port)?
         .into_iter()
         .filter(|n| !names.contains(n))
@@ -541,6 +542,66 @@ fn list_files(dir: &Path, prefix: &str, files: &mut Vec<(String, bool)>) -> Resu
         }
     }
     Ok(())
+}
+
+/// What had the focus as a scenario's `traverse` actions kept it.
+fn compare_focus(label: &str, reference: &Path, port: &Path) -> Result<Option<CaptureResult>> {
+    let folder = |side: &Path| side.join("files/focus");
+    let mut names = BTreeSet::new();
+    for side in [reference, port].map(folder) {
+        if side.is_dir() {
+            let entries = sorted_entries(&side)?;
+            names.extend(
+                entries
+                    .iter()
+                    .filter_map(|p| p.file_name().map(ToOwned::to_owned)),
+            );
+        }
+    }
+    if names.is_empty() {
+        return Ok(None);
+    }
+    let mut outcome = Outcome::default();
+    for name in names {
+        let read = |side: &Path| -> Result<Vec<Json>> {
+            let path = folder(side).join(&name);
+            let text = fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+            let lines = text.lines().map(|line| {
+                asrs_parity::json::parse(line).map_err(|e| format!("{}: {e}", path.display()))
+            });
+            lines.collect()
+        };
+        let (theirs, ours) = (read(reference)?, read(port)?);
+        let mut differences: Vec<String> = theirs
+            .iter()
+            .zip(&ours)
+            .enumerate()
+            .filter_map(|(i, (theirs, ours))| {
+                let difference = asrs_parity::focus::difference(theirs, ours)?;
+                Some(format!("{i}: {difference}"))
+            })
+            .collect();
+        if theirs.len() != ours.len() {
+            differences.push(format!(
+                "{} upstream, {} on the port",
+                theirs.len(),
+                ours.len()
+            ));
+        }
+        let detail = match differences.first() {
+            Some(first) => format!("{} of {} differ, {first}", differences.len(), theirs.len()),
+            None => format!("{} equal", theirs.len()),
+        };
+        let name = name.to_string_lossy();
+        outcome.push("focus", &name, differences.is_empty(), detail);
+    }
+    Ok(Some(CaptureResult {
+        label: format!("{label} focus"),
+        outcome,
+        error: None,
+        reference: None,
+        port: None,
+    }))
 }
 
 /// `text` with every `YYYY-MM-DD` replaced, since the two sides may run on different days.
