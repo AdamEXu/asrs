@@ -4,7 +4,7 @@ use std::process::Command;
 
 use asrs_model::app_identity::{APP_USER_MODEL_ID, BUNDLE_ID};
 
-use super::associations::ASSOCIATIONS;
+use super::associations::{ASSOCIATIONS, CSV};
 use super::{Bundle, NAME, VERSION, run_tool, write};
 use crate::{Result, workspace_root};
 
@@ -45,7 +45,9 @@ fn inno_setup() -> Result<PathBuf> {
 }
 
 /// Installs for the current user and adds asrs to the "Open with" list of each extension. The
-/// extension's own default value, which names the default program, is never written.
+/// extension's own default value, which names the default program, is never written. CSV files
+/// often have no default, and the only program in OpenWithProgids then becomes it, so for them
+/// asrs is only among the programs that support the type.
 fn installer(bundle: &Bundle, stage: &Path) -> String {
     let architecture = match bundle.arch {
         "arm64" => "arm64",
@@ -55,6 +57,13 @@ fn installer(bundle: &Bundle, stage: &Path) -> String {
     let mut registry = String::new();
     for a in ASSOCIATIONS {
         let (ext, name) = (a.extension, a.name);
+        let _ = writeln!(
+            registry,
+            "Root: HKCU; Subkey: \"Software\\Classes\\Applications\\asrs.exe\\SupportedTypes\"; ValueType: string; ValueName: \".{ext}\"; ValueData: \"\""
+        );
+        if a.mime == CSV {
+            continue;
+        }
         let class = format!("Software\\Classes\\asrs.{ext}");
         let _ = write!(
             registry,
@@ -63,7 +72,6 @@ Root: HKCU; Subkey: \"{class}\\DefaultIcon\"; ValueType: string; ValueData: \"{{
 Root: HKCU; Subkey: \"{class}\\shell\\open\\command\"; ValueType: string; ValueData: \"\"\"{{app}}\\asrs.exe\"\" \"\"%1\"\"\"
 Root: HKCU; Subkey: \"Software\\Classes\\.{ext}\"; Flags: uninsdeletekeyifempty
 Root: HKCU; Subkey: \"Software\\Classes\\.{ext}\\OpenWithProgids\"; ValueType: string; ValueName: \"asrs.{ext}\"; ValueData: \"\"; Flags: uninsdeletevalue uninsdeletekeyifempty
-Root: HKCU; Subkey: \"Software\\Classes\\Applications\\asrs.exe\\SupportedTypes\"; ValueType: string; ValueName: \".{ext}\"; ValueData: \"\"
 "
         );
     }

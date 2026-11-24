@@ -5,14 +5,13 @@ use std::process::Command;
 
 use asrs_model::app_identity::BUNDLE_ID;
 
-use super::associations::ASSOCIATIONS;
+use super::associations::{ASSOCIATIONS, CSV};
 use super::{Bundle, MACOS_MINIMUM, NAME, VERSION, at, copy, run_tool, write};
 use crate::{Result, workspace_root};
 
 pub const ENTITLEMENTS: &str = "packaging/macos/entitlements.plist";
 /// Where the license files are in the mounted image, for a reader who does not open the app.
 const DMG_LICENSES: &[&str] = &["LICENSE", "THIRD_PARTY_NOTICES.md"];
-const CSV: &str = "text/csv";
 /// Even as an alternate, the only app that names CSV files becomes their default, ahead of every
 /// text editor, which name text. An app that names this type, which a CSV file also has, does not.
 const CSV_PARENT: &str = "public.delimited-values-text";

@@ -530,6 +530,8 @@ impl Smoke {
              $progids = (Get-Item \"$c\\.wpilog\\OpenWithProgids\").Property
              if ($progids -notcontains 'asrs.wpilog') { throw 'not an Open with program' }
              if ((Get-Item \"$c\\.wpilog\").GetValue('')) { throw 'became the default' }
+             $supported = (Get-Item \"$c\\Applications\\asrs.exe\\SupportedTypes\").Property
+             if ($supported -notcontains '.csv') { throw '.csv is not supported' }
              if (Test-Path \"$c\\.hoot\") { throw '.hoot is registered' }
              (Get-Item \"$c\\asrs.wpilog\\shell\\open\\command\").GetValue('')
              $lnk = Join-Path ([Environment]::GetFolderPath('Programs')) 'asrs.lnk'

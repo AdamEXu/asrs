@@ -29,7 +29,7 @@ pub const ASSOCIATIONS: &[Association] = &[
     ),
     association("rlog", "Robot log", "application/x-rlog"),
     association("revlog", "REV Robotics CAN log", "application/x-revlog"),
-    association("csv", "Comma-separated values", "text/csv"),
+    association("csv", "Comma-separated values", CSV),
     association("dslog", "NI Driver Station log", "application/x-dslog"),
     association(
         "dsevents",
@@ -38,8 +38,9 @@ pub const ASSOCIATIONS: &[Association] = &[
     ),
 ];
 
-/// A type every desktop already defines.
-const SYSTEM_TYPES: &[&str] = &["text/csv"];
+/// The one type that is not a robot log's: every desktop already defines it, and other programs
+/// open it.
+pub const CSV: &str = "text/csv";
 
 pub fn extensions() -> impl Iterator<Item = &'static str> {
     ASSOCIATIONS.iter().map(|a| a.extension)
@@ -57,7 +58,7 @@ pub fn mime_package() -> String {
          <mime-info xmlns=\"http://www.freedesktop.org/standards/shared-mime-info\">\n",
     );
     for a in ASSOCIATIONS {
-        if SYSTEM_TYPES.contains(&a.mime) {
+        if a.mime == CSV {
             continue;
         }
         let _ = write!(
