@@ -1649,7 +1649,10 @@ impl HubModel {
     pub fn next_live_timer(&self) -> Option<f64> {
         let live = self.live.as_ref().and_then(|s| s.borrow().next_due());
         let publisher = self.publisher.as_ref().and_then(PublisherSession::next_due);
-        [live, publisher].into_iter().flatten().reduce(f64::min)
+        [live, publisher]
+            .into_iter()
+            .flatten()
+            .min_by(f64::total_cmp)
     }
 
     /// Runs every live timer that is due, each as its own task.

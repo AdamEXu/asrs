@@ -212,9 +212,7 @@ impl RlogMain {
                         break;
                     }
                     // `Uint8Array.prototype.slice`: negative indexes count from the end, an
-                    // inverted range is empty. When expected is 0, or negative with a magnitude
-                    // of at least the buffer length, the buffer never shrinks and this spins
-                    // forever, as upstream's loop does (#182).
+                    // inverted range is empty.
                     let clamp = |x: i64| -> usize {
                         if x < 0 {
                             (len + x).max(0) as usize
@@ -223,6 +221,13 @@ impl RlogMain {
                         }
                     };
                     let (begin, end) = (clamp(4), clamp(expected));
+                    // The buffer would never shrink, and upstream's main process spins here for
+                    // good. This loop runs on the foreground thread, so the connection is dropped.
+                    if end == 0 {
+                        self.data_array.clear();
+                        cx.net.tcp_destroy(*id);
+                        break;
+                    }
                     let payload = if begin > end {
                         Vec::new()
                     } else {
@@ -342,6 +347,13 @@ mod tests {
                 let split = payloads(&[&stream[..a], &stream[a..b], &stream[b..]]);
                 assert_eq!(split, whole, "cut at {a} and {b}");
             }
+        }
+    }
+
+    #[test]
+    fn a_length_that_never_consumes_anything_drops_the_connection() {
+        for length in [-4i32, -8, i32::MIN] {
+            assert!(payloads(&[&length.to_be_bytes()]).is_empty(), "{length}");
         }
     }
 }
