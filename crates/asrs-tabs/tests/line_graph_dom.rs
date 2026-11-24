@@ -80,9 +80,7 @@ use asrs_model::source_list::{
     ClearPrompt, Env, ItemView, Length, ListButton, ListInput, ListPointer, Rect, SourceList,
     SourceListDom, TypePrompt,
 };
-use asrs_model::source_list_config::{
-    SourceListConfig, SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
-};
+use asrs_model::source_list_config::{SourceListConfig, SourceListItemState};
 use asrs_model::tab_controller::TabController;
 use asrs_parity::Value;
 use asrs_parity::json::Json;
@@ -386,7 +384,7 @@ struct Painter {
 
 struct Host {
     log: RefCell<Log>,
-    memory: SourceListTypeMemory,
+    memory: JsValue,
     selection: ScriptedSelection,
     preferences: Preferences,
     dark: bool,
@@ -663,7 +661,10 @@ fn list_dump(list: &SourceList, log: &Log) -> JsValue {
     let mut o = JsObject::new();
     o.insert("title", list.title().to_js());
     o.insert("state", list.state().to_js());
-    o.insert("displayed", list.displayed_state(log).to_js());
+    o.insert(
+        "displayed",
+        list.displayed_state(log).expect("modeled items").to_js(),
+    );
     o.insert("stopped", list.is_stopped().to_js());
     let hand = if list.hand_icon_shown() {
         ["0.15", "opacity 1s ease-in 1s"]
@@ -769,7 +770,7 @@ impl Harness {
             others,
             host: Host {
                 log: RefCell::new(Log::new(true)),
-                memory: JsObject::new(),
+                memory: JsValue::Object(JsObject::new()),
                 selection: ScriptedSelection::default(),
                 preferences: Preferences::default(),
                 dark: false,
@@ -1144,8 +1145,8 @@ impl Harness {
             }
             "remove" => {
                 let i = index(at(&args, 1))?;
-                controller.with_list(list, |l, _| l.remove(i));
-                None
+                let removed = controller.with_list(list, |l, _| l.remove(i));
+                removed.err().map(|e| e.to_string())
             }
             "clearClick" => {
                 let mut prompt = None;
@@ -1634,14 +1635,12 @@ impl Harness {
             return self.apply_log(&ops);
         }
         if record.field("slTypeMemory").is_some() {
-            let value = js(record, "slTypeMemory")?;
-            self.host.memory = SourceListTypeMemoryEntry::memory_from_js(&value)
-                .ok_or("slTypeMemory does not parse")?;
+            self.host.memory = js(record, "slTypeMemory")?;
             return Ok(());
         }
         if record.field("slMemory").is_some() {
             let expected = encode(&js(record, "slMemory")?);
-            let actual = encode(&self.host.memory.to_js());
+            let actual = encode(&self.host.memory);
             if expected != actual {
                 return Err(format!(
                     "type memory\n upstream {expected}\n port     {actual}"

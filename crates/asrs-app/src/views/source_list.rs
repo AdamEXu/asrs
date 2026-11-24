@@ -501,7 +501,7 @@ fn item_body(
             .max_w(px(max as f32))
             .overflow_hidden()
             .child(
-                Text::new(key.clone(), key_style())
+                Text::new(r.key_text.to_string_lossy(), key_style())
                     .color(theme.text)
                     .subpixel(text_dx(NAME_LEFT + indent + type_width), 0.0),
             )

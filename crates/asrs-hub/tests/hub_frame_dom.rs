@@ -671,7 +671,7 @@ fn hub_frame_vectors() {
         .filter(|p| p.to_string_lossy().ends_with(".entry.json"))
         .collect();
     specs.sort();
-    assert_eq!(specs.len(), 3, "dom/hub-frame specs");
+    assert_eq!(specs.len(), 4, "dom/hub-frame specs");
     let mut failures = Vec::new();
     for spec in &specs {
         let name = spec
