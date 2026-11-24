@@ -39,7 +39,9 @@ mod desktop {
         IntoElement, Render, ScrollEvent, Styled, Window, div, px, size,
     };
     use asrs_ui::platform::probe::{self, MouseAction, WheelSample};
-    use asrs_ui::platform::{self, MenuPath, PopupEntry, PopupMenu};
+    use asrs_ui::platform::{
+        self, MenuPath, PopupEntry, PopupMenu, SelectMenu, SelectMenuItem, SelectMenuItemKind,
+    };
     use asrs_ui::selection::colors::ForcedActive;
     use asrs_ui::theme::ThemeSource;
 
@@ -919,6 +921,80 @@ app.whenReady().then(() => {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    /// The drawn select list: below its control, with keys, and closed by a press outside.
+    async fn lists(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
+        let handle = handle_of(cx, hub);
+        with_window(cx, handle, |w| w.activate_window());
+        sleep(cx, 800).await;
+        let others = cx.update(|cx| cx.windows().len());
+        let number = with_window(cx, handle, |w| probe::window_number(w)).expect("window id");
+        let [_, client] = probe::rects(number).expect("rects");
+        let (x, y) = (f64::from(client[0]), f64::from(client[1]));
+        let chosen: Rc<RefCell<Vec<Option<usize>>>> = Rc::default();
+        for (name, keys, want) in [
+            ("keys choose an option", &[DOWN, DOWN, RETURN][..], Some(12)),
+            (
+                "Escape keeps what keys chose",
+                &[DOWN, ESCAPE][..],
+                Some(11),
+            ),
+            ("a press outside chooses nothing", &[][..], None),
+        ] {
+            let items = (0..30).map(|i| SelectMenuItem {
+                label: format!("Option {i}"),
+                kind: SelectMenuItemKind::Option,
+                enabled: true,
+                tool_tip: String::new(),
+            });
+            let menu = SelectMenu {
+                items: items.collect(),
+                font_size: 13.0,
+                selected: Some(10),
+                right_aligned: false,
+            };
+            let sink = chosen.clone();
+            cx.update(|cx| {
+                handle.update(cx, |_, window, cx| {
+                    let at = [100.0, 120.0, 200.0, 22.0];
+                    platform::select_popup(window, cx, menu, at, move |row, _| {
+                        sink.borrow_mut().push(row);
+                    });
+                })
+            })
+            .expect("window");
+            sleep(cx, 1500).await;
+            let windows = cx.update(|cx| cx.windows());
+            let list = windows.into_iter().find(|w| *w != handle);
+            let open = cx.update(|cx| cx.windows().len()) == others + 1;
+            report.check(&format!("select list, {name}: opens"), open, "");
+            if let Some(list) = list.filter(|_| others == 1) {
+                let bounds = with_window(cx, list, |w| platform::window_bounds(w));
+                let placed =
+                    bounds.is_some_and(|b| (b.0, b.1, b.2) == (x + 100.0, y + 142.0, 200.0));
+                report.check(
+                    &format!("select list, {name}: opens below its control"),
+                    placed,
+                    format!("{bounds:?}"),
+                );
+            }
+            for key in keys {
+                probe::post_keys(&[*key]);
+                sleep(cx, 400).await;
+            }
+            if keys.is_empty() {
+                click(cx, (x + 700.0, y + 500.0)).await;
+            }
+            sleep(cx, 1000).await;
+            let got = chosen.take();
+            let left = cx.update(|cx| cx.windows().len());
+            report.check(
+                &format!("select list, {name}"),
+                got == [want] && left == others,
+                format!("{got:?}, {left} windows left of {others}"),
+            );
+        }
+    }
+
     struct NoScreen;
 
     impl WindowSystem for NoScreen {
@@ -1060,6 +1136,7 @@ app.whenReady().then(() => {
                 sleep(cx, 1500).await;
                 captions(cx, &electron, &mut report).await;
                 menus(cx, &mut report, hub).await;
+                lists(cx, &mut report, hub).await;
                 accelerators(cx, &mut report, hub).await;
                 wheel(cx, &electron, &mut report).await;
                 aspects(cx, &electron, &mut report).await;
