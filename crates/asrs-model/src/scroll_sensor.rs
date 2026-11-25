@@ -250,6 +250,17 @@ impl ScrollSensor {
         }
     }
 
+    /// A key's smooth scroll of the overlay at `now` (ms).
+    pub fn scroll_by(&mut self, by: [f64; 2], now: f64) {
+        let wheel = Wheel {
+            delta: by.map(|v| -v),
+            precise: false,
+        };
+        let (offset, max) = (self.raw, self.max());
+        self.animation
+            .wheel(wheel, now, offset, max, [f64::INFINITY; 2]);
+    }
+
     /// Advances a notched wheel animation to the frame at `now` (ms).
     pub fn animate(&mut self, now: f64) {
         if let Some(to) = self.animation.animate(now) {

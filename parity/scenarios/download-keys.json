@@ -1,0 +1,188 @@
+{
+  "about": "Interaction (#325): the download window's file list scrolled from the keyboard after a click on a row",
+  "prefs": {
+    "robotAddress": "127.0.0.1",
+    "remotePath": "/media/sda1/logs/",
+    "hasScrolledLineGraph": true,
+    "hasScrolledTimeline": true
+  },
+  "robot": {
+    "account": "systemcore",
+    "files": {
+      "/media/sda1/logs/FRC_20250301_120100_Q1.wpilog": 0,
+      "/media/sda1/logs/FRC_20250301_120200_Q2.wpilog": 333333,
+      "/media/sda1/logs/FRC_20250301_120300_Q3.wpilog": 666666,
+      "/media/sda1/logs/FRC_20250301_120400_Q4.wpilog": 999999,
+      "/media/sda1/logs/FRC_20250301_120500_Q5.wpilog": 1333332,
+      "/media/sda1/logs/FRC_20250301_120600_Q6.wpilog": 1666665,
+      "/media/sda1/logs/FRC_20250301_120700_Q7.wpilog": 1999998,
+      "/media/sda1/logs/FRC_20250301_120800_Q8.wpilog": 2333331,
+      "/media/sda1/logs/FRC_20250301_120900_Q9.wpilog": 2666664,
+      "/media/sda1/logs/FRC_20250301_121000_Q10.wpilog": 2999997,
+      "/media/sda1/logs/FRC_20250301_121100_Q11.wpilog": 3333330,
+      "/media/sda1/logs/FRC_20250301_121200_Q12.wpilog": 3666663,
+      "/media/sda1/logs/FRC_20250301_121300_Q13.wpilog": 3999996,
+      "/media/sda1/logs/FRC_20250301_121400_Q14.wpilog": 4333329,
+      "/media/sda1/logs/FRC_20250301_121500_Q15.wpilog": 4666662,
+      "/media/sda1/logs/FRC_20250301_121600_Q16.wpilog": 4999995,
+      "/media/sda1/logs/FRC_20250301_121700_Q17.wpilog": 5333328,
+      "/media/sda1/logs/FRC_20250301_121800_Q18.wpilog": 5666661,
+      "/media/sda1/logs/FRC_20250301_121900_Q19.wpilog": 5999994,
+      "/media/sda1/logs/FRC_20250301_122000_Q20.wpilog": 6333327,
+      "/media/sda1/logs/FRC_20250301_122100_Q21.wpilog": 6666660,
+      "/media/sda1/logs/FRC_20250301_122200_Q22.wpilog": 6999993,
+      "/media/sda1/logs/FRC_20250301_122300_Q23.wpilog": 7333326,
+      "/media/sda1/logs/FRC_20250301_122400_Q24.wpilog": 7666659,
+      "/media/sda1/logs/FRC_20250301_122500_Q25.wpilog": 7999992,
+      "/media/sda1/logs/FRC_20250301_122600_Q26.wpilog": 8333325,
+      "/media/sda1/logs/FRC_20250301_122700_Q27.wpilog": 8666658,
+      "/media/sda1/logs/FRC_20250301_122800_Q28.wpilog": 8999991,
+      "/media/sda1/logs/FRC_20250301_122900_Q29.wpilog": 9333324,
+      "/media/sda1/logs/CANivore/a.hoot": 9666657,
+      "/media/sda1/logs/akit_0000.rlog": 9999990,
+      "/media/sda1/logs/akit_0001.rlog": 10333323,
+      "/media/sda1/logs/akit_0002.rlog": 10666656,
+      "/media/sda1/logs/akit_0003.rlog": 10999989,
+      "/media/sda1/logs/akit_0004.rlog": 11333322,
+      "/media/sda1/logs/akit_0005.rlog": 11666655
+    }
+  },
+  "actions": [
+    {
+      "idle": true
+    },
+    {
+      "appMenu": [
+        "Download Logs..."
+      ]
+    },
+    {
+      "prompt": "download",
+      "width": 500,
+      "height": 472
+    },
+    {
+      "download": "listed"
+    },
+    {
+      "mouse": "move",
+      "x": 200,
+      "y": 120
+    },
+    {
+      "mouse": "click",
+      "x": 200,
+      "y": 120
+    },
+    {
+      "mouse": "move",
+      "x": 200,
+      "y": 450
+    },
+    {
+      "key": "Down"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "key": "Down"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "after-down",
+      "probes": [
+        "div.file-list"
+      ]
+    },
+    {
+      "key": "PageDown"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "after-pagedown",
+      "probes": [
+        "div.file-list"
+      ]
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "alt"
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "after-down-alt",
+      "probes": [
+        "div.file-list"
+      ]
+    },
+    {
+      "key": "End"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "after-end",
+      "probes": [
+        "div.file-list"
+      ]
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "key": "PageUp"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "after-pageup",
+      "probes": [
+        "div.file-list"
+      ]
+    },
+    {
+      "key": "Home"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "after-home",
+      "probes": [
+        "div.file-list"
+      ]
+    }
+  ]
+}

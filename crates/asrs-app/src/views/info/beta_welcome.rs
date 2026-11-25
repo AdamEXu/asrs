@@ -396,9 +396,13 @@ impl BetaWelcomePage {
 
 impl Render for BetaWelcomePage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
-        let (width, scale): (Lu, f32) = (page::device_width(window), window.scale_factor());
-        let t = &mut self.typesetter;
-        let layout = BetaLayout::new(t, &self.page, self.app_name, width, scale);
+        let scale = window.scale_factor();
+        let (width, t): (Lu, _) = (self.scroll.width(window), &mut self.typesetter);
+        let mut layout = BetaLayout::new(t, &self.page, self.app_name, width, scale);
+        if self.scroll.reserve(layout.height, window, cx) {
+            let (width, t) = (self.scroll.width(window), &mut self.typesetter);
+            layout = BetaLayout::new(t, &self.page, self.app_name, width, scale);
+        }
         self.scroll.lay_out(layout.height, window, cx);
         if let Some(fade) = self.fade {
             if cx.background_executor().now() - fade.start < OPACITY_TRANSITION {

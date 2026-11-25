@@ -589,6 +589,7 @@ const BORROWED_INPUTS: &[(&str, &str)] = &[
     ("hubSession", "dom"),
     ("selectKeys", "selectKeysMain"),
     ("spinButtons", "spinButtonsMain"),
+    ("scrollers", "scrollersMain"),
     ("focusRings", "focusRingsMain"),
     ("genMenusHost", "genMenus"),
     ("genMenusHost", "genMenusMain"),
