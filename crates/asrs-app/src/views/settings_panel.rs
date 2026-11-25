@@ -19,9 +19,8 @@ use super::frame::{FrameHost, HubFrame, SETTINGS_SECTION, wheel_of};
 use super::scrollers::{Area, HandleScroller};
 use super::source_list::scroll_to;
 
-/// A tab by the address of its controller, which stays put while the tab exists.
 pub(super) fn tab_key(tab: &TabRef<'_, HubPage>) -> usize {
-    std::ptr::from_ref(tab.controller()).cast::<()>() as usize
+    tab.id() as usize
 }
 
 #[derive(Default)]
