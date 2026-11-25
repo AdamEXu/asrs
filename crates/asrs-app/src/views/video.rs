@@ -224,7 +224,7 @@ impl Control {
     }
 }
 
-/// A CSS length in LayoutUnits, truncated as `LayoutUnit(float)` truncates.
+/// A length in LayoutUnits, truncated as `LayoutUnit(float)` truncates.
 fn lu(v: f64) -> f64 {
     math::trunc(v * 64.0) / 64.0
 }
@@ -234,10 +234,26 @@ fn percent(v: f64, percent: f64) -> f64 {
     lu(f64::from((v * percent / 100.0) as f32))
 }
 
+/// The device px of a laid out CSS length, which is a whole number of LayoutUnits (1/64 device px)
+/// but for the division by the scale.
+fn device(v: f64, scale: f64) -> f64 {
+    math::floor(v * scale * 64.0 + 0.5) / 64.0
+}
+
+/// `v` on the device pixel grid, in CSS px.
+fn snap(v: f64, scale: f64) -> f64 {
+    math::floor(device(v, scale) + 0.5) / scale
+}
+
+/// The width of a 1 px border, in CSS px: Blink floors it to whole device px, at least one.
+fn border(scale: f64) -> f64 {
+    math::max2(math::floor(scale), 1.0) / scale
+}
+
 /// Where the controls sit in `div.controls-content`, in client coordinates.
 #[derive(Clone, Debug, PartialEq)]
 struct ControlsLayout {
-    /// The border box; its last pixel column is the `border-right`.
+    /// The border box, whose right edge is the `border-right`.
     source: [f64; 4],
     sources: [[f64; 4]; 3],
     lock: [f64; 4],
@@ -250,43 +266,50 @@ struct ControlsLayout {
 
 impl ControlsLayout {
     /// `space` is the width of the white space between two inline buttons.
-    fn new([x, y, w, h]: [f64; 4], transport: usize, space: f64) -> ControlsLayout {
+    fn new(controls: [f64; 4], transport: usize, space: f64, scale: f64) -> ControlsLayout {
+        let [x, y, w, h] = controls.map(|v| device(v, scale));
+        let space = device(space, scale);
+        let [button, inset, timeline_left, slider_height] =
+            [BUTTON, TIMELINE_INSET, TIMELINE_LEFT, SLIDER_HEIGHT]
+                .map(|v| lu(f64::from((v * scale) as f32)));
+        let css = |rect: [f64; 4]| rect.map(|v| v / scale);
+
         let source_width = percent(w, 30.0);
         let button_width = percent(source_width, 80.0 / 3.0);
         let button_top = y + percent(h, 15.0);
         let sources = std::array::from_fn(|i| {
             let i = i as f64;
             let left = percent(source_width, 5.0 * (i + 1.0) + 80.0 / 3.0 * i);
-            [x + left, button_top, button_width, percent(h, 70.0)]
+            css([x + left, button_top, button_width, percent(h, 70.0)])
         });
         let sync = x + percent(w, 30.0);
         let sync_width = percent(w, 70.0);
         let half = percent(h, 50.0);
-        let middle = percent(half, 50.0) - BUTTON / 2.0;
+        let middle = percent(half, 50.0) - button / 2.0;
         let timeline = [
-            sync + TIMELINE_LEFT,
-            y + TIMELINE_INSET,
-            math::max2(sync_width - TIMELINE_LEFT - TIMELINE_INSET, 0.0),
-            math::max2(half - 2.0 * TIMELINE_INSET, 0.0),
+            sync + timeline_left,
+            y + inset,
+            math::max2(sync_width - timeline_left - inset, 0.0),
+            math::max2(half - 2.0 * inset, 0.0),
         ];
-        let line = BUTTON * transport as f64 + space * (transport as f64 - 1.0);
+        let line = button * transport as f64 + space * (transport as f64 - 1.0);
         let first = sync + lu(math::max2(sync_width - line, 0.0) / 2.0);
         ControlsLayout {
-            source: [x, y, source_width + 1.0, h],
+            source: css([x, y, source_width + border(scale) * scale, h]),
             sources,
-            lock: [sync + 5.0, y + middle, BUTTON, BUTTON],
-            timeline,
-            slider: [timeline[0], timeline[1], timeline[2], SLIDER_HEIGHT],
-            marker: [
+            lock: css([sync + inset, y + middle, button, button]),
+            timeline: css(timeline),
+            slider: css([timeline[0], timeline[1], timeline[2], slider_height]),
+            marker: css([
                 timeline[0],
-                timeline[1] + SLIDER_HEIGHT,
+                timeline[1] + slider_height,
                 timeline[2],
-                math::max2(timeline[3] - SLIDER_HEIGHT, 0.0),
-            ],
+                math::max2(timeline[3] - slider_height, 0.0),
+            ]),
             transport: (0..transport)
                 .map(|i| {
-                    let left = first + (BUTTON + space) * i as f64;
-                    [left, y + half + middle, BUTTON, BUTTON]
+                    let left = first + (button + space) * i as f64;
+                    css([left, y + half + middle, button, button])
                 })
                 .collect(),
         }
@@ -295,10 +318,12 @@ impl ControlsLayout {
 
 /// The used width of `VIDEO_TIMELINE_PROGRESS` in a container `width` px wide. Without a
 /// `width` the empty box shrinks to nothing.
-fn progress_width(style: &JsString, width: f64) -> f64 {
+fn progress_width(style: &JsString, width: f64, scale: f64) -> f64 {
     let style = style.to_string_lossy();
     let share = style.strip_suffix('%').and_then(|v| v.parse::<f64>().ok());
-    share.map_or(0.0, |share| math::max2(percent(width, share), 0.0))
+    share.map_or(0.0, |share| {
+        math::max2(percent(device(width, scale), share), 0.0) / scale
+    })
 }
 
 /// The stroke of a source button, as its transition and animation leave it.
@@ -812,14 +837,14 @@ impl<H: FrameHost> HubFrame<H> {
         )])
         .expect("body font");
         space.white_space = WhiteSpace::Pre;
-        let space = lu(text::measure(cx, &space, " ", scale).0);
+        let space = text::measure(cx, &space, " ", scale).0;
         let transport: Vec<Control> = Control::TRANSPORT
             .into_iter()
             .filter(|c| !c.hidden(buttons))
             .collect();
-        let layout = ControlsLayout::new(controls, transport.len(), space);
+        let layout = ControlsLayout::new(controls, transport.len(), space, f64::from(scale));
 
-        let snap = |v: f64| math::floor(v * f64::from(scale) + 0.5) / f64::from(scale);
+        let snap = |v: f64| snap(v, f64::from(scale));
         let at = move |[x, y, w, h]: [f64; 4]| {
             let (left, top) = (snap(x), snap(y));
             div()
@@ -829,7 +854,8 @@ impl<H: FrameHost> HubFrame<H> {
                 .w(px((snap(x + w) - left) as f32))
                 .h(px((snap(y + h) - top) as f32))
         };
-        let border = appearance.pick(0xdddddd, 0x000000);
+        let border_color = appearance.pick(0xdddddd, 0x000000);
+        let border = border(f64::from(scale));
         let [sx, sy, sw, sh] = layout.source;
         let mut root = div()
             .absolute()
@@ -837,7 +863,7 @@ impl<H: FrameHost> HubFrame<H> {
             .top_0()
             .size_full()
             .child(probed("div.video-source", at(layout.source)))
-            .child(at([sx + sw - 1.0, sy, 1.0, sh]).bg(rgb(border)));
+            .child(at([sx + sw - border, sy, border, sh]).bg(rgb(border_color)));
 
         let places: Vec<(Control, FocusHandle)> = Control::ALL
             .map(|control| (control, focus::place((control.id(), key), window, cx)))
@@ -921,7 +947,7 @@ impl<H: FrameHost> HubFrame<H> {
             slider.set_clip(TIMELINE_RADIUS as f32, layout.timeline[3] as f32);
         });
         let [mx, my, mw, mh] = layout.marker;
-        let filled = [mx, my, progress_width(&progress, mw), mh];
+        let filled = [mx, my, progress_width(&progress, mw, f64::from(scale)), mh];
         let clip = layout.timeline;
         let marker = canvas(
             |_, _, _| {},
@@ -1010,7 +1036,7 @@ impl<H: FrameHost> HubFrame<H> {
 /// Fills `part` (client px) as `div.video-timeline-container`'s rounded overflow clip leaves it.
 fn paint_in_clip(part: [f64; 4], clip: [f64; 4], color: u32, window: &mut Window) {
     let scale = f64::from(window.scale_factor());
-    let snap = |v: f64| px((math::floor(v * scale + 0.5) / scale) as f32);
+    let snap = |v: f64| px(snap(v, scale) as f32);
     let bounds = |[x, y, w, h]: [f64; 4]| Bounds {
         origin: point(snap(x), snap(y)),
         size: size(snap(x + w) - snap(x), snap(y + h) - snap(y)),
@@ -1031,7 +1057,7 @@ mod tests {
     /// Blink's boxes in the `video` scenario at 1100x650.
     #[test]
     fn controls_sit_where_blink_lays_them_out() {
-        let layout = ControlsLayout::new([300.0, 565.0, 800.0, 85.0], 5, 4.1875);
+        let layout = ControlsLayout::new([300.0, 565.0, 800.0, 85.0], 5, 4.1875, 1.0);
         assert_eq!(layout.source, [300.0, 565.0, 241.0, 85.0]);
         assert_eq!(
             layout.sources,
@@ -1047,9 +1073,118 @@ mod tests {
         );
     }
 
+    /// Blink's boxes in the `video` scenario on Windows, where a space is 4.3828125 px wide before
+    /// it is rounded up to a LayoutUnit.
+    #[test]
+    fn controls_sit_on_the_device_grid() {
+        let transport = |space, scale| {
+            ControlsLayout::new([300.0, 565.0, 800.0, 85.0], 5, space, scale).transport
+        };
+        let boxes = |left: [f64; 5]| left.map(|x| [x, 613.75, 30.0, 30.0]);
+        assert_eq!(
+            transport(4.390625, 1.0),
+            boxes([736.21875, 770.609375, 805.0, 839.390625, 873.78125])
+        );
+        assert_eq!(
+            transport(4.3828125, 2.0),
+            boxes([736.234375, 770.6171875, 805.0, 839.3828125, 873.765625])
+        );
+    }
+
+    /// Blink's boxes of `#controller7` in a 85 px high `div.controls-content` at fractional scales,
+    /// in device px: the space, the source box's width, the source buttons' lefts and width, the
+    /// timeline's left and width, the transport buttons' lefts.
+    #[test]
+    fn controls_sit_on_the_grid_of_fractional_scales() {
+        let recorded = [
+            (
+                1.25,
+                508.0,
+                6.359375,
+                191.5,
+                [384.515625, 444.84375, 505.171875, 50.796875],
+                [615.5, 388.25],
+                [681.28125, 725.140625, 769.0, 812.859375, 856.71875],
+            ),
+            (
+                1.25,
+                612.0,
+                6.359375,
+                230.5,
+                [386.46875, 459.140625, 531.8125, 61.1875],
+                [654.5, 479.25],
+                [765.78125, 809.640625, 853.5, 897.359375, 941.21875],
+            ),
+            (
+                1.5,
+                868.0,
+                7.640625,
+                391.59375,
+                [469.515625, 593.203125, 716.890625, 104.15625],
+                [900.59375, 843.890625],
+                [1168.5, 1221.140625, 1273.78125, 1326.421875, 1379.0625],
+            ),
+            (
+                3.0,
+                824.0,
+                15.265625,
+                744.59375,
+                [937.078125, 1171.90625, 1406.75, 197.75],
+                [1761.59375, 1595.390625],
+                [2251.25, 2356.515625, 2461.78125, 2567.046875, 2672.3125],
+            ),
+            (
+                3.0,
+                1024.0,
+                15.265625,
+                924.59375,
+                [946.078125, 1237.90625, 1529.75, 245.75],
+                [1941.59375, 2015.390625],
+                [2641.25, 2746.515625, 2851.78125, 2957.046875, 3062.3125],
+            ),
+            (
+                1.25,
+                577.0,
+                6.359375,
+                217.375,
+                [385.8125, 454.328125, 522.84375, 57.6875],
+                [641.375, 448.625],
+                [737.34375, 781.203125, 825.0625, 868.921875, 912.78125],
+            ),
+            (
+                3.0,
+                1136.0,
+                15.265625,
+                1025.390625,
+                [951.109375, 1274.875, 1598.625, 272.625],
+                [2042.390625, 2250.59375],
+                [2859.65625, 2964.921875, 3070.1875, 3175.453125, 3280.71875],
+            ),
+        ];
+        for (scale, width, space, source, sources, timeline, transport) in recorded {
+            let layout = ControlsLayout::new([300.0, 565.0, width, 85.0], 5, space / scale, scale);
+            let px = |v: f64| device(v, scale);
+            let pixels = |v: f64| math::floor(v + 0.5);
+            assert_eq!(px(layout.source[2]), source);
+            assert_eq!(
+                layout.sources.map(|b| px(snap(b[0] + b[2], scale))),
+                [0, 1, 2].map(|i| pixels(sources[i] + sources[3]))
+            );
+            assert_eq!(layout.sources.map(|b| px(b[0])), sources[..3]);
+            assert_eq!(px(layout.sources[0][2]), sources[3]);
+            assert_eq!([0, 2].map(|i| px(layout.timeline[i])), timeline);
+            let lefts = layout.transport.iter().map(|b| b[0]);
+            assert_eq!(lefts.clone().map(px).collect::<Vec<_>>(), transport);
+            assert_eq!(
+                lefts.map(|v| px(snap(v, scale))).collect::<Vec<_>>(),
+                transport.map(pixels)
+            );
+        }
+    }
+
     #[test]
     fn progress_is_a_share_of_the_track() {
-        let width = |s: &str| progress_width(&JsString::from(s), 515.0);
+        let width = |s: &str| progress_width(&JsString::from(s), 515.0, 1.0);
         assert_eq!(width("50%"), 257.5);
         assert_eq!(width(""), 0.0);
         assert_eq!(width("120%"), 618.0);
