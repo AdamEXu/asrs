@@ -267,6 +267,9 @@ pub fn paint_progress(bounds: Bounds<Pixels>, position: f64, window: &mut Window
                     *p = tiny_skia::PremultipliedColorU8::TRANSPARENT;
                 }
             }
+            if Backend::HOST == Backend::Raster {
+                skia::clipped(&mut bar, &track);
+            }
             skia::over(&mut pixmap, &bar);
         }
         let i = stroke / 2.0;

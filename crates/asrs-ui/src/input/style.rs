@@ -1,5 +1,6 @@
 use asrs_canvas::text::{Family, FontSpec};
 
+use crate::svg::Backend;
 use crate::text::Align;
 use crate::theme::Appearance;
 
@@ -33,7 +34,10 @@ pub const DISABLED_TEXT: u32 = 0x545454ff;
 pub const NATIVE_RADIUS: f32 = 2.0;
 pub const ACCENT: u32 = 0x0075ffff;
 pub const NATIVE_FILL: u32 = 0xefefefff;
-pub const NATIVE_TRACK_BORDER: u32 = 0x7676768f;
+pub const NATIVE_TRACK_BORDER: u32 = match Backend::HOST {
+    Backend::Graphite => 0x7676768f,
+    Backend::Raster => 0x76767680,
+};
 
 /// How the border box is painted.
 #[derive(Clone, Copy, Debug, PartialEq)]
