@@ -589,7 +589,7 @@ impl<M: FieldModel> TextField<M> {
         window.prevent_default();
         let Point { x, y } = event.position;
         let to_edge = Behavior::current().moves_to_line_edge();
-        let x = x.clamp(line.left(), line.right() - px(1.0));
+        let x = x.min(line.right() - px(1.0)).max(line.left());
         self.editor.update(cx, |state, cx| {
             let text = state.value();
             let byte = if to_edge && y < line.top() {
