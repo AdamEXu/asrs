@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use asrs_js::json;
 use asrs_js::math;
-use asrs_js::string::JsString;
+use asrs_js::string::{JsError, JsString};
 use asrs_js::value::JsValue;
 
 use super::LoggableType;
@@ -53,11 +53,24 @@ pub enum LogError {
     /// The proto decoder threw out of the call: `addDescriptor` in `putProto`, or
     /// `ProtoDecoder.fromSerialized` in `fromSerialized` and `mergeWith`.
     Proto(ProtoError),
+    /// The call threw this error.
+    Thrown(JsError),
     /// Upstream continues in a way the port does not model; see the text.
     Unmodeled(&'static str),
     /// `putUnknownStruct` recursed past V8's stack and threw `RangeError: Maximum call stack
     /// size exceeded` out of the call, after the writes it had already made.
     StackOverflow,
+}
+
+impl LogError {
+    /// Whether upstream's `catch` around the call sees this: a JS throw, not a dead realm or an
+    /// unmodeled path.
+    pub fn is_throw(&self) -> bool {
+        match self {
+            LogError::Proto(_) | LogError::Thrown(_) | LogError::StackOverflow => true,
+            LogError::NeverCompletes | LogError::Unmodeled(_) => false,
+        }
+    }
 }
 
 #[derive(Debug, Default)]

@@ -136,11 +136,13 @@ impl ToJs for Alert {
 }
 
 /// An axis's `Units.UnitConfig`: `null`, or `undefined` when a manual preset names a unit
-/// `ALL_UNITS` lacks.
+/// `ALL_UNITS` lacks. `Inherited` is a unit named like an `Object.prototype` member: that member,
+/// which has no `suffix`.
 #[derive(Clone, Copy, Debug)]
 pub enum AxisUnits {
     None,
     Unknown,
+    Inherited,
     Unit(&'static UnitConfig),
 }
 
@@ -148,7 +150,9 @@ impl PartialEq for AxisUnits {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (AxisUnits::Unit(a), AxisUnits::Unit(b)) => std::ptr::eq(*a, *b),
-            (AxisUnits::None, AxisUnits::None) | (AxisUnits::Unknown, AxisUnits::Unknown) => true,
+            (AxisUnits::None, AxisUnits::None)
+            | (AxisUnits::Unknown, AxisUnits::Unknown)
+            | (AxisUnits::Inherited, AxisUnits::Inherited) => true,
             _ => false,
         }
     }
@@ -159,6 +163,7 @@ impl ToJs for AxisUnits {
         match self {
             AxisUnits::None => JsValue::Null,
             AxisUnits::Unknown => JsValue::Undefined,
+            AxisUnits::Inherited => JsValue::Object(JsObject::new()),
             AxisUnits::Unit(config) => {
                 let mut o = JsObject::new();
                 o.insert("value", config.value.to_js());
