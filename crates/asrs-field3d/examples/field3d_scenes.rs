@@ -1,7 +1,8 @@
 //! Renders the 3D reference scenes (`parity/field3d/scenes/*.json`) with the port, the
 //! counterpart of `oracle/field3d/page.ts`. Usage:
 //! `field3d_scenes <scenes dir> <out dir> [<scene>...]`. Writes `<scene>@<n>x-<theme>.png`
-//! (straight RGBA) and `<scene>@<n>x.edges.png` (the gate's edge mask) for scales 1 and 2.
+//! (straight RGBA) and `<scene>@<n>x.edges.png` (the gate's edge mask) for scales 1 and 2, and
+//! `adapter.json`.
 
 #![allow(clippy::disallowed_methods)]
 
@@ -543,11 +544,19 @@ fn main() -> Result<(), String> {
     names.sort();
     std::fs::create_dir_all(out_dir).map_err(|e| e.to_string())?;
     let mut renderer = Renderer::new().map_err(|e| e.to_string())?;
-    eprintln!(
-        "adapter: {} ({:?})",
-        renderer.adapter_info().name,
-        renderer.adapter_info().backend
-    );
+    let info = renderer.adapter_info();
+    eprintln!("adapter: {} ({:?})", info.name, info.backend);
+    let backend = format!("{:?}", info.backend);
+    let device_type = format!("{:?}", info.device_type);
+    let adapter = Json::object([
+        ("name", Json::string(&info.name)),
+        ("backend", Json::string(&backend)),
+        ("deviceType", Json::string(&device_type)),
+        ("driver", Json::string(&info.driver)),
+        ("driverInfo", Json::string(&info.driver_info)),
+    ]);
+    std::fs::write(Path::new(out_dir).join("adapter.json"), adapter.to_pretty())
+        .map_err(|e| e.to_string())?;
     for name in names {
         let path = Path::new(scenes_dir).join(format!("{name}.json"));
         let text = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
@@ -572,7 +581,9 @@ fn main() -> Result<(), String> {
                 scene.background = Some(Color::style(&background.into()));
                 let frame = build_frame(&mut scene, &mut camera, options);
                 let mut pixels = Vec::new();
-                renderer.render(&frame, &mut pixels);
+                renderer
+                    .render(&frame, &mut pixels)
+                    .map_err(|e| e.to_string())?;
                 swap_red_blue(&mut pixels);
                 let image = Rgba {
                     width: options.width,

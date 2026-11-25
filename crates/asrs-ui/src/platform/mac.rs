@@ -1442,6 +1442,34 @@ pub(super) mod probe {
         }
     }
 
+    pub fn can_become_main(window: &Window) -> Option<bool> {
+        Some(ns_window(window)?.canBecomeMainWindow())
+    }
+
+    type IsActive = extern "C-unwind" fn(&AnyObject, Sel) -> Bool;
+
+    extern "C-unwind" fn active(_: &AnyObject, _: Sel) -> Bool {
+        Bool::YES
+    }
+
+    pub fn make_main(window: &Window) {
+        let (Some(window), Some(is_active)) = (
+            ns_window(window),
+            <NSApplication as objc2::ClassType>::class().instance_method(objc2::sel!(isActive)),
+        ) else {
+            return;
+        };
+        super::perform_on_run_loop(move || {
+            // SAFETY: the replacement has the signature of `isActive`.
+            unsafe {
+                let active = std::mem::transmute::<IsActive, objc2::runtime::Imp>(active);
+                let theirs = is_active.set_implementation(active);
+                window.makeMainWindow();
+                is_active.set_implementation(theirs);
+            }
+        });
+    }
+
     pub fn window_chrome(window: &Window) -> Option<WindowChrome> {
         let window = ns_window(window)?;
         let button = window.standardWindowButton(NSWindowButton::CloseButton)?;
@@ -1927,10 +1955,6 @@ pub(super) mod probe {
     }
 
     pub fn post_keys(_keysyms: &[u32]) -> bool {
-        false
-    }
-
-    pub fn split_monitors(_x: Option<u16>) -> bool {
         false
     }
 }

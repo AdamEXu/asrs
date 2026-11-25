@@ -316,5 +316,35 @@
         "content": "0e65e0ca52079cf5"
       }
     ]
+  },
+  "field3d": {
+    "x86_64": {
+      "d3d11-warp": {
+        "electronSwitches": [
+          "--enable-unsafe-swiftshader",
+          "--use-angle=d3d11-warp"
+        ],
+        "glRenderer": "ANGLE (Microsoft, Microsoft Basic Render Driver (0x0000008C) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+        "samples": 4,
+        "portEnvironment": [
+          "ASRS_FIELD3D_ADAPTER=warp"
+        ],
+        "portAdapter": {
+          "name": "Microsoft Basic Render Driver",
+          "backend": "Dx12",
+          "deviceType": "Cpu",
+          "driver": "10.0.26100.9278",
+          "driverInfo": ""
+        },
+        "captures": 68,
+        "failed": [],
+        "ssimMin": 0.9999725104765733,
+        "differingPctMax": 0.028531468531468533,
+        "interiorMaxDelta": 2,
+        "interiorDifferingPctMax": 0.00014430108132015287,
+        "maxDelta": 30,
+        "outlierBlob": 0
+      }
+    }
   }
 }

@@ -399,6 +399,12 @@ pub(super) mod probe {
 
     pub fn post_window_notification(_window: &Window, _name: &str) {}
 
+    pub fn can_become_main(_window: &Window) -> Option<bool> {
+        None
+    }
+
+    pub fn make_main(_window: &Window) {}
+
     pub fn window_chrome(_window: &Window) -> Option<WindowChrome> {
         None
     }
@@ -526,10 +532,6 @@ pub(super) mod probe {
     }
 
     pub fn post_keys(_keysyms: &[u32]) -> bool {
-        false
-    }
-
-    pub fn split_monitors(_x: Option<u16>) -> bool {
         false
     }
 }
