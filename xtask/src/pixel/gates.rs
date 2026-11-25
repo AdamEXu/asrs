@@ -585,8 +585,8 @@ fn antialiasing(reference: &Capture, port: &Capture, masked: &[bool], out: &mut 
     let differing = &compared.differing;
     if !differing.is_empty() {
         detail += &format!("; {} differ:", differing.len());
-        for (rect, expected, actual) in differing.iter().take(8) {
-            detail += &format!(" {} {expected:?} vs {actual:?};", fmt_rect(*rect));
+        for text in differing.iter().take(8) {
+            detail += &format!(" {text};");
         }
     }
     out.push("3 text", "antialiasing", differing.is_empty(), detail);

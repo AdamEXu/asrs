@@ -1,5 +1,7 @@
 //! How the text of a box is antialiased, from its pixels.
 
+use std::fmt;
+
 use asrs_parity::pixel::Rgb;
 
 use super::gates::{Rect, TextInk};
@@ -68,38 +70,80 @@ pub fn contrast(image: &Rgb, rect: Rect, scale: f64) -> [u8; 3] {
     [if background[1] < 0x80 { 0xff } else { 0 }; 3]
 }
 
-/// `None` for a box with too little ink, or one that is neither.
-pub fn mode(image: &Rgb, rect: Rect, scale: f64, color: [u8; 3]) -> Option<Mode> {
-    let pixels = pixels(image, rect, scale);
-    let background = most_common(&pixels)?;
-    let inked: Vec<[u8; 3]> = pixels
-        .into_iter()
-        .filter(|p| (0..3).any(|c| p[c].abs_diff(background[c]) > INK))
-        .collect();
-    if inked.len() < MIN_INK {
-        return None;
+/// The ink of a box: how many pixels, and the share of them that needs a coverage per channel.
+struct Ink {
+    pixels: usize,
+    per_channel: f64,
+}
+
+impl Ink {
+    fn of(image: &Rgb, rect: Rect, scale: f64, color: [u8; 3]) -> Ink {
+        let pixels = pixels(image, rect, scale);
+        let background = most_common(&pixels).unwrap_or_default();
+        let inked: Vec<[u8; 3]> = pixels
+            .into_iter()
+            .filter(|p| (0..3).any(|c| p[c].abs_diff(background[c]) > INK))
+            .collect();
+        let per_channel = inked
+            .iter()
+            .filter(|p| !one_coverage(**p, color, background))
+            .count();
+        Ink {
+            pixels: inked.len(),
+            per_channel: per_channel as f64 / inked.len().max(1) as f64,
+        }
     }
-    let per_channel = inked
-        .iter()
-        .filter(|p| !one_coverage(**p, color, background))
-        .count();
-    let share = per_channel as f64 / inked.len() as f64;
-    if share >= LCD_SHARE {
-        Some(Mode::Lcd)
-    } else if share <= GRAYSCALE_SHARE {
-        Some(Mode::Grayscale)
-    } else {
-        None
+
+    fn mode(&self) -> Option<Mode> {
+        if self.pixels < MIN_INK {
+            None
+        } else if self.per_channel >= LCD_SHARE {
+            Some(Mode::Lcd)
+        } else if self.per_channel <= GRAYSCALE_SHARE {
+            Some(Mode::Grayscale)
+        } else {
+            None
+        }
     }
 }
 
+/// `None` for a box with too little ink, or one that is neither.
+pub fn mode(image: &Rgb, rect: Rect, scale: f64, color: [u8; 3]) -> Option<Mode> {
+    Ink::of(image, rect, scale, color).mode()
+}
+
 /// The mode of every box: how many are LCD and grayscale upstream, how many are unclear on either
-/// side, and those where the port has the other mode.
+/// side, and those the port draws in the other mode, or with ink that is further from the
+/// reference's than `LCD_SHARE` where either is unclear.
 pub struct Compared {
     pub lcd: usize,
     pub grayscale: usize,
     pub unclear: usize,
-    pub differing: Vec<(Rect, Mode, Mode)>,
+    pub differing: Vec<Differing>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Differing {
+    pub rect: Rect,
+    pub expected: Option<Mode>,
+    pub actual: Option<Mode>,
+    /// The shares of the ink that need a coverage per channel.
+    pub per_channel: [f64; 2],
+}
+
+impl fmt::Display for Differing {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let name = |mode: Option<Mode>| mode.map_or("unclear".to_owned(), |m| format!("{m:?}"));
+        write!(
+            f,
+            "{:?} is {} upstream ({:.2}) and {} here ({:.2})",
+            self.rect,
+            name(self.expected),
+            self.per_channel[0],
+            name(self.actual),
+            self.per_channel[1]
+        )
+    }
 }
 
 pub fn compare<'a>(
@@ -115,17 +159,30 @@ pub fn compare<'a>(
         differing: Vec::new(),
     };
     for ink in inks {
-        let of = |image| mode(image, ink.rect, scale, ink.color);
-        let (Some(expected), Some(actual)) = (of(reference), of(port)) else {
-            out.unclear += 1;
-            continue;
+        let of = |image| Ink::of(image, ink.rect, scale, ink.color);
+        let (theirs, ours) = (of(reference), of(port));
+        let (expected, actual) = (theirs.mode(), ours.mode());
+        let differs = match (expected, actual) {
+            (Some(expected), Some(actual)) => {
+                match expected {
+                    Mode::Lcd => out.lcd += 1,
+                    Mode::Grayscale => out.grayscale += 1,
+                }
+                actual != expected
+            }
+            _ => {
+                out.unclear += 1;
+                theirs.pixels >= MIN_INK
+                    && (theirs.per_channel - ours.per_channel).abs() > LCD_SHARE
+            }
         };
-        match expected {
-            Mode::Lcd => out.lcd += 1,
-            Mode::Grayscale => out.grayscale += 1,
-        }
-        if actual != expected {
-            out.differing.push((ink.rect, expected, actual));
+        if differs {
+            out.differing.push(Differing {
+                rect: ink.rect,
+                expected,
+                actual,
+                per_channel: [theirs.per_channel, ours.per_channel],
+            });
         }
     }
     out
@@ -175,6 +232,26 @@ mod tests {
         let same = compare(inks.iter(), &lcd, &lcd, 1.0);
         assert_eq!((same.lcd, same.grayscale, same.differing.len()), (1, 0, 0));
         let other = compare(inks.iter(), &lcd, &gray, 1.0);
-        assert_eq!(other.differing, [(RECT, Mode::Lcd, Mode::Grayscale)]);
+        let [differing] = &other.differing[..] else {
+            panic!("{:?}", other.differing);
+        };
+        assert_eq!(
+            (differing.expected, differing.actual),
+            (Some(Mode::Lcd), Some(Mode::Grayscale))
+        );
+        let nothing = image(|_| [0xff; 3]);
+        let missing = compare(inks.iter(), &lcd, &nothing, 1.0);
+        assert_eq!((missing.unclear, missing.differing.len()), (1, 1));
+        let unclear = image(|i| match i / 4 % 16 {
+            0 => [0x40, 0x80, 0xc0],
+            _ => [0x80; 3],
+        });
+        assert_eq!(mode(&unclear, RECT, 1.0, [0x22; 3]), None);
+        assert_eq!(compare(inks.iter(), &lcd, &unclear, 1.0).differing.len(), 1);
+        assert!(
+            compare(inks.iter(), &unclear, &unclear, 1.0)
+                .differing
+                .is_empty()
+        );
     }
 }

@@ -368,21 +368,37 @@ fn rgb3(v: &Json) -> Option<[u8; 3]> {
     Some([c(0)?, c(1)?, c(2)?])
 }
 
-/// Electron rounds a window's content up on a display at another scale (Windows): the scene's page
-/// is at the top left.
-fn cropped(image: Rgba, width: u32, height: u32) -> Rgba {
-    let (width, height) = (image.width.min(width), image.height.min(height));
-    let rows = image.data.chunks(image.width as usize * 4);
-    let data = rows
-        .take(height as usize)
-        .flat_map(|row| &row[..width as usize * 4])
-        .copied()
-        .collect();
-    Rgba {
+/// How many more rows than the scene's page a reference may have: on a Windows display of scale 1
+/// Electron makes a 2x window's content this much taller than asked.
+const EXTRA_ROWS: u32 = if cfg!(windows) { 4 } else { 0 };
+
+/// The scene's page in its reference, with nothing but the page's background below it.
+fn page_of(image: Rgba, width: u32, height: u32, background: [u8; 3]) -> Result<Rgba> {
+    let extra = image.height.checked_sub(height);
+    if image.width != width || extra.is_none_or(|extra| extra > EXTRA_ROWS) {
+        return Err(format!(
+            "the reference is {}x{} for a page of {width}x{height}",
+            image.width, image.height
+        ));
+    }
+    let mut data = image.data;
+    let below = data.split_off((width * height * 4) as usize);
+    let [r, g, b] = background;
+    if below
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .any(|p| *p != [r, g, b, 255])
+    {
+        return Err(format!(
+            "the reference has something below its page of {width}x{height}"
+        ));
+    }
+    Ok(Rgba {
         width,
         height,
         data,
-    }
+    })
 }
 
 fn hex_color(css: &str) -> Option<[u8; 3]> {
@@ -448,8 +464,8 @@ fn run_port(paths: &Paths) -> Result {
                 (css * device) as u32
             };
             let png = pixel::read_png(&dir.join(format!("ref/{capture}.png")))?;
-            let reference =
-                pixel::composite(&cropped(png, side("width"), side("height")), background);
+            let page = page_of(png, side("width"), side("height"), background)?;
+            let reference = pixel::composite(&page, background);
             let mine = pixel::composite(
                 &pixel::read_png(&port.join(format!("{capture}.png")))?,
                 background,
@@ -470,11 +486,8 @@ fn run_port(paths: &Paths) -> Result {
                 })
                 .collect();
             let modes = antialias::compare(inks.iter(), &reference, &mine, device);
-            for (rect, expected, actual) in &modes.differing {
-                gates.failures.push(format!(
-                    "{rect:?} is {expected:?} upstream and {actual:?} here"
-                ));
-            }
+            let differing = modes.differing.iter().map(ToString::to_string);
+            gates.failures.extend(differing);
             let cmp = pixel::compare(&reference, &mine, background)?;
             let (w, h) = (reference.width as usize, reference.height as usize);
             let mask = text_mask(&scene, &dom, device, w, h);
