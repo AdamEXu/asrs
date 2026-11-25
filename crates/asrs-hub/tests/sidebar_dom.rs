@@ -765,12 +765,19 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
         let array = |i: usize| args[i].as_array().ok_or_else(|| err("array argument"));
         let log = &mut *log.borrow_mut();
         match method.as_str() {
-            "putBoolean" => log.put_boolean(&key(0)?, number(&args[1])?, truthy(&args[2])),
-            "putNumber" => log.put_number(&key(0)?, number(&args[1])?, number(&args[2])?),
-            "putString" => log.put_string(&key(0)?, number(&args[1])?, js_string(&args[2])?),
+            "putBoolean" => log
+                .put_boolean(&key(0)?, number(&args[1])?, truthy(&args[2]))
+                .unwrap(),
+            "putNumber" => log
+                .put_number(&key(0)?, number(&args[1])?, number(&args[2])?)
+                .unwrap(),
+            "putString" => log
+                .put_string(&key(0)?, number(&args[1])?, js_string(&args[2])?)
+                .unwrap(),
             "putBooleanArray" => {
                 let values = array(2)?.iter().map(truthy).collect();
                 log.put_boolean_array(&key(0)?, number(&args[1])?, values)
+                    .unwrap()
             }
             "putNumberArray" => {
                 let values = array(2)?
@@ -778,6 +785,7 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
                     .map(number)
                     .collect::<Result<Vec<f64>, String>>()?;
                 log.put_number_array(&key(0)?, number(&args[1])?, values)
+                    .unwrap()
             }
             "putStringArray" => {
                 let values = array(2)?
@@ -785,6 +793,7 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
                     .map(js_string)
                     .collect::<Result<Vec<JsString>, String>>()?;
                 log.put_string_array(&key(0)?, number(&args[1])?, values)
+                    .unwrap()
             }
             "putJSON" => log
                 .put_json(&key(0)?, number(&args[1])?, js_string(&args[2])?)
@@ -821,7 +830,8 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
                 else {
                     return Err(err("putPose translation is [x, y]"));
                 };
-                log.put_pose(&key(0)?, number(&args[1])?, [*tx, *ty], *r);
+                log.put_pose(&key(0)?, number(&args[1])?, [*tx, *ty], *r)
+                    .unwrap();
             }
             "setStructuredType" => {
                 let value = match &args[1] {
@@ -844,16 +854,14 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
 }
 
 fn exception_emit(where_: &str, outcome: EventOutcome) -> Option<Emit> {
-    let error = match outcome {
-        EventOutcome::Ok => return None,
-        EventOutcome::MergedFilenameMissing => {
-            "TypeError: Cannot read properties of undefined (reading 'replace')"
-        }
+    let EventOutcome::Threw(error) = outcome else {
+        return None;
     };
+    let error = format!("{}: {}", error.name, error.message);
     Some(Emit {
         values: vec![
             ("exception", cve_string(&js(where_))),
-            ("error", cve_string(&js(error))),
+            ("error", cve_string(&js(&error))),
         ],
     })
 }

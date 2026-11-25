@@ -306,10 +306,12 @@ mod tests {
     fn keeps_upstream_schema_and_loop_bugs() {
         let key = |k: &str| JsString::from(k);
         let mut log = Log::new(true);
-        log.put_boolean_array(&key("/Flags"), 1.0, vec![true, false]);
-        log.put_string_array(&key("/Names"), 1.0, vec![key("a")]);
-        log.put_number(&key("undefined"), 1.0, 0.5);
-        log.put_number(&key("/Value"), 1.0, 2.0);
+        log.put_boolean_array(&key("/Flags"), 1.0, vec![true, false])
+            .unwrap();
+        log.put_string_array(&key("/Names"), 1.0, vec![key("a")])
+            .unwrap();
+        log.put_number(&key("undefined"), 1.0, 0.5).unwrap();
+        log.put_number(&key("/Value"), 1.0, 2.0).unwrap();
         let fields = ["/Flags", "/Names", "undefined", "/Value"].map(key);
         let file = generate_mcap(&log, &fields, &None, &mut |_| {}).unwrap();
         assert_eq!(
@@ -327,8 +329,9 @@ mod tests {
     fn sampled_export_loses_messages_whose_add_value_throws() {
         let key = |k: &str| JsString::from(k);
         let mut log = Log::new(true);
-        log.put_string_array(&key("undefined"), 1.0, vec![key("a")]);
-        log.put_number(&key("/Value"), 1.0, 2.0);
+        log.put_string_array(&key("undefined"), 1.0, vec![key("a")])
+            .unwrap();
+        log.put_number(&key("/Value"), 1.0, 2.0).unwrap();
         let fields = ["/Value", "undefined"].map(key);
         assert!(matches!(
             generate_mcap(&log, &fields, &None, &mut |_| {}),

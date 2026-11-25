@@ -175,7 +175,7 @@ fn equal_frames_are_not_drawn(headless: &mut HeadlessCapture, scale: f32) {
                     let mut log = model.page().shared_log().borrow_mut();
                     for t in 0..=100 {
                         let t = f64::from(t);
-                        log.put_number_array(&axes, t, vec![t]);
+                        log.put_number_array(&axes, t, vec![t]).unwrap();
                     }
                 }
                 model.page_mut().selection_mut().set_selected_time(1.0);

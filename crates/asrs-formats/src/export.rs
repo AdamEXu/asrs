@@ -421,7 +421,7 @@ mod tests {
     fn fields_of(keys: &[&str]) -> Result<Vec<String>, ExportError> {
         let mut log = Log::new(true);
         for key in keys {
-            log.put_number(&JsString::from(*key), 0.0, 1.0);
+            log.put_number(&JsString::from(*key), 0.0, 1.0).unwrap();
         }
         let options = ExportOptions {
             format: Format::CsvTable,

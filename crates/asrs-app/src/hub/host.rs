@@ -414,7 +414,9 @@ fn run_export(
         export_options(options),
     ) {
         (Ok(log), Some(options)) => export(&log, &options, progress),
-        (Err(error), _) if error.is_throw() => Err(ExportError::Rejected),
+        (Err(LogError::Proto(_) | LogError::Thrown(_) | LogError::StackOverflow), _) => {
+            Err(ExportError::Rejected)
+        }
         (Err(LogError::NeverCompletes), _) => Err(ExportError::Unported(
             "a log the export worker never finishes reading",
         )),

@@ -508,7 +508,7 @@ impl PhoenixSource {
                     let value = match enums::lookup(&name, &ops::to_string(&value))? {
                         Lookup::Undefined => JsValue::String(JsString::new()),
                         Lookup::Value(value) => value,
-                        Lookup::Function => JsValue::Undefined,
+                        Lookup::Inherited => JsValue::Undefined,
                     };
                     log.put_untyped(&key, timestamp, LoggableType::String, value)?;
                 } else {

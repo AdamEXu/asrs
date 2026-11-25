@@ -481,6 +481,7 @@
     "live/phoenix/devices-change": {"cases":290,"content":"116044cecaae6b6d","generator":"c0b4f0e23c77c00c","spec":"parity/specs/live/phoenix/devices-change.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/phoenix/edges": {"cases":835,"content":"f1eefd188d0b93f5","generator":"05429d4bb46eaa07","spec":"parity/specs/live/phoenix/edges.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/phoenix/failures": {"cases":394,"content":"2bf9376c6ed9263d","generator":"d3547e100e68e12b","spec":"parity/specs/live/phoenix/failures.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "live/phoenix/foreign": {"cases":117,"content":"67df17c43f89aec0","generator":"27875af891c88096","spec":"parity/specs/live/phoenix/foreign.session.json","zone":"UTC","generatedOn":"linux-x86_64"},
     "live/phoenix/multi-device": {"cases":651,"content":"6cebdf520a8785e5","generator":"cd01ee5bebc862da","spec":"parity/specs/live/phoenix/multi-device.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/phoenix/quirks": {"cases":85,"content":"34b9e2cbba10c404","generator":"0977cab1e542bad9","spec":"parity/specs/live/phoenix/quirks.session.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "live/phoenix/reconnect": {"cases":239,"content":"5f11fef30063f6a1","generator":"2d5028742001a59e","spec":"parity/specs/live/phoenix/reconnect.session.json","zone":"UTC","generatedOn":"macos-aarch64"},

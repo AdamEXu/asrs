@@ -90,7 +90,7 @@ fn run(headless: &mut HeadlessCapture, scale: f32) {
             for g in 0..GROUPS {
                 for f in 0..FIELDS {
                     let key = JsString::from(format!("/Group{g}/Field{f:02}").as_str());
-                    log.put_number(&key, 0.0, (g * FIELDS + f) as f64);
+                    log.put_number(&key, 0.0, (g * FIELDS + f) as f64).unwrap();
                 }
             }
         }

@@ -3,7 +3,7 @@
 
 use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
-use asrs_js::value::{JsObject, JsValue};
+use asrs_js::value::JsValue;
 
 const TABLE: &[(&str, &[(&str, &str)])] = &[
     (
@@ -195,88 +195,47 @@ pub fn has(name: &JsString) -> bool {
 pub enum Lookup {
     Undefined,
     Value(JsValue),
-    /// An inherited method, which no [`JsValue`] holds.
-    Function,
+    /// An inherited method or object, which no [`JsValue`] holds.
+    Inherited,
 }
 
 /// `PhoenixEnums[name][key]`, for a `name` that [`has`] finds. Both lookups see inherited
 /// members.
 pub fn lookup(name: &JsString, key: &JsString) -> Result<Lookup, JsError> {
+    let inherited = match ops::is_object_prototype_member(key) {
+        true => Lookup::Inherited,
+        false => Lookup::Undefined,
+    };
     if let Some((_, values)) = TABLE.iter().find(|(n, _)| is(name, n)) {
         return Ok(match values.iter().find(|(k, _)| is(key, k)) {
             Some((_, value)) => Lookup::Value(JsValue::string(*value)),
-            None => object_member(key),
+            None => inherited,
         });
     }
     if is(name, "__proto__") {
         // `Object.prototype` itself, whose own prototype is `null`.
         return Ok(match is(key, "__proto__") {
             true => Lookup::Value(JsValue::Null),
-            false => object_member(key),
+            false => inherited,
         });
     }
     let method = name.to_string_lossy();
     Ok(match key.to_string_lossy().as_str() {
         "name" if method == "constructor" => Lookup::Value(JsValue::string("Object")),
         "name" => Lookup::Value(JsValue::string(method.as_str())),
-        "length" => Lookup::Value(JsValue::Number(method_length(&method))),
-        "prototype" if method == "constructor" => Lookup::Value(JsValue::Object(JsObject::new())),
+        "length" => Lookup::Value(JsValue::Number(match method.as_str() {
+            "__defineGetter__" | "__defineSetter__" => 2.0,
+            "toString" | "valueOf" | "toLocaleString" => 0.0,
+            _ => 1.0,
+        })),
         "arguments" | "caller" => {
             return Err(JsError::type_error(
                 "'caller', 'callee', and 'arguments' properties may not be accessed on strict \
                  mode functions or the arguments objects for calls to them",
             ));
         }
-        "apply" | "bind" | "call" => Lookup::Function,
-        other if method == "constructor" && OBJECT_STATICS.contains(&other) => Lookup::Function,
-        "__proto__" => Lookup::Function,
-        _ => object_member(key),
+        "apply" | "bind" | "call" => Lookup::Inherited,
+        "prototype" if method == "constructor" => Lookup::Inherited,
+        _ => inherited,
     })
 }
-
-/// A member that a plain object inherits. `__proto__` reads `Object.prototype`, which has no
-/// enumerable properties.
-fn object_member(key: &JsString) -> Lookup {
-    if is(key, "__proto__") {
-        Lookup::Value(JsValue::Object(JsObject::new()))
-    } else if ops::is_object_prototype_member(key) {
-        Lookup::Function
-    } else {
-        Lookup::Undefined
-    }
-}
-
-fn method_length(method: &str) -> f64 {
-    match method {
-        "__defineGetter__" | "__defineSetter__" => 2.0,
-        "toString" | "valueOf" | "toLocaleString" => 0.0,
-        _ => 1.0,
-    }
-}
-
-/// `Object`'s own methods.
-const OBJECT_STATICS: &[&str] = &[
-    "assign",
-    "getOwnPropertyDescriptor",
-    "getOwnPropertyDescriptors",
-    "getOwnPropertyNames",
-    "getOwnPropertySymbols",
-    "hasOwn",
-    "is",
-    "preventExtensions",
-    "seal",
-    "create",
-    "defineProperties",
-    "defineProperty",
-    "freeze",
-    "getPrototypeOf",
-    "setPrototypeOf",
-    "isExtensible",
-    "isFrozen",
-    "isSealed",
-    "keys",
-    "entries",
-    "fromEntries",
-    "values",
-    "groupBy",
-];
