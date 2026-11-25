@@ -4,6 +4,7 @@ use asrs_app::menus::model::{Command, MenuItem};
 use asrs_app::menus::roles::{BuiltItem, build_from_template};
 use asrs_js::value::{JsValue, ToJs};
 use asrs_model::app_identity::AppIdentity;
+use asrs_model::build_constants;
 use asrs_model::json_file;
 use asrs_model::preferences::Preferences;
 use asrs_services::fs::MemFs;
@@ -140,7 +141,7 @@ fn clicks(platform: Platform, identity: AppIdentity, profile: ReleaseProfile) ->
 }
 
 #[test]
-fn release_clicks_differ_from_parity_by_the_name_and_help_links_only() {
+fn release_clicks_differ_from_parity_by_the_name_version_and_help_links_only() {
     const HELP_LINKS: [(&str, &str); 3] = [
         (
             "https://github.com/Mechanical-Advantage/AdvantageScope/issues",
@@ -155,6 +156,7 @@ fn release_clicks_differ_from_parity_by_the_name_and_help_links_only() {
             "https://github.com/AdamEXu/asrs",
         ),
     ];
+    let version = |identity: AppIdentity| format!("Version: {}\\n", identity.full_version());
     for platform in [Platform::Mac, Platform::Windows, Platform::Linux] {
         let upstream = clicks(platform, AppIdentity::UPSTREAM, ReleaseProfile::PARITY);
         let release = clicks(platform, AppIdentity::RELEASE, ReleaseProfile::RELEASE);
@@ -171,7 +173,11 @@ fn release_clicks_differ_from_parity_by_the_name_and_help_links_only() {
             }
             let text = format!("{upstream:?}");
             assert_eq!(
-                text.replace(AppIdentity::UPSTREAM.name, AppIdentity::RELEASE.name),
+                text.replace(AppIdentity::UPSTREAM.name, AppIdentity::RELEASE.name)
+                    .replace(
+                        &version(AppIdentity::UPSTREAM),
+                        &version(AppIdentity::RELEASE)
+                    ),
                 format!("{release:?}"),
                 "{platform:?}"
             );
@@ -184,4 +190,30 @@ fn release_clicks_differ_from_parity_by_the_name_and_help_links_only() {
             "About, custom assets, asset status, export, two imports"
         );
     }
+}
+
+#[test]
+fn versions() {
+    let upstream = build_constants::VERSION;
+    assert_eq!(AppIdentity::UPSTREAM.full_version(), upstream);
+    let own = env!("CARGO_PKG_VERSION");
+    assert_ne!(own, upstream);
+    assert_eq!(
+        AppIdentity::RELEASE.version_line(),
+        format!("asrs {own} (AdvantageScope {upstream})")
+    );
+    let identity = if cfg!(feature = "parity") {
+        AppIdentity::UPSTREAM
+    } else {
+        AppIdentity::RELEASE
+    };
+    assert_eq!(asrs_app::IDENTITY, identity);
+    let paths = AppPaths {
+        style: PathStyle::Posix,
+        user_data: "/u".to_owned(),
+        temp: "/t".to_owned(),
+        bundled_assets: "/b".to_owned(),
+        packaged: true,
+    };
+    assert_eq!(paths.app_version(), upstream, "layouts and the state file");
 }

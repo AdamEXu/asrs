@@ -31,6 +31,7 @@ mod tables;
 mod text;
 mod ui;
 mod vectors;
+mod version;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -49,6 +50,7 @@ commands:
   licenses  third-party license bundle for releases into target/licenses (needs cargo-about)
   bundle    release packages: app, LGPL sin/cos library, license bundle (see `cargo xtask bundle help`)
   smoke     check the release packages: install, start, OCR, library swap (see `cargo xtask smoke help`)
+  version   the version, its numeric forms, and whether a tag matches it (see `cargo xtask version help`)
   libm      build or plant-test the LGPL sin/cos library asrs loads at runtime (see `cargo xtask libm help`)
   oracle    parity oracle: setup, gen, fn, smoke (see `cargo xtask oracle`)
   corpus    test corpora: gen, list, fuzz, fetch (see `cargo xtask corpus`)
@@ -76,6 +78,7 @@ fn main() -> ExitCode {
         Some("licenses") => licenses::run(),
         Some("bundle") => bundle::run(&args[1..]),
         Some("smoke") => smoke::run(&args[1..]),
+        Some("version") => version::run(&args[1..]),
         Some("libm") => libm::run(&args[1..]),
         Some("oracle") => oracle::run(&args[1..]),
         Some("corpus") => corpus::run(&args[1..]),

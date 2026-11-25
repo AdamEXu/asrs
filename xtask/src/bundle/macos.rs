@@ -7,6 +7,7 @@ use asrs_model::app_identity::BUNDLE_ID;
 
 use super::associations::{ASSOCIATIONS, CSV};
 use super::{Bundle, MACOS_MINIMUM, NAME, VERSION, at, copy, run_tool, write};
+use crate::version::Version;
 use crate::{Result, workspace_root};
 
 pub const ENTITLEMENTS: &str = "packaging/macos/entitlements.plist";
@@ -26,7 +27,10 @@ pub fn package(bundle: &Bundle) -> Result {
         &root.join("packaging/icons/asrs.icns"),
         &contents.join("Resources/asrs.icns"),
     )?;
-    write(&contents.join("Info.plist"), &info_plist())?;
+    write(
+        &contents.join("Info.plist"),
+        &info_plist(&Version::current()?),
+    )?;
     write(&contents.join("PkgInfo"), "APPL????")?;
     sign(&bundle.exe_dir(&app).join(bundle.library_name()), &root)?;
     sign(&app, &root)?;
@@ -72,7 +76,8 @@ fn dmg(bundle: &Bundle, app: &Path) -> Result {
     fs::remove_dir_all(&folder).map_err(at(&folder))
 }
 
-fn info_plist() -> String {
+fn info_plist(version: &Version) -> String {
+    let (short, build) = (version.numbers(), version.macos_build());
     let mut documents = String::new();
     for a in ASSOCIATIONS {
         let files = if a.mime == CSV {
@@ -136,9 +141,9 @@ fn info_plist() -> String {
   <key>CFBundleIconFile</key>
   <string>asrs</string>
   <key>CFBundleShortVersionString</key>
-  <string>{VERSION}</string>
+  <string>{short}</string>
   <key>CFBundleVersion</key>
-  <string>{VERSION}</string>
+  <string>{build}</string>
   <key>CFBundleDocumentTypes</key>
   <array>
 {documents}  </array>

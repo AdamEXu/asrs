@@ -191,6 +191,13 @@ pub fn show_startup_error(title: &str, detail: &str) {
     startup_error::show(title, detail);
 }
 
+/// Lets a packaged Windows build, which has no console of its own, print to the one it was started
+/// from. Output that goes elsewhere stays there.
+pub fn attach_console() {
+    #[cfg(windows)]
+    imp::attach_console();
+}
+
 /// Installs the process-wide hooks (the raw wheel monitor on macOS). Idempotent.
 pub fn init(_cx: &mut App) {
     imp::init();
