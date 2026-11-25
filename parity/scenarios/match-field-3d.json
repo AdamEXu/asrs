@@ -1,5 +1,6 @@
 {
   "about": "The same real match on a 3D field in wall-blue coordinates: a robot with its module velocities, a ghost and vision targets, from the default camera and from a driver station. The drawing buffer is compared under gate 4. The log is public and not redistributable, so `cargo xtask corpus fetch` puts it in place",
+  "titleBar": true,
   "gl": true,
   "prefs": {
     "coordinateSystem": "wall-blue"

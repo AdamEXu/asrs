@@ -1,5 +1,6 @@
 {
   "about": "Interaction (#174, #200): the timeline over a canvas tab: hovered at a fractional position, clicked, a range dragged with shift, trackpad zoom, pan, and the selected time cleared. The canvas, the timeline range and the hovered time are compared",
+  "titleBar": true,
   "actions": [
     {
       "open": [

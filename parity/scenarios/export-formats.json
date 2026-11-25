@@ -1,5 +1,6 @@
 {
   "about": "Interaction: every export format picked by type-ahead in the prompt that File > Export Data opens, confirmed and written; the files are compared byte for byte",
+  "titleBar": true,
   "actions": [
     {
       "open": [

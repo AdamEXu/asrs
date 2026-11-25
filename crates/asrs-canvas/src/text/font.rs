@@ -21,6 +21,10 @@ pub struct FontSpec {
     pub size: f32,
     pub weight: f32,
     pub italic: bool,
+    /// Hinted on a scaled display too. Chromium asks fontconfig for a font once, at the display
+    /// scale its page knows, and a page learns its display's scale only after its initial HTML has
+    /// been styled, which makes the fonts of the `<input>`s and `<select>`s in it.
+    pub hinted: bool,
 }
 
 impl Default for FontSpec {
@@ -30,11 +34,12 @@ impl Default for FontSpec {
             size: 10.0,
             weight: 400.0,
             italic: false,
+            hinted: false,
         }
     }
 }
 
-pub type FontKey = (Family, u32, u32, bool);
+pub type FontKey = (Family, u32, u32, bool, bool);
 
 impl FontSpec {
     pub fn key(&self) -> FontKey {
@@ -43,6 +48,7 @@ impl FontSpec {
             self.size.to_bits(),
             self.weight.to_bits(),
             self.italic,
+            self.hinted,
         )
     }
 
@@ -208,6 +214,7 @@ mod tests {
             size,
             weight,
             italic,
+            hinted: false,
         })
     }
 

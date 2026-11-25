@@ -1,5 +1,6 @@
 {
   "about": "Interaction: File > Reset to DS Layout, declined and then accepted, over a layout with a renamed tab. The DS layout and the saved HubState are compared",
+  "titleBar": true,
   "actions": [
     {
       "open": [

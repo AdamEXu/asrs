@@ -1,5 +1,6 @@
 {
   "about": "Interaction (#200): more tabs than fit: a click selects a tab, the bar scrolled by trackpad with both shadows, a hovered tab, a tab dragged to another place and captured mid-drag, the close button, and the add button's menu. Saved HubState (order, selection) is compared",
+  "titleBar": true,
   "actions": [
     {
       "open": [

@@ -159,6 +159,9 @@ fn menu_button(
     );
     let pressed = focus.handle.clone();
     let label_x = menu_x + x + label[0];
+    let snap = |v: f64| (v * f64::from(scale)).round() / f64::from(scale);
+    // GPUI snaps the button first, and the label from there.
+    let label_left = snap(label_x) - snap(menu_x + x);
     let button = div()
         .id(id)
         .size_full()
@@ -186,7 +189,7 @@ fn menu_button(
                 .color(color)
                 .subpixel(snap_remainder(label_x as f32, scale), 0.0)
                 .absolute()
-                .left(px(label[0] as f32))
+                .left(px(label_left as f32))
                 .top(px(label[1] as f32)),
         )
         .children(focus.outline(appearance));

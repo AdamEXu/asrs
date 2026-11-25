@@ -680,6 +680,7 @@ impl<H: FrameHost> HubFrame<H> {
         let [x, y, width, height] = rect;
         let mut dom = dom.borrow_mut();
         let layout = &mut dom.layout;
+        let overflows = layout.scroll_range().iter().any(|range| *range > 0.0);
         let count = layout.columns.len();
         let columns: Vec<[f64; 2]> = (0..count)
             .map(|i| [layout.column_left(i), layout.columns[i]])
@@ -764,6 +765,11 @@ impl<H: FrameHost> HubFrame<H> {
                     (s.range.start.block..=s.range.end.block).contains(&index) && visible
                 };
                 let mut over = Vec::new();
+                let past = |s: &Selected| s.range.end.block > index;
+                let selected_past = selected.as_ref().filter(covered).is_some_and(past);
+                // A sticky cell is a layer, and a selection that goes on past it is drawn beyond its
+                // opaque background.
+                let sticky = |element| text::grayscale_layer(overflows && selected_past, element);
                 if let Some(selected) = selected.as_ref().filter(covered) {
                     let backend = &mut **self.text.backend();
                     let text = doc.text(index);
@@ -800,13 +806,13 @@ impl<H: FrameHost> HubFrame<H> {
                     let at = [from, top + CELL_PADDING];
                     let element = grid.text(plain(piece, cell_style(bold), text_color), at);
                     if bold {
-                        first_cells = first_cells.child(element);
+                        first_cells = first_cells.child(sticky(element));
                     } else {
                         cells = cells.child(element);
                     }
                 }
                 if bold {
-                    first_cells = first_cells.children(over);
+                    first_cells = first_cells.children(over.into_iter().map(sticky));
                 } else {
                     cells = cells.children(over);
                 }
@@ -986,7 +992,7 @@ impl<H: FrameHost> HubFrame<H> {
                     .track_focus(&focus::last(&rows_place)),
             )
             .child(probes)
-            .child(cells)
+            .child(text::scroller(overflows, cells))
             .child(first_cells)
             .child(header)
             .into_any_element()

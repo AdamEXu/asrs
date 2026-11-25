@@ -1,5 +1,6 @@
 {
   "about": "Focus rings (#355) in the active hub: the swerve tab's orientation switcher and a number input, which takes none, pressed and after keys",
+  "titleBar": true,
   "actions": [
     {
       "open": [

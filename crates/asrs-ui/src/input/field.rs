@@ -8,10 +8,10 @@ use gpui_kit::base::input::{
 };
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, ClipboardItem, Context, DispatchPhase, Entity,
-    EntityInputHandler, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement,
+    EntityInputHandler, EventEmitter, FocusHandle, Focusable, FontWeight, Hsla, InteractiveElement,
     IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
     Point, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task, TextAlign,
-    WeakEntity, Window, canvas, div, px, rgba,
+    WeakEntity, Window, canvas, div, point, px, rgba, size,
 };
 
 use crate::focus;
@@ -22,7 +22,7 @@ use crate::input::native::{PointerState, paint_text_field};
 use crate::input::spin::{self, paint_spin_button};
 use crate::input::style::{DISABLED_TEXT, FieldStyle, Frame, device_border};
 use crate::platform;
-use crate::selection;
+use crate::selection::{self, Behavior};
 use crate::symbols::Symbol;
 use crate::text::{self, Align, LineHeight, Overflow, Text, TextStyle, WhiteSpace};
 
@@ -117,6 +117,20 @@ pub fn geometry(
 fn split(v: f32, scale: f32) -> (f32, f32) {
     let snapped = v.round();
     (snapped / scale, (v - snapped) / scale)
+}
+
+/// The editor's caret, as a part of its line height and in CSS px, and what it keeps clear of
+/// the end of left-aligned text.
+const EDITOR_CARET: f32 = 0.85;
+const CARET_WIDTH: f32 = 1.0;
+const EDITOR_MARGIN: f32 = 10.0;
+
+fn gpui_family(family: Family) -> &'static str {
+    match family {
+        Family::Arial if cfg!(target_os = "linux") => "Liberation Sans",
+        Family::Arial => "Arial",
+        _ => ".SystemUIFont",
+    }
 }
 
 /// What an edit from `old` to `new` replaced: the range of `old`, and what it is now.
@@ -257,13 +271,9 @@ impl<M: FieldModel> TextField<M> {
                 cx.weak_entity(),
                 window.window_handle(),
             );
-            let mut editor = InputState::new(window, cx)
+            InputState::new(window, cx)
                 .default_value(shown.clone())
-                .validate(filter);
-            if style.align == Align::Center {
-                editor.set_text_align(TextAlign::Center, cx);
-            }
-            editor
+                .validate(filter)
         });
         let subscription = cx.subscribe_in(&editor, window, Self::on_editor);
         TextField {
@@ -565,6 +575,37 @@ impl<M: FieldModel> TextField<M> {
         }
     }
 
+    /// A press on the input beside its line of text.
+    fn press_beside(
+        &mut self,
+        event: &MouseDownEvent,
+        line: Bounds<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if self.disabled || window.default_prevented() || line.contains(&event.position) {
+            return;
+        }
+        window.prevent_default();
+        let Point { x, y } = event.position;
+        let to_edge = Behavior::current().moves_to_line_edge();
+        let x = x.min(line.right() - px(1.0)).max(line.left());
+        self.editor.update(cx, |state, cx| {
+            let text = state.value();
+            let byte = if to_edge && y < line.top() {
+                0
+            } else if to_edge && y >= line.bottom() {
+                text.len()
+            } else {
+                state
+                    .character_index_for_point(point(x, line.center().y), window, cx)
+                    .map_or(text.len(), |utf16| utf8_range(&text, 0..utf16).end)
+            };
+            state.focus(window, cx);
+            state.set_selected_range(byte..byte, cx);
+        });
+    }
+
     /// The spin button in the box `[x, y, width, height]` (device px), which the pointer keeps
     /// turning after a press on it wherever it goes.
     fn spin_button(
@@ -687,6 +728,20 @@ impl<M: FieldModel> TextField<M> {
     }
 }
 
+fn utf8_range(text: &str, utf16: Range<usize>) -> Range<usize> {
+    let byte = |at: usize| {
+        let mut units = 0;
+        text.char_indices()
+            .find(|&(_, c)| {
+                let before = units;
+                units += c.len_utf16();
+                before >= at
+            })
+            .map_or(text.len(), |(byte, _)| byte)
+    };
+    byte(utf16.start)..byte(utf16.end)
+}
+
 /// Runs an action of the editor's, which its crate does not export.
 fn select_to(action: &str, window: &mut Window, cx: &mut App) {
     if let Ok(action) = cx.build_action(action, None) {
@@ -754,19 +809,51 @@ impl<M: FieldModel> Render for TextField<M> {
         } else {
             gpui_kit::transparent_black()
         };
+        self.editor.update(cx, |editor, cx| {
+            editor.set_text_align(
+                match style.align {
+                    Align::Center => TextAlign::Center,
+                    Align::End | Align::Right => TextAlign::Right,
+                    _ => TextAlign::Left,
+                },
+                cx,
+            );
+        });
+        let (box_width, box_height) = (right - left, bottom - top);
+        let line_height = box_height / EDITOR_CARET;
+        let editor_width = match style.align {
+            Align::Center | Align::End | Align::Right => box_width,
+            _ => box_width + EDITOR_MARGIN - CARET_WIDTH,
+        };
         let mut editor_box = div()
             .absolute()
             .left(px(left))
             .top(px(top))
-            .w(px(right - left))
-            .h(px(bottom - top))
-            .text_size(px(style.font.size))
-            .line_height(px(bottom - top))
-            .text_color(editor_text_color)
-            .child(Input::new(&self.editor));
-        if style.font.family == Family::Arial && cfg!(not(target_os = "linux")) {
-            editor_box = editor_box.font_family("Arial");
-        }
+            .w(px(box_width))
+            .h(px(box_height))
+            .child(
+                div()
+                    .absolute()
+                    .left_0()
+                    .top_0()
+                    .w(px(box_width))
+                    .h(px(box_height))
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .absolute()
+                            .left_0()
+                            .top(px((box_height - line_height) / 2.0))
+                            .w(px(editor_width))
+                            .h(px(line_height))
+                            .font_family(gpui_family(style.font.family))
+                            .font_weight(FontWeight(style.font.weight))
+                            .text_size(px(style.font.size))
+                            .line_height(px(line_height))
+                            .text_color(editor_text_color)
+                            .child(Input::new(&self.editor)),
+                    ),
+            );
         let subpixel = (self.subpixel.0 + dx, self.subpixel.1 + dy);
         let page_selected = selection::all::colors(window, cx);
         let paint = |s: &str, rgba_hex: u32| {
@@ -778,27 +865,32 @@ impl<M: FieldModel> Render for TextField<M> {
                 .h(px(bottom - top))
         };
         if self.value.shown().is_empty() && !self.placeholder.is_empty() {
-            let alpha = (style.placeholder & 0xff) as f32 / 255.0 * style.placeholder_opacity;
+            let alpha = (style.placeholder & 0xff) as f32 / 255.0;
             editor_box = editor_box.child(
                 div()
                     .absolute()
                     .left_0()
                     .top_0()
-                    .opacity(alpha)
-                    .child(paint(&self.placeholder, style.placeholder)),
+                    .opacity(style.placeholder_opacity)
+                    .child(paint(&self.placeholder, style.placeholder).alpha(alpha)),
             );
         } else if !focused && !self.value.shown().is_empty() {
             let alpha = (color & 0xff) as f32 / 255.0;
             editor_box = editor_box.child(
-                div()
-                    .absolute()
-                    .left_0()
-                    .top_0()
-                    .opacity(alpha)
-                    .child(paint(self.value.shown(), color).selected(page_selected)),
+                div().absolute().left_0().top_0().child(
+                    paint(self.value.shown(), color)
+                        .alpha(alpha)
+                        .selected(page_selected),
+                ),
             );
         }
 
+        let editor_bounds = Bounds {
+            origin: point(px(left), px(top)),
+            size: size(px(box_width), px(box_height)),
+        };
+        let placed = Rc::new(std::cell::Cell::new(None::<Bounds<Pixels>>));
+        let pressed_at = placed.clone();
         let mut root = div()
             .id("text-field")
             .key_context(match self.kind {
@@ -847,9 +939,22 @@ impl<M: FieldModel> Render for TextField<M> {
                     this.blur(window, cx);
                 }
             }))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+                    if let Some(bounds) = pressed_at.get() {
+                        let mut editor = editor_bounds;
+                        editor.origin += bounds.origin;
+                        this.press_beside(event, editor, window, cx);
+                    }
+                }),
+            )
             .child(
                 canvas(
-                    move |bounds, window, _| window.set_focus_bounds(&handle, bounds),
+                    move |bounds, window, _| {
+                        placed.set(Some(bounds));
+                        window.set_focus_bounds(&handle, bounds);
+                    },
                     |_, _, _, _| {},
                 )
                 .absolute()

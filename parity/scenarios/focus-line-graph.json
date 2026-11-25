@@ -1,5 +1,6 @@
 {
   "about": "Focus rings (#355) in the active hub: tab control, axis menu and source type buttons pressed, after keys with Cmd or Ctrl and without",
+  "titleBar": true,
   "actions": [
     {
       "open": [

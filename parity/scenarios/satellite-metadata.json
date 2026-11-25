@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U23): a metadata tab popped out, with its table and, after another log opens, without",
+  "titleBar": true,
   "actions": [
     {
       "main": "restore-state",

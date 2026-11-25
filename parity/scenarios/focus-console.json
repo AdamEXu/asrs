@@ -1,5 +1,6 @@
 {
   "about": "Focus rings (#355) in the active hub: the console tab's buttons, pressed and after keys",
+  "titleBar": true,
   "actions": [
     {
       "open": [
@@ -148,12 +149,14 @@
     {
       "mouse": "move",
       "x": 871,
-      "y": 103
+      "y": 103,
+      "on": "button.export-button"
     },
     {
       "mouse": "down",
       "x": 871,
-      "y": 103
+      "y": 103,
+      "on": "button.export-button"
     },
     {
       "mouse": "move",
@@ -202,12 +205,14 @@
     {
       "mouse": "move",
       "x": 899,
-      "y": 103
+      "y": 103,
+      "on": "button.highlight-button"
     },
     {
       "mouse": "down",
       "x": 899,
-      "y": 103
+      "y": 103,
+      "on": "button.highlight-button"
     },
     {
       "mouse": "move",

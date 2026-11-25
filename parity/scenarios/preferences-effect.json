@@ -1,5 +1,6 @@
 {
   "about": "Interaction: the preferences window's effect on the hub: original timestamps and wall-blue coordinates picked in the window and confirmed, shown by the line graph and by a 2D field, and the window opened again with what was written. prefs.json is compared",
+  "titleBar": true,
   "actions": [
     {
       "open": [

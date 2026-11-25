@@ -1,5 +1,6 @@
 {
   "about": "Interaction (#232): the line graph's help text over a first zoom, which turns it off in the preferences: the overlay gone in later captures and after the tab is made again, and prefs.json written",
+  "titleBar": true,
   "actions": [
     {
       "open": [

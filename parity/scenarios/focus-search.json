@@ -1,5 +1,6 @@
 {
   "about": "The sidebar's search field (#355), focused with text in an active and an inactive window and hovered: the cancel button shows in all but the inactive one",
+  "titleBar": true,
   "actions": [
     {
       "open": [

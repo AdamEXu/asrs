@@ -25,7 +25,7 @@ use asrs_ui::gpui::{
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, PlainText, TextField};
 use asrs_ui::parity::probed;
 use asrs_ui::selection::{Document, Hit, Place};
-use asrs_ui::text::{self, TextStyle, snap_remainder};
+use asrs_ui::text::{self, TextStyle, scroller, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 use asrs_ui::tooltip::titled;
 
@@ -491,7 +491,9 @@ impl Rows<'_> {
                     piece = piece.opacity(FAINT as f32);
                 } else if style.faint {
                     piece = self.grid.text(
-                        plain(text, cell_style(font), blend(color)).form_control(),
+                        plain(text, cell_style(font), blend(color))
+                            .form_control()
+                            .grayscale(),
                         [x, line_top],
                     );
                 }
@@ -503,6 +505,7 @@ impl Rows<'_> {
                 let line_top = y - self.text_box.0;
                 layer = layer.children(selected.recoloured(self.grid, rect, |color| {
                     let text = plain(text, cell_style(font), blend(color)).form_control();
+                    let text = if style.faint { text.grayscale() } else { text };
                     vec![self.grid.text(text, [x, line_top])]
                 }));
             }
@@ -638,7 +641,18 @@ impl<H: FrameHost> HubFrame<H> {
             ))
             .children(recorded)
             .child(self.area_bars(Area::Console(shown.key), layout.extent(), cx))
-            .child(self.console_header(shown, &view, appearance, blurred, grid, window, cx));
+            .child(self.console_header(
+                Shown {
+                    container: [rect[0], rect[1], layout.client()[0], rect[3]],
+                    ..shown
+                },
+                &view,
+                appearance,
+                blurred,
+                grid,
+                window,
+                cx,
+            ));
         let drag_hidden = displayed(self.host().hub(cx))
             .is_none_or(|(_, r)| r.dom().borrow().drag_highlight_hidden);
         if !drag_hidden {
@@ -699,7 +713,7 @@ impl<H: FrameHost> HubFrame<H> {
                 grid.place([x, y - scroll_top, width, layout.table_height()])
                     .track_focus(&focus::last(&rows_place)),
             )
-            .child(layer)
+            .child(scroller(layout.table_height() > height, layer))
             .child(probed(
                 ".console-table-container",
                 grid.place([x, y, width, height]),

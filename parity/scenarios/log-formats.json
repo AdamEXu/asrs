@@ -1,5 +1,6 @@
 {
   "about": "The other log formats, from the synthetic corpora (`cargo xtask corpus gen`): an RLOG with every type tag, a Road Runner log and a CSV opened in turn, each with its sidebar, and a file of no known format, whose error box is compared",
+  "titleBar": true,
   "actions": [
     {
       "open": [

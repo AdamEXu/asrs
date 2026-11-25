@@ -20,6 +20,7 @@ use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::scroll_sensor::{SIZE_PX, ScrollSensor, Wheel};
 use asrs_model::selection_impl::{ControlButton, KeyTarget};
 use asrs_model::source_list::Rect;
+use asrs_model::tab_type::TabType;
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::canvas_view::{
@@ -54,6 +55,7 @@ use super::line_graph::LineGraphViews;
 use super::metadata::MetadataView;
 use super::page_text::PageSelection;
 use super::scrollers::{Area, Scrollers};
+use super::settings_panel::SettingsPanels;
 use super::source_list::{self, ListsGeometry};
 use super::statistics::StatisticsViews;
 use super::tab_bar::{self, TabBarGeometry};
@@ -300,6 +302,7 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) field_2d: Field2dViews,
     pub(super) field3d: Field3dViews,
     pub(super) canvas_tabs: CanvasTabViews,
+    pub(super) settings_panels: SettingsPanels,
     pub(super) table: TableViews,
     pub(super) console: ConsoleViews,
     pub(super) documentation: DocumentationViews,
@@ -516,6 +519,7 @@ impl<H: FrameHost> HubFrame<H> {
             field_2d: Field2dViews::default(),
             field3d: Field3dViews::default(),
             canvas_tabs: CanvasTabViews::default(),
+            settings_panels: SettingsPanels::default(),
             table: TableViews::default(),
             console: ConsoleViews::default(),
             documentation: DocumentationViews::default(),
@@ -644,7 +648,7 @@ impl<H: FrameHost> HubFrame<H> {
             self.host.scroll_side_bar([top, height]);
         }
         self.scroll_source_list(focused, bounds, window);
-        self.canvas_tabs.scroll_to(focused, bounds, window);
+        self.settings_panels.scroll_to(focused, bounds, window);
         self.scroll_statistics_settings(focused, bounds, window, cx);
         self.scroll_table(focused, cx);
     }
@@ -1183,6 +1187,24 @@ impl<H: FrameHost> HubFrame<H> {
         .into_any_element()
     }
 
+    /// Whether the displayed tab's canvas reaches under `div.controls-content`, which Chromium
+    /// then draws on a layer of its own.
+    fn controls_over_canvas(&self, cx: &App) -> bool {
+        let mut tabs = self.host().hub(cx).tabs().tabs();
+        let shown = tabs.find(|tab| !tab.content_hidden());
+        matches!(
+            shown.and_then(|tab| tab.tab_type()),
+            Some(
+                TabType::LineGraph
+                    | TabType::Field2d
+                    | TabType::Field3d
+                    | TabType::Statistics
+                    | TabType::Joysticks
+                    | TabType::Swerve
+            )
+        )
+    }
+
     fn timeline_element(&mut self, dark: bool, cx: &mut Context<'_, Self>) -> AnyElement {
         let state = self
             .timeline_canvas
@@ -1622,7 +1644,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(video) = self.video_controls(rect, appearance, scale, window, cx) {
                     controls = controls.child(video);
                 }
-                viewer = viewer.child(probe(FrameElement::ControlsContent, controls));
+                let separate = self.controls_over_canvas(cx);
+                let controls = probe(FrameElement::ControlsContent, controls);
+                viewer = viewer.child(text::grayscale_layer(separate, controls));
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsHandle) {
                 let handle = focus::section(

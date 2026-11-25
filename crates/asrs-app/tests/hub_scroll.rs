@@ -2,7 +2,8 @@
 
 //! The scrolling keys and the scrollbars of the real hub window, headless. How far a key goes is
 //! `scroll/keys`' for a scroller of the view's height, and what shows where it goes is read off
-//! the boxes of the rendered text.
+//! the boxes of the rendered text. `scroll/settings` is replayed on the 2D and 3D field tabs, whose
+//! settings it is a recording of.
 
 #[allow(dead_code)]
 #[path = "support/hub_page.rs"]
@@ -14,6 +15,7 @@ use asrs_app::views::console_layout::ConsoleLayout;
 use asrs_js::ops;
 use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
+use asrs_model::messages::MainToHub;
 use asrs_model::tab_type::TabType;
 use asrs_parity::json::Json;
 use asrs_parity::vectors;
@@ -21,7 +23,7 @@ use asrs_tabs::console::controller::ConsoleRenderer;
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::gpui::{
     KeyDownEvent, KeyUpEvent, Keystroke, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    PlatformInput, point, px,
+    PlatformInput, ScrollDelta, ScrollEvent, point, px,
 };
 use asrs_ui::parity::Recorder;
 use asrs_ui::scroll::{Style, set_style};
@@ -35,6 +37,8 @@ const HOST: &str = if cfg!(target_os = "macos") {
     "linux-x86_64"
 };
 const SETTLE_FRAMES: usize = 40;
+/// Enough for Blink's longest smooth scroll of the settings, which go 25 px at most.
+const SETTINGS_FRAMES: usize = 20;
 const ROWS: usize = 400;
 /// The `scrollTop` the recorded keys scroll from.
 const RECORDED_FROM: f64 = 700.0;
@@ -93,14 +97,17 @@ impl Page<'_> {
     }
 
     fn press(&mut self, key: &'static str) {
-        let keystroke = Keystroke::parse(key).expect("a keystroke");
+        self.press_stroke(Keystroke::parse(key).expect("a keystroke"), SETTLE_FRAMES);
+    }
+
+    fn press_stroke(&mut self, keystroke: Keystroke, frames: usize) {
         self.dispatch(PlatformInput::KeyDown(KeyDownEvent {
             keystroke: keystroke.clone(),
             is_held: false,
             prefer_character_input: false,
         }));
         self.dispatch(PlatformInput::KeyUp(KeyUpEvent { keystroke }));
-        self.frames(SETTLE_FRAMES);
+        self.frames(frames);
     }
 
     fn move_to(&mut self, [x, y]: [f64; 2], pressed_button: Option<MouseButton>) {
@@ -141,8 +148,7 @@ impl Page<'_> {
         self.headless
             .context()
             .update(|cx| cx.set_global(Recorder::default()));
-        let window = self.window.into();
-        self.headless.capture(window).expect("render");
+        self.draw();
         self.headless
             .context()
             .update(|cx| std::mem::take(cx.global_mut::<Recorder>()))
@@ -380,15 +386,148 @@ fn classic(headless: &mut HeadlessCapture, scale: f32) {
             let layout = console.geometry_ref::<ConsoleLayout>();
             layout.expect("a layout").client()[0]
         });
+        let filter = page.rect("input.filter")[0];
         page.close();
-        w
+        [w, filter]
     };
     let overlay = width(headless, Style::Overlay);
     let next_to = width(headless, Style::Classic);
-    assert_eq!(overlay - next_to, 15.0, "the console's table");
+    assert_eq!(overlay[0] - next_to[0], 15.0, "the console's table");
+    assert_eq!(overlay[1] - next_to[1], 15.0, "its header");
     headless
         .context()
         .update(|cx| set_style(Style::Overlay, false, cx));
+}
+
+/// The width of the recorded page, which is that of `div.controls-content` next to a 300 px sidebar.
+const SETTINGS_PAGE: f64 = 800.0;
+
+fn restore_field(page: &mut Page<'_>, kind: TabType, height: f64) {
+    let tab = ops::object([
+        ("type", JsValue::Number(kind.number())),
+        ("title", JsValue::string("Field")),
+        ("controller", JsValue::Null),
+        ("controllerUUID", JsValue::string("field")),
+        ("renderer", JsValue::Null),
+        ("controlsHeight", JsValue::Number(height)),
+    ]);
+    let sidebar = ops::object([
+        ("width", JsValue::Number(300.0)),
+        ("expanded", JsValue::Array(Vec::new())),
+    ]);
+    let tabs = ops::object([
+        ("selected", JsValue::Number(0.0)),
+        ("tabs", JsValue::Array(vec![tab])),
+    ]);
+    let state = ops::object([("sidebar", sidebar), ("tabs", tabs)]);
+    page.main(MainToHub::RestoreState, state);
+    page.frames(4);
+}
+
+/// A recorded op, at positions relative to the panel's controls at `origin`.
+fn settings_op(page: &mut Page<'_>, op: &[Json], origin: [f64; 2]) {
+    let text = |value: &Json| value.as_str().expect("a string").to_string_lossy();
+    let at = |i: usize| op[i].as_f64().expect("a number");
+    match text(&op[0]).as_str() {
+        "wheel" => {
+            let [x, y] = [at(1) + origin[0], at(2) + origin[1]];
+            page.dispatch(PlatformInput::Scroll(ScrollEvent {
+                position: point(px(x as f32), px(y as f32)),
+                delta: ScrollDelta::Pixels(point(px(-at(3) as f32), px(-at(4) as f32))),
+                ..ScrollEvent::default()
+            }));
+            page.frames(2);
+        }
+        "click" => page.click([at(1) + origin[0], at(2) + origin[1]]),
+        "key" => {
+            let name = text(&op[1]).to_lowercase();
+            let name = name.strip_prefix("arrow").unwrap_or(&name);
+            let shift = op
+                .get(2)
+                .is_some_and(|m| items(Some(m)).iter().any(|m| text(m) == "shift"));
+            let mut keystroke = Keystroke {
+                key: name.to_owned(),
+                ..Keystroke::default()
+            };
+            keystroke.modifiers.shift = shift;
+            let smooth = keystroke.key != "tab";
+            page.press_stroke(keystroke, if smooth { SETTINGS_FRAMES } else { 2 });
+        }
+        other => panic!("op {other}"),
+    }
+}
+
+/// Replays the steps recorded at `scale`: where the panel is after each op, and how wide its content.
+fn settings(headless: &mut HeadlessCapture, scale: f32) -> usize {
+    let records = vectors::load(&format!("scroll/settings/{HOST}")).expect("vectors");
+    let mut steps: Vec<&[vectors::Record]> = Vec::new();
+    let begins = |record: &vectors::Record| record.field("boxes").is_some();
+    let mut rest = &records[..];
+    while !rest.is_empty() {
+        let next = rest.iter().skip(1).position(begins);
+        let (step, after) = rest.split_at(next.map_or(rest.len(), |at| at + 1));
+        steps.push(step);
+        rest = after;
+    }
+    let recorded_at = |step: &[vectors::Record]| step[0].field("scale").and_then(Json::as_f64);
+    steps.retain(|step| recorded_at(step) == Some(f64::from(scale)));
+    let mut compared = 0;
+    for step in steps {
+        let first = &step[0];
+        let style = first.string("style").expect("a style");
+        let name = first.string("step").expect("a step");
+        let (kind, height) = name.split_once('-').expect("a kind and a height");
+        let height: f64 = height.parse().expect("a height");
+        let (kind, probe, title) = match kind {
+            "2d" => (TabType::Field2d, "div.field-2d-settings", "Orientation"),
+            "3d" => (TabType::Field3d, "div.field-3d-settings", "XR"),
+            other => panic!("panel {other}"),
+        };
+        let bars = match style.as_str() {
+            "overlay" => Style::Overlay,
+            "classic" => Style::Classic,
+            _ => Style::Fluent,
+        };
+        headless.context().update(|cx| set_style(bars, false, cx));
+        let mut page = Page::open(headless, scale);
+        restore_field(&mut page, kind, height);
+        let [x, y, w, h] = page.rect("div.controls-content");
+        assert_eq!([w, h], [SETTINGS_PAGE, height], "{name}: the controls");
+
+        let boxes = &items(first.field("boxes"))[1];
+        let size = |i: usize| items(Some(boxes))[i].as_f64().expect("a number");
+        let [left, _, outer, _] = page.rect(probe);
+        assert_eq!([outer, height], [size(4), size(5)], "{name}: the box");
+        let drawn = page.record().texts;
+        let field = drawn
+            .iter()
+            .find(|run| run.text == "Field" && run.rects[0][1] >= y);
+        let [text_x, _, text_w, _] = field.expect("a title").rects[0];
+        let centre = text_x + text_w / 2.0 - (left + 1.0);
+        assert!(
+            (centre - size(0) / 2.0).abs() < 1.0,
+            "{name} {style} {scale}x: centred at {centre}, {} wide",
+            size(0)
+        );
+
+        let start = page.tops();
+        for record in &step[1..] {
+            let op = items(record.field("op"));
+            settings_op(&mut page, op, [x, y]);
+            let want = items(Some(&items(record.field("scroll"))[1]))[1].as_f64();
+            let got = moved(&start, &page.tops(), title);
+            assert!(
+                (got - want.expect("a number")).abs() < 0.01,
+                "{name} {style} {scale}x {op:?}: {got}, recorded {want:?}"
+            );
+            compared += 1;
+        }
+        page.close();
+    }
+    headless
+        .context()
+        .update(|cx| set_style(Style::of(false), false, cx));
+    compared
 }
 
 fn main() {
@@ -405,6 +544,10 @@ fn main() {
         scrollbar(&mut headless, scale);
         classic(&mut headless, scale);
         focus(&mut headless, scale);
+        assert!(
+            settings(&mut headless, scale) > 0,
+            "no settings at {scale}x"
+        );
     }
     println!("hub_scroll: ok");
 }

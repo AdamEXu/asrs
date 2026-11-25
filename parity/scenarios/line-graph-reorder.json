@@ -1,5 +1,6 @@
 {
   "about": "Interaction (#211): four sources in one list: one dragged above the first, captured mid-drag, and one dragged to the end. Saved HubState (the order) is compared",
+  "titleBar": true,
   "actions": [
     {
       "open": [

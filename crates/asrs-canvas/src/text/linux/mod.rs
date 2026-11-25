@@ -39,6 +39,8 @@ struct Face {
     skew: bool,
     style: RenderStyle,
     fallback: bool,
+    /// [`FontSpec::hinted`].
+    hinted: bool,
 }
 
 /// Skia's Fontations scaler over fontconfig, configured as Chromium configures it on Linux.
@@ -122,6 +124,7 @@ impl Fontations {
             skew: spec.italic && !self.typefaces[typeface].italic,
             style: fontconfig::render_style("", 0.0, false, false),
             fallback: true,
+            hinted: spec.hinted,
         });
         let face = (self.faces.len() - 1) as u32;
         self.substitutes.insert((spec.key(), typeface), face);
@@ -130,12 +133,16 @@ impl Fontations {
 
     /// Chromium's `GetFontRenderParams`: subpixel positioning, which linear metrics come with,
     /// is for displays scaled above 1 and turns hinting off.
-    fn linear(&self) -> bool {
+    fn linear(&self, face: &Face) -> bool {
+        self.scaled() && !face.hinted
+    }
+
+    fn scaled(&self) -> bool {
         self.device_scale > 1.0
     }
 
     fn hinting(&self, face: &Face) -> Hinting {
-        if self.linear() {
+        if self.linear(face) {
             Hinting::None
         } else {
             face.style.hinting
@@ -263,11 +270,12 @@ impl Fontations {
     }
 
     fn vertical_metrics(&self, face: u32, size: f32) -> FontMetrics {
+        let linear = self.linear(&self.faces[face as usize]);
         let typeface = &self.typefaces[self.faces[face as usize].typeface];
         let metrics = typeface.metrics(size);
         let mut ascent = round(metrics.ascent);
         let mut descent = round(-metrics.descent);
-        if descent < -metrics.descent && self.linear() && ascent >= 1.0 {
+        if descent < -metrics.descent && linear && ascent >= 1.0 {
             descent += 1.0;
             ascent -= 1.0;
         }
@@ -290,7 +298,7 @@ impl Faces for Fontations {
     }
 
     fn advance(&mut self, face: u32, id: u32, size: f32) -> f32 {
-        if self.linear() {
+        if self.linear(&self.faces[face as usize]) {
             return self.strike_advance(face, id, CANONICAL_SIZE) * (size / CANONICAL_SIZE);
         }
         self.strike_advance(face, id, size)
@@ -310,6 +318,7 @@ impl Faces for Fontations {
             skew: spec.italic && !italic,
             style,
             fallback: false,
+            hinted: spec.hinted,
         });
         let face = (self.faces.len() - 1) as u32;
         self.primary.insert(spec.key(), face);
@@ -336,6 +345,18 @@ impl Faces for Fontations {
                 ..*spec
             };
             if let Some((_, _, typeface)) = self.resolve(&regular)
+                && self.typefaces[typeface].has_char(c)
+            {
+                return Some(self.substitute_face(spec, typeface));
+            }
+        }
+        // Upstream's style sheets always follow Courier with monospace.
+        if !emoji && spec.family == Family::Courier {
+            let monospace = FontSpec {
+                family: Family::Monospace,
+                ..*spec
+            };
+            if let Some((_, _, typeface)) = self.resolve(&monospace)
                 && self.typefaces[typeface].has_char(c)
             {
                 return Some(self.substitute_face(spec, typeface));
@@ -382,14 +403,10 @@ impl TextBackend for Fontations {
     }
 
     fn glyph_bounds(&mut self, glyph: Glyph) -> Option<Bounds> {
-        let size = self.faces.get(glyph.face as usize)?.size;
-        let bounds = if self.linear() {
-            let scale = size / CANONICAL_SIZE;
-            self.strike_bounds(glyph, CANONICAL_SIZE, false)
-                .map(|b| b.map(|v| v * scale))
-        } else {
-            self.strike_bounds(glyph, size, true)
-        };
+        let face = self.faces.get(glyph.face as usize)?;
+        let size = face.size;
+        let hinted = !self.linear(face);
+        let bounds = self.strike_bounds(glyph, size, hinted);
         let [left, top, right, bottom] = bounds.unwrap_or_default();
         Some(Bounds {
             left,
@@ -432,7 +449,7 @@ impl TextBackend for Fontations {
     }
 
     fn set_device_scale(&mut self, scale: f32) -> bool {
-        let changed = (scale > 1.0) != self.linear();
+        let changed = (scale > 1.0) != self.scaled();
         self.device_scale = scale;
         changed
     }
