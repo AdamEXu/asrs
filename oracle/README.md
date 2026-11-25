@@ -1495,7 +1495,8 @@ rewrite, `createAssetFolders()` and `loadAssets()` over upstream's `bundledAsset
 (`--bundled-assets`), and boots the hub with main's assets and preferences file. The hub's
 `save-state` and `save-type-memory` go to main's `StateTracker` and type memory, with the window
 where the driver puts its own: 16 px into the primary work area that `xtask pixel port` reads
-from the upstream run (`--work-area`). What lands in `userData/` is copied to `files/` and listed
+from the upstream run (`--work-area`), and mouse and wheel actions go where that run's `points` say
+the driver sent them (`--points`). What lands in `userData/` is copied to `files/` and listed
 in `run.json` with the driver's filter, and `xtask pixel compare` requires every file the port
 wrote to equal upstream's and every file upstream wrote to be written by the port. Its
 page realm is `V8MathRandom::from_seed(1)` after the 77 draws upstream's hub bundle

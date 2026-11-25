@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U17): the generated drive log and a restored Video tab, with video-data messages as main sends them for generated clips (frames in the driver's inputs/): the empty tab, a first frame while ffmpeg still runs, the timeline slider dragged with the pointer and moved with an arrow key while it has the focus, the next and previous frame buttons, the keyboard's frame and 5 s keys, the lock button and locked selections inside, after and stepped within the clip, play to the end of the clip with the keyboard, a hovered and a pressed source button, portrait and upscaled clips, a frame not converted yet, a frame file that does not exist, and the Blue Alliance button without an API key (main's error box). Saved HubState, dialogs and written files are compared. Nothing is masked",
+  "titleBar": true,
   "actions": [
     {
       "open": [
