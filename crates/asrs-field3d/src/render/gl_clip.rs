@@ -14,6 +14,8 @@ use wgpu::hal::vulkan;
 struct Real {
     create_graphics_pipelines: vk::PFN_vkCreateGraphicsPipelines,
     cmd_set_viewport: vk::PFN_vkCmdSetViewport,
+    // wgpu unloads the Vulkan library with its last instance, which would leave the two dangling.
+    _library: ash::Entry,
 }
 
 /// The loader's own entry points, which dispatch on their handle and so serve every device.
@@ -121,6 +123,7 @@ pub(super) fn open(
                 unsafe extern "system" fn(),
                 vk::PFN_vkCmdSetViewport,
             >(viewport),
+            _library: entry.clone(),
         });
 
         let mut extensions = hal.required_device_extensions(desc.required_features);
