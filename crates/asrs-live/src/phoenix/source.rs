@@ -15,7 +15,7 @@ use asrs_js::value::{JsObject, JsValue};
 use asrs_log::log::log_key_utils::PHOENIX_PREFIX;
 use asrs_log::log::{Log, LoggableType};
 
-use super::enums;
+use super::enums::{self, Lookup};
 use crate::Thrown;
 use crate::http::{FetchEvent, FetchTransport, RequestId};
 use crate::live_data_source::{
@@ -383,7 +383,7 @@ impl PhoenixSource {
                 }
                 _ => continue,
             };
-            if enums::is_prototype_key(&device_name) {
+            if ops::is_object_prototype_member(&device_name) {
                 // Both `in` checks below see the inherited member, which has no `find`.
                 return Err(Thrown::type_error(
                     "this.deviceSignals[deviceName].find is not a function",
@@ -500,25 +500,19 @@ impl PhoenixSource {
                 let key = field_key(device_name, &name);
                 let timestamp = ops::value_to_number(&ops::get(point, "Timestamp")?)?
                     - self.live_start_log_time.unwrap_or(0.0);
+                let Some(log) = self.base.log() else {
+                    continue;
+                };
+                let mut log = log.borrow_mut();
                 if enums::has(&name) {
-                    let value_str = enums::lookup(&name, &ops::to_string(&value)).unwrap_or("");
-                    if let Some(log) = self.base.log() {
-                        log.borrow_mut()
-                            .put_string(&key, timestamp, JsString::from(value_str));
-                    }
-                } else if let Some(log) = self.base.log() {
-                    match value {
-                        JsValue::Number(number) => {
-                            log.borrow_mut().put_number(&key, timestamp, number)
-                        }
-                        JsValue::Null => {
-                            log.borrow_mut()
-                                .put_null(&key, timestamp, LoggableType::Number)
-                        }
-                        // Upstream stores any other JSON value in the Number field as is, which
-                        // the `Log` cannot hold (#205).
-                        _ => {}
-                    }
+                    let value = match enums::lookup(&name, &ops::to_string(&value))? {
+                        Lookup::Undefined => JsValue::String(JsString::new()),
+                        Lookup::Value(value) => value,
+                        Lookup::Function => JsValue::Undefined,
+                    };
+                    log.put_untyped(&key, timestamp, LoggableType::String, value)?;
+                } else {
+                    log.put_untyped(&key, timestamp, LoggableType::Number, value)?;
                 }
             }
         }

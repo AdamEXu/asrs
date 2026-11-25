@@ -18,7 +18,7 @@ use asrs_js::string::{JsError, JsString};
 use asrs_js::time::Clock;
 use asrs_js::value::{JsObject, JsValue};
 use asrs_live::{Thrown, TunedValue};
-use asrs_log::log::log_util::{TYPE_KEY, get_value_at};
+use asrs_log::log::log_util::{TYPE_KEY, get_foreign_at, get_value_at};
 use asrs_log::log::{Log, LogFieldTree, LoggableType, StructuredType, search_fields};
 use asrs_log::realm::JsRealm;
 use asrs_log::util::arrays_equal;
@@ -322,12 +322,18 @@ impl SidebarEnv<'_> {
 }
 
 /// Whether the upstream listener or `refresh` threw part-way, leaving rows half built.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EventOutcome {
     Ok,
-    /// A merged-log root such as `Log-1` or `Log0.5` indexes past the filenames, and
-    /// `htmlEncode(undefined)` throws.
-    MergedFilenameMissing,
+    Threw(JsError),
+}
+
+/// What `htmlEncode(value)` throws for a value that is not a string.
+fn html_encode_throws(value: &JsValue) -> EventOutcome {
+    EventOutcome::Threw(match value {
+        JsValue::Undefined | JsValue::Null => ops::cannot_read(value, "replace"),
+        _ => JsError::type_error("text.replace is not a function"),
+    })
 }
 
 type Aborted = EventOutcome;
@@ -360,6 +366,7 @@ struct NumberState {
     last_has_value: bool,
     first_update: bool,
     last_value: Option<f64>,
+    last_foreign: Option<JsValue>,
     last_char_count: Option<usize>,
 }
 
@@ -368,7 +375,8 @@ struct TextState {
     text: JsString,
     first_update: bool,
     last_value: Option<JsString>,
-    last_char_count: Option<usize>,
+    last_foreign: Option<JsValue>,
+    last_char_count: Option<JsValue>,
     last_sidebar_width: Rc<JsValue>,
 }
 
@@ -572,6 +580,53 @@ fn negated(width: f64) -> f64 {
 }
 
 /// `this.sidebarWidth === lastSidebarWidth`: an object is only the same until it is replaced.
+/// Whether two reads of a field's raw value are `===`: an object read twice is the same object.
+fn same_sample(a: &Option<JsValue>, b: &Option<JsValue>) -> bool {
+    match (a, b) {
+        (Some(a), Some(b)) => {
+            ops::strict_equals(a, b)
+                || matches!((a, b), (JsValue::Array(_), _) | (JsValue::Object(_), _)) && a == b
+        }
+        (None, None) => true,
+        _ => false,
+    }
+}
+
+/// A number row's text. `value` is a number unless an unchecked source wrote something else.
+fn number_text(value: &JsValue) -> Result<JsString, JsError> {
+    let number = ops::value_to_number(value)?;
+    let method = |name: &str| match value {
+        JsValue::Undefined => ops::cannot_read(value, name),
+        _ => JsError::type_error(format!("value.{name} is not a function")),
+    };
+    if abs(number) < 1e-9 {
+        Ok(js("0"))
+    } else if abs(number) >= 1e5 || abs(number) < 1e-3 {
+        let JsValue::Number(number) = value else {
+            return Err(method("toExponential"));
+        };
+        Ok(number::to_exponential(*number, Some(1.0))
+            .map(|text| JsString::from(text).replace(&js("+"), &js("")).unwrap())
+            .unwrap_or_default())
+    } else if rem(number, 1.0) == 0.0 {
+        Ok(ops::to_string(value))
+    } else {
+        let JsValue::Number(number) = value else {
+            return Err(method("toFixed"));
+        };
+        Ok(JsString::from(number::to_fixed(*number, 3.0).unwrap()))
+    }
+}
+
+/// A string row's text and `valueStr.length` for a value that is not a string.
+fn foreign_text(value: &JsValue, max_characters: f64) -> Result<(JsString, JsValue), JsError> {
+    let length = ops::get(value, "length")?;
+    if ops::gt(&length, &JsValue::Number(max_characters))? {
+        return Err(JsError::type_error("value.substring is not a function"));
+    }
+    Ok((ops::to_string(value), length))
+}
+
 fn same_width(a: &Rc<JsValue>, b: &Rc<JsValue>) -> bool {
     ops::strict_equals(&**a, &**b)
         || (Rc::ptr_eq(a, b) && matches!(**a, JsValue::Array(_) | JsValue::Object(_)))
@@ -1369,7 +1424,8 @@ impl Sidebar {
         self.tuning_value_cache
             .insert(full_key.clone(), js(if value { "true" } else { "false" }));
         if env.publish(&full_key, TunedValue::Boolean(value)).is_ok() {
-            env.log
+            let _ = env
+                .log
                 .borrow_mut()
                 .put_boolean(&full_key, live_time, value);
         }
@@ -1425,7 +1481,7 @@ impl Sidebar {
                     if env.publish(&full_key, TunedValue::Number(value)).is_err() {
                         continue;
                     }
-                    env.log.borrow_mut().put_number(&full_key, live_time, value);
+                    let _ = env.log.borrow_mut().put_number(&full_key, live_time, value);
                 }
             } else if state.last_has_value {
                 self.tuning_value_cache.remove_key(&full_key);
@@ -1438,11 +1494,14 @@ impl Sidebar {
     }
 
     /// `periodic`: `searchPeriodic`, `updateTitle`, `updateValues`, `updateTuningButton`.
-    pub fn periodic(&mut self, env: &mut SidebarEnv<'_>) {
+    pub fn periodic(&mut self, env: &mut SidebarEnv<'_>) -> EventOutcome {
         self.search_periodic(env.geometry);
         self.update_title(env);
-        self.update_values(env);
+        if let Err(outcome) = self.update_values(env) {
+            return outcome;
+        }
         self.update_tuning_button(env);
+        EventOutcome::Ok
     }
 
     fn update_title(&mut self, env: &SidebarEnv<'_>) {
@@ -1481,7 +1540,7 @@ impl Sidebar {
 
     /// `updateValueCallbacks` run in registration order: the value rows of the current
     /// rebuild, rows built since under removed parents included.
-    fn update_values(&mut self, env: &mut SidebarEnv<'_>) {
+    fn update_values(&mut self, env: &mut SidebarEnv<'_>) -> Attempt<()> {
         let mode = env.selection.get_mode();
         let hovered = env.selection.get_hovered_time();
         let selected = env.selection.get_selected_time();
@@ -1501,8 +1560,10 @@ impl Sidebar {
             }
             let row = self.row_ref_in(&display, id);
             let rect = env.geometry.field_item_rect(row);
-            self.update_value(env, id, time, rect);
+            self.update_value(env, id, time, rect)
+                .map_err(EventOutcome::Threw)?;
         }
+        Ok(())
     }
 
     fn update_value(
@@ -1511,19 +1572,20 @@ impl Sidebar {
         id: usize,
         time: Option<f64>,
         rect: RowRect,
-    ) {
+    ) -> Result<(), JsError> {
         if !rect.on_screen(env.inner_height) {
-            return;
+            return Ok(());
         }
         let Some(full_key) = self.nodes[id].full_key.clone() else {
-            return;
+            return Ok(());
         };
+        let foreign = time.and_then(|t| get_foreign_at(&env.log.borrow(), &full_key, t));
         let remeasure = match &mut self.nodes[id].value {
             ValueState::Bool(state) => {
                 let value =
                     time.and_then(|t| get_value_at::<bool>(&env.log.borrow(), &full_key, t, None));
                 if !state.first_update && value == state.last_value {
-                    return;
+                    return Ok(());
                 }
                 state.first_update = false;
                 state.last_value = value;
@@ -1548,21 +1610,19 @@ impl Sidebar {
             ValueState::Number(state) => {
                 let value =
                     time.and_then(|t| get_value_at::<f64>(&env.log.borrow(), &full_key, t, None));
-                if !state.first_update && value == state.last_value {
-                    return;
+                if !state.first_update
+                    && same_sample(&foreign, &state.last_foreign)
+                    && (foreign.is_some() || value == state.last_value)
+                {
+                    return Ok(());
                 }
                 state.first_update = false;
                 state.last_value = value;
-                let value_str = match value {
-                    None => JsString::new(),
-                    Some(v) if abs(v) < 1e-9 => js("0"),
-                    Some(v) if abs(v) >= 1e5 || abs(v) < 1e-3 => {
-                        number::to_exponential(v, Some(1.0))
-                            .map(|text| JsString::from(text).replace(&js("+"), &js("")).unwrap())
-                            .unwrap_or_default()
-                    }
-                    Some(v) if rem(v, 1.0) == 0.0 => JsString::from(number::to_string(v)),
-                    Some(v) => JsString::from(number::to_fixed(v, 3.0).unwrap()),
+                state.last_foreign = foreign.clone();
+                let value_str = match (foreign, value) {
+                    (Some(foreign), _) => number_text(&foreign)?,
+                    (None, Some(v)) => number_text(&JsValue::Number(v))?,
+                    (None, None) => JsString::new(),
                 };
                 let char_count = value_str.len();
                 state.placeholder = Some(value_str.clone());
@@ -1575,30 +1635,36 @@ impl Sidebar {
                 let value = time
                     .and_then(|t| get_value_at::<JsString>(&env.log.borrow(), &full_key, t, None));
                 if !state.first_update
-                    && value == state.last_value
+                    && same_sample(&foreign, &state.last_foreign)
+                    && (foreign.is_some() || value == state.last_value)
                     && same_width(&self.sidebar_width, &state.last_sidebar_width)
                 {
-                    return;
+                    return Ok(());
                 }
                 state.first_update = false;
                 state.last_value = value.clone();
+                state.last_foreign = foreign.clone();
                 state.last_sidebar_width = self.sidebar_width.clone();
-                let value_str = match value {
-                    None => JsString::new(),
-                    Some(v) => {
-                        let max_characters = round(self.width_number * 0.03);
-                        if (v.len() as f64) > max_characters {
-                            let mut truncated = v.substring(0.0, Some(max_characters - 1.0));
-                            truncated.push_str(&js("\u{2026}"));
-                            truncated
-                        } else {
-                            v
+                let max_characters = round(self.width_number * 0.03);
+                let (text, char_count) = match (foreign, value) {
+                    (Some(foreign), _) if foreign.as_str().is_none() => {
+                        foreign_text(&foreign, max_characters)?
+                    }
+                    (_, value) => {
+                        let mut text = value.unwrap_or_default();
+                        if (text.len() as f64) > max_characters {
+                            text = text.substring(0.0, Some(max_characters - 1.0));
+                            text.push_str(&js("\u{2026}"));
                         }
+                        let count = JsValue::Number(text.len() as f64);
+                        (text, count)
                     }
                 };
-                let char_count = value_str.len();
-                state.text = value_str;
-                let changed = state.last_char_count != Some(char_count);
+                state.text = text;
+                let changed = state
+                    .last_char_count
+                    .as_ref()
+                    .is_none_or(|last| !ops::strict_equals(last, &char_count));
                 state.last_char_count = Some(char_count);
                 changed
             }
@@ -1607,6 +1673,7 @@ impl Sidebar {
         if remeasure {
             self.measure_value_width(env, id);
         }
+        Ok(())
     }
 
     /// `--value-width`, which upstream re-measures only when the value element's visibility,
@@ -1720,7 +1787,11 @@ impl Sidebar {
         }
         self.roots.clear();
         self.active_fields.clear();
-        let mut tree = env.log.borrow().get_field_tree(true, &JsString::new());
+        let mut tree = env
+            .log
+            .borrow()
+            .get_field_tree(true, &JsString::new(), &mut env.realm.object_prototype)
+            .map_err(EventOutcome::Threw)?;
         let root_keys: Vec<JsString> = tree
             .keys()
             .filter(|key| !starts_with(key, "."))
@@ -1929,10 +2000,21 @@ impl Sidebar {
         if let Some(full_key) = field.full_key.clone() {
             if !full_key.is_empty() {
                 self.update_type_warning(env, id);
-                if let Some(structured_type) = env.log.borrow().get_structured_type(&full_key) {
-                    let mut label = js(" \u{2013} ");
-                    label.push_str(structured_type);
-                    self.nodes[id].type_label = Some(label);
+                match env.log.borrow().structured_type(&full_key) {
+                    StructuredType::Null => {}
+                    StructuredType::Named(structured_type) => {
+                        let mut label = js(" \u{2013} ");
+                        label.push_str(structured_type);
+                        self.nodes[id].type_label = Some(label);
+                    }
+                    StructuredType::Undefined => {
+                        self.nodes[id].type_label = Some(JsString::new());
+                        return Err(html_encode_throws(&JsValue::Undefined));
+                    }
+                    StructuredType::Foreign(value) => {
+                        self.nodes[id].type_label = Some(JsString::new());
+                        return Err(html_encode_throws(value));
+                    }
                 }
             }
             self.search_callbacks.push(SearchCallback::Highlight(id));
@@ -1986,7 +2068,7 @@ impl Sidebar {
             if merge_index < filenames.len() as f64 {
                 if merge_index < 0.0 || merge_index.fract() != 0.0 {
                     self.nodes[id].type_label = Some(JsString::new());
-                    return Err(EventOutcome::MergedFilenameMissing);
+                    return Err(html_encode_throws(&JsValue::Undefined));
                 }
                 let mut label = js(" \u{2013} ");
                 label.push_str(&filenames[merge_index as usize]);

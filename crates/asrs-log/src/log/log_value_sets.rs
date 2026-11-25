@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
+use asrs_js::ops;
 use asrs_js::string::JsString;
+use asrs_js::value::JsValue;
 
 use super::LoggableType;
 
@@ -34,6 +36,7 @@ pub enum LogValueSetAny {
     NumberArray(LogValueSetNumberArray),
     StringArray(LogValueSetStringArray),
     Empty(LogValueSet<()>),
+    Foreign(LoggableType, LogValueSet<JsValue>),
 }
 
 /// The value column of a field. Each column is an `Arc`, so cloning a field shares its data
@@ -48,6 +51,9 @@ pub enum LogValues {
     NumberArray(Arc<Vec<Vec<f64>>>),
     StringArray(Arc<Vec<Vec<JsString>>>),
     Empty(Arc<Vec<()>>),
+    /// A Boolean, Number or String column that upstream wrote other values into, which it does
+    /// for sources that do not check what they receive.
+    Foreign(LoggableType, Arc<Vec<JsValue>>),
 }
 
 /// A value type a field can hold, with `LogUtil.logValuesEqual` for its type.
@@ -57,10 +63,14 @@ pub trait LogValue: Clone + Sized {
     fn column_mut(values: &mut LogValues) -> Option<&mut Arc<Vec<Self>>>;
     fn log_values_equal(&self, other: &Self) -> bool;
     fn into_any(set: LogValueSet<Self>) -> LogValueSetAny;
+    fn into_js(self) -> JsValue;
+    /// What a consumer that expects this type makes of a foreign value.
+    fn from_js(value: &JsValue) -> Self;
 }
 
 macro_rules! log_value {
-    ($ty:ty, $variant:ident, |$a:ident, $b:ident| $equal:expr) => {
+    ($ty:ty, $variant:ident, |$a:ident, $b:ident| $equal:expr, |$v:ident| $into:expr,
+     |$f:ident| $from:expr) => {
         impl LogValue for $ty {
             const TYPE: LoggableType = LoggableType::$variant;
 
@@ -86,18 +96,79 @@ macro_rules! log_value {
             fn into_any(set: LogValueSet<Self>) -> LogValueSetAny {
                 LogValueSetAny::$variant(set)
             }
+
+            fn into_js(self) -> JsValue {
+                let $v = self;
+                $into
+            }
+
+            fn from_js($f: &JsValue) -> Self {
+                $from
+            }
         }
     };
 }
 
-log_value!(RawValue, Raw, |a, b| a[..] == b[..]);
-log_value!(bool, Boolean, |a, b| a == b);
-log_value!(f64, Number, |a, b| a == b);
-log_value!(JsString, String, |a, b| a == b);
-log_value!(Vec<bool>, BooleanArray, |a, b| a == b);
-log_value!(Vec<f64>, NumberArray, |a, b| a == b);
-log_value!(Vec<JsString>, StringArray, |a, b| a == b);
-log_value!((), Empty, |_a, _b| false);
+fn array<T>(values: Vec<T>, item: impl Fn(T) -> JsValue) -> JsValue {
+    JsValue::Array(values.into_iter().map(item).collect())
+}
+
+fn items<T>(value: &JsValue, item: impl Fn(&JsValue) -> T) -> Vec<T> {
+    match value {
+        JsValue::Array(values) => values.iter().map(item).collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn to_number(value: &JsValue) -> f64 {
+    ops::value_to_number(value).unwrap_or(f64::NAN)
+}
+
+log_value!(
+    RawValue,
+    Raw,
+    |a, b| a[..] == b[..],
+    |v| JsValue::Bytes(v.to_vec()),
+    |f| match f {
+        JsValue::Bytes(bytes) => RawValue::from(bytes.as_slice()),
+        _ => RawValue::default(),
+    }
+);
+log_value!(bool, Boolean, |a, b| a == b, |v| JsValue::Bool(v), |f| {
+    ops::to_boolean(f)
+});
+log_value!(f64, Number, |a, b| a == b, |v| JsValue::Number(v), |f| {
+    to_number(f)
+});
+log_value!(
+    JsString,
+    String,
+    |a, b| a == b,
+    |v| JsValue::String(v),
+    |f| ops::to_string(f)
+);
+log_value!(
+    Vec<bool>,
+    BooleanArray,
+    |a, b| a == b,
+    |v| array(v, JsValue::Bool),
+    |f| items(f, ops::to_boolean)
+);
+log_value!(
+    Vec<f64>,
+    NumberArray,
+    |a, b| a == b,
+    |v| array(v, JsValue::Number),
+    |f| items(f, to_number)
+);
+log_value!(
+    Vec<JsString>,
+    StringArray,
+    |a, b| a == b,
+    |v| array(v, JsValue::String),
+    |f| items(f, ops::to_string)
+);
+log_value!((), Empty, |_a, _b| false, |_v| JsValue::Null, |_f| ());
 
 impl LogValues {
     pub fn new(ty: LoggableType) -> Self {
@@ -123,6 +194,7 @@ impl LogValues {
             LogValues::NumberArray(_) => LoggableType::NumberArray,
             LogValues::StringArray(_) => LoggableType::StringArray,
             LogValues::Empty(_) => LoggableType::Empty,
+            LogValues::Foreign(ty, _) => *ty,
         }
     }
 
@@ -136,6 +208,7 @@ impl LogValues {
             LogValues::NumberArray(c) => c.len(),
             LogValues::StringArray(c) => c.len(),
             LogValues::Empty(c) => c.len(),
+            LogValues::Foreign(_, c) => c.len(),
         }
     }
 
@@ -145,6 +218,31 @@ impl LogValues {
 
     pub fn as_slice<T: LogValue>(&self) -> Option<&[T]> {
         T::column(self).map(|c| c.as_slice())
+    }
+
+    /// The column as [`LogValues::Foreign`], converting it first if it is not.
+    pub(super) fn make_foreign(&mut self) -> &mut Arc<Vec<JsValue>> {
+        fn convert<T: LogValue>(column: &[T]) -> Vec<JsValue> {
+            column.iter().cloned().map(T::into_js).collect()
+        }
+        if !matches!(self, LogValues::Foreign(..)) {
+            let values = match self {
+                LogValues::Raw(c) => convert(c),
+                LogValues::Boolean(c) => convert(c),
+                LogValues::Number(c) => convert(c),
+                LogValues::String(c) => convert(c),
+                LogValues::BooleanArray(c) => convert(c),
+                LogValues::NumberArray(c) => convert(c),
+                LogValues::StringArray(c) => convert(c),
+                LogValues::Empty(c) => convert(c),
+                LogValues::Foreign(_, c) => c.to_vec(),
+            };
+            *self = LogValues::Foreign(self.loggable_type(), Arc::new(values));
+        }
+        match self {
+            LogValues::Foreign(_, column) => column,
+            _ => unreachable!("converted above"),
+        }
     }
 
     pub(crate) fn drain_front(&mut self, count: usize) {
@@ -160,6 +258,7 @@ impl LogValues {
             LogValues::NumberArray(c) => drain(c, count),
             LogValues::StringArray(c) => drain(c, count),
             LogValues::Empty(c) => drain(c, count),
+            LogValues::Foreign(_, c) => drain(c, count),
         }
     }
 
@@ -187,6 +286,13 @@ impl LogValues {
             LogValues::NumberArray(c) => set(c, timestamps, range),
             LogValues::StringArray(c) => set(c, timestamps, range),
             LogValues::Empty(c) => set(c, timestamps, range),
+            LogValues::Foreign(ty, c) => LogValueSetAny::Foreign(
+                *ty,
+                LogValueSet {
+                    timestamps: timestamps[range.clone()].to_vec(),
+                    values: c[range].to_vec(),
+                },
+            ),
         }
     }
 }
@@ -202,6 +308,7 @@ impl LogValueSetAny {
             LogValueSetAny::NumberArray(_) => LoggableType::NumberArray,
             LogValueSetAny::StringArray(_) => LoggableType::StringArray,
             LogValueSetAny::Empty(_) => LoggableType::Empty,
+            LogValueSetAny::Foreign(ty, _) => *ty,
         }
     }
 
@@ -215,6 +322,7 @@ impl LogValueSetAny {
             LogValueSetAny::NumberArray(s) => &s.timestamps,
             LogValueSetAny::StringArray(s) => &s.timestamps,
             LogValueSetAny::Empty(s) => &s.timestamps,
+            LogValueSetAny::Foreign(_, s) => &s.timestamps,
         }
     }
 

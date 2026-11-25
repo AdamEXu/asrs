@@ -184,6 +184,7 @@ pub fn value_set_js(set: &LogValueSetAny) -> JsValue {
                 .collect(),
         ),
         LogValueSetAny::Empty(s) => (&s.timestamps, Vec::new()),
+        LogValueSetAny::Foreign(_, s) => (&s.timestamps, s.values.clone()),
     };
     let mut o = JsObject::new();
     o.insert("timestamps", JsValue::Array(numbers(timestamps)));
@@ -228,6 +229,10 @@ fn push_range_data(acc: &mut Option<LogValueSetAny>, new: LogValueSetAny) {
         }
         (LogValueSetAny::Empty(a), LogValueSetAny::Empty(b)) => {
             a.timestamps.extend(b.timestamps);
+        }
+        (LogValueSetAny::Foreign(_, a), LogValueSetAny::Foreign(_, b)) => {
+            a.timestamps.extend(b.timestamps);
+            a.values.extend(b.values);
         }
         _ => {}
     }
@@ -822,6 +827,10 @@ impl TableRenderer {
                         match data {
                             LogValueSetAny::Boolean(set) => {
                                 format!("{} {text}", boolean_icon(set.values[index]))
+                            }
+                            LogValueSetAny::Foreign(LoggableType::Boolean, set) => {
+                                let value = ops::to_boolean(&set.values[index]);
+                                format!("{} {text}", boolean_icon(value))
                             }
                             _ => text,
                         }

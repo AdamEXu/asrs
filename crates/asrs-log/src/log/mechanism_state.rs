@@ -3,6 +3,7 @@
 use asrs_js::math;
 use asrs_js::string::JsString;
 
+use crate::realm::ObjectPrototype;
 use crate::units;
 
 use super::Log;
@@ -79,7 +80,9 @@ struct Abort;
 fn add_root_lines(log: &Log, key: &JsString, time: f64, lines: &mut Vec<MechanismLine>) {
     let mut prefix = key.clone();
     prefix.push_unit(u16::from(b'/'));
-    let tree = log.get_field_tree(true, &prefix);
+    let Ok(tree) = log.get_field_tree(true, &prefix, &mut ObjectPrototype::default()) else {
+        return;
+    };
     for (child_key, child_tree) in tree.iter() {
         if child_key.starts_with(&ascii("."), None)
             || is(child_key, "backgroundColor")

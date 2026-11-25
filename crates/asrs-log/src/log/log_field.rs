@@ -5,7 +5,9 @@ use std::collections::HashMap;
 use std::ops::Range;
 use std::sync::{Arc, Mutex, PoisonError};
 
+use asrs_js::ops;
 use asrs_js::string::JsString;
+use asrs_js::value::JsValue;
 
 use super::LoggableType;
 use super::log_key_utils::is_child_log;
@@ -20,6 +22,8 @@ pub enum StructuredType {
     Null,
     Undefined,
     Named(JsString),
+    /// A value that is neither, which an unchecked write to a `.type` key assigns.
+    Foreign(JsValue),
 }
 
 impl StructuredType {
@@ -27,6 +31,15 @@ impl StructuredType {
         match self {
             StructuredType::Named(s) => Some(s),
             _ => None,
+        }
+    }
+
+    pub(super) fn from_js(value: &JsValue) -> Self {
+        match value {
+            JsValue::Null => StructuredType::Null,
+            JsValue::Undefined => StructuredType::Undefined,
+            JsValue::String(s) => StructuredType::Named(s.clone()),
+            other => StructuredType::Foreign(other.clone()),
         }
     }
 }
@@ -130,6 +143,11 @@ impl LogField {
     /// The value column, if the field holds `T`.
     pub fn column<T: LogValue>(&self) -> Option<&[T]> {
         self.values.as_slice()
+    }
+
+    /// Whether the column holds values of other types than the declared one.
+    pub fn is_foreign(&self) -> bool {
+        matches!(self.values, LogValues::Foreign(..))
     }
 
     pub fn len(&self) -> usize {
@@ -257,7 +275,8 @@ impl LogField {
     }
 
     /// The typed getters (`getNumber` and friends): `None`, without touching the range cache,
-    /// unless the field holds `T`.
+    /// unless the field holds `T`. A [`LogValues::Foreign`] column reads through `T`'s JS
+    /// conversion; `get_range` returns it as stored.
     pub fn get<T: LogValue>(
         &self,
         start: f64,
@@ -265,11 +284,20 @@ impl LogField {
         uuid: Option<&str>,
         start_offset: Option<i64>,
     ) -> Option<LogValueSet<T>> {
-        let column = self.values.as_slice::<T>()?;
+        if self.get_type() != T::TYPE {
+            return None;
+        }
         let range = self.get_range_indices(start, end, uuid, start_offset);
+        let values = match (T::column(&self.values), &self.values) {
+            (Some(column), _) => column[range.clone()].to_vec(),
+            (None, LogValues::Foreign(_, column)) => {
+                column[range.clone()].iter().map(T::from_js).collect()
+            }
+            (None, _) => return None,
+        };
         Some(LogValueSet {
-            timestamps: self.timestamps[range.clone()].to_vec(),
-            values: column[range].to_vec(),
+            timestamps: self.timestamps[range].to_vec(),
+            values,
         })
     }
 
@@ -354,37 +382,37 @@ impl LogField {
         }
         let child_log = T::TYPE == LoggableType::Raw
             && is_child_log(self.wpilib_type.as_ref(), self.structured_type.as_named());
-        let Some(column) = T::column_mut(&mut self.values) else {
-            return;
-        };
-        let timestamps = &mut self.timestamps;
+        match T::column_mut(&mut self.values) {
+            Some(column) => insert(
+                &mut self.timestamps,
+                column,
+                child_log,
+                timestamp,
+                value,
+                T::log_values_equal,
+            ),
+            None => self.put_foreign(timestamp, T::TYPE, value.into_js()),
+        }
+    }
 
-        let length = timestamps.len();
-        if length > 0 && timestamps[length - 1] == timestamp {
-            Arc::make_mut(column)[length - 1] = value;
+    /// A scalar writer (by `ty`) given a value of another JS type, stored as it is. The column
+    /// becomes [`LogValues::Foreign`] and keeps its declared type.
+    pub(super) fn put_foreign(&mut self, timestamp: f64, ty: LoggableType, value: JsValue) {
+        if self.get_type() != ty {
+            self.type_warning = true;
             return;
         }
-        let insert_index = lower_bound(timestamps, timestamp, 0);
-        if insert_index < length && timestamps[insert_index] == timestamp {
-            Arc::make_mut(column)[insert_index] = value;
+        if value.is_null() {
             return;
         }
-
-        if !child_log && insert_index > 0 && value.log_values_equal(&column[insert_index - 1]) {
-            return;
-        }
-        if !child_log
-            && insert_index < column.len()
-            && value.log_values_equal(&column[insert_index])
-        {
-            Arc::make_mut(timestamps)[insert_index] = timestamp;
-        } else if insert_index == length {
-            Arc::make_mut(timestamps).push(timestamp);
-            Arc::make_mut(column).push(value);
-        } else {
-            Arc::make_mut(timestamps).insert(insert_index, timestamp);
-            Arc::make_mut(column).insert(insert_index, value);
-        }
+        insert(
+            &mut self.timestamps,
+            self.values.make_foreign(),
+            false,
+            timestamp,
+            value,
+            ops::strict_equals,
+        );
     }
 
     pub fn put_raw(&mut self, timestamp: f64, value: impl Into<RawValue>) {
@@ -439,5 +467,38 @@ impl LogField {
             striping_reference: serialized.striping_reference,
             get_range_cache: Mutex::default(),
         }
+    }
+}
+
+fn insert<T: Clone>(
+    timestamps: &mut Arc<Vec<f64>>,
+    column: &mut Arc<Vec<T>>,
+    child_log: bool,
+    timestamp: f64,
+    value: T,
+    equal: impl Fn(&T, &T) -> bool,
+) {
+    let length = timestamps.len();
+    if length > 0 && timestamps[length - 1] == timestamp {
+        Arc::make_mut(column)[length - 1] = value;
+        return;
+    }
+    let insert_index = lower_bound(timestamps, timestamp, 0);
+    if insert_index < length && timestamps[insert_index] == timestamp {
+        Arc::make_mut(column)[insert_index] = value;
+        return;
+    }
+
+    if !child_log && insert_index > 0 && equal(&value, &column[insert_index - 1]) {
+        return;
+    }
+    if !child_log && insert_index < column.len() && equal(&value, &column[insert_index]) {
+        Arc::make_mut(timestamps)[insert_index] = timestamp;
+    } else if insert_index == length {
+        Arc::make_mut(timestamps).push(timestamp);
+        Arc::make_mut(column).push(value);
+    } else {
+        Arc::make_mut(timestamps).insert(insert_index, timestamp);
+        Arc::make_mut(column).insert(insert_index, value);
     }
 }

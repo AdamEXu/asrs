@@ -1,8 +1,9 @@
 //! `PhoenixEnums` from the bottom of `PhoenixDiagnosticsSource.ts`, valid as of Phoenix
-//! 26.0.0-beta-1. `has` models `name in PhoenixEnums`, so it also covers `Object.prototype`
-//! members; `lookup` models `PhoenixEnums[name][key]`, which is `undefined` for them.
+//! 26.0.0-beta-1.
 
-use asrs_js::string::JsString;
+use asrs_js::ops;
+use asrs_js::string::{JsError, JsString};
+use asrs_js::value::{JsObject, JsValue};
 
 const TABLE: &[(&str, &[(&str, &str)])] = &[
     (
@@ -180,42 +181,102 @@ const TABLE: &[(&str, &[(&str, &str)])] = &[
     ("RobotEnable", &[("0", "Disabled"), ("1", "Enabled")]),
 ];
 
-const PROTOTYPE_KEYS: &[&str] = &[
-    "constructor",
-    "__defineGetter__",
-    "__defineSetter__",
-    "hasOwnProperty",
-    "__lookupGetter__",
-    "__lookupSetter__",
-    "isPrototypeOf",
-    "propertyIsEnumerable",
-    "toString",
-    "valueOf",
-    "toLocaleString",
-    "__proto__",
-];
-
 fn is(name: &JsString, text: &str) -> bool {
     name.units().iter().copied().eq(text.encode_utf16())
 }
 
 /// `name in PhoenixEnums`.
 pub fn has(name: &JsString) -> bool {
-    TABLE.iter().any(|(n, _)| is(name, n)) || is_prototype_key(name)
+    TABLE.iter().any(|(n, _)| is(name, n)) || ops::is_object_prototype_member(name)
 }
 
-/// Whether `name in {}` holds: an `Object.prototype` member.
-pub fn is_prototype_key(name: &JsString) -> bool {
-    PROTOTYPE_KEYS.iter().any(|p| is(name, p))
+/// What `PhoenixEnums[name][key]` reads back.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Lookup {
+    Undefined,
+    Value(JsValue),
+    /// An inherited method, which no [`JsValue`] holds.
+    Function,
 }
 
-/// `PhoenixEnums[name][key]`: `None` when the value upstream reads back is `undefined`.
-pub fn lookup<'a>(name: &JsString, key: &JsString) -> Option<&'a str> {
-    TABLE
-        .iter()
-        .find(|(n, _)| is(name, n))?
-        .1
-        .iter()
-        .find(|(k, _)| is(key, k))
-        .map(|(_, v)| *v)
+/// `PhoenixEnums[name][key]`, for a `name` that [`has`] finds. Both lookups see inherited
+/// members.
+pub fn lookup(name: &JsString, key: &JsString) -> Result<Lookup, JsError> {
+    if let Some((_, values)) = TABLE.iter().find(|(n, _)| is(name, n)) {
+        return Ok(match values.iter().find(|(k, _)| is(key, k)) {
+            Some((_, value)) => Lookup::Value(JsValue::string(*value)),
+            None => object_member(key),
+        });
+    }
+    if is(name, "__proto__") {
+        // `Object.prototype` itself, whose own prototype is `null`.
+        return Ok(match is(key, "__proto__") {
+            true => Lookup::Value(JsValue::Null),
+            false => object_member(key),
+        });
+    }
+    let method = name.to_string_lossy();
+    Ok(match key.to_string_lossy().as_str() {
+        "name" if method == "constructor" => Lookup::Value(JsValue::string("Object")),
+        "name" => Lookup::Value(JsValue::string(method.as_str())),
+        "length" => Lookup::Value(JsValue::Number(method_length(&method))),
+        "prototype" if method == "constructor" => Lookup::Value(JsValue::Object(JsObject::new())),
+        "arguments" | "caller" => {
+            return Err(JsError::type_error(
+                "'caller', 'callee', and 'arguments' properties may not be accessed on strict \
+                 mode functions or the arguments objects for calls to them",
+            ));
+        }
+        "apply" | "bind" | "call" => Lookup::Function,
+        other if method == "constructor" && OBJECT_STATICS.contains(&other) => Lookup::Function,
+        "__proto__" => Lookup::Function,
+        _ => object_member(key),
+    })
 }
+
+/// A member that a plain object inherits. `__proto__` reads `Object.prototype`, which has no
+/// enumerable properties.
+fn object_member(key: &JsString) -> Lookup {
+    if is(key, "__proto__") {
+        Lookup::Value(JsValue::Object(JsObject::new()))
+    } else if ops::is_object_prototype_member(key) {
+        Lookup::Function
+    } else {
+        Lookup::Undefined
+    }
+}
+
+fn method_length(method: &str) -> f64 {
+    match method {
+        "__defineGetter__" | "__defineSetter__" => 2.0,
+        "toString" | "valueOf" | "toLocaleString" => 0.0,
+        _ => 1.0,
+    }
+}
+
+/// `Object`'s own methods.
+const OBJECT_STATICS: &[&str] = &[
+    "assign",
+    "getOwnPropertyDescriptor",
+    "getOwnPropertyDescriptors",
+    "getOwnPropertyNames",
+    "getOwnPropertySymbols",
+    "hasOwn",
+    "is",
+    "preventExtensions",
+    "seal",
+    "create",
+    "defineProperties",
+    "defineProperty",
+    "freeze",
+    "getPrototypeOf",
+    "setPrototypeOf",
+    "isExtensible",
+    "isFrozen",
+    "isSealed",
+    "keys",
+    "entries",
+    "fromEntries",
+    "values",
+    "groupBy",
+];

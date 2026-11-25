@@ -73,6 +73,7 @@ pub fn value_json(set: &LogValueSetAny, index: usize) -> Option<Vec<u8>> {
                 .collect(),
         ),
         LogValueSetAny::Empty(_) => return None,
+        LogValueSetAny::Foreign(_, set) => set.values[index].clone(),
     };
     let object: JsObject<JsValue> = [(JsString::from("value"), value)].into_iter().collect();
     json::stringify(&JsValue::Object(object))
