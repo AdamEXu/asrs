@@ -11,7 +11,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::Duration;
 
-use asrs_app::hub::Hub;
+use asrs_app::hub::{Hub, HubEvent};
 use asrs_app::main_process::{self, MainProcess, SatelliteConfig};
 use asrs_app::satellite::Satellite;
 use asrs_app::windows::{self, WindowId, Windows};
@@ -97,7 +97,14 @@ impl Page {
         let (id, hub, window) = cx.update(|cx| {
             let (id, hub) = MainProcess::hub_windows(cx).remove(0);
             let window = Windows::handle(cx, id).expect("the hub's window");
-            (id, hub.upgrade().expect("the hub"), window)
+            let hub = hub.upgrade().expect("the hub");
+            cx.subscribe(&hub, |_, event, _| {
+                if let HubEvent::Exception { task, error } = event {
+                    panic!("{task}: {error}");
+                }
+            })
+            .detach();
+            (id, hub, window)
         });
         Page {
             cx,
@@ -253,7 +260,15 @@ fn restore_state(kind: TabType) -> JsValue {
         ops::object([
             ("type", JsValue::Number(kind.number())),
             ("title", JsValue::string("")),
-            ("controller", JsValue::Null),
+            (
+                "controller",
+                match kind {
+                    TabType::Table | TabType::Joysticks | TabType::Mechanism => {
+                        JsValue::Array(Vec::new())
+                    }
+                    _ => JsValue::Null,
+                },
+            ),
             ("controllerUUID", JsValue::string(uuid)),
             ("renderer", JsValue::Null),
             ("controlsHeight", JsValue::Number(200.0)),
