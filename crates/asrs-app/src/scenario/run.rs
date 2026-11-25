@@ -25,6 +25,7 @@ use asrs_ui::gpui::{
 use asrs_ui::parity::Recorder;
 use asrs_ui::platform::dialog::{Reply, Script};
 use asrs_ui::platform::{self, EditCommand};
+use asrs_ui::scroll::{Style, set_style};
 use asrs_ui::selection::colors::ForcedActive;
 use asrs_ui::theme::ThemeSource;
 use asrs_ui::tooltip::{ForcedHost, Host};
@@ -1310,7 +1311,9 @@ impl Variant<'_> {
 
     fn open(&mut self) -> Result<(), String> {
         let theme = self.theme;
+        let classic = self.scenario.classic_scrollbars;
         self.headless.context().update(|cx| {
+            set_style(Style::of(classic), false, cx);
             cx.set_global(match theme {
                 Theme::Light => ThemeSource::Light,
                 Theme::Dark => ThemeSource::Dark,

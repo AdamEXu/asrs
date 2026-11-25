@@ -46,7 +46,7 @@ export type Scenario = {
 };
 
 const ACTION_KEYS = ["main", "open", "eval", "selection", "wait", "idle", "mouse", "wheel", "pointer", "activate", "key", "dialog", "menu", "appMenu", "prompt", "download", "role", "copy", "focus", "traverse", "hover", "capture"];
-const TOP_KEYS = ["page", "window", "scales", "themes", "gl", "prefs", "userData", "robot", "platforms", "actions", "about"];
+const TOP_KEYS = ["page", "window", "scales", "themes", "gl", "prefs", "userData", "robot", "scrollbars", "platforms", "actions", "about"];
 
 export function actionKind(action: Action): string {
   return ACTION_KEYS.find((k) => k in action)!;

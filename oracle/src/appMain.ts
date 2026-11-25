@@ -57,7 +57,9 @@ function fail(message: string): never {
   process.exit(2);
 }
 
-const argv = process.argv.slice(process.argv.findIndex((a) => /appMain\.mjs$/.test(a)) + 1);
+const script = process.argv.findIndex((a) => /appMain\.mjs$/.test(a));
+// macOS takes `-AppleShowScrollBars <style>`, the last two, as a default of this process.
+const argv = process.argv.slice(script + 1).filter((a, i, all) => a !== "-AppleShowScrollBars" && all[i - 1] !== "-AppleShowScrollBars");
 const positional = argv.filter((a) => !a.startsWith("--"));
 const options = Object.fromEntries(argv.filter((a) => a.startsWith("--")).map((a) => a.slice(2).split("=", 2)));
 if (positional.length !== 2) fail(USAGE);

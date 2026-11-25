@@ -1,0 +1,244 @@
+{
+  "entry": "dom",
+  "fixture": {
+    "seed": 76,
+    "geometry": "real",
+    "steps": [
+      {
+        "eval": "/*sidebar:recorder*/ (() => {\n  const w = window;\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const tree = w.__oracleTree;\n  const sideBar = document.getElementsByClassName(\"side-bar\")[0];\n  w.addEventListener(\"scroll\", (event) => {\n    if (event.target === sideBar) write({ sb: \"scroll\" });\n  }, true);\n  const search = document.getElementsByClassName(\"side-bar-search\")[0];\n  w.addEventListener(\"blur\", (event) => {\n    if (event.target === search) write({ sb: \"blur\" });\n  }, true);\n  w.addEventListener(\"mousedown\", (event) => {\n    if (event.target instanceof Element && event.target.closest(\".field-item-label\") !== null) {\n      write({ sb: \"mousedown\", offset: tree([event.offsetX, event.offsetY]) });\n    }\n  }, true);\n})()"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/a/b",
+            0,
+            1
+          ],
+          [
+            "putNumber",
+            "/a/toString",
+            0,
+            2
+          ],
+          [
+            "putNumber",
+            "/a/constructor",
+            0,
+            3
+          ],
+          [
+            "putNumber",
+            "/hasOwnProperty",
+            0,
+            3
+          ],
+          [
+            "putNumber",
+            "/c",
+            0,
+            1
+          ]
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "start"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          0
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "selected"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/a/toString/d",
+            0,
+            1
+          ]
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "threw"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/e",
+            0,
+            1
+          ]
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "threw again"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/e",
+            1,
+            2
+          ]
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "unchanged"
+      },
+      {
+        "log": [
+          [
+            "deleteField",
+            "/a/toString/d"
+          ]
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "deleted"
+      }
+    ]
+  }
+}

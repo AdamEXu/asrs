@@ -17,7 +17,7 @@ use asrs_ui::focus::{self, ScrollAxis};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Context, DispatchPhase, Entity, HitboxBehavior,
     InteractiveElement, IntoElement, KeyDownEvent, MouseButton, MouseDownEvent, MouseUpEvent,
-    ParentElement, Render, ScrollHandle, StatefulInteractiveElement, Styled, Subscription,
+    ParentElement, Render, ScrollEvent, StatefulInteractiveElement, Styled, Subscription,
     TouchDragEvent, TouchPhase, Window, anchored, canvas, deferred, div, point, px, rgb, rgba,
 };
 use asrs_ui::icon::{Icon, IconFit, IconSource};
@@ -27,9 +27,12 @@ use asrs_ui::text::{Measurer, Text, TextStyle};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 use asrs_ui::tooltip::{covering, titled, untitled};
 
+use asrs_ui::scroll::{self, Extent, Request, scrollbars};
+
 use crate::hub::Hub;
-use crate::views::frame::Section;
+use crate::views::frame::{Section, wheel_of};
 use crate::views::number::FormNumber;
+use crate::views::scrollers::HandleScroller;
 
 const TITLE_HEIGHT: f64 = 30.0;
 const SEARCH_TOP: f64 = TITLE_HEIGHT + 5.0;
@@ -303,8 +306,8 @@ struct TuningField {
 pub struct SidebarView {
     hub: Entity<Hub>,
     layout: Rc<RefCell<SidebarLayout>>,
-    scroll: ScrollHandle,
-    results_scroll: ScrollHandle,
+    scroll: HandleScroller,
+    results_scroll: HandleScroller,
     search: Option<(Entity<TextField<PlainText>>, Subscription)>,
     tuning: HashMap<JsString, TuningField>,
     rendered: Range<usize>,
@@ -349,8 +352,8 @@ impl SidebarView {
         SidebarView {
             hub,
             layout: geometry.0.clone(),
-            scroll: ScrollHandle::new(),
-            results_scroll: ScrollHandle::new(),
+            scroll: HandleScroller::default(),
+            results_scroll: HandleScroller::default(),
             search: None,
             tuning: HashMap::new(),
             rendered: 0..0,
@@ -495,10 +498,16 @@ impl SidebarView {
                 layout.results_scroll.take(),
             )
         };
-        let shown = -f64::from(f32::from(self.scroll.offset().y));
+        let now = self.hub.read(cx).frame_time(cx);
+        let scale = f64::from(window.scale_factor());
+        let moving = self.scroll.animate(now, scale);
+        if self.results_scroll.animate(now, scale) || moving {
+            window.request_animation_frame();
+        }
+        let shown = self.scroll.top();
         let scrolled = match scroll_to {
             Some(top) => {
-                self.scroll.set_offset(point(px(0.0), px(-(top as f32))));
+                self.scroll.scroll_to(top, scale);
                 top != shown
             }
             None => {
@@ -519,8 +528,8 @@ impl SidebarView {
             field.update(cx, |field, cx| field.blur(window, cx));
         }
         match results {
-            Some(ResultsScroll::Top) => self.results_scroll.set_offset(point(px(0.0), px(0.0))),
-            Some(ResultsScroll::Item(index)) => self.results_scroll.scroll_to_item(index),
+            Some(ResultsScroll::Top) => self.results_scroll.scroll_to(0.0, scale),
+            Some(ResultsScroll::Item(index)) => self.results_scroll.handle.scroll_to_item(index),
             None => {}
         }
     }
@@ -780,6 +789,17 @@ impl SidebarView {
         }
     }
 
+    /// A key's smooth scroll.
+    pub fn scroll_smooth(&mut self, by: f64, cx: &mut Context<'_, Self>) {
+        let now = self.hub.read(cx).frame_time(cx);
+        self.scroll.smooth(by, now);
+        cx.notify();
+    }
+
+    pub fn scroll_range(&self) -> [[f64; 2]; 2] {
+        self.scroll.range()
+    }
+
     fn search_results(
         &self,
         appearance: Appearance,
@@ -805,8 +825,29 @@ impl SidebarView {
             .track_focus(&place.tab_stop(content > height))
             .w_full()
             .h(px(height as f32))
-            .overflow_y_scroll()
-            .track_scroll(&self.results_scroll);
+            .overflow_hidden()
+            .track_scroll(&self.results_scroll.handle)
+            .on_scroll(cx.listener(|view, event: &ScrollEvent, window, cx| {
+                let wheel = wheel_of(event);
+                if view.results_scroll.takes(wheel) {
+                    let now = view.hub.read(cx).frame_time(cx);
+                    let scale = f64::from(window.scale_factor());
+                    view.results_scroll.wheel(wheel, now, scale);
+                    cx.stop_propagation();
+                    cx.notify();
+                }
+            }))
+            .on_key_down(cx.listener(|view, event: &KeyDownEvent, window, cx| {
+                let step = scroll::step(&event.keystroke);
+                if let Some(step) = step.filter(|_| !window.default_prevented()) {
+                    let [client, max] = view.results_scroll.range();
+                    let [_, by] = step.delta(client, max, f64::from(window.scale_factor()));
+                    let now = view.hub.read(cx).frame_time(cx);
+                    view.results_scroll.smooth(by, now);
+                    cx.stop_propagation();
+                    cx.notify();
+                }
+            }));
         for (index, (key, hovered)) in items.into_iter().enumerate() {
             let background = if hovered {
                 Some(if dark { 0x555555 } else { 0xcccccc })
@@ -836,8 +877,29 @@ impl SidebarView {
             }
             list = list.child(item);
         }
+        let results = cx.entity().downgrade();
+        let results_bars = scrollbars(
+            &self.results_scroll.bars,
+            Extent {
+                dark,
+                ..self.results_scroll.extent()
+            },
+            move |request, window, cx| {
+                let scale = f64::from(window.scale_factor());
+                let _ = results.update(cx, |view, cx| {
+                    let now = view.hub.read(cx).frame_time(cx);
+                    match request {
+                        Request::Press => {}
+                        Request::To([_, to]) => view.results_scroll.scroll_to(to, scale),
+                        Request::By([_, by]) => view.results_scroll.smooth(by, now),
+                    }
+                    cx.notify();
+                });
+            },
+        );
         // Drawn outside the side bar's own section.
         let mut popup = div()
+            .relative()
             .tab_group()
             .tab_index(Section::SearchResults as isize)
             .min_w(px(min_width.unwrap_or(0.0) as f32))
@@ -845,7 +907,8 @@ impl SidebarView {
             .rounded(px(6.0))
             .overflow_hidden()
             .bg(rgb(if dark { 0x222222 } else { 0xffffff }))
-            .child(list);
+            .child(list)
+            .child(results_bars);
         popup = if dark {
             popup.border(px(0.5)).border_color(rgba(0xffffff4d))
         } else {
@@ -1038,8 +1101,14 @@ impl Render for SidebarView {
         let mut root = div()
             .id("side-bar")
             .size_full()
-            .overflow_y_scroll()
-            .track_scroll(&self.scroll)
+            .overflow_hidden()
+            .track_scroll(&self.scroll.handle)
+            .on_scroll(cx.listener(|view, event: &ScrollEvent, window, cx| {
+                let now = view.hub.read(cx).frame_time(cx);
+                let scale = f64::from(window.scale_factor());
+                view.scroll.wheel(wheel_of(event), now, scale);
+                cx.notify();
+            }))
             .child(content);
         if let Some(results) = self.search_results(appearance, window, cx) {
             root = root.child(results);

@@ -1,0 +1,681 @@
+{
+  "entry": "dom",
+  "fixture": {
+    "seed": 71,
+    "geometry": "real",
+    "steps": [
+      {
+        "eval": "/*sidebar:recorder*/ (() => {\n  const w = window;\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const tree = w.__oracleTree;\n  const sideBar = document.getElementsByClassName(\"side-bar\")[0];\n  w.addEventListener(\"scroll\", (event) => {\n    if (event.target === sideBar) write({ sb: \"scroll\" });\n  }, true);\n  const search = document.getElementsByClassName(\"side-bar-search\")[0];\n  w.addEventListener(\"blur\", (event) => {\n    if (event.target === search) write({ sb: \"blur\" });\n  }, true);\n  w.addEventListener(\"mousedown\", (event) => {\n    if (event.target instanceof Element && event.target.closest(\".field-item-label\") !== null) {\n      write({ sb: \"mousedown\", offset: tree([event.offsetX, event.offsetY]) });\n    }\n  }, true);\n})()"
+      },
+      {
+        "log": [
+          [
+            "putBoolean",
+            "/B",
+            0,
+            true
+          ],
+          [
+            "putBoolean",
+            "/B",
+            1,
+            "yes"
+          ],
+          [
+            "putBoolean",
+            "/B",
+            2,
+            ""
+          ],
+          [
+            "putBoolean",
+            "/B",
+            3,
+            0
+          ],
+          [
+            "putBoolean",
+            "/B",
+            4,
+            5
+          ],
+          [
+            "putBoolean",
+            "/B",
+            5,
+            []
+          ],
+          [
+            "putBoolean",
+            "/B",
+            6,
+            {
+              "o": []
+            }
+          ],
+          [
+            "putBoolean",
+            "/B",
+            7,
+            false
+          ],
+          [
+            "putBoolean",
+            "/B",
+            8,
+            "yes"
+          ],
+          [
+            "putBoolean",
+            "/B",
+            9,
+            "yes"
+          ],
+          [
+            "putNumber",
+            "/N",
+            0,
+            1.5
+          ],
+          [
+            "putNumber",
+            "/N",
+            1,
+            "5"
+          ],
+          [
+            "putNumber",
+            "/N",
+            2,
+            " 7 "
+          ],
+          [
+            "putNumber",
+            "/N",
+            3,
+            true
+          ],
+          [
+            "putNumber",
+            "/N",
+            4,
+            false
+          ],
+          [
+            "putNumber",
+            "/N",
+            5,
+            []
+          ],
+          [
+            "putNumber",
+            "/N",
+            6,
+            [
+              5
+            ]
+          ],
+          [
+            "putNumber",
+            "/N",
+            7,
+            "1e-12"
+          ],
+          [
+            "putNumber",
+            "/N",
+            8,
+            "0x10"
+          ],
+          [
+            "putNumber",
+            "/N",
+            9,
+            8
+          ],
+          [
+            "putNumber",
+            "/N",
+            10,
+            "5"
+          ],
+          [
+            "putNumber",
+            "/N",
+            11,
+            5
+          ],
+          [
+            "putString",
+            "/S",
+            0,
+            "text"
+          ],
+          [
+            "putString",
+            "/S",
+            1,
+            5
+          ],
+          [
+            "putString",
+            "/S",
+            2,
+            true
+          ],
+          [
+            "putString",
+            "/S",
+            3,
+            {
+              "o": []
+            }
+          ],
+          [
+            "putString",
+            "/S",
+            4,
+            []
+          ],
+          [
+            "putString",
+            "/S",
+            5,
+            [
+              "a"
+            ]
+          ],
+          [
+            "putString",
+            "/S",
+            6,
+            {
+              "o": [
+                [
+                  "length",
+                  {
+                    "n": "4008000000000000"
+                  }
+                ]
+              ]
+            }
+          ],
+          [
+            "putString",
+            "/S",
+            7,
+            0
+          ],
+          [
+            "putString",
+            "/S",
+            8,
+            "back"
+          ],
+          [
+            "putString",
+            "/S",
+            9,
+            12345678901234567890
+          ],
+          [
+            "putString",
+            "/S",
+            10,
+            [
+              "b"
+            ]
+          ],
+          [
+            "putNumber",
+            "/Plain",
+            0,
+            1.5
+          ],
+          [
+            "putString",
+            "/Z",
+            0,
+            "z"
+          ]
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "none"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          0
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "t0"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          1
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "t1"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          2
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "t2"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          3
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "t3"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          4
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "t4"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          5
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "t5"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          6
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "t6"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          7
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "t7"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          8
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "t8"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          9
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "t9"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          10
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "t10"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          11
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "t11"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          6.5
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "same sample"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/N",
+            12,
+            "9"
+          ],
+          [
+            "putBoolean",
+            "/B",
+            12,
+            null
+          ],
+          [
+            "putString",
+            "/S",
+            12,
+            null
+          ]
+        ]
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          20
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "after"
+      }
+    ]
+  }
+}

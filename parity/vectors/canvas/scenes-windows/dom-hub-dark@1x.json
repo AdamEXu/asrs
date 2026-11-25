@@ -1,0 +1,276 @@
+{
+  "scene": "dom-hub-dark@1x",
+  "scale": 1,
+  "rows": [
+    {
+      "id": "div.title-bar-text/0",
+      "rect": [
+        320,
+        8,
+        122.125,
+        21
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "button/0",
+      "rect": [
+        35.265625,
+        12,
+        21.359375,
+        14
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "button/1",
+      "rect": [
+        68.9375,
+        12,
+        19.34375,
+        14
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "button/2",
+      "rect": [
+        101.109375,
+        12,
+        25.796875,
+        14
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "button/3",
+      "rect": [
+        140.46875,
+        12,
+        25.359375,
+        14
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "button/4",
+      "rect": [
+        181.40625,
+        12,
+        42.6875,
+        14
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "button/5",
+      "rect": [
+        239.609375,
+        12,
+        24.6875,
+        14
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "div.search-results-item/0",
+      "rect": [
+        25,
+        525,
+        135.359375,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "div.side-bar-title/0",
+      "rect": [
+        51.140625,
+        45,
+        197.703125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "input.side-bar-search/0",
+      "rect": [
+        16,
+        73,
+        268,
+        29
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "span/0",
+      "rect": [
+        35,
+        112,
+        88.625,
+        20
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "span/1",
+      "rect": [
+        55,
+        142,
+        81.28125,
+        20
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "span/2",
+      "rect": [
+        75,
+        172,
+        74.046875,
+        20
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "span.field-item-type-label/0",
+      "rect": [
+        149.046875,
+        172,
+        60.953125,
+        20
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "div.field-value/0",
+      "rect": [
+        251.984375,
+        173,
+        36.015625,
+        17
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "span/3",
+      "rect": [
+        75,
+        202,
+        92.28125,
+        20
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "span.field-item-type-label/1",
+      "rect": [
+        167.28125,
+        202,
+        42.71875,
+        20
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "span/4",
+      "rect": [
+        75,
+        232,
+        71.78125,
+        20
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "span.field-item-type-label/2",
+      "rect": [
+        146.78125,
+        232,
+        63.21875,
+        20
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "div.field-value/1",
+      "rect": [
+        233.984375,
+        233,
+        54.015625,
+        17
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "span/5",
+      "rect": [
+        55,
+        262,
+        51.5,
+        20
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "span.field-item-type-label/3",
+      "rect": [
+        106.5,
+        262,
+        69.5,
+        20
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "div.field-value/2",
+      "rect": [
+        251.984375,
+        263,
+        36.015625,
+        17
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "span/6",
+      "rect": [
+        55,
+        292,
+        76.296875,
+        20
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "div.tab.tab-selected/0",
+      "rect": [
+        321,
+        53,
+        76.359375,
+        21
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "div.tab/0",
+      "rect": [
+        419.359375,
+        53,
+        57.578125,
+        21
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "div.tab/1",
+      "rect": [
+        498.9375,
+        53,
+        61.109375,
+        21
+      ],
+      "mode": "grayscale"
+    }
+  ]
+}

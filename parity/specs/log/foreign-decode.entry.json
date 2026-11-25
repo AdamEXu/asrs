@@ -1,0 +1,4 @@
+{
+  "entry": "foreignLogs",
+  "args": ["decode"]
+}

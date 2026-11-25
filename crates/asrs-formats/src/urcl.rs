@@ -297,7 +297,7 @@ pub fn parse_urcl_r3(
             &child(&device_key, "/Firmware"),
             timestamp,
             js(&number_to_string(major)),
-        );
+        )?;
         log.create_blank_field(&device_key, LoggableType::Empty);
         log.set_generated_parent(&device_key);
     }
@@ -384,11 +384,11 @@ pub fn parse_urcl_r3(
                                 &log_key,
                                 message_timestamp,
                                 signal_number(signal_value),
-                            );
+                            )?;
                         }
                         SignalType::Boolean => {
                             if let SignalValue::Bool(b) = signal_value {
-                                log.put_boolean(&log_key, message_timestamp, *b);
+                                log.put_boolean(&log_key, message_timestamp, *b)?;
                             }
                         }
                     }
@@ -411,7 +411,7 @@ pub fn parse_urcl_r3(
                     && v > 0.0
                 {
                     let derived = child(&device_log_key, "/AppliedOutputVoltage");
-                    log.put_number(&derived, timestamp, applied * v);
+                    log.put_number(&derived, timestamp, applied * v)?;
                     log.set_metadata_string(
                         &derived,
                         description_metadata(APPLIED_OUTPUT_VOLTAGE_DESCRIPTION),
@@ -419,7 +419,7 @@ pub fn parse_urcl_r3(
                 }
                 if let (Some(current), Some(applied)) = (output_current, applied_output) {
                     let derived = child(&device_log_key, "/CurrentInput");
-                    log.put_number(&derived, timestamp, (current * applied).abs());
+                    log.put_number(&derived, timestamp, (current * applied).abs())?;
                     log.set_metadata_string(
                         &derived,
                         description_metadata(CURRENT_INPUT_DESCRIPTION),
@@ -495,7 +495,7 @@ pub fn parse_urcl_r2(
             &child(&device_key, "/Firmware"),
             timestamp,
             firmware_string(firmware),
-        );
+        )?;
         log.create_blank_field(&device_key, LoggableType::Empty);
         log.set_generated_parent(&device_key);
     }
@@ -570,7 +570,7 @@ pub fn parse_urcl_r1(
             &child(&device_key, "/Firmware"),
             timestamp,
             firmware_string(firmware),
-        );
+        )?;
     }
 
     let periodic_end =
@@ -717,31 +717,31 @@ fn parse_periodic_0(
     let sticky_faults = u16le(value, 4)?;
     let bits = u8_at(value, 6)?;
 
-    log.put_number(&child(key, "/AppliedOutput"), timestamp, applied_output);
+    log.put_number(&child(key, "/AppliedOutput"), timestamp, applied_output)?;
     let bus_voltage = get_or_default(log, &child(key, "/BusVoltage"), timestamp, 0.0_f64, None);
     if bus_voltage > 0.0 {
         log.put_number(
             &child(key, "/AppliedOutputVoltage"),
             timestamp,
             applied_output * bus_voltage,
-        );
+        )?;
     }
     for (index, fault_name) in FAULTS.iter().enumerate() {
         log.put_boolean(
             &child(&child(key, "/Fault/"), fault_name),
             timestamp,
             faults & (1 << index) != 0,
-        );
+        )?;
         log.put_boolean(
             &child(&child(key, "/StickyFault/"), fault_name),
             timestamp,
             sticky_faults & (1 << index) != 0,
-        );
+        )?;
     }
-    log.put_boolean(&child(key, "/SensorInvert"), timestamp, bits & 0x01 != 0);
-    log.put_boolean(&child(key, "/MotorInvert"), timestamp, bits & 0x02 != 0);
-    log.put_boolean(&child(key, "/IsBrushless"), timestamp, bits & 0x10 != 0);
-    log.put_boolean(&child(key, "/IsFollower"), timestamp, bits & 0x20 != 0);
+    log.put_boolean(&child(key, "/SensorInvert"), timestamp, bits & 0x01 != 0)?;
+    log.put_boolean(&child(key, "/MotorInvert"), timestamp, bits & 0x02 != 0)?;
+    log.put_boolean(&child(key, "/IsBrushless"), timestamp, bits & 0x10 != 0)?;
+    log.put_boolean(&child(key, "/IsFollower"), timestamp, bits & 0x20 != 0)?;
     Ok(())
 }
 
@@ -760,16 +760,16 @@ fn parse_periodic_1(
     let motor_current_raw = (u32::from(u16le(value, 6)?) >> 4) & 0x0fff;
     let motor_current = f64::from(motor_current_raw) / 32.0;
 
-    log.put_number(&child(key, "/MotorVelocityRPM"), timestamp, motor_velocity);
+    log.put_number(&child(key, "/MotorVelocityRPM"), timestamp, motor_velocity)?;
     if motor_temperature > 0.0 {
         log.put_number(
             &child(key, "/MotorTemperatureC"),
             timestamp,
             motor_temperature,
-        );
+        )?;
     }
-    log.put_number(&child(key, "/BusVoltage"), timestamp, motor_voltage);
-    log.put_number(&child(key, "/MotorCurrentAmps"), timestamp, motor_current);
+    log.put_number(&child(key, "/BusVoltage"), timestamp, motor_voltage)?;
+    log.put_number(&child(key, "/MotorCurrentAmps"), timestamp, motor_current)?;
     Ok(())
 }
 
@@ -794,9 +794,9 @@ fn parse_periodic_2(
         &child(key, "/MotorPositionRotations"),
         timestamp,
         motor_position,
-    );
+    )?;
     if let Some(i_accum) = i_accum {
-        log.put_number(&child(key, "/IAccum"), timestamp, i_accum);
+        log.put_number(&child(key, "/IAccum"), timestamp, i_accum)?;
     }
     Ok(())
 }
@@ -828,17 +828,17 @@ fn parse_periodic_3(
         &child(key, "/AnalogSensor/Voltage"),
         timestamp,
         sensor_voltage,
-    );
+    )?;
     log.put_number(
         &child(key, "/AnalogSensor/Velocity"),
         timestamp,
         sensor_velocity,
-    );
+    )?;
     log.put_number(
         &child(key, "/AnalogSensor/Position"),
         timestamp,
         sensor_position,
-    );
+    )?;
     Ok(())
 }
 
@@ -861,12 +861,12 @@ fn parse_periodic_4(
         &child(&child(&child(key, "/"), name), "/VelocityRPM"),
         timestamp,
         encoder_velocity,
-    );
+    )?;
     log.put_number(
         &child(&child(&child(key, "/"), name), "/PositionRotations"),
         timestamp,
         encoder_position,
-    );
+    )?;
     Ok(())
 }
 
@@ -884,12 +884,12 @@ fn parse_periodic_5(
         &child(key, "/AbsoluteEncoder/PositionRotations"),
         timestamp,
         encoder_position,
-    );
+    )?;
     log.put_number(
         &child(key, "/AbsoluteEncoder/PositionRotationsNoOffset"),
         timestamp,
         encoder_absolute_angle,
-    );
+    )?;
     Ok(())
 }
 
@@ -907,12 +907,12 @@ fn parse_periodic_6(
         &child(key, "/AbsoluteEncoder/VelocityRPM"),
         timestamp,
         encoder_velocity,
-    );
+    )?;
     log.put_number(
         &child(key, "/AbsoluteEncoder/Frequency"),
         timestamp,
         encoder_frequency,
-    );
+    )?;
     Ok(())
 }
 
@@ -925,6 +925,6 @@ fn parse_periodic_7(
     _firmware: FirmwareVersion,
 ) -> Result<(), SchemaError> {
     let i_accum = f64::from(f32le(value, 0)?);
-    log.put_number(&child(key, "/IAccum"), timestamp, i_accum);
+    log.put_number(&child(key, "/IAccum"), timestamp, i_accum)?;
     Ok(())
 }

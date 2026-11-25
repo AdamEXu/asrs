@@ -32,6 +32,17 @@ impl From<Abort> for Fail {
     }
 }
 
+/// Inside `decode` only a JS throw is caught.
+impl From<LogError> for Fail {
+    fn from(error: LogError) -> Self {
+        match error {
+            LogError::Proto(_) | LogError::Thrown(_) | LogError::StackOverflow => Fail::Js,
+            LogError::NeverCompletes => Fail::Abort(Abort::NeverReturns),
+            LogError::Unmodeled(what) => Fail::Abort(Abort::Unmodeled(what)),
+        }
+    }
+}
+
 /// `dataArray[position]`; past either end is `undefined`.
 fn u8_at(data: &[u8], position: i64) -> Option<u8> {
     usize::try_from(position)
@@ -102,17 +113,6 @@ fn shift(offset: &mut i64, by: i64) -> i64 {
     let at = *offset;
     *offset += by;
     at
-}
-
-/// A `LogError` is a JS throw (`Proto`, `StackOverflow`), an upstream hang (`NeverCompletes`) or an unmodeled
-/// continuation; inside `decode` only the first is caught.
-fn caught(result: Result<(), LogError>) -> Result<(), Fail> {
-    match result {
-        Ok(()) => Ok(()),
-        Err(LogError::Proto(_) | LogError::StackOverflow) => Err(Fail::Js),
-        Err(LogError::NeverCompletes) => Err(Fail::Abort(Abort::NeverReturns)),
-        Err(LogError::Unmodeled(what)) => Err(Fail::Abort(Abort::Unmodeled(what))),
-    }
 }
 
 fn js(text: &str) -> JsString {
@@ -397,7 +397,7 @@ impl RlogDecoder {
                     return Err(Fail::Js);
                 }
                 let key = Self::effective_key(log, key, LoggableType::Boolean)?;
-                log.put_boolean(&key, timestamp, value[0] != 0);
+                log.put_boolean(&key, timestamp, value[0] != 0)?;
             }
             Some("int" | "int64") => {
                 if value.len() != 8 {
@@ -405,7 +405,7 @@ impl RlogDecoder {
                 }
                 let number = i64_at(data, *offset)? as f64;
                 let key = Self::effective_key(log, key, LoggableType::Number)?;
-                log.put_number(&key, timestamp, number);
+                log.put_number(&key, timestamp, number)?;
             }
             Some("float") => {
                 if value.len() != 4 {
@@ -413,7 +413,7 @@ impl RlogDecoder {
                 }
                 let number = f64::from(f32_at(data, *offset)?);
                 let key = Self::effective_key(log, key, LoggableType::Number)?;
-                log.put_number(&key, timestamp, number);
+                log.put_number(&key, timestamp, number)?;
             }
             Some("double") => {
                 if value.len() != 8 {
@@ -421,7 +421,7 @@ impl RlogDecoder {
                 }
                 let number = f64_at(data, *offset)?;
                 let key = Self::effective_key(log, key, LoggableType::Number)?;
-                log.put_number(&key, timestamp, number);
+                log.put_number(&key, timestamp, number)?;
             }
             Some("string") => {
                 let string = self
@@ -429,12 +429,12 @@ impl RlogDecoder {
                     .decode(value)
                     .expect("nonfatal UTF-8 never errors");
                 let key = Self::effective_key(log, key, LoggableType::String)?;
-                log.put_string(&key, timestamp, string);
+                log.put_string(&key, timestamp, string)?;
             }
             Some("boolean[]") => {
                 let array: Vec<bool> = value.iter().map(|x| *x != 0).collect();
                 let key = Self::effective_key(log, key, LoggableType::BooleanArray)?;
-                log.put_boolean_array(&key, timestamp, array);
+                log.put_boolean_array(&key, timestamp, array)?;
             }
             Some("int[]" | "int64[]") => {
                 if !value.len().is_multiple_of(8) {
@@ -447,7 +447,7 @@ impl RlogDecoder {
                     position += 8;
                 }
                 let key = Self::effective_key(log, key, LoggableType::NumberArray)?;
-                log.put_number_array(&key, timestamp, array);
+                log.put_number_array(&key, timestamp, array)?;
             }
             Some("float[]") => {
                 if !value.len().is_multiple_of(4) {
@@ -460,7 +460,7 @@ impl RlogDecoder {
                     position += 4;
                 }
                 let key = Self::effective_key(log, key, LoggableType::NumberArray)?;
-                log.put_number_array(&key, timestamp, array);
+                log.put_number_array(&key, timestamp, array)?;
             }
             Some("double[]") => {
                 if !value.len().is_multiple_of(8) {
@@ -473,7 +473,7 @@ impl RlogDecoder {
                     position += 8;
                 }
                 let key = Self::effective_key(log, key, LoggableType::NumberArray)?;
-                log.put_number_array(&key, timestamp, array);
+                log.put_number_array(&key, timestamp, array)?;
             }
             Some("string[]") => {
                 let size = u32_at(data, *offset)?;
@@ -496,7 +496,7 @@ impl RlogDecoder {
                     position = position.saturating_add(4).saturating_add(string_size);
                 }
                 let key = Self::effective_key(log, key, LoggableType::StringArray)?;
-                log.put_string_array(&key, timestamp, array);
+                log.put_string_array(&key, timestamp, array)?;
             }
             Some("json") => {
                 let string = self
@@ -504,11 +504,11 @@ impl RlogDecoder {
                     .decode(value)
                     .expect("nonfatal UTF-8 never errors");
                 let key = Self::effective_key(log, key, LoggableType::String)?;
-                caught(log.put_json(&key, timestamp, string))?;
+                log.put_json(&key, timestamp, string)?;
             }
             Some("msgpack") => {
                 let key = Self::effective_key(log, key, LoggableType::Raw)?;
-                caught(log.put_msgpack(realm, &key, timestamp, Arc::<[u8]>::from(value)))?;
+                log.put_msgpack(realm, &key, timestamp, Arc::<[u8]>::from(value))?;
             }
             _ => {
                 if type_.starts_with(&js(STRUCT_PREFIX), None) {
@@ -520,49 +520,25 @@ impl RlogDecoder {
                         schema
                     };
                     let key = Self::effective_key(log, key, LoggableType::Raw)?;
-                    caught(log.put_struct(
-                        &key,
-                        timestamp,
-                        Arc::<[u8]>::from(value),
-                        &schema,
-                        is_array,
-                    ))?;
+                    log.put_struct(&key, timestamp, Arc::<[u8]>::from(value), &schema, is_array)?;
                 } else if type_.starts_with(&js(PHOTON_PREFIX), None) {
                     let schema = schema_type(&type_, PHOTON_PREFIX);
                     let key = Self::effective_key(log, key, LoggableType::Raw)?;
-                    caught(log.put_photon_struct(
-                        &key,
-                        timestamp,
-                        Arc::<[u8]>::from(value),
-                        &schema,
-                    ))?;
+                    log.put_photon_struct(&key, timestamp, Arc::<[u8]>::from(value), &schema)?;
                 } else if type_.starts_with(&js(PROTO_PREFIX), None) {
                     let schema = schema_type(&type_, PROTO_PREFIX);
                     let key = Self::effective_key(log, key, LoggableType::Raw)?;
-                    caught(log.put_proto(
-                        realm,
-                        &key,
-                        timestamp,
-                        Arc::<[u8]>::from(value),
-                        &schema,
-                    ))?;
+                    log.put_proto(realm, &key, timestamp, Arc::<[u8]>::from(value), &schema)?;
                 } else {
                     let key = Self::effective_key(log, key, LoggableType::Raw)?;
-                    caught(log.put_raw(&key, timestamp, Arc::<[u8]>::from(value)))?;
+                    log.put_raw(&key, timestamp, Arc::<[u8]>::from(value))?;
                     if let Some(parser) = custom_schemas::get(&type_) {
                         // The parser runs inside its own try/catch; the generated parent is
                         // marked either way.
                         match parser(log, &key, timestamp, value) {
-                            Ok(())
-                            | Err(SchemaError::Threw)
-                            | Err(SchemaError::Log(LogError::Proto(_) | LogError::StackOverflow)) =>
-                                {}
-                            Err(SchemaError::Log(LogError::NeverCompletes)) => {
-                                return Err(Fail::Abort(Abort::NeverReturns));
-                            }
-                            Err(SchemaError::Log(LogError::Unmodeled(what))) => {
-                                return Err(Fail::Abort(Abort::Unmodeled(what)));
-                            }
+                            Ok(()) | Err(SchemaError::Threw) => {}
+                            Err(SchemaError::Log(error)) if error.is_throw() => {}
+                            Err(SchemaError::Log(error)) => return Err(error.into()),
                         }
                         log.set_generated_parent(&key);
                     }
@@ -589,27 +565,27 @@ impl RlogDecoder {
                 // no field yet (or an undeclared id without an "undefined" field) writes
                 // nothing.
                 let lookup = key.unwrap_or_else(|| js("undefined"));
-                match log.get_type(&lookup) {
+                match log.try_get_type(&lookup)? {
                     Some(LoggableType::Raw) => {
-                        caught(log.put_raw(&lookup, timestamp, Vec::<u8>::new()))?;
+                        log.put_raw(&lookup, timestamp, Vec::<u8>::new())?;
                     }
                     Some(LoggableType::Boolean) => {
-                        log.put_boolean(&lookup, timestamp, false);
+                        log.put_boolean(&lookup, timestamp, false)?;
                     }
                     Some(LoggableType::Number) => {
-                        log.put_number(&lookup, timestamp, 0.0);
+                        log.put_number(&lookup, timestamp, 0.0)?;
                     }
                     Some(LoggableType::String) => {
-                        log.put_string(&lookup, timestamp, JsString::new());
+                        log.put_string(&lookup, timestamp, JsString::new())?;
                     }
                     Some(LoggableType::BooleanArray) => {
-                        log.put_boolean_array(&lookup, timestamp, Vec::new());
+                        log.put_boolean_array(&lookup, timestamp, Vec::new())?;
                     }
                     Some(LoggableType::NumberArray) => {
-                        log.put_number_array(&lookup, timestamp, Vec::new());
+                        log.put_number_array(&lookup, timestamp, Vec::new())?;
                     }
                     Some(LoggableType::StringArray) => {
-                        log.put_string_array(&lookup, timestamp, Vec::new());
+                        log.put_string_array(&lookup, timestamp, Vec::new())?;
                     }
                     _ => {}
                 }
@@ -617,22 +593,22 @@ impl RlogDecoder {
             Some(1) => {
                 let value = u8_at(data, shift(offset, 1)) != Some(0);
                 let key = Self::effective_key(log, key.as_ref(), LoggableType::Boolean)?;
-                log.put_boolean(&key, timestamp, value);
+                log.put_boolean(&key, timestamp, value)?;
             }
             Some(9) => {
                 let byte = u8_at(data, shift(offset, 1)).unwrap_or(0);
                 let key = Self::effective_key(log, key.as_ref(), LoggableType::Raw)?;
-                caught(log.put_raw(&key, timestamp, vec![byte]))?;
+                log.put_raw(&key, timestamp, vec![byte])?;
             }
             Some(3) => {
                 let number = f64::from(i32_at(data, shift(offset, 4))?);
                 let key = Self::effective_key(log, key.as_ref(), LoggableType::Number)?;
-                log.put_number(&key, timestamp, number);
+                log.put_number(&key, timestamp, number)?;
             }
             Some(5) => {
                 let number = f64_at(data, shift(offset, 8))?;
                 let key = Self::effective_key(log, key.as_ref(), LoggableType::Number)?;
-                log.put_number(&key, timestamp, number);
+                log.put_number(&key, timestamp, number)?;
             }
             Some(7) => {
                 let string_length = i64::from(i16_at(data, shift(offset, 2))?);
@@ -642,7 +618,7 @@ impl RlogDecoder {
                     .expect("nonfatal UTF-8 never errors");
                 *offset += string_length;
                 let key = Self::effective_key(log, key.as_ref(), LoggableType::String)?;
-                log.put_string(&key, timestamp, string);
+                log.put_string(&key, timestamp, string)?;
             }
             Some(2) => {
                 let length = i16_at(data, shift(offset, 2))?;
@@ -651,7 +627,7 @@ impl RlogDecoder {
                     array.push(u8_at(data, shift(offset, 1)) != Some(0));
                 }
                 let key = Self::effective_key(log, key.as_ref(), LoggableType::BooleanArray)?;
-                log.put_boolean_array(&key, timestamp, array);
+                log.put_boolean_array(&key, timestamp, array)?;
             }
             Some(10) => {
                 let length = i16_at(data, shift(offset, 2))?;
@@ -660,7 +636,7 @@ impl RlogDecoder {
                     array.push(u8_at(data, shift(offset, 1)).unwrap_or(0));
                 }
                 let key = Self::effective_key(log, key.as_ref(), LoggableType::Raw)?;
-                caught(log.put_raw(&key, timestamp, array))?;
+                log.put_raw(&key, timestamp, array)?;
             }
             Some(4) => {
                 let length = i16_at(data, shift(offset, 2))?;
@@ -669,7 +645,7 @@ impl RlogDecoder {
                     array.push(f64::from(i32_at(data, shift(offset, 4))?));
                 }
                 let key = Self::effective_key(log, key.as_ref(), LoggableType::NumberArray)?;
-                log.put_number_array(&key, timestamp, array);
+                log.put_number_array(&key, timestamp, array)?;
             }
             Some(6) => {
                 let length = i16_at(data, shift(offset, 2))?;
@@ -678,7 +654,7 @@ impl RlogDecoder {
                     array.push(f64_at(data, shift(offset, 8))?);
                 }
                 let key = Self::effective_key(log, key.as_ref(), LoggableType::NumberArray)?;
-                log.put_number_array(&key, timestamp, array);
+                log.put_number_array(&key, timestamp, array)?;
             }
             Some(8) => {
                 let length = i16_at(data, shift(offset, 2))?;
@@ -693,7 +669,7 @@ impl RlogDecoder {
                     *offset += string_length;
                 }
                 let key = Self::effective_key(log, key.as_ref(), LoggableType::StringArray)?;
-                log.put_string_array(&key, timestamp, array);
+                log.put_string_array(&key, timestamp, array)?;
             }
             _ => {}
         }

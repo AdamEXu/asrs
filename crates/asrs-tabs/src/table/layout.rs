@@ -15,8 +15,10 @@ const KEY_INSET: f64 = 6.0 + 30.0;
 
 #[derive(Clone, Debug)]
 pub struct TableLayout {
-    /// `TABLE_CONTAINER`'s box, which has no borders. Scrollbars overlay its content.
+    /// `TABLE_CONTAINER`'s box, which has no borders.
     pub container: Rect,
+    /// What a scrollbar takes of the container, which overlay ones do not.
+    pub scrollbar: f64,
     pub device_pixel_ratio: f64,
     /// The width of every column in CSS px, the jump input's first.
     pub columns: Vec<f64>,
@@ -31,6 +33,7 @@ impl Default for TableLayout {
     fn default() -> Self {
         TableLayout {
             container: Rect::default(),
+            scrollbar: 0.0,
             device_pixel_ratio: 1.0,
             columns: Vec::new(),
             key_text: Vec::new(),
@@ -96,8 +99,35 @@ impl TableLayout {
 
     fn scroll_range_device(&self) -> [f64; 2] {
         let content = self.table_device();
+        let client = self.client_device();
+        [0, 1].map(|axis| math::max2(content[axis] - client[axis], 0.0))
+    }
+
+    /// The container's box without its scrollbars.
+    fn client_device(&self) -> [f64; 2] {
+        let content = self.table_device();
         let size = [self.container.width, self.container.height];
-        [0, 1].map(|axis| math::max2(content[axis] - size[axis] * self.device_pixel_ratio, 0.0))
+        let size = size.map(|v| v * self.device_pixel_ratio);
+        let taken = self.scrollbar * self.device_pixel_ratio;
+        let mut client = size;
+        for _ in 0..2 {
+            client = [0, 1].map(|axis| {
+                let across = 1 - axis;
+                let bar = content[across] > client[across];
+                size[axis] - if bar { taken } else { 0.0 }
+            });
+        }
+        client
+    }
+
+    /// `clientWidth` and `clientHeight`, unrounded.
+    pub fn client(&self) -> [f64; 2] {
+        self.client_device().map(|v| v / self.device_pixel_ratio)
+    }
+
+    /// `table.data-table`'s size.
+    pub fn content(&self) -> [f64; 2] {
+        self.table_device().map(|v| v / self.device_pixel_ratio)
     }
 
     /// The largest `scrollLeft` and `scrollTop`, not on the pixel grid.
@@ -203,7 +233,7 @@ impl TableGeometry for TableLayout {
     }
 
     fn container_client_height(&mut self) -> f64 {
-        math::round(self.container.height)
+        math::round(self.client()[1])
     }
 
     fn header_client_height(&mut self) -> f64 {

@@ -36,7 +36,8 @@ impl Page<'_> {
             let mut log = model.page().shared_log().borrow_mut();
             for i in range {
                 let text = JsString::from(format!("line {i}").as_str());
-                log.put_string(&JsString::from(KEY), i as f64 / 10.0, text);
+                log.put_string(&JsString::from(KEY), i as f64 / 10.0, text)
+                    .unwrap();
             }
         });
     }
@@ -246,7 +247,7 @@ impl Page<'_> {
         self.model(|model| {
             let key = JsString::from("/RealMetadata/Key");
             let mut log = model.page().shared_log().borrow_mut();
-            log.put_string(&key, time, JsString::from(value));
+            log.put_string(&key, time, JsString::from(value)).unwrap();
         });
         self.model(|model| {
             let (tabs, page) = model.tabs_mut();
