@@ -21,7 +21,7 @@ fn windows() {
     assert_eq!(fields.len(), 4, "ASRS_FILE_VERSION is {version}");
     let packed = fields
         .iter()
-        .fold(0, |packed, field| packed << 16 | u64::from(*field));
+        .fold(0u64, |packed, field| (packed << 16) | u64::from(*field));
     winresource::WindowsResource::new()
         .set_version_info(winresource::VersionInfo::FILEVERSION, packed)
         .set_version_info(winresource::VersionInfo::PRODUCTVERSION, packed)
