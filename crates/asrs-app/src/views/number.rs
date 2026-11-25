@@ -1,6 +1,7 @@
 //! The value of an `<input type="number">` through `asrs_tabs::form`.
 
 use asrs_js::string::JsString;
+use asrs_model::layout_unit::{border, zoomed};
 use asrs_tabs::form::{self, NumberInput};
 use asrs_ui::input::FieldModel;
 
@@ -29,4 +30,10 @@ impl FieldModel for FormNumber {
         let kept = form::insertable_number_text(&units(left), &units(text), &units(right));
         String::from_utf16_lossy(&kept)
     }
+}
+
+/// The UA's 2 px border and 1 px (block) or 2 px (inline) padding on both sides of an input, in
+/// device px across and down.
+pub fn input_chrome(scale: f64) -> [f64; 2] {
+    [2.0, 1.0].map(|padding| 2.0 * (border(2.0, scale) + zoomed(padding, scale)))
 }
