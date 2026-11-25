@@ -2432,6 +2432,58 @@ mod tests {
     }
 
     #[test]
+    fn deferred_strokes_paint_what_strokes_one_by_one_paint() {
+        let mut c = Canvas2d::new(400, 300);
+        let long = |c: &mut Canvas2d, color: &str, offset: f64| {
+            c.set_stroke_style(color);
+            c.begin_path();
+            for i in 0..400 {
+                let x = f64::from(i);
+                c.line_to(x, offset + 60.0 * (x * 0.37).sin());
+            }
+            c.push(Call::Stroke);
+        };
+        c.set_line_width(5.0);
+        long(&mut c, "red", 90.0);
+        long(&mut c, "rgba(0, 0, 255, 0.5)", 95.0);
+        c.begin_path();
+        c.move_to(0.0, 0.0);
+        c.line_to(400.0, 250.0);
+        c.push(Call::Stroke);
+        c.save();
+        c.begin_path();
+        c.arc(200.0, 150.0, 90.0, 0.0, 7.0);
+        c.push(Call::Clip);
+        c.set_line_width(20.0);
+        long(&mut c, "green", 120.0);
+        c.restore();
+        c.scale(0.5, 2.0);
+        long(&mut c, "orange", 60.0);
+        c.set_fill_style("rgba(0, 0, 0, 0.5)");
+        c.push(Call::FillRect(100.0, 20.0, 300.0, 60.0));
+        long(&mut c, "purple", 70.0);
+        c.push(Call::ClearRect(150.0, 30.0, 40.0, 40.0));
+        long(&mut c, "black", 100.0);
+
+        let mut together = Raster::new(c.width, c.height).unwrap();
+        together.run(&c.calls);
+        let mut one_by_one = Raster::new(c.width, c.height).unwrap();
+        for call in &c.calls {
+            one_by_one.apply(call);
+        }
+        assert!(together.pixmap().data() == one_by_one.pixmap().data());
+        assert_eq!(together.deferred.len(), 0);
+        let mut reordered = c.calls.clone();
+        let strokes: Vec<usize> = (0..reordered.len())
+            .filter(|&i| reordered[i] == Call::Stroke)
+            .collect();
+        reordered.remove(strokes[1]);
+        let mut without = Raster::new(c.width, c.height).unwrap();
+        without.run(&reordered);
+        assert!(together.pixmap().data() != without.pixmap().data());
+    }
+
+    #[test]
     fn clear_rect_ignores_global_alpha_and_is_not_antialiased() {
         let mut c = Canvas2d::new(6, 1);
         c.fill_rect(0.0, 0.0, 6.0, 1.0);
