@@ -323,10 +323,10 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
   ([`vendor/gpui-pre-windows/LICENSE-APACHE`](vendor/gpui-pre-windows/LICENSE-APACHE))
 - Copyright Zed Industries, Inc. and contributors
 - Version: 0.3.12, from https://github.com/zed-industries/zed
-- Used in: `vendor/gpui-pre-windows/`, modified by asrs. The changes are recorded in
+- Used in: `vendor/gpui-pre-windows/`, modified by asrs. The change is recorded in
   [`patches/gpui-pre-windows-0.3.12.patch`](patches/gpui-pre-windows-0.3.12.patch), which
-  modifies `src/directx_atlas.rs` and `src/directx_renderer.rs`. Each of those files starts with
-  a line stating that asrs modified it.
+  modifies `src/directx_renderer.rs`. That file starts with a line stating that asrs modified
+  it.
 
 gpui-component, gpui-kit and the other gpui crates are unmodified crate dependencies and
 appear in the crate license listing.

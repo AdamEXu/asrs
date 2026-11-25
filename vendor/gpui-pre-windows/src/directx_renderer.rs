@@ -2063,7 +2063,7 @@ mod dxgi {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::{borrow::Cow, prelude::v1::test};
+    use std::prelude::v1::test;
     use windows::Win32::{Foundation::HMODULE, UI::WindowsAndMessaging::*};
     use windows::core::w;
 
@@ -2118,13 +2118,6 @@ mod tests {
 
     fn device_size(width: i32, height: i32) -> Size<DevicePixels> {
         size(DevicePixels(width), DevicePixels(height))
-    }
-
-    fn scaled_bounds(size: Size<DevicePixels>) -> Bounds<ScaledPixels> {
-        Bounds {
-            origin: Point::default(),
-            size: size.map(|side| ScaledPixels(side.0 as f32)),
-        }
     }
 
     fn path_scene() -> Scene {
@@ -2210,61 +2203,5 @@ mod tests {
             path_texture_sizes(&renderer),
             Some([(64, 48, 1), (64, 48, 4)])
         );
-    }
-
-    #[test]
-    fn test_oversized_tiles_draw_texel_for_pixel() {
-        let Some(devices) = create_devices() else {
-            return;
-        };
-        let mut renderer = create_renderer(&devices);
-        for (ix, (width, height)) in [(1600, 692), (1333, 777), (700, 1511), (2200, 1300)]
-            .into_iter()
-            .enumerate()
-        {
-            let tile_size = device_size(width, height);
-            renderer.resize(tile_size).expect("resized");
-            let mut state = 1u32;
-            let bgra: Vec<u8> = (0..width * height)
-                .flat_map(|_| {
-                    state = state.wrapping_mul(1664525).wrapping_add(1013904223);
-                    let [_, b, g, r] = state.to_le_bytes();
-                    [b, g, r, 255]
-                })
-                .collect();
-            let key = AtlasKey::Image(RenderImageParams {
-                image_id: ImageId(ix),
-                frame_index: 0,
-            });
-            let tile = renderer
-                .sprite_atlas()
-                .get_or_insert_with(key.clone(), &mut || {
-                    Ok(Some((tile_size, Cow::Borrowed(&bgra))))
-                })
-                .expect("allocated")
-                .expect("tile");
-            let bounds = scaled_bounds(tile_size);
-            let mut scene = Scene::default();
-            scene.insert_primitive(PolychromeSprite {
-                order: 0,
-                pad: 0,
-                grayscale: false.into(),
-                opacity: 1.,
-                bounds,
-                content_mask: ContentMask { bounds },
-                corner_radii: Corners::default(),
-                tile,
-            });
-            scene.finish();
-            let image = render(&mut renderer, &scene);
-            let different = image
-                .as_raw()
-                .chunks_exact(4)
-                .zip(bgra.chunks_exact(4))
-                .filter(|(drawn, source)| *drawn != [source[2], source[1], source[0], source[3]])
-                .count();
-            assert_eq!(different, 0, "{width}x{height}");
-            renderer.sprite_atlas().remove(&key);
-        }
     }
 }

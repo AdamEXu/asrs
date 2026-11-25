@@ -1,4 +1,3 @@
-// Modified by asrs: see patches/gpui-pre-windows-0.3.12.patch in the asrs repository.
 use etagere::BucketedAtlasAllocator;
 use parking_lot::Mutex;
 use windows::Win32::Graphics::{
@@ -172,7 +171,7 @@ impl DirectXAtlasTextures {
             width: DevicePixels(16384),
             height: DevicePixels(16384),
         };
-        let size = atlas_texture_size(min_size.min(&MAX_ATLAS_SIZE), DEFAULT_ATLAS_SIZE);
+        let size = min_size.min(&MAX_ATLAS_SIZE).max(&DEFAULT_ATLAS_SIZE);
         let pixel_format;
         let bind_flag;
         let bytes_per_pixel;
@@ -329,22 +328,6 @@ impl DirectXAtlasTexture {
     }
 }
 
-// A tile over the default size gets a texture of its own when the padding would not hold a second
-// one like it. Smaller tiles, such as long text runs, share the padded texture. The spare texel
-// keeps the sampler, which wraps, off the tile's opposite edge as the padding did.
-fn atlas_texture_size(tile: Size<DevicePixels>, default: Size<DevicePixels>) -> Size<DevicePixels> {
-    let padded = tile.max(&default);
-    let holds_two = tile.width.0 * 2 <= default.width.0 || tile.height.0 * 2 <= default.height.0;
-    if padded == default || holds_two {
-        padded
-    } else {
-        Size {
-            width: padded.width.min(tile.width + DevicePixels(1)),
-            height: padded.height.min(tile.height + DevicePixels(1)),
-        }
-    }
-}
-
 fn device_size_to_etagere(size: Size<DevicePixels>) -> etagere::Size {
     etagere::Size::new(size.width.into(), size.height.into())
 }
@@ -433,104 +416,5 @@ mod tests {
 
         let tile_b = insert_tile(&atlas, big_key_b, big);
         assert_eq!(tile_b.texture_id, keeper_tile.texture_id);
-    }
-
-    fn size_of(width: i32, height: i32) -> Size<DevicePixels> {
-        Size {
-            width: DevicePixels(width),
-            height: DevicePixels(height),
-        }
-    }
-
-    fn texture_size(atlas: &DirectXAtlas, id: AtlasTextureId) -> Option<(u32, u32)> {
-        let lock = atlas.0.lock();
-        let texture = lock.backend.texture(id)?;
-        let mut desc = D3D11_TEXTURE2D_DESC::default();
-        unsafe { texture.texture.GetDesc(&mut desc) };
-        Some((desc.Width, desc.Height))
-    }
-
-    #[test]
-    fn test_atlas_texture_size() {
-        let default = size_of(1024, 1024);
-        for (tile, expected) in [
-            ((1, 1), (1024, 1024)),
-            ((1024, 1024), (1024, 1024)),
-            ((1600, 20), (1600, 1024)),
-            ((1600, 512), (1600, 1024)),
-            ((1600, 513), (1600, 514)),
-            ((1600, 692), (1600, 693)),
-            ((1025, 1024), (1025, 1024)),
-            ((1601, 1303), (1601, 1303)),
-            ((512, 1200), (1024, 1200)),
-            ((513, 1200), (514, 1200)),
-        ] {
-            assert_eq!(
-                atlas_texture_size(size_of(tile.0, tile.1), default),
-                size_of(expected.0, expected.1),
-            );
-        }
-    }
-
-    #[test]
-    fn test_oversized_tiles_get_a_fitting_texture() {
-        let Some(atlas) = create_atlas() else {
-            return;
-        };
-        let tiles = [
-            ((1601, 513), (1601, 514)),
-            ((1600, 692), (1600, 693)),
-            ((519, 1201), (520, 1201)),
-            ((1601, 1303), (1601, 1303)),
-        ];
-        for (ix, ((width, height), expected)) in tiles.into_iter().enumerate() {
-            let key = make_image_key(ix);
-            let tile = insert_tile(&atlas, key.clone(), size_of(width, height));
-            assert_eq!(tile.bounds.origin, Point::default());
-            assert_eq!(texture_size(&atlas, tile.texture_id), Some(expected));
-            atlas.remove(&key);
-            assert_eq!(texture_size(&atlas, tile.texture_id), None);
-        }
-    }
-
-    #[test]
-    fn test_oversized_texture_is_recycled_beside_small_tiles() {
-        let Some(atlas) = create_atlas() else {
-            return;
-        };
-        let canvas = size_of(1600, 692);
-        let first = insert_tile(&atlas, make_image_key(0), canvas);
-        let small = insert_tile(&atlas, make_image_key(1), size_of(64, 64));
-        assert_ne!(first.texture_id, small.texture_id);
-        assert_eq!(texture_size(&atlas, small.texture_id), Some((1024, 1024)));
-
-        for frame in 2..10 {
-            let next = insert_tile(&atlas, make_image_key(frame), canvas);
-            let previous = if frame == 2 { 0 } else { frame - 1 };
-            atlas.remove(&make_image_key(previous));
-            let lock = atlas.0.lock();
-            let textures = &lock.backend.polychrome_textures;
-            assert!(textures.textures.len() <= 3);
-            assert_eq!(textures.textures.iter().flatten().count(), 2);
-            drop(lock);
-            assert_eq!(texture_size(&atlas, next.texture_id), Some((1600, 693)));
-        }
-        let again = insert_tile(&atlas, make_image_key(10), size_of(64, 64));
-        assert_eq!(again.texture_id, small.texture_id);
-    }
-
-    #[test]
-    fn test_wide_tiles_share_a_padded_texture() {
-        let Some(atlas) = create_atlas() else {
-            return;
-        };
-        let run = size_of(1600, 400);
-        let mut previous = insert_tile(&atlas, make_image_key(0), run);
-        let texture_id = previous.texture_id;
-        for frame in 1..8 {
-            previous = insert_tile(&atlas, make_image_key(frame), run);
-            atlas.remove(&make_image_key(frame - 1));
-            assert_eq!(previous.texture_id, texture_id);
-        }
     }
 }
