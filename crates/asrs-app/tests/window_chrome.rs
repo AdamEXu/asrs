@@ -210,9 +210,9 @@ async fn compare(scratch: &Path, cx: &mut AsyncApp) {
                 }
             }
             if let Some(dir) = &captures {
-                for state in ["inactive", "active"] {
-                    capture(cx, id, dir.join(format!("{name}-{theme}-{state}.png"))).await;
-                }
+                let active = std::env::var_os("ASRS_CHROME_ACTIVE").is_some();
+                let state = if active { "active" } else { "inactive" };
+                capture(cx, id, dir.join(format!("{name}-{theme}-{state}.png"))).await;
             }
             cx.update(|cx| windows::close(cx, id));
             wait(cx, 100).await;
@@ -299,7 +299,7 @@ fn main() {
         cx.set_global(KeepHidden);
         cx.spawn(async move |cx| {
             compare(&scratch, cx).await;
-            if std::env::var_os("ASRS_CHROME_CAPTURES").is_none() {
+            if std::env::var_os("ASRS_CHROME_ACTIVE").is_none() {
                 assert_eq!(probe::app_is_active(), Some(false));
             }
             println!("window chrome: passed");

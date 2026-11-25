@@ -4,6 +4,7 @@
 // captured with their frames.
 const { app, BrowserWindow, nativeTheme } = require("electron");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 process.on("uncaughtException", (error) => {
@@ -13,6 +14,10 @@ process.on("uncaughtException", (error) => {
 
 const [requestFile, out] = process.argv.slice(-2);
 const request = JSON.parse(fs.readFileSync(requestFile, "utf8"));
+// What updateFancyWindow() adds once main has told the page its platform.
+const HUB_CLASSES = ["fancy-title-bar-mac", "fancy-side-bar-mac", ...(parseInt(os.release()) >= 27 ? ["fancy-side-bar-mac-27"] : [])]
+  .map((name) => JSON.stringify(name))
+  .join();
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 app.setPath("userData", `${out}.data`);
@@ -37,18 +42,18 @@ async function capture(win, name) {
 app.whenReady().then(async () => {
   await wait(request.settle);
   const records = [];
-  for (const theme of ["light", "dark", "system"]) {
+  for (const theme of request.captures ? ["light", "dark"] : ["light", "dark", "system"]) {
     nativeTheme.themeSource = theme;
     const parent = new BrowserWindow({ width: 1100, height: 650, show: false });
     for (const { name, page, options } of request.windows) {
       const owner = options.modal ? { parent } : {};
       const win = new BrowserWindow({ ...options, ...owner, show: false });
       await win.loadFile(path.join(request.www, page));
+      if (name === "Hub") await win.webContents.executeJavaScript(`document.body.classList.add(${HUB_CLASSES}), 0`);
       await wait(request.settle);
       records.push({ name, theme, options, chrome: await chrome(win) });
       if (request.captures) {
-        await capture(win, `${name}-${theme}-inactive`);
-        await capture(win, `${name}-${theme}-active`);
+        await capture(win, `${name}-${theme}-${process.env.ASRS_CHROME_ACTIVE ? "active" : "inactive"}`);
       }
       win.destroy();
     }

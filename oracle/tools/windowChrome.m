@@ -1,5 +1,7 @@
 // Loaded into Electron with DYLD_INSERT_LIBRARIES: a window given the represented file
-// "asrs-chrome <file>" writes its native properties to the file as JSON.
+// "asrs-chrome <file>" writes its native properties to the file as JSON, and one given "asrs-capture <file>" is
+// ordered in off the screen and captured with its frame. With ASRS_CHROME_ACTIVE every window looks
+// active, without the app being so.
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
 
@@ -93,33 +95,15 @@ static NSDictionary *chrome(NSWindow *w) {
   };
 }
 
-static NSWindow *looks_active;
-
-static void answer_yes(Class class, SEL selector) {
-  Method method = class_getInstanceMethod(class, selector);
-  if (method == NULL) return;
-  BOOL (*theirs)(id, SEL) = (BOOL (*)(id, SEL))method_getImplementation(method);
-  BOOL (^ours)(id) = ^BOOL(id self) {
-    BOOL forced = looks_active != nil && (self == looks_active || self == NSApp);
-    return forced || theirs(self, selector);
-  };
-  method_setImplementation(method, imp_implementationWithBlock(ours));
-}
-
-static void look_active(NSWindow *window) {
-  static dispatch_once_t once;
-  dispatch_once(&once, ^{
-    for (NSString *name in @[ @"isKeyWindow", @"isMainWindow", @"hasKeyAppearance", @"hasMainAppearance",
-                              @"_hasActiveAppearance", @"_hasKeyAppearance", @"_hasMainAppearance", @"_hasActiveControls" ]) {
-      answer_yes([NSWindow class], NSSelectorFromString(name));
-    }
-    answer_yes([NSApplication class], @selector(isActive));
-  });
-  looks_active = window;
-  NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
-  for (NSString *name in @[ NSWindowDidBecomeKeyNotification, NSWindowDidBecomeMainNotification ]) {
-    [center postNotificationName:name object:window];
+// AppKit reads these as it builds a window's frame.
+static void look_active(void) {
+  BOOL (^yes)(id) = ^BOOL(id self) { return YES; };
+  for (NSString *name in @[ @"isKeyWindow", @"isMainWindow", @"hasKeyAppearance", @"hasMainAppearance", @"_hasActiveAppearance",
+                            @"_hasKeyAppearance", @"_hasMainAppearance", @"_hasActiveControls" ]) {
+    Method method = class_getInstanceMethod([NSWindow class], NSSelectorFromString(name));
+    if (method != NULL) method_setImplementation(method, imp_implementationWithBlock(yes));
   }
+  method_setImplementation(class_getInstanceMethod([NSApplication class], @selector(isActive)), imp_implementationWithBlock(yes));
 }
 
 static void capture(NSWindow *w, NSString *file) {
@@ -128,8 +112,6 @@ static void capture(NSWindow *w, NSString *file) {
     [w orderWindow:NSWindowBelow relativeTo:0];
     [w setFrameOrigin:NSMakePoint(3000, 100)];
   }
-  looks_active = nil;
-  if ([file hasSuffix:@"-active.png"]) look_active(w);
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1500 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
     [NSTask launchedTaskWithLaunchPath:@"/usr/sbin/screencapture"
                              arguments:@[ @"-x", @"-o", [NSString stringWithFormat:@"-l%ld", (long)w.windowNumber], file ]];
@@ -153,6 +135,7 @@ static void hooked(NSWindow *self, SEL _cmd, NSString *file) {
 static void hook(void) {
   Method method = class_getInstanceMethod([NSWindow class], @selector(setRepresentedFilename:));
   set_file = (void (*)(id, SEL, NSString *))method_setImplementation(method, (IMP)hooked);
+  if (getenv("ASRS_CHROME_ACTIVE") != NULL) look_active();
 }
 
 __attribute__((constructor)) static void install(void) {

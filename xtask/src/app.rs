@@ -47,7 +47,8 @@ display.icc beside the captures; `normalize` converts those to sRGB.
   chrome [--captures <dir>]
                   (macOS) the native properties of upstream's windows in its Electron, on windows
                   that are never shown, in each theme, into parity/windows/macos-chrome.json. With
-                  --captures also each window with its frame, ordered in off the screen, as PNGs.
+                  --captures also each window with its frame, ordered in off the screen, as PNGs,
+                  looking active with ASRS_CHROME_ACTIVE=1, and the recording is left alone.
                   ASRS_ELECTRON names another build of Electron
   compare <dir> <dir>
                   two run labels or directories: window captures equal outside the recorded
@@ -753,6 +754,9 @@ fn chrome(paths: &Paths, captures: Option<&Path>) -> Result {
         .map_err(|e| format!("running Electron: {e}"))?;
     if !status.success() {
         return Err(format!("windowChrome.cjs: {status}"));
+    }
+    if !captures.is_empty() {
+        return Ok(());
     }
     let record = fs::read_to_string(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     let text = format!(
