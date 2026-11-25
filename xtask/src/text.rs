@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use asrs_parity::json::Json;
-use asrs_parity::pixel;
+use asrs_parity::pixel::{self, Rgba};
 use asrs_parity::vectors as parity_vectors;
 
 use crate::canvas::{platform, read_json, write};
@@ -368,6 +368,23 @@ fn rgb3(v: &Json) -> Option<[u8; 3]> {
     Some([c(0)?, c(1)?, c(2)?])
 }
 
+/// Electron rounds a window's content up on a display at another scale (Windows): the scene's page
+/// is at the top left.
+fn cropped(image: Rgba, width: u32, height: u32) -> Rgba {
+    let (width, height) = (image.width.min(width), image.height.min(height));
+    let rows = image.data.chunks(image.width as usize * 4);
+    let data = rows
+        .take(height as usize)
+        .flat_map(|row| &row[..width as usize * 4])
+        .copied()
+        .collect();
+    Rgba {
+        width,
+        height,
+        data,
+    }
+}
+
 fn hex_color(css: &str) -> Option<[u8; 3]> {
     let rgb = u32::from_str_radix(css.strip_prefix('#')?, 16).ok()?;
     (css.len() == 7).then_some([(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8])
@@ -425,10 +442,14 @@ fn run_port(paths: &Paths) -> Result {
                     _ => gates.failures.push(format!("{id}: not captured")),
                 }
             }
-            let reference = pixel::composite(
-                &pixel::read_png(&dir.join(format!("ref/{capture}.png")))?,
-                background,
-            );
+            let device: f64 = scale.parse().expect("scale");
+            let side = |key: &str| {
+                let css = scene.get(key).and_then(Json::as_f64).unwrap_or_default();
+                (css * device) as u32
+            };
+            let png = pixel::read_png(&dir.join(format!("ref/{capture}.png")))?;
+            let reference =
+                pixel::composite(&cropped(png, side("width"), side("height")), background);
             let mine = pixel::composite(
                 &pixel::read_png(&port.join(format!("{capture}.png")))?,
                 background,
@@ -448,7 +469,6 @@ fn run_port(paths: &Paths) -> Result {
                     })
                 })
                 .collect();
-            let device = scale.parse().expect("scale");
             let modes = antialias::compare(inks.iter(), &reference, &mine, device);
             for (rect, expected, actual) in &modes.differing {
                 gates.failures.push(format!(
