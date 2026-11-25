@@ -7,7 +7,8 @@
 
 #![deny(clippy::disallowed_methods)]
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 
 use crate::display::ImageDataSource;
 use crate::raster::CanvasError;
@@ -290,12 +291,13 @@ impl Heatmap {
         }
     }
 
-    /// The output canvas's premultiplied bitmap, which `drawImage` draws from.
-    pub fn pixmap(&self) -> Option<&Pixmap> {
-        self.heatmap
-            .as_ref()
-            .and_then(|h| h.renderer.canvas.raster.as_ref())
-            .map(Raster::pixmap)
+    /// The output canvas's premultiplied bitmap, which `drawImage` draws from; `None` while it
+    /// is blank, when drawing it changes nothing.
+    pub fn pixmap(&self) -> Option<&Arc<Pixmap>> {
+        match &self.heatmap.as_ref()?.renderer.canvas.bitmap {
+            Bitmap::Shared(pixmap) => Some(pixmap),
+            Bitmap::Blank | Bitmap::Raster(_) => None,
+        }
     }
 
     /// The output canvas's bitmap size, as the element's `width`/`height` report.
@@ -402,9 +404,10 @@ impl H337 {
 
     fn canvas_image_data(&mut self) -> Result<ImageData, CanvasError> {
         let (w, h) = self.renderer.canvas_size();
-        self.renderer
-            .canvas
-            .get_image_data(0.0, 0.0, w as f64, h as f64)
+        let canvas = &mut self.renderer.canvas;
+        let data = canvas.get_image_data(0.0, 0.0, w as f64, h as f64);
+        canvas.share();
+        data
     }
 
     fn shadow_image_data(&mut self) -> Result<ImageData, CanvasError> {
@@ -515,11 +518,20 @@ impl Store {
     }
 }
 
+/// The pixels of a [`Layer`]. A canvas no pixel was drawn on since its last whole clear has no
+/// memory.
+enum Bitmap {
+    Blank,
+    Raster(Box<Raster<'static>>),
+    Shared(Arc<Pixmap>),
+}
+
 /// A canvas element plus its 2d context: a persistent `Raster`, or the all-no-op
 /// behavior a zero-sized canvas bitmap exhibits (draws do nothing, `getImageData`
 /// still validates its arguments and returns transparent pixels).
 struct Layer {
-    raster: Option<Raster<'static>>,
+    bitmap: Bitmap,
+    images: HashMap<String, Arc<Pixmap>>,
     width: u32,
     height: u32,
 }
@@ -529,22 +541,77 @@ const OUT_OF_MEMORY: CanvasError = CanvasError::Range("Out of memory at ImageDat
 impl Layer {
     fn new(width: u32, height: u32) -> Layer {
         Layer {
-            raster: Raster::new(width, height),
+            bitmap: Bitmap::Blank,
+            images: HashMap::new(),
             width,
             height,
         }
     }
 
+    fn raster(&mut self) -> Option<&mut Raster<'static>> {
+        if !matches!(self.bitmap, Bitmap::Raster(_)) {
+            let mut raster = match std::mem::replace(&mut self.bitmap, Bitmap::Blank) {
+                Bitmap::Shared(pixmap) => Raster::over(Arc::unwrap_or_clone(pixmap)),
+                _ => Raster::new(self.width, self.height)?,
+            };
+            for (id, pixmap) in &self.images {
+                raster.add_image(id, pixmap.clone());
+            }
+            self.bitmap = Bitmap::Raster(Box::new(raster));
+        }
+        match &mut self.bitmap {
+            Bitmap::Raster(raster) => Some(raster),
+            _ => None,
+        }
+    }
+
+    /// Lets others draw from the bitmap. Drawing on the canvas again leaves what they hold as
+    /// it was.
+    fn share(&mut self) {
+        self.bitmap = match std::mem::replace(&mut self.bitmap, Bitmap::Blank) {
+            Bitmap::Raster(raster) => Bitmap::Shared(Arc::new(raster.into_pixmap())),
+            other => other,
+        };
+    }
+
     fn apply(&mut self, call: &Call) {
-        if let Some(raster) = self.raster.as_mut() {
+        if let Some(raster) = self.raster() {
             raster.apply(call);
         }
     }
 
-    fn add_image(&mut self, id: &str, pixmap: &Pixmap) {
-        if let Some(raster) = self.raster.as_mut() {
+    fn covered_by(&self, width: f64, height: f64) -> bool {
+        width >= f64::from(self.width) && height >= f64::from(self.height)
+    }
+
+    /// `clearRect(0, 0, width, height)`.
+    fn clear(&mut self, width: f64, height: f64) {
+        let drop = match &self.bitmap {
+            Bitmap::Blank => return,
+            Bitmap::Raster(_) => false,
+            Bitmap::Shared(pixmap) => Arc::strong_count(pixmap) > 1,
+        };
+        if drop && self.covered_by(width, height) {
+            self.bitmap = Bitmap::Blank;
+        } else {
+            self.apply(&Call::ClearRect(0.0, 0.0, width, height));
+        }
+    }
+
+    /// [`Layer::clear`] of a canvas nothing is about to be drawn on.
+    fn empty(&mut self, width: f64, height: f64) {
+        if self.covered_by(width, height) {
+            self.bitmap = Bitmap::Blank;
+        } else {
+            self.clear(width, height);
+        }
+    }
+
+    fn add_image(&mut self, id: &str, pixmap: Arc<Pixmap>) {
+        if let Bitmap::Raster(raster) = &mut self.bitmap {
             raster.add_image(id, pixmap.clone());
         }
+        self.images.insert(id.to_owned(), pixmap);
     }
 
     /// `getImageData`, propagating the exception upstream throws instead of recording it.
@@ -555,7 +622,7 @@ impl Layer {
         sw: f64,
         sh: f64,
     ) -> Result<ImageData, CanvasError> {
-        match self.raster.as_mut() {
+        match self.raster() {
             Some(raster) => {
                 let call = Call::GetImageData {
                     sx,
@@ -569,7 +636,7 @@ impl Layer {
                 if let Some((_, e)) = raster.errors().get(errors) {
                     return Err(e.clone());
                 }
-                Ok(raster.register(GET_IMAGE_REGISTER).cloned().unwrap())
+                Ok(raster.take_register(GET_IMAGE_REGISTER).unwrap())
             }
             None => {
                 let (mut x, mut y, mut w, mut h) =
@@ -634,7 +701,7 @@ struct Renderer {
     width: f64,
     height: f64,
     palette: Vec<u8>,
-    templates: HashMap<String, Option<Pixmap>>,
+    templates: HashSet<String>,
     render_boundaries: [f64; 4],
     blur: f64,
     opacity: f64,
@@ -652,7 +719,7 @@ impl Renderer {
             width: config.width,
             height: config.height,
             palette: color_palette(),
-            templates: HashMap::new(),
+            templates: HashSet::new(),
             render_boundaries: [10000.0, 10000.0, 0.0, 0.0],
             blur: 0.0,
             opacity: 0.0,
@@ -683,15 +750,20 @@ impl Renderer {
     }
 
     fn render_all(&mut self, data: &InternalData<'_>) -> Result<(), CanvasError> {
-        self.shadow
-            .apply(&Call::ClearRect(0.0, 0.0, self.width, self.height));
-        self.canvas
-            .apply(&Call::ClearRect(0.0, 0.0, self.width, self.height));
-        if array_length(data.data) > 0 {
-            self.draw_alpha(&prepare_data(data))?;
-            self.colorize()?;
+        let (width, height) = (self.width, self.height);
+        if array_length(data.data) == 0 {
+            self.shadow.empty(width, height);
+            self.canvas.empty(width, height);
+            self.canvas.share();
+            return Ok(());
         }
-        Ok(())
+        self.shadow.clear(width, height);
+        self.canvas.clear(width, height);
+        let drawn = self
+            .draw_alpha(&prepare_data(data))
+            .and_then(|()| self.colorize());
+        self.canvas.share();
+        drawn
     }
 
     fn draw_alpha(&mut self, data: &Prepared<'_>) -> Result<(), CanvasError> {
@@ -708,12 +780,11 @@ impl Renderer {
             let rect_y = y - radius;
 
             let key = number::to_string(radius);
-            if !self.templates.contains_key(&key) {
-                let template = point_template(radius, blur);
-                if let Some(pixmap) = template.as_ref() {
-                    self.shadow.add_image(&key, pixmap);
+            if !self.templates.contains(&key) {
+                if let Some(pixmap) = point_template(radius, blur) {
+                    self.shadow.add_image(&key, Arc::new(pixmap));
                 }
-                self.templates.insert(key.clone(), template);
+                self.templates.insert(key.clone());
             }
             let alpha = (value - min) / (max - min);
             self.shadow

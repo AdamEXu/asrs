@@ -554,8 +554,14 @@ use asrs_js::number::to_int32;
 
 impl<'a> Raster<'a> {
     pub fn new(width: u32, height: u32) -> Option<Raster<'a>> {
-        Some(Raster {
-            pixmap: Pixmap::new(width, height)?,
+        Some(Raster::over(Pixmap::new(width, height)?))
+    }
+
+    /// A canvas showing `pixmap` (premultiplied), its context's state fresh.
+    pub fn over(pixmap: Pixmap) -> Raster<'a> {
+        let (width, height) = (pixmap.width(), pixmap.height());
+        Raster {
+            pixmap,
             state: State::default(),
             stack: Vec::new(),
             path: Path::new(),
@@ -569,7 +575,7 @@ impl<'a> Raster<'a> {
             unflushed: false,
             shades: ShadeCache::default(),
             deferred: Vec::new(),
-        })
+        }
     }
 
     /// Reuses the images an earlier frame of the same canvas resampled.
@@ -627,6 +633,10 @@ impl<'a> Raster<'a> {
 
     pub fn register(&self, name: &str) -> Option<&ImageData> {
         self.registers.get(name)
+    }
+
+    pub fn take_register(&mut self, name: &str) -> Option<ImageData> {
+        self.registers.remove(name)
     }
 
     pub fn pixmap(&self) -> &Pixmap {
@@ -842,9 +852,13 @@ impl<'a> Raster<'a> {
                 self.registers.insert(register.clone(), data);
             }
             Call::PutImageData { data, dx, dy } => {
+                let registered;
                 let image = match data {
-                    ImageDataSource::Register(name) => self.registers.get(name).cloned(),
-                    ImageDataSource::Inline(image) => Some(image.clone()),
+                    ImageDataSource::Register(name) => {
+                        registered = self.registers.get(name).cloned();
+                        registered.as_ref()
+                    }
+                    ImageDataSource::Inline(image) => Some(image),
                 };
                 if let Some(image) = image {
                     let (x, y) = (i64::from(to_int32(*dx)), i64::from(to_int32(*dy)));
@@ -853,7 +867,7 @@ impl<'a> Raster<'a> {
                         && x + i64::from(image.width) >= i64::from(self.pixmap.width())
                         && y + i64::from(image.height) >= i64::from(self.pixmap.height());
                     self.flush();
-                    pixels::write_rect(&mut self.pixmap, &image, x, y);
+                    pixels::write_rect(&mut self.pixmap, image, x, y);
                 }
             }
         }

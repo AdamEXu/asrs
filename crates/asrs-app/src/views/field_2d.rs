@@ -395,7 +395,7 @@ fn mouse_button(button: MouseButton) -> f64 {
 struct Painted {
     frame: Canvas2d,
     style: Option<CanvasStyle>,
-    heatmap: Option<Pixmap>,
+    heatmap: Option<Arc<Pixmap>>,
 }
 
 /// What a settings control does to its controller.
@@ -567,7 +567,7 @@ impl<H: FrameHost> HubFrame<H> {
                 images.push((path.to_string_lossy(), image.pixmap.clone()));
             }
             if let Some(heatmap) = painted.heatmap {
-                images.push((HEATMAP_IMAGE.to_owned(), Arc::new(heatmap)));
+                images.push((HEATMAP_IMAGE.to_owned(), heatmap));
             }
             let (raster, shades) = (&mut tab.raster, &mut tab.shades);
             tab.bitmap = rasterize(&painted.frame, &images, raster, shades).map(Arc::new);
