@@ -255,3 +255,20 @@ fn merge_with_nonzero_offset_copies_and_shifts() {
     assert!(!Arc::ptr_eq(&merged.timestamps, &original.timestamps));
     assert_eq!(merged.timestamps.as_slice(), &[100.0, 101.0]);
 }
+
+#[test]
+fn writing_a_merged_field_leaves_the_shared_source_column_alone() {
+    let (source, key) = number_log();
+    let mut target = Log::new(false);
+    let mut realm = JsRealm::new(Box::new(SetRng::new(vec![0.5])));
+    target
+        .merge_with(&source, &JsString::new(), &mut realm)
+        .unwrap();
+    target.put_number(&key, 0.5, 9.0).unwrap();
+    let source_field = source.get_field(&key).unwrap();
+    assert_eq!(source_field.get_timestamps(), &[0.0, 1.0]);
+    assert_eq!(source_field.column::<f64>().unwrap(), &[1.0, 2.0]);
+    let merged = target.get_field(&key).unwrap();
+    assert_eq!(merged.get_timestamps(), &[0.0, 0.5, 1.0]);
+    assert_eq!(merged.column::<f64>().unwrap(), &[1.0, 9.0, 2.0]);
+}
