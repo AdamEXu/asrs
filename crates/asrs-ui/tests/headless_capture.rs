@@ -65,6 +65,28 @@ fn has_text(shot: &Capture, scale: u32) -> bool {
     })
 }
 
+/// Scrollbars follow the system's style while the app runs.
+#[cfg(target_os = "macos")]
+fn scrollbar_preferences(headless: &mut HeadlessCapture) {
+    use asrs_ui::scroll::{Style, set_style, style, use_system_style};
+
+    let cx = headless.context();
+    let system = cx.update(|cx| {
+        use_system_style(cx);
+        style(cx)
+    });
+    let other = match system {
+        Style::Overlay => Style::Classic,
+        _ => Style::Overlay,
+    };
+    cx.update(|cx| set_style(other, false, cx));
+    cx.run_until_parked();
+    assert_eq!(cx.update(|cx| style(cx)), other);
+    asrs_ui::platform::probe::post_scroller_style_change();
+    cx.run_until_parked();
+    assert_eq!(cx.update(|cx| style(cx)), system);
+}
+
 fn main() {
     if asrs_parity::ci::skip_in_ci("headless capture", "a GPU") {
         return;
@@ -92,6 +114,9 @@ fn run() {
     let handle = window.into();
     assert_eq!(capture.capture(handle).expect("capture"), one);
     assert_eq!(capture.capture(handle).expect("capture"), one);
+
+    #[cfg(target_os = "macos")]
+    scrollbar_preferences(&mut capture);
 
     capture.set_scale_factor(handle, 2.0).expect("scale 2");
     assert_eq!(capture.capture(handle).expect("capture"), two);

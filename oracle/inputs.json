@@ -882,6 +882,15 @@
     "src/environment.ts",
     "src/robotServer.ts"
   ],
+  "scrollers": [
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/scrollers.ts",
+    "src/shims.ts"
+  ],
+  "scrollersMain": [
+    "src/scrollersMain.ts"
+  ],
   "selectKeys": [
     "src/dom/fixtureFile.ts",
     "src/environment.ts",

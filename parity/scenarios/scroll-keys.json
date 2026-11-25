@@ -1,0 +1,364 @@
+{
+  "about": "Interaction (#325): the keys that scroll, after a click in the table, the sidebar and the timeline's overlay",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table",
+              "controller": [
+                "/Drive/LeftVelocity",
+                "/Drive/ModuleSpeeds",
+                "/DriverStation/Enabled",
+                "/Missing/Field/WithALongName",
+                "/Odometry/Robot3d/rotation/q/w"
+              ],
+              "controllerUUID": "table000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 103
+    },
+    {
+      "mouse": "click",
+      "x": 700,
+      "y": 103
+    },
+    {
+      "mouse": "move",
+      "x": 640,
+      "y": 630
+    },
+    {
+      "key": "Down"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "key": "Down"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "key": "Down"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "table-down",
+      "probes": [
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th"
+      ]
+    },
+    {
+      "key": "PageDown"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "table-page",
+      "probes": [
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th"
+      ]
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "alt"
+      ]
+    },
+    {
+      "wait": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "table-option",
+      "probes": [
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th"
+      ]
+    },
+    {
+      "key": "Right"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "key": "Right"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "table-right",
+      "probes": [
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th"
+      ]
+    },
+    {
+      "key": "End"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "table-end",
+      "probes": [
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th"
+      ]
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "key": "PageUp"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "table-up",
+      "probes": [
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th"
+      ]
+    },
+    {
+      "key": "Home"
+    },
+    {
+      "wait": 400
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "table-home",
+      "probes": [
+        ".renderer-content",
+        "table.data-table",
+        "table.data-table th"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 60,
+      "y": 420
+    },
+    {
+      "mouse": "click",
+      "x": 60,
+      "y": 420
+    },
+    {
+      "key": "PageDown"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "side-bar-page",
+      "probes": [
+        ".side-bar"
+      ]
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "side-bar-up",
+      "probes": [
+        ".side-bar"
+      ]
+    },
+    {
+      "key": "End"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "side-bar-end",
+      "probes": [
+        ".side-bar"
+      ]
+    },
+    {
+      "key": "Home"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Graph",
+              "controller": {
+                "leftSources": [],
+                "rightSources": [],
+                "discreteSources": [],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 400
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 70
+    },
+    {
+      "mouse": "click",
+      "x": 700,
+      "y": 70
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 71
+    },
+    {
+      "key": "Down"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "timeline-down",
+      "probes": [
+        ".timeline"
+      ]
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "timeline-up",
+      "probes": [
+        ".timeline"
+      ]
+    }
+  ]
+}

@@ -182,15 +182,52 @@ function measure(fonts: string[], strings: string[], aligns: string[], baselines
   return out;
 }
 
+/** Makes every piece of text of a page the text box of its parent element. */
+function tagTextBoxes() {
+  const used = new Map<string, number>();
+  const tag = (el: HTMLElement) => {
+    const name = [el.localName, ...Array.from(el.classList)].join(".");
+    const index = used.get(name) ?? 0;
+    used.set(name, index + 1);
+    el.dataset.row = `${name}/${index}`;
+  };
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const range = document.createRange();
+  while (walker.nextNode()) {
+    const node = walker.currentNode;
+    const parent = node.parentElement!;
+    if (node.nodeValue!.trim() === "" || parent.dataset.row !== undefined) continue;
+    range.selectNodeContents(node);
+    if (Array.from(range.getClientRects()).some((r) => r.width > 0 && r.height > 0)) tag(parent);
+  }
+  for (const input of Array.from(document.querySelectorAll("input"))) {
+    if (input.placeholder !== "" && input.getClientRects().length > 0) tag(input);
+  }
+}
+
+/** `rect` inside every ancestor that clips its contents. */
+function clipped(rect: DOMRect, el: HTMLElement): DOMRect {
+  let [left, top, right, bottom] = [rect.left, rect.top, rect.right, rect.bottom];
+  for (let at: HTMLElement | null = el; at !== null && at !== document.body; at = at.parentElement) {
+    const style = getComputedStyle(at);
+    if (style.overflow === "visible" && style.maskImage === "none") continue;
+    const clip = at.getBoundingClientRect();
+    [left, top] = [Math.max(left, clip.left), Math.max(top, clip.top)];
+    [right, bottom] = [Math.min(right, clip.right), Math.min(bottom, clip.bottom)];
+  }
+  return new DOMRect(left, top, Math.max(right - left, 0), Math.max(bottom - top, 0));
+}
+
 function domBoxes() {
+  const tagged = "textBoxes" in document.body.dataset;
+  if (tagged) tagTextBoxes();
   const rows: unknown[] = [];
   for (const el of Array.from(document.querySelectorAll<HTMLElement>("[data-row]"))) {
-    const text = el.firstChild;
-    const r = el.getBoundingClientRect();
+    const text = Array.from(el.childNodes).find((n) => n.nodeType === Node.TEXT_NODE && n.nodeValue!.trim() !== "");
     const chars: number[][] = [];
-    if (text !== null && text.nodeType === Node.TEXT_NODE) {
+    const range = document.createRange();
+    if (text !== undefined) {
       const value = text.nodeValue ?? "";
-      const range = document.createRange();
       for (let i = 0; i < value.length; ) {
         const end = i + (value.codePointAt(i)! > 0xffff ? 2 : 1);
         range.setStart(text, i);
@@ -199,7 +236,9 @@ function domBoxes() {
         chars.push([i, b.x, b.y, b.width, b.height]);
         i = end;
       }
+      range.selectNodeContents(text);
     }
+    const r = tagged && text !== undefined ? clipped(range.getBoundingClientRect(), el) : el.getBoundingClientRect();
     rows.push({ id: el.dataset.row, rect: [r.x, r.y, r.width, r.height], chars });
   }
   const patches = Array.from(document.querySelectorAll<HTMLElement>("[data-patch]")).map((el) => {

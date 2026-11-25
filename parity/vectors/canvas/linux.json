@@ -173,6 +173,228 @@
       "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf": "93cdc4ee9aa40e2afceecc63da0ca05ec7aab4bec991ece51a6b52389f48a477"
     }
   },
+  "dom-stock": {
+    "electron": "39.2.7",
+    "chrome": "142.0.7444.235",
+    "arch": "x64",
+    "osRelease": "7.2.15-1-omarchy",
+    "profile": "stock",
+    "generator": "175f0d5e4374c3e2",
+    "files": [
+      {
+        "file": "dom-hub-dark@1x.json",
+        "content": "2b4d88e1ccfb0536"
+      },
+      {
+        "file": "dom-hub-dark@1x.png",
+        "content": "69cd1b9ea2cadc0a"
+      },
+      {
+        "file": "dom-hub-dark@2x.json",
+        "content": "104cb3afe87dc62e"
+      },
+      {
+        "file": "dom-hub-dark@2x.png",
+        "content": "ce91cea6b219fe12"
+      },
+      {
+        "file": "dom-hub-light@1x.json",
+        "content": "26f6c8892bb34690"
+      },
+      {
+        "file": "dom-hub-light@1x.png",
+        "content": "abcf006481e8e303"
+      },
+      {
+        "file": "dom-hub-light@2x.json",
+        "content": "e2d1338887f0ce85"
+      },
+      {
+        "file": "dom-hub-light@2x.png",
+        "content": "f3a0f92ca307d900"
+      },
+      {
+        "file": "dom-lcd-dark@1x.json",
+        "content": "2e74a0ff897cfdde"
+      },
+      {
+        "file": "dom-lcd-dark@1x.png",
+        "content": "3b397434762e43ca"
+      },
+      {
+        "file": "dom-lcd-dark@2x.json",
+        "content": "a63eb93504f53cb5"
+      },
+      {
+        "file": "dom-lcd-dark@2x.png",
+        "content": "908e76dc8a46dd53"
+      },
+      {
+        "file": "dom-lcd-light@1x.json",
+        "content": "cc63919794fb33e8"
+      },
+      {
+        "file": "dom-lcd-light@1x.png",
+        "content": "02581b7639fad80d"
+      },
+      {
+        "file": "dom-lcd-light@2x.json",
+        "content": "e650bf0eae7402d7"
+      },
+      {
+        "file": "dom-lcd-light@2x.png",
+        "content": "688947a20b853bac"
+      },
+      {
+        "file": "dom-text-dark@1x.json",
+        "content": "3bdde1c079246e55"
+      },
+      {
+        "file": "dom-text-dark@1x.png",
+        "content": "2c8bbb9ff3410420"
+      },
+      {
+        "file": "dom-text-dark@2x.json",
+        "content": "86f2d9bdff84cb9a"
+      },
+      {
+        "file": "dom-text-dark@2x.png",
+        "content": "659c561837b53474"
+      },
+      {
+        "file": "dom-text-light@1x.json",
+        "content": "5e4c4d674abf7524"
+      },
+      {
+        "file": "dom-text-light@1x.png",
+        "content": "45399fc6817d8096"
+      },
+      {
+        "file": "dom-text-light@2x.json",
+        "content": "a9f94abd5a4f905e"
+      },
+      {
+        "file": "dom-text-light@2x.png",
+        "content": "213506e8658402f7"
+      }
+    ]
+  },
+  "dom-gray": {
+    "electron": "39.2.7",
+    "chrome": "142.0.7444.235",
+    "arch": "x64",
+    "osRelease": "7.2.15-1-omarchy",
+    "profile": "gray",
+    "generator": "175f0d5e4374c3e2",
+    "files": [
+      {
+        "file": "dom-hub-dark@1x.json",
+        "content": "af0500bd9892813a"
+      },
+      {
+        "file": "dom-hub-dark@1x.png",
+        "content": "de2afe2b6c61bc96"
+      },
+      {
+        "file": "dom-hub-dark@2x.json",
+        "content": "7d74049b5d892e52"
+      },
+      {
+        "file": "dom-hub-dark@2x.png",
+        "content": "713ca2611e7cff2d"
+      },
+      {
+        "file": "dom-hub-light@1x.json",
+        "content": "84b989b36207724c"
+      },
+      {
+        "file": "dom-hub-light@1x.png",
+        "content": "6f2dd540481dd33d"
+      },
+      {
+        "file": "dom-hub-light@2x.json",
+        "content": "b396835788b0bec9"
+      },
+      {
+        "file": "dom-hub-light@2x.png",
+        "content": "2bba0de138ad6354"
+      },
+      {
+        "file": "dom-lcd-dark@1x.json",
+        "content": "24cf9e0ad8ec235e"
+      },
+      {
+        "file": "dom-lcd-dark@1x.png",
+        "content": "323d708890b57ac5"
+      },
+      {
+        "file": "dom-lcd-dark@2x.json",
+        "content": "e28d3dc6e0c806e9"
+      },
+      {
+        "file": "dom-lcd-dark@2x.png",
+        "content": "e71ab31c5fa0f649"
+      },
+      {
+        "file": "dom-lcd-light@1x.json",
+        "content": "f4a124bdb2061be4"
+      },
+      {
+        "file": "dom-lcd-light@1x.png",
+        "content": "2eb3b58ae0038869"
+      },
+      {
+        "file": "dom-lcd-light@2x.json",
+        "content": "6ff954c681cce72b"
+      },
+      {
+        "file": "dom-lcd-light@2x.png",
+        "content": "d6374fc784017f79"
+      },
+      {
+        "file": "dom-text-dark@1x.json",
+        "content": "89ea6038a94cd389"
+      },
+      {
+        "file": "dom-text-dark@1x.png",
+        "content": "9b85d03301a8224a"
+      },
+      {
+        "file": "dom-text-dark@2x.json",
+        "content": "706079a358e371ee"
+      },
+      {
+        "file": "dom-text-dark@2x.png",
+        "content": "22f248b20aad289e"
+      },
+      {
+        "file": "dom-text-light@1x.json",
+        "content": "1e27ede2027ccb04"
+      },
+      {
+        "file": "dom-text-light@1x.png",
+        "content": "83e3fb54631be34f"
+      },
+      {
+        "file": "dom-text-light@2x.json",
+        "content": "3d993cde866cae62"
+      },
+      {
+        "file": "dom-text-light@2x.png",
+        "content": "1f25597e4f39659e"
+      }
+    ]
+  },
+  "lcdLut": {
+    "electron": "39.2.7",
+    "chrome": "142.0.7444.235",
+    "arch": "x64",
+    "osRelease": "7.2.15-1-omarchy",
+    "profile": "stock",
+    "generator": "175f0d5e4374c3e2",
+    "file": "lut-linux-lcd.bin",
+    "content": "acbb232381872fe3"
+  },
   "field3d": {
     "x86_64": {
       "swiftshader": {
