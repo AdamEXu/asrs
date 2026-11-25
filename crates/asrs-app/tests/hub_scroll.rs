@@ -37,6 +37,8 @@ const HOST: &str = if cfg!(target_os = "macos") {
     "linux-x86_64"
 };
 const SETTLE_FRAMES: usize = 40;
+/// Enough for Blink's longest smooth scroll of the settings, which go 25 px at most.
+const SETTINGS_FRAMES: usize = 20;
 const ROWS: usize = 400;
 /// The `scrollTop` the recorded keys scroll from.
 const RECORDED_FROM: f64 = 700.0;
@@ -93,17 +95,17 @@ impl Page<'_> {
     }
 
     fn press(&mut self, key: &'static str) {
-        self.press_stroke(Keystroke::parse(key).expect("a keystroke"));
+        self.press_stroke(Keystroke::parse(key).expect("a keystroke"), SETTLE_FRAMES);
     }
 
-    fn press_stroke(&mut self, keystroke: Keystroke) {
+    fn press_stroke(&mut self, keystroke: Keystroke, frames: usize) {
         self.dispatch(PlatformInput::KeyDown(KeyDownEvent {
             keystroke: keystroke.clone(),
             is_held: false,
             prefer_character_input: false,
         }));
         self.dispatch(PlatformInput::KeyUp(KeyUpEvent { keystroke }));
-        self.frames(SETTLE_FRAMES);
+        self.frames(frames);
     }
 
     fn move_to(&mut self, [x, y]: [f64; 2], pressed_button: Option<MouseButton>) {
@@ -431,7 +433,7 @@ fn settings_op(page: &mut Page<'_>, op: &[Json], origin: [f64; 2]) {
                 delta: ScrollDelta::Pixels(point(px(-at(3) as f32), px(-at(4) as f32))),
                 ..ScrollEvent::default()
             }));
-            page.frames(SETTLE_FRAMES);
+            page.frames(2);
         }
         "click" => page.click([at(1) + origin[0], at(2) + origin[1]]),
         "key" => {
@@ -445,7 +447,8 @@ fn settings_op(page: &mut Page<'_>, op: &[Json], origin: [f64; 2]) {
                 ..Keystroke::default()
             };
             keystroke.modifiers.shift = shift;
-            page.press_stroke(keystroke);
+            let smooth = keystroke.key != "tab";
+            page.press_stroke(keystroke, if smooth { SETTINGS_FRAMES } else { 2 });
         }
         other => panic!("op {other}"),
     }
