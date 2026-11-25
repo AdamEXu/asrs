@@ -404,7 +404,9 @@ impl MainProcess {
                 Self::open_satellite(cx, config);
             }
             HubEvent::SatelliteUpdate(update) => {
-                let hub = Self::hub_windows(cx).into_iter().find(|(hub, _)| *hub == id);
+                let hub = Self::hub_windows(cx)
+                    .into_iter()
+                    .find(|(hub, _)| *hub == id);
                 let hub = hub.and_then(|(_, hub)| hub.upgrade());
                 let moving = hub.is_none_or(|hub| hub.read(cx).moving());
                 let uuid = ops::to_string(&update.uuid).to_string_lossy();

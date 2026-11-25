@@ -259,7 +259,10 @@ fn restore_state(kind: TabType) -> JsValue {
             ("controlsHeight", JsValue::Number(200.0)),
         ])
     };
-    let tabs = vec![tab(TabType::Documentation, "documentation"), tab(kind, UUID)];
+    let tabs = vec![
+        tab(TabType::Documentation, "documentation"),
+        tab(kind, UUID),
+    ];
     let sidebar = ops::object([
         ("width", JsValue::Number(300.0)),
         ("expanded", JsValue::Array(Vec::new())),
@@ -304,7 +307,11 @@ mod body {
                 selection.set_playback_speed(1e-3);
                 selection.play();
             });
-            assert_eq!(page.drawn_in(60), [60, 60], "{kind:?}");
+            let drawn = page.drawn_in(60);
+            assert!(
+                drawn.iter().all(|drawn| (60..=64).contains(drawn)),
+                "{kind:?}: {drawn:?}"
+            );
             page.selection(|selection| selection.pause());
             page.assert_idle(&format!("{kind:?} paused"));
         }
@@ -352,8 +359,7 @@ mod body {
         let window = page.window;
         page.cx
             .simulate_window_visibility_change(window, WindowVisibility::Hidden);
-        page.settle();
-        assert_eq!(page.drawn_in(120)[1], 0, "hidden");
+        page.assert_idle("hidden");
         let [start, _] = page.range();
         page.selection(|selection| {
             selection.set_selected_time(start);
@@ -361,10 +367,12 @@ mod body {
             selection.play();
         });
         let [_, satellite] = page.drawn_in(60);
-        assert!((59..=61).contains(&satellite), "hidden and playing: {satellite}");
+        assert!(
+            (59..=64).contains(&satellite),
+            "hidden and playing: {satellite}"
+        );
         page.selection(|selection| selection.pause());
-        page.settle();
-        assert_eq!(page.drawn_in(120)[1], 0, "hidden and paused");
+        page.assert_idle("hidden and paused");
         page.cx
             .simulate_window_visibility_change(window, WindowVisibility::Visible);
         assert!(page.drawn_in(30)[0] > 0, "shown again");

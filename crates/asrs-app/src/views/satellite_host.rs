@@ -143,8 +143,7 @@ impl FrameHost for SatelliteHost {
     }
 
     fn end_draw(&mut self, window: &Window, cx: &mut App) {
-        self.satellite
-            .update(cx, |page, _| page.end_draw(window));
+        self.satellite.update(cx, |page, _| page.end_draw(window));
     }
 
     fn touched(&mut self, cx: &mut App) {

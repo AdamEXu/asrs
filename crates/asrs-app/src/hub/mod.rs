@@ -22,6 +22,7 @@ use asrs_hub::hub::{HubHost, HubModel, HubView, LoadingGlow};
 use asrs_hub::tabs::SatelliteUpdate;
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng, SystemClock, V8MathRandom};
+use asrs_js::value::JsValue;
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_ui::gpui::{App, BackgroundExecutor, Context, EventEmitter, Window};
@@ -135,6 +136,7 @@ pub struct Hub {
     loading: LoadingGlow,
     repaint: Repaint,
     moving: bool,
+    table_ranges: Vec<JsValue>,
 }
 
 impl EventEmitter<HubEvent> for Hub {}
@@ -163,6 +165,7 @@ impl Hub {
             host,
             repaint: Repaint::default(),
             moving: true,
+            table_ranges: Vec::new(),
         };
         hub.repaint.changed();
         hub.after_task(cx);
@@ -189,7 +192,32 @@ impl Hub {
         if message.name == MainToHub::HistoricalData {
             return;
         }
+        if self.repeats_table_range(&message) {
+            self.host.begin_task();
+            self.run_quietly(cx, |model, host| model.handle_main_message(&message, host));
+            return;
+        }
         self.task(cx, |model, host| model.handle_main_message(&message, host));
+    }
+
+    /// Whether `message` is the range a satellite's table sent last: it sends one every frame.
+    fn repeats_table_range(&mut self, message: &NamedMessage<MainToHub>) -> bool {
+        if message.name != MainToHub::AddTableRange {
+            return false;
+        }
+        let table = |data: &JsValue| data.get("rendererUUID").cloned();
+        let uuid = table(&message.data);
+        match self.table_ranges.iter_mut().find(|r| table(r) == uuid) {
+            Some(range) if *range == message.data => true,
+            Some(range) => {
+                *range = message.data.clone();
+                false
+            }
+            None => {
+                self.table_ranges.push(message.data.clone());
+                false
+            }
+        }
     }
 
     /// Runs `f` as one page task, such as an input handler a view dispatches into the
