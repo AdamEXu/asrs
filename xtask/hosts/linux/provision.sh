@@ -2,6 +2,12 @@
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
+# It changes the machine's boot, login and desktop.
+if [[ $(. /etc/os-release && echo "$ID-$VERSION_ID") != ubuntu-24.04 || $(id -un) != admin ]]; then
+  echo 'this provisions the asrs-linux VM only' >&2
+  exit 1
+fi
+
 # An upgrade can change the libraries and the kernel the references were recorded with. One that is
 # already running is left to finish: stopping it leaves half-installed packages.
 sudo systemctl mask -q --now apt-daily.timer apt-daily-upgrade.timer

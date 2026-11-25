@@ -15,11 +15,13 @@ trap 'for pid in "${pids[@]}"; do kill "$pid" 2>/dev/null || true; done; wait' E
 # the socket of a desktop's Xwayland.
 display=:90
 socket=/tmp/.X11-unix/X${display#:}
-[[ ! -e $socket ]] || { echo "$socket exists" >&2; exit 1; }
+lock=/tmp/.X${display#:}-lock
+[[ ! -e $socket && ! -L $socket ]] || { echo "$socket exists" >&2; exit 1; }
 Xvfb "$display" -screen 0 2880x1800x24 -dpi 96 -nolisten tcp >/dev/null 2>&1 9>&- &
 xvfb=$!
 pids+=("$xvfb")
-until [[ -S $socket ]]; do
+# The socket alone may be another server's that took the number since the check above.
+until [[ -S $socket && $(tr -d ' ' <"$lock" 2>/dev/null) == "$xvfb" ]]; do
   kill -0 "$xvfb" 2>/dev/null || { echo 'Xvfb did not start' >&2; exit 1; }
   sleep 0.1
 done
@@ -30,7 +32,11 @@ unset WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE SWAYSOCK XAUTHORITY
 unset GDK_SCALE GDK_DPI_SCALE
 
 if command -v xfwm4 >/dev/null; then
-  env -u DBUS_SESSION_BUS_ADDRESS dbus-run-session -- xfwm4 --compositor=off >/dev/null 2>&1 9>&- &
+  # xfwm4 writes its workspaces to xfconf, which would be the desktop's own configuration.
+  config=$HOME/.cache/asrs-display
+  mkdir -p "$config"
+  env -u DBUS_SESSION_BUS_ADDRESS XDG_CONFIG_HOME="$config" \
+    dbus-run-session -- xfwm4 --compositor=off >/dev/null 2>&1 9>&- &
   pids+=("$!")
   for _ in {1..100}; do
     xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q 'window id' && break
