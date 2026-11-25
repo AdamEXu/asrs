@@ -74,7 +74,15 @@ impl Page<'_> {
             .expect("window");
             cx.run_until_parked();
         }
-        self.headless.capture(self.window.into()).expect("render");
+        self.draw();
+    }
+
+    /// Lays out and paints the page, without rasterizing it.
+    pub fn draw(&mut self) {
+        let cx = self.headless.context();
+        cx.update_window(self.window.into(), |_, window, _| window.refresh())
+            .expect("window");
+        cx.run_until_parked();
     }
 
     pub fn model<R>(&mut self, f: impl FnOnce(&mut HubModel) -> R) -> R {

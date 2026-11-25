@@ -148,8 +148,7 @@ impl Page<'_> {
         self.headless
             .context()
             .update(|cx| cx.set_global(Recorder::default()));
-        let window = self.window.into();
-        self.headless.capture(window).expect("render");
+        self.draw();
         self.headless
             .context()
             .update(|cx| std::mem::take(cx.global_mut::<Recorder>()))
