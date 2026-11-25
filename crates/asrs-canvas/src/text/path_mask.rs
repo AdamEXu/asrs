@@ -8,7 +8,7 @@ use crate::blit::Spans;
 use crate::skpath::SkPath;
 
 fn div255(product: u32) -> u8 {
-    ((product + 128) * 257 >> 16) as u8
+    (((product + 128) * 257) >> 16) as u8
 }
 
 /// Blits source over: two spans of one row can share a pixel, as where a counter's edges meet.
