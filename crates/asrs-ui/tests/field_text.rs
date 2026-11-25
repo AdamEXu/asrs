@@ -13,8 +13,8 @@ use asrs_ui::selection::colors::ForcedActive;
 use asrs_ui::text::snap_remainder;
 use asrs_ui::theme::Appearance;
 use gpui_kit::{
-    App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement, Keystroke, ParentElement,
-    Render, Styled, Window, div, px, rgb, size,
+    App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement, Keystroke,
+    ParentElement, Render, Styled, Window, div, px, rgb, size,
 };
 
 struct Page {
@@ -111,7 +111,8 @@ fn main() {
         asrs_ui::init(cx);
         cx.set_global(Recorder::default());
     });
-    let records = vectors::load("focus/text/macos-aarch64").unwrap_or_else(|e| panic!("focus/text: {e}"));
+    let records =
+        vectors::load("focus/text/macos-aarch64").unwrap_or_else(|e| panic!("focus/text: {e}"));
     let (mut compared, mut failures) = (0, Vec::new());
     let mut worst = pixel::Stats::default();
     for record in &records {
@@ -134,6 +135,11 @@ fn main() {
         let [x, y, w, h] = [0, 1, 2, 3].map(|i| rect[i] as f32);
         let background = if dark { 0x202020 } else { 0xffffff };
 
+        let force = |capture: &mut HeadlessCapture, active| {
+            let cx = capture.context();
+            cx.update(|cx| cx.set_global(ForcedActive(active)));
+        };
+        force(&mut capture, true);
         let window = capture
             .open_window(size(px(500.0), px(100.0)), scale, |window, cx| {
                 let field = cx.new(|cx| {
@@ -152,9 +158,6 @@ fn main() {
                 })
             })
             .expect("a window");
-        capture
-            .context()
-            .update(|cx| cx.set_global(ForcedActive(active)));
         window
             .update(capture.context(), |page, window, cx| {
                 page.field.update(cx, |field, cx| {
@@ -174,11 +177,16 @@ fn main() {
                     press("home", 1, window, cx);
                     press("right", start, window, cx);
                     press("shift-right", end - start, window, cx);
-                } else if selection.as_str().is_some_and(|s| s.to_string_lossy() == "typed") {
+                } else if selection
+                    .as_str()
+                    .is_some_and(|s| s.to_string_lossy() == "typed")
+                {
                     press("end", 1, window, cx);
                 }
             })
             .expect("open");
+        capture.capture(window.into()).expect("capture");
+        force(&mut capture, active);
         let shot = capture.capture(window.into()).expect("capture");
 
         let want = pixels(record);
@@ -222,7 +230,12 @@ fn main() {
             .expect("open");
     }
     assert!(compared >= 120, "{compared} records");
-    assert!(failures.is_empty(), "{} differ:\n{}", failures.len(), failures.join("\n"));
+    assert!(
+        failures.is_empty(),
+        "{} differ:\n{}",
+        failures.len(),
+        failures.join("\n")
+    );
     println!(
         "field text: {compared} fields, at most {} px and {} levels off",
         worst.exact_mismatch, worst.max_channel

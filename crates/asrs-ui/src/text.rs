@@ -18,9 +18,9 @@ use asrs_canvas::text::lut::MaskGammaLut;
 use asrs_canvas::text::{Family, FixedAdvance, TextBackend, platform_backend};
 use gpui_kit::base::input::InputState;
 use gpui_kit::{
-    App, AvailableSpace, Bounds, ContentMask, Corners, Element, ElementId, Entity, Global, GlobalElementId,
-    InspectorElementId, IntoElement, LayoutId, Pixels, Refineable, RenderImage, Rgba, SharedString,
-    Style, StyleRefinement, Styled, Window, WindowId, fill, point, px, size,
+    App, AvailableSpace, Bounds, ContentMask, Corners, Element, ElementId, Entity, Global,
+    GlobalElementId, InspectorElementId, IntoElement, LayoutId, Pixels, Refineable, RenderImage,
+    Rgba, SharedString, Style, StyleRefinement, Styled, Window, WindowId, fill, point, px, size,
 };
 use image::{Frame, RgbaImage};
 
@@ -569,7 +569,12 @@ impl Element for Text {
             dom::cut(&mut layout, dom::lu_round((room * f64::from(scale)) as f32));
         }
         let scroll = self.scroll.as_ref().map_or(0.0, |editor| {
-            (f32::from(editor.read(cx).scroll_offset().x) * scale).round()
+            let line = layout.lines.first().and_then(|line| line.fragments.last());
+            let end = line.map_or(0, |last| last.x + last.width);
+            let most = ((available - end).min(0) as f32 / 64.0).round();
+            (f32::from(editor.read(cx).scroll_offset().x) * scale)
+                .round()
+                .max(most)
         });
         let origin = (
             dom::lu_round((f32::from(bounds.origin.x) + self.subpixel.0) * scale + scroll),
@@ -760,7 +765,9 @@ impl Element for Text {
                 let images = images.clone();
                 window.with_content_mask(Some(within(left, right)), |window| draw(images, window));
             }
-            window.with_content_mask(Some(within(left, right)), |window| draw(part_images, window));
+            window.with_content_mask(Some(within(left, right)), |window| {
+                draw(part_images, window)
+            });
         });
         #[cfg(feature = "parity")]
         {

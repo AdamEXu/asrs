@@ -1,11 +1,11 @@
-import { app, BrowserWindow, nativeTheme } from "electron";
+import { app, BrowserWindow, nativeImage, nativeTheme } from "electron";
 import fs from "node:fs";
 
 // Electron main process for `fieldText` (not run under ELECTRON_RUN_AS_NODE). For each of the
-// fixture's controls, themes and cases it loads the control's markup into a page that is never shown, gives
+// fixture's controls, themes and cases it loads the control's markup into an offscreen page, gives
 // its input (#i) the case's value, focuses it and applies the case's selection: "all" (`select()`),
-// "typed" (the value typed, which leaves the
-// caret at its end in view) or [start, end]. It then records the pixels of the
+// "typed" (an editing command that leaves the
+// caret at the value's end, scrolled into view) or [start, end]. It then records the pixels of the
 // input's box in a page that is active, through Emulation.setFocusEmulationEnabled, and in one that
 // is not, as rows of runs of colours. The caret is transparent, since it blinks.
 
@@ -31,8 +31,7 @@ app
       show: false,
       frame: false,
       focusable: false,
-      paintWhenInitiallyHidden: true,
-      webPreferences: { backgroundThrottling: false, spellcheck: false }
+      webPreferences: { offscreen: true, backgroundThrottling: false, spellcheck: false }
     });
     win.webContents.on("render-process-gone", (_event, details) => fail(`renderer gone: ${details.reason}`));
     await win.loadURL("about:blank");
@@ -45,8 +44,9 @@ app
     };
     const painted = () => evaluate("new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => setTimeout(resolve, 50))))");
     const shot = async () => {
-      const image = await win.webContents.capturePage();
-      return { width: image.getSize(scale).width, bytes: image.toBitmap({ scaleFactor: scale }) };
+      const { data } = await send("Page.captureScreenshot", { format: "png" });
+      const image = nativeImage.createFromBuffer(Buffer.from(data, "base64"));
+      return { width: image.getSize().width, bytes: image.toBitmap() };
     };
     const pixels = async ([x, y, w, h]: number[]) => {
       let { width, bytes } = await shot();
@@ -83,12 +83,9 @@ app
           await send("Emulation.setFocusEmulationEnabled", { enabled: true });
           const text = JSON.stringify(value);
           const select = selection === "all" ? "i.select()" : Array.isArray(selection) ? `i.setSelectionRange(${selection.join(", ")})` : "";
-          const fill = selection === "typed" ? "i.focus()" : `i.value = ${text}; i.focus(); ${select}`;
+          const typed = `i.focus(); document.execCommand("insertText", false, ${text}); i.scrollLeft = i.scrollWidth`;
+          const fill = selection === "typed" ? typed : `i.value = ${text}; i.focus(); ${select}`;
           await evaluate(`(() => { const i = document.getElementById("i"); ${fill} })()`);
-          if (selection === "typed") {
-            for (const char of value) win.webContents.sendInputEvent({ type: "char", keyCode: char });
-            for (let i = 0; i < 1000 && (await evaluate("document.getElementById('i').value")) !== value; i++);
-          }
           if ((await evaluate("document.getElementById('i').value")) !== value) fail(`${control.name}: ${value} is not a value`);
           const rect = await evaluate(`(() => { const r = document.getElementById("i").getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()`);
           const [left, top] = rect.slice(0, 2).map((v: number) => Math.round(v * scale));

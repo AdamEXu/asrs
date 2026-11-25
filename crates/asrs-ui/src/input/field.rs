@@ -9,8 +9,8 @@ use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, ClipboardItem, Context, DispatchPhase, Entity,
     EntityInputHandler, EventEmitter, FocusHandle, Focusable, FontWeight, Hsla, InteractiveElement,
     IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
-    Point, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task,
-    TextAlign, WeakEntity, Window, canvas, div, px, rgba,
+    Point, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task, TextAlign,
+    WeakEntity, Window, canvas, div, point, px, rgba, size,
 };
 
 use crate::focus;
@@ -220,8 +220,8 @@ impl Spin {
 }
 
 /// An `<input type="text|number|search">`. The editor (gpui-base's, for IME) is always
-/// present and takes clicks; only its caret shows. The text, its selection
-/// and the placeholder are painted with [`Text`], as Chromium paints them.
+/// present and takes clicks; only its caret shows. The text, its selection and the placeholder
+/// are painted with [`Text`], as Chromium paints them.
 pub struct TextField<M: FieldModel> {
     value: FieldValue<M>,
     kind: FieldKind,
@@ -546,6 +546,33 @@ impl<M: FieldModel> TextField<M> {
         }
     }
 
+    /// A press on the input beside its editor, which puts the caret at the nearest place.
+    fn press_beside(
+        &mut self,
+        event: &MouseDownEvent,
+        editor: Bounds<Pixels>,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if self.disabled || window.default_prevented() || editor.contains(&event.position) {
+            return;
+        }
+        window.prevent_default();
+        let x = event.position.x;
+        let at = point(
+            x.clamp(editor.left(), editor.right() - px(1.0)),
+            editor.center().y,
+        );
+        self.editor.update(cx, |state, cx| {
+            let text = state.value();
+            let index = state.character_index_for_point(at, window, cx);
+            let end = text.encode_utf16().count();
+            let byte = utf8_range(&text, 0..index.unwrap_or(end)).end;
+            state.focus(window, cx);
+            state.set_selected_range(byte..byte, cx);
+        });
+    }
+
     /// The spin button in the box `[x, y, width, height]` (device px), which the pointer keeps
     /// turning after a press on it wherever it goes.
     fn spin_button(
@@ -761,6 +788,11 @@ impl<M: FieldModel> Render for TextField<M> {
             self.value.shown().to_owned()
         };
         let caret = selected.is_empty() && page_active(window, cx) && !crate::parity::recording(cx);
+        if !has_focus && self.editor.read(cx).scroll_offset().x != px(0.0) {
+            self.editor.update(cx, |editor, cx| {
+                editor.set_scroll_offset(point(px(0.0), px(0.0)), cx)
+            });
+        }
         let clear: Hsla = rgba(0x00000000).into();
         // The editor replaces a colour whose alpha is 0 with its theme's.
         let hidden = Hsla { a: 1e-4, ..clear };
@@ -839,6 +871,12 @@ impl<M: FieldModel> Render for TextField<M> {
                 editor_box.child(div().absolute().left_0().top_0().opacity(alpha).child(text));
         }
 
+        let editor_bounds = Bounds {
+            origin: point(px(left), px(top + (box_height - line_height) / 2.0)),
+            size: size(px(box_width), px(line_height)),
+        };
+        let placed = Rc::new(std::cell::Cell::new(None::<Bounds<Pixels>>));
+        let pressed_at = placed.clone();
         let mut root = div()
             .id("text-field")
             .key_context(match self.kind {
@@ -887,9 +925,22 @@ impl<M: FieldModel> Render for TextField<M> {
                     this.blur(window, cx);
                 }
             }))
+            .on_mouse_down(
+                MouseButton::Left,
+                cx.listener(move |this, event: &MouseDownEvent, window, cx| {
+                    if let Some(bounds) = pressed_at.get() {
+                        let mut editor = editor_bounds;
+                        editor.origin += bounds.origin;
+                        this.press_beside(event, editor, window, cx);
+                    }
+                }),
+            )
             .child(
                 canvas(
-                    move |bounds, window, _| window.set_focus_bounds(&handle, bounds),
+                    move |bounds, window, _| {
+                        placed.set(Some(bounds));
+                        window.set_focus_bounds(&handle, bounds);
+                    },
                     |_, _, _, _| {},
                 )
                 .absolute()
@@ -959,6 +1010,10 @@ impl<M: FieldModel> Render for TextField<M> {
         if let (Some([cx0, cy0, cw, ch]), true) = (g.cancel, cancel_visible) {
             let (cl, _) = split(cx0, scale);
             let (ct, _) = split(cy0, scale);
+            let (cr, _) = split(cx0 + cw, scale);
+            let (cb, _) = split(cy0 + ch, scale);
+            let (box_w, box_h) = (cr - cl, cb - ct);
+            let side = box_w.min(box_h);
             let filter = style.cancel_filter;
             root = root.child(
                 div()
@@ -966,8 +1021,8 @@ impl<M: FieldModel> Render for TextField<M> {
                     .absolute()
                     .left(px(cl))
                     .top(px(ct))
-                    .w(px(cw / scale))
-                    .h(px(ch / scale))
+                    .w(px(box_w))
+                    .h(px(box_h))
                     .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
                     .on_click(cx.listener(|this, _, window, cx| this.clear(window, cx)))
                     .child(
@@ -975,9 +1030,10 @@ impl<M: FieldModel> Render for TextField<M> {
                             |_, _, _| {},
                             move |bounds, _, window, cx| {
                                 let dpr = f64::from(window.scale_factor());
-                                let side = f64::from(bounds.size.width) * dpr;
+                                let anchor = [box_w, box_h].map(|v| f64::from((v - side) / 2.0));
+                                let side = f64::from(side) * dpr;
                                 let placement = Placement {
-                                    anchor: [0.0, 0.0],
+                                    anchor,
                                     size: [side, side],
                                     scale: 1.0,
                                     centered: false,
