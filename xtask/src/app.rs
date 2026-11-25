@@ -38,6 +38,10 @@ display.icc beside the captures; `normalize` converts those to sRGB.
                   that have a reference in parity/tooltips, or of the named ones, where they
                   differ from the captures before, into parity/tooltips/<scenario>.json, with the generated logs in
                   parity/tooltips/inputs
+  windows         where upstream's Electron puts windows opened without x and y and, on macOS,
+                  what its window focus and blur events follow, on windows that are never shown,
+                  into parity/windows/<os>.json. On Linux, under `ASRS_RFB_PORT=<port>
+                  xtask/hosts/linux/display.sh`, for several screens and work areas
   compare <dir> <dir>
                   two run labels or directories: window captures equal outside the recorded
                   masks; canvas and drawing-buffer dumps, DOM dumps and written files equal
@@ -62,6 +66,7 @@ pub fn run(args: &[String]) -> Result {
             run_scenarios(&paths, &options).map(|_| ())
         }
         Some((cmd, rest)) if cmd == "tooltips" => tooltips(&paths, rest),
+        Some((cmd, [])) if cmd == "windows" => windows(&paths),
         Some((cmd, [a, b])) if cmd == "compare" => {
             let report = compare(&run_dir(&paths, a), &run_dir(&paths, b))?;
             report.print();
@@ -358,19 +363,8 @@ pub(crate) fn private_pasteboard(paths: &Paths, command: &mut Command) -> Result
     if !cfg!(target_os = "macos") {
         return Ok(());
     }
-    let library = paths.root.join("target/oracle/pasteboard.dylib");
-    let status = Command::new("cc")
-        .args(["-dynamiclib", "-framework", "AppKit", "-o"])
-        .arg(&library)
-        .arg(paths.root.join("oracle/tools/pasteboard.m"))
-        .status()
-        .map_err(|e| format!("running cc: {e}"))?;
-    if !status.success() {
-        return Err(format!("building {}: {status}", library.display()));
-    }
-    command
-        .env("DYLD_INSERT_LIBRARIES", library)
-        .env("ASRS_PRIVATE_PASTEBOARD", "1");
+    insert_library(paths, "pasteboard", command)?;
+    command.env("ASRS_PRIVATE_PASTEBOARD", "1");
     Ok(())
 }
 
@@ -379,21 +373,11 @@ fn tooltip_log(paths: &Paths, out: &Path, command: &mut Command) -> Result {
     if !cfg!(target_os = "macos") {
         return Err("tooltips are recorded on macOS".to_owned());
     }
-    let library = paths.root.join("target/oracle/tooltips.dylib");
-    let status = Command::new("cc")
-        .args(["-dynamiclib", "-framework", "AppKit", "-o"])
-        .arg(&library)
-        .arg(paths.root.join("oracle/tools/tooltips.m"))
-        .status()
-        .map_err(|e| format!("running cc: {e}"))?;
-    if !status.success() {
-        return Err(format!("building {}: {status}", library.display()));
-    }
+    insert_library(paths, "tooltips", command)?;
     let log = out.with_extension("tooltips");
     fs::write(&log, "").map_err(|e| format!("{}: {e}", log.display()))?;
     command
         .arg("--tooltips")
-        .env("DYLD_INSERT_LIBRARIES", library)
         .env("ASRS_TOOLTIP_LOG", log);
     Ok(())
 }
@@ -468,6 +452,169 @@ fn tooltips(paths: &Paths, names: &[String]) -> Result {
             }
         }
     }
+    Ok(())
+}
+
+/// `BrowserWindow` options without `x` and `y`: the hub's on a first launch, upstream's other kinds
+/// of window, and sizes that round or do not fit.
+const PLACED: &str = r#"[
+{"width":1100,"height":650,"minWidth":800,"minHeight":400,"titleBarStyle":"hiddenInset","vibrancy":"sidebar"},
+{"width":1100,"height":650},
+{"width":1100,"height":650,"titleBarStyle":"hiddenInset"},
+{"width":1100,"height":650,"titleBarStyle":"hiddenInset","resizable":false},
+{"width":1101,"height":651,"titleBarStyle":"hiddenInset"},
+{"width":801,"height":400,"titleBarStyle":"hiddenInset"},
+{"width":500,"height":500,"titleBarStyle":"hiddenInset"},
+{"width":1700,"height":1300,"titleBarStyle":"hiddenInset"},
+{"width":900,"height":500,"minWidth":200,"minHeight":100,"resizable":true},
+{"width":901,"height":501,"resizable":false},
+{"width":400,"height":473,"useContentSize":true,"resizable":false,"alwaysOnTop":true},
+{"width":1400,"height":930},
+{"width":1400,"height":940,"titleBarStyle":"hiddenInset"},
+{"width":2400,"height":1500},
+{"width":2400,"height":1500,"x":40,"y":50},
+{"width":2400,"height":1500,"x":40,"y":50,"titleBarStyle":"hiddenInset"},
+{"width":2400,"height":1500,"useContentSize":true}
+]"#;
+
+/// Screens as `<width>x<height>+<x>+<y>`, then `_NET_WORKAREA` where there is one.
+const SCREENS: [(&[&str], Option<[u32; 4]>); 12] = [
+    (&["1920x1080+0+0"], None),
+    (&["1920x1080+0+0"], Some([0, 0, 1920, 1040])),
+    (&["1920x1080+0+0"], Some([61, 29, 1859, 1051])),
+    (&["1920x1080+0+0", "1280x1024+1920+56"], None),
+    (
+        &["1920x1080+0+0", "1280x1024+1920+56"],
+        Some([0, 0, 1920, 1041]),
+    ),
+    (
+        &["1920x1080+0+0", "1280x1024+1920+56"],
+        Some([0, 30, 3200, 1050]),
+    ),
+    (
+        &["1920x1080+0+0", "1280x1024+1920+56"],
+        Some([1920, 56, 1280, 990]),
+    ),
+    (
+        &["1920x1080+0+0", "1280x1024+1920+56"],
+        Some([0, 0, 3000, 1080]),
+    ),
+    (&["1280x1024+0+700", "1920x1080+1280+0"], None),
+    (
+        &["1280x1024+0+700", "1920x1080+1280+0"],
+        Some([0, 0, 3200, 1650]),
+    ),
+    (
+        &["1280x1024+0+700", "1920x1080+1280+0"],
+        Some([1280, 40, 1920, 1040]),
+    ),
+    (
+        &["1000x800+0+0", "1920x1080+0+800", "1280x1024+1920+800"],
+        Some([0, 25, 3200, 1855]),
+    ),
+];
+
+fn windows(paths: &Paths) -> Result {
+    let out = paths.root.join("target/parity/app/windows.json");
+    let request = out.with_extension("request.json");
+    write(
+        &request,
+        format!("{{\"settle\":300,\"options\":{PLACED}}}").as_bytes(),
+    )?;
+    let record = |scale: Option<u32>| -> Result<String> {
+        let mut command = Command::new(paths.electron()?);
+        if let Some(scale) = scale {
+            command.args([
+                format!("--force-device-scale-factor={scale}"),
+                "--ozone-platform=x11".to_owned(),
+            ]);
+        }
+        command
+            .arg("--lang=en-US")
+            .arg(paths.root.join("oracle/tools/windows.cjs"))
+            .args([&request, &out])
+            .current_dir(&paths.root)
+            .env_remove("ELECTRON_RUN_AS_NODE");
+        oracle::pin_environment(&mut command, oracle::DEFAULT_ZONE);
+        if cfg!(target_os = "macos") {
+            insert_library(paths, "windowEvents", &mut command)?;
+            command.env("ASRS_WINDOW_EVENTS", "1");
+        }
+        let status = command
+            .status()
+            .map_err(|e| format!("running Electron: {e}"))?;
+        if !status.success() {
+            return Err(format!("windows.cjs: {status}"));
+        }
+        fs::read_to_string(&out).map_err(|e| format!("{}: {e}", out.display()))
+    };
+    let mut records = Vec::new();
+    if cfg!(target_os = "macos") {
+        records.push(record(None)?);
+    } else {
+        let port = std::env::var("ASRS_RFB_PORT").map_err(|_| USAGE.to_owned())?;
+        for (screens, work_area) in SCREENS {
+            checked(
+                Command::new(paths.root.join("xtask/hosts/linux/screens.py"))
+                    .arg(&port)
+                    .args(screens),
+            )?;
+            set_work_area(work_area)?;
+            for scale in SCALES {
+                let area = work_area.map_or("null".to_owned(), |area| format!("{area:?}"));
+                records.push(format!(
+                    "{{\"netWorkArea\":{area},\"scale\":{scale},{}",
+                    record(Some(scale))?.trim_start_matches('{')
+                ));
+            }
+        }
+    }
+    let version = oracle::ELECTRON_VERSION;
+    let text = format!(
+        "{{\"electron\":\"{version}\",\"records\":[\n{}\n]}}\n",
+        records.join(",\n")
+    );
+    let file = format!("parity/windows/{}.json", std::env::consts::OS);
+    write(&paths.root.join(file), text.as_bytes())
+}
+
+fn checked(command: &mut Command) -> Result {
+    let status = command
+        .status()
+        .map_err(|e| format!("running {command:?}: {e}"))?;
+    if !status.success() {
+        return Err(format!("{command:?}: {status}"));
+    }
+    Ok(())
+}
+
+/// The property a window manager keeps for what panels leave free, set for it.
+fn set_work_area(area: Option<[u32; 4]>) -> Result {
+    let Some(area) = area else {
+        return checked(Command::new("xprop").args(["-root", "-remove", "_NET_WORKAREA"]));
+    };
+    let value = area.map(|v| v.to_string()).join(", ");
+    checked(Command::new("xprop").args([
+        "-root",
+        "-f",
+        "_NET_WORKAREA",
+        "32c",
+        "-set",
+        "_NET_WORKAREA",
+        &value,
+    ]))
+}
+
+/// Builds `oracle/tools/<name>.m` and has the command load it (macOS).
+fn insert_library(paths: &Paths, name: &str, command: &mut Command) -> Result {
+    let library = paths.root.join(format!("target/oracle/{name}.dylib"));
+    checked(
+        Command::new("cc")
+            .args(["-dynamiclib", "-framework", "AppKit", "-o"])
+            .arg(&library)
+            .arg(paths.root.join(format!("oracle/tools/{name}.m"))),
+    )?;
+    command.env("DYLD_INSERT_LIBRARIES", library);
     Ok(())
 }
 

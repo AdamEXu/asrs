@@ -3,6 +3,8 @@
 # desktop must be left alone. Needs Xvfb, and xfwm4 for what depends on a window manager.
 #
 #   FONTCONFIG_FILE=<dir>/gray.conf xtask/hosts/linux/display.sh <command>...
+#
+# With ASRS_RFB_PORT=<free port> it is an Xvnc, whose screens screens.py sets.
 set -euo pipefail
 
 exec 9>>"$HOME/.asrs-gui.lock"
@@ -17,12 +19,17 @@ display=:90
 socket=/tmp/.X11-unix/X${display#:}
 lock=/tmp/.X${display#:}-lock
 [[ ! -e $socket && ! -L $socket ]] || { echo "$socket exists" >&2; exit 1; }
-Xvfb "$display" -screen 0 2880x1800x24 -dpi 96 -nolisten tcp >/dev/null 2>&1 9>&- &
+if [[ -n ${ASRS_RFB_PORT-} ]]; then
+  Xvnc "$display" -geometry 2880x1800 -depth 24 -dpi 96 -nolisten tcp -SecurityTypes None -localhost \
+    -rfbport "$ASRS_RFB_PORT" >/dev/null 2>&1 9>&- &
+else
+  Xvfb "$display" -screen 0 2880x1800x24 -dpi 96 -nolisten tcp >/dev/null 2>&1 9>&- &
+fi
 xvfb=$!
 pids+=("$xvfb")
 # The socket alone may be another server's that took the number since the check above.
 until [[ -S $socket && $(tr -d ' ' <"$lock" 2>/dev/null) == "$xvfb" ]]; do
-  kill -0 "$xvfb" 2>/dev/null || { echo 'Xvfb did not start' >&2; exit 1; }
+  kill -0 "$xvfb" 2>/dev/null || { echo 'the X server did not start' >&2; exit 1; }
   sleep 0.1
 done
 export DISPLAY=$display XDG_SESSION_TYPE=x11 DBUS_SESSION_BUS_ADDRESS=disabled:
