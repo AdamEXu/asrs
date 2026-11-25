@@ -141,6 +141,10 @@ jobs:
       - name: Test
         timeout-minutes: 30
         run: cargo test --workspace --locked --no-fail-fast
+      - name: Test (vendored Windows renderer)
+        if: runner.os == 'Windows'
+        timeout-minutes: 30
+        run: cargo test --locked -p gpui-pre-windows --lib directx
       - name: Test (parity features)
         timeout-minutes: 30
         run: >-

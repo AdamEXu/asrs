@@ -187,6 +187,15 @@ diff --git a/src/directx_renderer.rs b/src/directx_renderer.rs
  
          let annotation = self
              .devices
+@@ -409,7 +420,7 @@
+     /// goes through MetalRenderer; this is the Windows analogue). Draws into
+     /// the existing render target, copies it into a `D3D11_USAGE_STAGING`
+     /// texture, maps it, and converts BGRA to RGBA.
+-    #[cfg(feature = "test-support")]
++    #[cfg(any(test, feature = "test-support"))]
+     pub(crate) fn render_to_image(
+         &mut self,
+         scene: &Scene,
 @@ -497,6 +508,7 @@
          let resources = self.resources.as_mut().context("resources missing")?;
          resources.render_target.take();
@@ -359,7 +368,7 @@ diff --git a/src/directx_renderer.rs b/src/directx_renderer.rs
  }
  
  #[inline]
-@@ -2054,5 +2057,98 @@
+@@ -2054,5 +2057,214 @@
              (number >> 16) & 0xFFFF,
              number & 0xFFFF
          ))
@@ -369,10 +378,11 @@ diff --git a/src/directx_renderer.rs b/src/directx_renderer.rs
 +#[cfg(test)]
 +mod tests {
 +    use super::*;
-+    use std::prelude::v1::test;
-+    use windows::Win32::Foundation::HMODULE;
++    use std::{borrow::Cow, prelude::v1::test};
++    use windows::Win32::{Foundation::HMODULE, UI::WindowsAndMessaging::*};
++    use windows::core::w;
 +
-+    fn create_devices() -> Option<DirectXRendererDevices> {
++    fn create_devices() -> Option<DirectXDevices> {
 +        let dxgi_factory: IDXGIFactory6 =
 +            unsafe { CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0)) }.ok()?;
 +        let adapter: IDXGIAdapter1 = unsafe { dxgi_factory.EnumWarpAdapter() }.ok()?;
@@ -392,69 +402,184 @@ diff --git a/src/directx_renderer.rs b/src/directx_renderer.rs
 +            )
 +        }
 +        .ok()?;
-+        let devices = DirectXDevices {
++        Some(DirectXDevices {
 +            adapter,
 +            dxgi_factory,
 +            device: device?,
 +            device_context: device_context?,
-+        };
-+        DirectXRendererDevices::new(&devices, false).ok()
++        })
 +    }
 +
-+    fn describe(texture: &ID3D11Texture2D) -> (u32, u32, u32) {
-+        let mut desc = D3D11_TEXTURE2D_DESC::default();
-+        unsafe { texture.GetDesc(&mut desc) };
-+        (desc.Width, desc.Height, desc.SampleDesc.Count)
++    fn create_renderer(devices: &DirectXDevices) -> DirectXRenderer {
++        let hwnd = unsafe {
++            CreateWindowExW(
++                WINDOW_EX_STYLE(0),
++                w!("STATIC"),
++                w!(""),
++                WS_POPUP,
++                0,
++                0,
++                64,
++                64,
++                None,
++                None,
++                None,
++                None,
++            )
++        }
++        .expect("window");
++        DirectXRenderer::new(hwnd, devices, true).expect("renderer")
+     }
++
++    fn device_size(width: i32, height: i32) -> Size<DevicePixels> {
++        size(DevicePixels(width), DevicePixels(height))
++    }
++
++    fn scaled_bounds(size: Size<DevicePixels>) -> Bounds<ScaledPixels> {
++        Bounds {
++            origin: Point::default(),
++            size: size.map(|side| ScaledPixels(side.0 as f32)),
++        }
++    }
++
++    fn path_scene() -> Scene {
++        let mut path = Path::new(point(px(3.), px(2.)));
++        path.line_to(point(px(50.), px(9.)));
++        path.curve_to(point(px(10.), px(40.)), point(px(45.), px(38.)));
++        path.color = rgb(0x336699).into();
++        path.content_mask = ContentMask {
++            bounds: Bounds::new(Point::default(), size(px(64.), px(48.))),
++        };
++        let mut scene = Scene::default();
++        scene.insert_primitive(path.scale(1.));
++        scene.finish();
++        scene
++    }
++
++    fn render(renderer: &mut DirectXRenderer, scene: &Scene) -> image::RgbaImage {
++        renderer
++            .render_to_image(scene, WindowBackgroundAppearance::Opaque)
++            .expect("image")
++    }
++
++    fn path_texture_sizes(renderer: &DirectXRenderer) -> Option<[(u32, u32, u32); 2]> {
++        let textures = renderer.resources.as_ref()?.path_textures.as_ref()?;
++        Some(
++            [
++                &textures.path_intermediate_texture,
++                &textures.path_intermediate_msaa_texture,
++            ]
++            .map(|texture| {
++                let mut desc = D3D11_TEXTURE2D_DESC::default();
++                unsafe { texture.GetDesc(&mut desc) };
++                (desc.Width, desc.Height, desc.SampleDesc.Count)
++            }),
++        )
 +    }
 +
 +    #[test]
-+    fn test_path_textures_are_created_on_demand_at_the_current_size() {
++    fn test_path_textures_follow_the_scenes_and_the_window() {
 +        let Some(devices) = create_devices() else {
 +            return;
 +        };
-+        let mut resources =
-+            DirectXResources::new(&devices, 64, 32, HWND::default(), false).expect("resources");
-+        assert!(resources.path_textures.is_none());
++        let mut renderer = create_renderer(&devices);
++        let empty = Scene::default();
++        let paths = path_scene();
++        renderer.resize(device_size(64, 48)).expect("resized");
++        let blank = render(&mut renderer, &empty);
++        assert_eq!(path_texture_sizes(&renderer), None);
 +
-+        for (width, height) in [(64, 32), (200, 100)] {
-+            if width != 64 {
-+                resources.render_target.take();
-+                resources.render_target_view.take();
-+                unsafe {
-+                    devices.device_context.ClearState();
-+                    devices.device_context.Flush();
-+                    resources.swap_chain.ResizeBuffers(
-+                        BUFFER_COUNT as u32,
-+                        width,
-+                        height,
-+                        RENDER_TARGET_FORMAT,
-+                        DXGI_SWAP_CHAIN_FLAG(0),
-+                    )
-+                }
-+                .expect("resized buffers");
-+                resources
-+                    .recreate_resources(&devices, width, height)
-+                    .expect("recreated resources");
-+                assert!(resources.path_textures.is_none());
-+            }
-+            resources
-+                .create_path_textures(&devices)
-+                .expect("path textures");
-+            let textures = resources.path_textures.as_ref().expect("path textures");
-+            let intermediate = textures.path_intermediate_texture.clone();
-+            assert_eq!(describe(&intermediate), (width, height, 1));
++        let first = render(&mut renderer, &paths);
++        assert_ne!(first, blank);
++        assert_eq!(
++            path_texture_sizes(&renderer),
++            Some([(64, 48, 1), (64, 48, 4)])
++        );
++        assert_eq!(render(&mut renderer, &paths), first);
++
++        for (width, height) in [(80, 60), (72, 50), (64, 48)] {
++            renderer
++                .resize(device_size(width, height))
++                .expect("resized");
++            assert_eq!(path_texture_sizes(&renderer), None);
++            let mut image = render(&mut renderer, &paths);
 +            assert_eq!(
-+                describe(&textures.path_intermediate_msaa_texture),
-+                (width, height, PATH_MULTISAMPLE_COUNT),
++                image::imageops::crop(&mut image, 0, 0, 64, 48).to_image(),
++                first
 +            );
-+            assert!(textures.path_intermediate_srv.is_some());
-+            assert!(textures.path_intermediate_msaa_view.is_some());
-+
-+            resources
-+                .create_path_textures(&devices)
-+                .expect("path textures");
-+            let textures = resources.path_textures.as_ref().expect("path textures");
-+            assert_eq!(textures.path_intermediate_texture, intermediate);
++            let (width, height) = (width as u32, height as u32);
++            assert_eq!(
++                path_texture_sizes(&renderer),
++                Some([(width, height, 1), (width, height, 4)])
++            );
 +        }
-     }
++
++        let devices = create_devices().expect("devices");
++        renderer.handle_device_lost(&devices).expect("recovered");
++        renderer.mark_drawable();
++        assert_eq!(path_texture_sizes(&renderer), None);
++        assert_eq!(render(&mut renderer, &empty), blank);
++        assert_eq!(path_texture_sizes(&renderer), None);
++        assert_eq!(render(&mut renderer, &paths), first);
++        assert_eq!(
++            path_texture_sizes(&renderer),
++            Some([(64, 48, 1), (64, 48, 4)])
++        );
++    }
++
++    #[test]
++    fn test_oversized_tiles_draw_texel_for_pixel() {
++        let Some(devices) = create_devices() else {
++            return;
++        };
++        let mut renderer = create_renderer(&devices);
++        for (ix, (width, height)) in [(1600, 692), (1333, 777), (700, 1511), (2200, 1300)]
++            .into_iter()
++            .enumerate()
++        {
++            let tile_size = device_size(width, height);
++            renderer.resize(tile_size).expect("resized");
++            let mut state = 1u32;
++            let bgra: Vec<u8> = (0..width * height)
++                .flat_map(|_| {
++                    state = state.wrapping_mul(1664525).wrapping_add(1013904223);
++                    let [_, b, g, r] = state.to_le_bytes();
++                    [b, g, r, 255]
++                })
++                .collect();
++            let key = AtlasKey::Image(RenderImageParams {
++                image_id: ImageId(ix),
++                frame_index: 0,
++            });
++            let tile = renderer
++                .sprite_atlas()
++                .get_or_insert_with(key.clone(), &mut || {
++                    Ok(Some((tile_size, Cow::Borrowed(&bgra))))
++                })
++                .expect("allocated")
++                .expect("tile");
++            let bounds = scaled_bounds(tile_size);
++            let mut scene = Scene::default();
++            scene.insert_primitive(PolychromeSprite {
++                order: 0,
++                pad: 0,
++                grayscale: false.into(),
++                opacity: 1.,
++                bounds,
++                content_mask: ContentMask { bounds },
++                corner_radii: Corners::default(),
++                tile,
++            });
++            scene.finish();
++            let image = render(&mut renderer, &scene);
++            let different = image
++                .as_raw()
++                .chunks_exact(4)
++                .zip(bgra.chunks_exact(4))
++                .filter(|(drawn, source)| *drawn != [source[2], source[1], source[0], source[3]])
++                .count();
++            assert_eq!(different, 0, "{width}x{height}");
++            renderer.sprite_atlas().remove(&key);
++        }
++    }
  }
