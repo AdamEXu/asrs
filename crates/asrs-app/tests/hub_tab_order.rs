@@ -4,7 +4,7 @@
 //! headless, against what `cargo xtask app run` recorded of upstream at 1x in the light theme:
 //! `document.activeElement` at each `traverse` step of the scenarios and the hovered time at each
 //! `hover`. `data/focus_macos.jsonl` is of `focus-order` on macOS, from before the recorder kept
-//! `stop` and values. `data/focus_linux.jsonl` is of every scenario here on Linux x86_64 under the
+//! `stop` and values, and of `traverse-field-settings`. `data/focus_linux.jsonl` is of every scenario here on Linux x86_64 under the
 //! render host's fonts (`xtask/hosts/linux/fonts.sh`). An argument picks one. The logs in `parity/scenarios/inputs` are what the driver generates.
 
 use std::collections::BTreeMap;
@@ -114,7 +114,7 @@ fn main() {
         let record = json::parse(line).unwrap();
         let name = text(&record, "scenario").unwrap();
         // Without the fields there is no source link.
-        let shown = assets || name != "traverse-fields";
+        let shown = assets || !matches!(&*name, "traverse-fields" | "traverse-field-settings");
         if shown && args.get(1).is_none_or(|only| *only == name) {
             scenarios.entry(name).or_default().push(record);
         }
