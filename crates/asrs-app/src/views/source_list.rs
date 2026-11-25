@@ -418,16 +418,20 @@ fn item_body(
         .relative()
         .flex_none()
         .w(px(width as f32))
-        .h(px(height as f32))
-        .border_color(rgb(border_color));
+        .h(px(height as f32));
     if let Some(places) = places {
         body = focus::section(body, index as isize + 1, &places.item);
     }
+    // GPUI paints borders over children, where they would cover the focus rings.
+    let border = || {
+        let line = div().absolute().left_0().w_full().h(px(1.0));
+        line.bg(rgb(border_color))
+    };
     if borders.0 > 0.0 {
-        body = body.border_t_1();
+        body = body.border_t_1().child(border().top(px(-1.0)));
     }
     if borders.1 > 0.0 {
-        body = body.border_b_1();
+        body = body.border_b_1().child(border().bottom(px(-1.0)));
     }
     if item.parent_highlight {
         body = body.shadow(vec![BoxShadow {

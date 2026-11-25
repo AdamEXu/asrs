@@ -500,6 +500,9 @@
       "count": 3
     },
     {
+      "wait": 1500
+    },
+    {
       "capture": "cleared",
       "probes": []
     }
