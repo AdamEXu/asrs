@@ -1,5 +1,7 @@
 // Ported from three.js r168 (MIT, Copyright 2010-2024 three.js authors). See THIRD_PARTY_NOTICES.md.
 
+use std::sync::Arc;
+
 use asrs_js::math;
 
 use super::{Matrix3, Matrix4, Vector3};
@@ -179,16 +181,48 @@ fn normalize(value: f64, kind: ArrayKind) -> f64 {
 /// `gpuType` property, which makes `mergeAttributes` refuse to mix it with plain attributes.
 #[derive(Clone, Debug, PartialEq)]
 pub struct BufferAttribute {
-    pub array: ArrayData,
+    /// Shared by the geometries of every primitive that uses the accessor, until one writes.
+    pub array: Arc<ArrayData>,
     pub item_size: usize,
     pub normalized: bool,
     pub interleaved: bool,
 }
 
+fn get_component(
+    array: &ArrayData,
+    item_size: usize,
+    normalized: bool,
+    index: usize,
+    component: usize,
+) -> f64 {
+    let v = array.get(index * item_size + component);
+    if normalized {
+        denormalize(v, array.kind())
+    } else {
+        v
+    }
+}
+
+fn set_component(
+    array: &mut ArrayData,
+    item_size: usize,
+    normalized: bool,
+    index: usize,
+    component: usize,
+    value: f64,
+) {
+    let value = if normalized {
+        normalize(value, array.kind())
+    } else {
+        value
+    };
+    array.set(index * item_size + component, value);
+}
+
 impl BufferAttribute {
     pub fn new(array: ArrayData, item_size: usize, normalized: bool) -> Self {
         BufferAttribute {
-            array,
+            array: Arc::new(array),
             item_size,
             normalized,
             interleaved: false,
@@ -209,21 +243,33 @@ impl BufferAttribute {
     }
 
     pub fn get_component(&self, index: usize, component: usize) -> f64 {
-        let v = self.array.get(index * self.item_size + component);
-        if self.normalized {
-            denormalize(v, self.array.kind())
-        } else {
-            v
-        }
+        get_component(
+            &self.array,
+            self.item_size,
+            self.normalized,
+            index,
+            component,
+        )
     }
 
     pub fn set_component(&mut self, index: usize, component: usize, value: f64) {
-        let value = if self.normalized {
-            normalize(value, self.array.kind())
-        } else {
-            value
-        };
-        self.array.set(index * self.item_size + component, value);
+        let (item_size, normalized) = (self.item_size, self.normalized);
+        let array = Arc::make_mut(&mut self.array);
+        set_component(array, item_size, normalized, index, component, value);
+    }
+
+    /// Replaces the x, y and z of every item.
+    fn map_xyz(&mut self, f: impl Fn(Vector3) -> Vector3) {
+        let count = self.count();
+        let (item_size, normalized) = (self.item_size, self.normalized);
+        let array = Arc::make_mut(&mut self.array);
+        for i in 0..count {
+            let [x, y, z] = [0, 1, 2].map(|c| get_component(array, item_size, normalized, i, c));
+            let v = f(Vector3::new(x, y, z));
+            for (c, value) in [v.x, v.y, v.z].into_iter().enumerate() {
+                set_component(array, item_size, normalized, i, c, value);
+            }
+        }
     }
 
     pub fn get_x(&self, index: usize) -> f64 {
@@ -262,31 +308,19 @@ impl BufferAttribute {
                 self.set_component(i, 1, e[1] * x + e[4] * y + e[7]);
             }
         } else if self.item_size == 3 {
-            for i in 0..self.count() {
-                let v = self.get_xyz(i).apply_matrix3(m);
-                self.set_xyz(i, v);
-            }
+            self.map_xyz(|v| v.apply_matrix3(m));
         }
     }
 
     pub fn apply_matrix4(&mut self, m: &Matrix4) {
-        for i in 0..self.count() {
-            let v = self.get_xyz(i).apply_matrix4(m);
-            self.set_xyz(i, v);
-        }
+        self.map_xyz(|v| v.apply_matrix4(m));
     }
 
     pub fn apply_normal_matrix(&mut self, m: &Matrix3) {
-        for i in 0..self.count() {
-            let v = self.get_xyz(i).apply_normal_matrix(m);
-            self.set_xyz(i, v);
-        }
+        self.map_xyz(|v| v.apply_normal_matrix(m));
     }
 
     pub fn transform_direction(&mut self, m: &Matrix4) {
-        for i in 0..self.count() {
-            let v = self.get_xyz(i).transform_direction(m);
-            self.set_xyz(i, v);
-        }
+        self.map_xyz(|v| v.transform_direction(m));
     }
 }
