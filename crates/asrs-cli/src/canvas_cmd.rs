@@ -152,7 +152,7 @@ fn render_list(
                     return Err("image: no pixels".to_owned());
                 };
                 let pixmap =
-                    pixels::pixmap_from_straight_rgba(w, h, &data.data).ok_or("image: bad size")?;
+                    pixels::pixmap_from_straight_rgba(w, h, data.data).ok_or("image: bad size")?;
                 let source = Source {
                     pixmap: Arc::new(pixmap),
                     element: name == "img",

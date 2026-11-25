@@ -483,18 +483,15 @@ impl IccTransform {
     }
 
     /// A premultiplied pixmap of straight-alpha RGBA in this colour space.
-    pub fn pixmap(&self, width: u32, height: u32, rgba: &[u8]) -> Option<Pixmap> {
+    pub fn pixmap(&self, width: u32, height: u32, mut rgba: Vec<u8>) -> Option<Pixmap> {
         if rgba.len() != width as usize * height as usize * 4 {
             return None;
         }
         let mut cache: HashMap<[u8; 4], [u8; 4]> = HashMap::new();
-        let data = rgba
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .flat_map(|&p| *cache.entry(p).or_insert_with(|| self.convert(p)))
-            .collect();
-        Pixmap::from_vec(data, IntSize::from_wh(width, height)?)
+        for p in rgba.as_chunks_mut::<4>().0 {
+            *p = *cache.entry(*p).or_insert_with(|| self.convert(*p));
+        }
+        Pixmap::from_vec(rgba, IntSize::from_wh(width, height)?)
     }
 }
 

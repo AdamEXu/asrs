@@ -490,7 +490,7 @@ impl<H: FrameHost> HubFrame<H> {
             views
                 .images
                 .entry(path.clone())
-                .or_insert_with(|| field_image::load(path).map(Rc::new));
+                .or_insert_with(|| field_image::load_shared(path));
         }
         let container = [rect[0], rect[1] - overhang, rect[2], rect[3] + overhang];
         let shown = Shown {
