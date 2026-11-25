@@ -3014,6 +3014,16 @@ impl Window {
         self.invalidator.wake_platform();
     }
 
+    /// Whether the window's next frame will draw it.
+    pub fn is_dirty(&self) -> bool {
+        self.invalidator.is_dirty()
+    }
+
+    /// Whether callbacks scheduled via [`Self::on_next_frame`] are waiting.
+    pub fn has_next_frame_callbacks(&self) -> bool {
+        !self.next_frame_callbacks.borrow().is_empty()
+    }
+
     /// Schedule a frame to be drawn on the next animation frame.
     ///
     /// This is useful for elements that need to animate continuously, such as a video player or an animated GIF.

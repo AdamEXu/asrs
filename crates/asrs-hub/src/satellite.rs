@@ -381,6 +381,11 @@ impl SatelliteModel {
         Ok(tab.renderer.aspect_ratio(page))
     }
 
+    /// Whether the renderer left something to draw.
+    pub fn needs_draw(&mut self) -> bool {
+        self.hub.needs_draw()
+    }
+
     fn send_table_range(&mut self, range: Option<[f64; 2]>) {
         let (tabs, _) = self.hub.tabs_mut();
         let uuid = tabs

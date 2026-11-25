@@ -665,6 +665,7 @@ pub struct Sidebar {
     main_messages: Vec<(JsString, JsValue)>,
     highlight_timeouts: Vec<HighlightTimeout>,
     generation: u64,
+    changes: u64,
 }
 
 impl Sidebar {
@@ -703,6 +704,7 @@ impl Sidebar {
             main_messages: Vec::new(),
             highlight_timeouts: Vec::new(),
             generation: 0,
+            changes: 0,
         }
     }
 
@@ -710,9 +712,15 @@ impl Sidebar {
         self.highlight_timeouts.iter().map(|t| t.due).reduce(min2)
     }
 
+    /// A count of what the sidebar's timers and [`Sidebar::periodic`] changed of what it shows.
+    pub fn changes(&self) -> u64 {
+        self.changes
+    }
+
     /// Runs every highlight timeout due at `now`.
     pub fn fire_timeouts(&mut self, now: f64) {
         let nodes = &mut self.nodes;
+        let pending = self.highlight_timeouts.len();
         self.highlight_timeouts.retain(|timeout| {
             let due = timeout.due <= now;
             if due && let Some(node) = nodes.iter_mut().find(|n| n.id == timeout.node) {
@@ -720,6 +728,9 @@ impl Sidebar {
             }
             !due
         });
+        if self.highlight_timeouts.len() != pending {
+            self.changes += 1;
+        }
     }
 
     fn send_main(&mut self, name: &str, data: JsValue) {
@@ -959,9 +970,11 @@ impl Sidebar {
         let bottom = input.y + input.height;
         if Some(bottom) != self.search_results_top {
             self.search_results_top = Some(bottom);
+            self.changes += 1;
         }
         if Some(input.width) != self.search_results_min_width {
             self.search_results_min_width = Some(input.width);
+            self.changes += 1;
         }
         let hidden =
             !self.search_focused || self.search_value.is_empty() || self.search_results.is_empty();
@@ -972,6 +985,7 @@ impl Sidebar {
                 self.update_search_hovered(None);
             }
             self.search_results_hidden = hidden;
+            self.changes += 1;
         }
     }
 
@@ -1396,6 +1410,7 @@ impl Sidebar {
         let tuner_available = env.has_tunable_fields();
         if self.tuning_button_hidden == tuner_available {
             self.tuning_button_hidden = !tuner_available;
+            self.changes += 1;
             if !tuner_available {
                 self.set_tuning_mode_active(env, false);
             }
@@ -1456,6 +1471,7 @@ impl Sidebar {
         if !self.is_tuning_mode {
             return;
         }
+        self.changes += 1;
         for node in &mut self.nodes {
             if node.generation != self.generation {
                 continue;
@@ -1532,6 +1548,7 @@ impl Sidebar {
         };
         if title != self.title_text {
             self.title_text = title;
+            self.changes += 1;
         }
     }
 
@@ -1667,6 +1684,7 @@ impl Sidebar {
             }
             ValueState::None => false,
         };
+        self.changes += 1;
         if remeasure {
             self.measure_value_width(env, id);
         }

@@ -4,14 +4,14 @@ use std::rc::Rc;
 
 use asrs_canvas::text::Family;
 use gpui_kit::base::input::{
-    Cut, Delete, Input, InputEvent, InputState, MoveDown, MoveUp, Paste, Position,
+    Cut, Delete, Input, InputEditorStyle, InputEvent, InputState, MoveDown, MoveUp, Paste, Position,
 };
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, ClipboardItem, Context, DispatchPhase, Entity,
-    EntityInputHandler, EventEmitter, FocusHandle, Focusable, FontWeight, Hsla, InteractiveElement,
-    IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
-    Point, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task, TextAlign,
-    WeakEntity, Window, canvas, div, point, px, rgba, size,
+    EntityInputHandler, EventEmitter, FocusHandle, Focusable, Font, FontWeight, Hsla,
+    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ParentElement, Pixels, Point, Render, SharedString, StatefulInteractiveElement, Styled,
+    Subscription, Task, TextAlign, WeakEntity, Window, canvas, div, point, px, rgba, size,
 };
 
 use crate::focus;
@@ -22,6 +22,7 @@ use crate::input::native::{PointerState, paint_text_field};
 use crate::input::spin::{self, paint_spin_button};
 use crate::input::style::{DISABLED_TEXT, FieldStyle, Frame, device_border};
 use crate::platform;
+use crate::selection::colors::SelectionColors;
 use crate::selection::{self, Behavior};
 use crate::symbols::Symbol;
 use crate::text::{self, Align, LineHeight, Overflow, Text, TextStyle, WhiteSpace};
@@ -754,7 +755,8 @@ impl<M: FieldModel> Render for TextField<M> {
         let scale = window.scale_factor();
         let style = self.style;
         let text_style = self.text_style();
-        let line = text::layout(cx, &text_style, "0", scale, None).height as f32 / 64.0;
+        let layout = text::layout(cx, &text_style, "0", scale, None);
+        let line = layout.height as f32 / 64.0;
         let g = geometry(&style, self.kind, self.size.0, self.size.1, line, scale);
         let handle = self.focus_handle(cx);
         let focused = handle.is_focused(window);
@@ -804,12 +806,35 @@ impl<M: FieldModel> Render for TextField<M> {
         let (right, _) = split(ex + ew, scale);
         let (bottom, _) = split(ey + eh, scale);
         let text_color = rgba(color);
-        let editor_text_color: Hsla = if focused {
-            text_color.into()
-        } else {
-            gpui_kit::transparent_black()
+        // The editor draws its selection, whose text is one colour, in active windows alone.
+        let active = window.is_window_active();
+        let selection_colors = SelectionColors::new(active);
+        let (none_selected, all_selected) = self.editor.update(cx, |editor, cx| {
+            let selected = editor.selected_range();
+            let composing = editor.marked_text_range(window, cx).is_some();
+            let all = !composing && selected == (0..editor.value().len());
+            (selected.is_empty(), !selected.is_empty() && all)
+        });
+        let editor_text_color: Hsla = match selection_colors.text {
+            _ if !focused => gpui_kit::transparent_black(),
+            Some(selected) if all_selected && active => rgba(selected << 8 | 0xff).into(),
+            _ => text_color.into(),
         };
         self.editor.update(cx, |editor, cx| {
+            // The editor replaces a colour whose alpha is 0 with its theme's.
+            let hidden = Hsla {
+                a: 1e-4,
+                ..gpui_kit::transparent_black()
+            };
+            editor.set_editor_style(InputEditorStyle {
+                selection: selection_colors.rgba().into(),
+                caret: if none_selected {
+                    text_color.into()
+                } else {
+                    hidden
+                },
+                ..InputEditorStyle::default()
+            });
             editor.set_text_align(
                 match style.align {
                     Align::Center => TextAlign::Center,
@@ -820,7 +845,20 @@ impl<M: FieldModel> Render for TextField<M> {
             );
         });
         let (box_width, box_height) = (right - left, bottom - top);
-        let line_height = box_height / EDITOR_CARET;
+        let family = gpui_family(style.font.family);
+        let weight = FontWeight(style.font.weight);
+        let line_height = px(box_height / EDITOR_CARET).round();
+        let text_system = window.text_system();
+        let font_id = text_system.resolve_font(&Font {
+            weight,
+            ..gpui_kit::font(family)
+        });
+        // A platform's descent may have either sign.
+        let ascent = text_system.ascent(font_id, px(style.font.size));
+        let descent = text_system.descent(font_id, px(style.font.size)).abs();
+        let editor_baseline = (line_height - ascent - descent) / 2.0 + ascent;
+        let baseline = layout.lines[0].baseline as f32 / 64.0 + self.subpixel.1 + dy;
+        let editor_top = (baseline.round() - (f32::from(editor_baseline) * scale).round()) / scale;
         let editor_width = match style.align {
             Align::Center | Align::End | Align::Right => box_width,
             _ => box_width + EDITOR_MARGIN - CARET_WIDTH,
@@ -843,13 +881,13 @@ impl<M: FieldModel> Render for TextField<M> {
                         div()
                             .absolute()
                             .left_0()
-                            .top(px((box_height - line_height) / 2.0))
+                            .top(px(editor_top))
                             .w(px(editor_width))
-                            .h(px(line_height))
-                            .font_family(gpui_family(style.font.family))
-                            .font_weight(FontWeight(style.font.weight))
+                            .h(line_height)
+                            .font_family(family)
+                            .font_weight(weight)
                             .text_size(px(style.font.size))
-                            .line_height(px(line_height))
+                            .line_height(line_height)
                             .text_color(editor_text_color)
                             .child(Input::new(&self.editor)),
                     ),

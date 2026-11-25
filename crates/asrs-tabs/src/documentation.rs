@@ -160,4 +160,8 @@ impl<Cx: ?Sized> TabRenderer<Cx> for DocumentationRenderer {
         }
         Ok(())
     }
+
+    fn needs_draw(&self) -> bool {
+        self.frame.borrow().pending.is_some()
+    }
 }

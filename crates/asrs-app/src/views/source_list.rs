@@ -660,6 +660,7 @@ impl<H: FrameHost> HubFrame<H> {
         controls: [f64; 4],
         body_width: f64,
         scale: f32,
+        window: &Window,
         cx: &mut Context<'_, Self>,
     ) {
         let geometry = self.host().source_list_geometry();
@@ -672,7 +673,9 @@ impl<H: FrameHost> HubFrame<H> {
         let zoom = f64::from(scale);
         for (list, root) in displayed_lists(self.host().hub(cx), rect(controls), zoom) {
             let scroll = layout.scroll.entry(list.uuid().to_owned()).or_default();
-            scroll.animate(now, zoom);
+            if scroll.animate(now, zoom) {
+                window.request_animation_frame();
+            }
             let scroll_top = scroll.top();
             let mut placed = ListLayout::new(root, list.items(), scroll_top);
             placed.scrollbar = bar;
