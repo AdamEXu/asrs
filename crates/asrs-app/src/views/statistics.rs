@@ -1279,6 +1279,7 @@ impl<H: FrameHost> HubFrame<H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::views::control_layout_vectors;
 
     #[test]
     fn settings_boxes_match_blink() {
@@ -1298,5 +1299,27 @@ mod tests {
             SettingsLayout::new([300.0, 550.0, 800.0, 100.0], 15.0, 1.0).max_scroll,
             85.0
         );
+    }
+
+    #[test]
+    fn controls_lie_where_blink_puts_them() {
+        control_layout_vectors::each(6.0, 1280, |blink| {
+            let scale = blink.scale;
+            let [_, down] = input_chrome(scale);
+            let inputs = [0, 1, 2].map(|i| blink.all("div.setting-blocks input")[i].rect);
+            let line = inputs[0][3] - down / scale;
+            let layout = SettingsLayout::new(blink.controls, line, scale);
+            let panel = blink.all("div.setting-blocks")[0].rect;
+            blink.check("panel", &layout.panel, &panel);
+            let blocks = [0, 2, 4].map(|i| blink.all("div.setting-blocks > div")[i].rect);
+            for (title, block) in layout.titles.iter().zip(blocks) {
+                blink.check("title", title, &block);
+            }
+            let select = blink.all("div.setting-blocks select")[0].rect;
+            blink.check("select", &layout.select, &select);
+            for (field, input) in layout.fields.iter().zip(inputs) {
+                blink.check("input", field, &input);
+            }
+        });
     }
 }

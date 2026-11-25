@@ -640,6 +640,7 @@ impl<H: FrameHost> HubFrame<H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::views::control_layout_vectors;
 
     #[test]
     fn panel_boxes_match_blink() {
@@ -667,5 +668,44 @@ mod tests {
         let shorter = PanelLayout::new([300.0, 470.0, 800.0, 180.0], 1.0);
         assert_eq!(shorter.split(2), [920.0, 623.0, 160.0, 26.0]);
         assert_eq!(shorter.content_height, 185.0);
+    }
+
+    #[test]
+    fn controls_lie_where_blink_puts_them() {
+        for (tab_type, compared) in [(9.0, 1280), (11.0, 1280)] {
+            control_layout_vectors::each(tab_type, compared, |blink| {
+                let scale = blink.scale;
+                let [_, down] = input_chrome(scale);
+                let inputs: Vec<_> = blink.all("div.setting-blocks input").to_vec();
+                let line = inputs[0].rect[3] - down / scale;
+                let layout = PanelLayout::new(blink.controls, scale);
+                let panel = blink.all("div.setting-blocks")[0].rect;
+                blink.check("panel", &layout.panel, &panel);
+                let blocks = [0, 2, 4].map(|i| blink.all("div.setting-blocks > div")[i].rect);
+                for (i, block) in blocks.iter().enumerate() {
+                    blink.check("title", &layout.title(i), block);
+                }
+                for input in inputs {
+                    let [left, right] = layout.halves();
+                    let (column, i) = match input.class.as_str() {
+                        "max-speed" => (layout.column(), 0),
+                        "dimensions-width" => (left, 0),
+                        "dimensions-height" => (right, 0),
+                        "size-x" => (left, 1),
+                        _ => (right, 1),
+                    };
+                    let ours = layout.number(column, i, line);
+                    blink.check(&input.class, &ours, &input.rect);
+                }
+                for select in blink.all("div.setting-blocks select").to_vec() {
+                    let i = if select.class == "orientation" { 1 } else { 2 };
+                    let ours = layout.select(layout.column(), i);
+                    blink.check(&select.class, &ours, &select.rect);
+                }
+                for split in blink.all("div.setting-blocks div.split").to_vec() {
+                    blink.check(&split.class, &layout.split(2), &split.rect);
+                }
+            });
+        }
     }
 }

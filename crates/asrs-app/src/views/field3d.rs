@@ -1499,6 +1499,7 @@ impl<H: FrameHost> HubFrame<H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::views::control_layout_vectors;
 
     #[test]
     fn key_codes() {
@@ -1529,5 +1530,43 @@ mod tests {
     fn canvas_sizes_are_percentages() {
         assert_eq!(share("75%"), Some(75.0));
         assert_eq!(share(""), None);
+    }
+
+    #[test]
+    fn controls_lie_where_blink_puts_them() {
+        control_layout_vectors::each(3.0, 1549, |blink| {
+            let scale = blink.scale;
+            let select = blink.one("div.setting-blocks select", "field-select").rect;
+            let layout = SettingsLayout::new(blink.controls, select[2], scale);
+            let panel = blink.all("div.setting-blocks")[0].rect;
+            blink.check("panel", &layout.panel, &panel);
+            let blocks = [0, 2].map(|i| blink.all("div.setting-blocks > div")[i].rect);
+            for (title, block) in layout.titles.iter().zip(blocks) {
+                blink.check("title", title, &block);
+            }
+            blink.check("select", &layout.select, &select);
+            let button = blink.all("div.setting-blocks div.xr-button")[0].rect;
+            blink.check("button", &layout.button, &button);
+            let image = blink.all("div.setting-blocks div.xr-button img")[0].rect;
+            blink.check("image", &layout.image, &image);
+            let [x, y, w, h] = blink.renderer;
+            let alert = blink.all("div.field-3d-alert")[0].clone();
+            let sizes: Vec<_> = alert.lines.iter().map(|l| [l[2], l[3]]).collect();
+            // In half a narrow container the alert wraps, which the port's does not.
+            if sizes.len() == 2 {
+                let ([left, top, width, height], lines) = alert_layout(w, &sizes, scale);
+                let at = [x + left, y - CONTAINER_EXTRA_FIXED + top, width, height];
+                blink.check("alert", &at, &alert.rect);
+                for (ours, line) in lines.iter().zip(&alert.lines) {
+                    let ours = [at[0] + ours[0], at[1] + ours[1]];
+                    blink.check("alert text", &ours, &line[..2]);
+                }
+            }
+            let canvas = blink.all("canvas.field-3d-canvas")[0].rect;
+            let container = [x, y - CONTAINER_EXTRA_FIXED, w, h + CONTAINER_EXTRA_FIXED];
+            let style = blink.canvas_style.clone().expect("a fixed canvas");
+            let ours = fixed_canvas(container, [&style[0], &style[1]], scale);
+            blink.check("canvas", &ours, &canvas);
+        });
     }
 }

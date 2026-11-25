@@ -54,7 +54,18 @@ const MEASURE = `/*control-layout:measure*/ window.__controlLayout = () => windo
   document.body.appendChild(list);
   const nameWidth = name.clientWidth;
   list.remove();
-  return { type: tab.type, window: window.innerWidth, nameWidth, controls: box(content.getBoundingClientRect()), renderer: box(renderer.getBoundingClientRect()), parts: [...parts(content, ${JSON.stringify(PARTS)}), ...parts(renderer, ${JSON.stringify(RENDERED)})] };
+  const select = document.querySelector("div.controls-content table.joystick-selector select");
+  let selectWidth = null;
+  if (select !== null && shown(select)) {
+    const clone = select.cloneNode(true);
+    clone.style.width = "auto";
+    document.body.appendChild(clone);
+    selectWidth = clone.getBoundingClientRect().width;
+    clone.remove();
+  }
+  const canvas = renderer.querySelector("canvas.field-3d-canvas.fixed");
+  const canvasStyle = canvas === null ? null : [canvas.style.width, canvas.style.height];
+  return { type: tab.type, selectWidth, canvasStyle, window: window.innerWidth, nameWidth, controls: box(content.getBoundingClientRect()), renderer: box(renderer.getBoundingClientRect()), parts: [...parts(content, ${JSON.stringify(PARTS)}), ...parts(renderer, ${JSON.stringify(RENDERED)})] };
 })`;
 
 // The 3D field's canvas takes a fixed aspect ratio, and its alert shows, by script: the WebGL renderer is

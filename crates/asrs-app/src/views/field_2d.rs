@@ -1053,6 +1053,7 @@ fn select_baseline(scale: f32, cx: &mut App) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::views::control_layout_vectors;
 
     #[test]
     fn settings_boxes_match_blink() {
@@ -1081,5 +1082,38 @@ mod tests {
         assert_eq!(quarter_sin_cos(0.0), (0.0, 1.0));
         assert_eq!(quarter_sin_cos(-std::f64::consts::PI / 2.0), (-1.0, 0.0));
         assert_eq!(quarter_sin_cos(std::f64::consts::PI), (0.0, -1.0));
+    }
+
+    #[test]
+    fn controls_lie_where_blink_puts_them() {
+        control_layout_vectors::each(2.0, 1440, |blink| {
+            let scale = blink.scale;
+            let select = blink.one("div.setting-blocks select", "field-select").rect;
+            let source = blink.all("div.setting-blocks a").first().map(|a| a.rect);
+            let padding = 2.0 * zoomed(SOURCE_PADDING, scale) / scale;
+            let source_width = source.map(|a| a[2] - padding);
+            let layout = SettingsLayout::new(blink.controls, select[2], source_width, scale);
+            let panel = blink.all("div.setting-blocks")[0].rect;
+            blink.check("panel", &layout.panel, &panel);
+            let field = blink.all("div.setting-blocks > div")[0].rect;
+            let halves: Vec<_> = blink.all("div.setting-blocks div.half")[..2]
+                .iter()
+                .map(|half| (half.rect, half.lines[0]))
+                .collect();
+            blink.check("title", &layout.titles[0], &field);
+            for (title, (half, line)) in layout.titles[1..].iter().zip(halves) {
+                blink.check("title", title, &half);
+                let offset = centred_offset(title[2], line[2], scale).expect("fits");
+                blink.check("title text", &[title[0] + offset], &line[..1]);
+            }
+            blink.check("select", &layout.select, &select);
+            if let (Some([x, _]), Some(a)) = (layout.source, source) {
+                blink.check("source", &[x], &a[..1]);
+            }
+            for (ours, class) in [(layout.orientation, "orientation"), (layout.size, "size")] {
+                let split = blink.one("div.setting-blocks div.split", class).rect;
+                blink.check(class, &ours, &split);
+            }
+        });
     }
 }

@@ -16,7 +16,7 @@ pub fn zoomed(v: f64, scale: f64) -> f64 {
 
 /// `percent` of `v` as `MinimumValueForLength` resolves it, in single precision.
 pub fn percent(v: f64, percent: f64) -> f64 {
-    lu(f64::from((v * percent / 100.0) as f32))
+    lu(f64::from(v as f32 * percent as f32 / 100.0))
 }
 
 /// The device px of a laid out CSS length, which is a whole number of LayoutUnits but for the

@@ -990,3 +990,51 @@ fn uuid_hash(uuid: &str) -> usize {
         h.wrapping_mul(31).wrapping_add(usize::from(b))
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::views::control_layout_vectors;
+    use asrs_model::tab_type::TabType;
+
+    #[test]
+    fn controls_lie_where_blink_puts_them() {
+        let types = [
+            (TabType::LineGraph, 1.0, 1094),
+            (TabType::Field2d, 2.0, 480),
+            (TabType::Field3d, 3.0, 480),
+            (TabType::Statistics, 6.0, 480),
+            (TabType::Swerve, 9.0, 480),
+            (TabType::Mechanism, 10.0, 480),
+            (TabType::Points, 11.0, 480),
+        ];
+        let mut measurer = Measurer::default();
+        let name = "W".repeat(200);
+        for (tab_type, number, compared) in types {
+            let inset = if tab_type == TabType::LineGraph {
+                30.0
+            } else {
+                55.0
+            };
+            control_layout_vectors::each(number, compared, |blink| {
+                let scale = blink.scale;
+                let width =
+                    type_name_client_width(&mut measurer, &name, blink.window, scale as f32);
+                blink.check("type name", &[width], &[blink.name_width]);
+                let roots = controller_roots(tab_type, rect(blink.controls), scale);
+                let lists = blink.all("div.source-list").to_vec();
+                let titles = blink.all("div.source-list > div.title").to_vec();
+                for ((root, list), title) in roots.into_iter().zip(lists).zip(titles) {
+                    let r = root.rect;
+                    blink.check("list", &[r.x, r.y, r.width, r.height], &list.rect);
+                    let left = r.x + root.border_x + inset;
+                    let available = r.width - 2.0 * (root.border_x + inset);
+                    let line = title.lines[0];
+                    if let Some(offset) = centred_offset(available, line[2], scale) {
+                        blink.check("list title", &[left + offset], &line[..1]);
+                    }
+                }
+            });
+        }
+    }
+}

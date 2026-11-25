@@ -665,6 +665,7 @@ fn help_overlay(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::views::control_layout_vectors;
 
     #[test]
     fn ease_out_matches_its_control_points() {
@@ -682,5 +683,21 @@ mod tests {
         assert_eq!(fade.opacity(true, true, 900.0), (0.0, false));
         assert_eq!(fade.opacity(false, false, 1000.0), (0.0, false));
         assert_eq!(fade.opacity(true, false, 1100.0), (0.0, true));
+    }
+
+    #[test]
+    fn controls_lie_where_blink_puts_them() {
+        control_layout_vectors::each(1.0, 800, |blink| {
+            let spans = blink.all("div.line-graph-help-row > span").to_vec();
+            let sizes: Vec<_> = spans.iter().map(|s| [s.rect[2], s.rect[3]]).collect();
+            let layout = HelpLayout::new(blink.renderer, &sizes, blink.scale);
+            let container = blink.all("div.line-graph-help-container")[0].rect;
+            blink.check("container", &layout.container, &container);
+            let icons = blink.all("img.line-graph-help-icon").to_vec();
+            for ((row, icon), span) in layout.rows.iter().zip(icons).zip(spans) {
+                blink.check("icon", &row.icon, &icon.rect);
+                blink.check("label", &row.text, &span.rect[..2]);
+            }
+        });
     }
 }

@@ -378,6 +378,7 @@ const JOYSTICK_PLACES: [&str; ROWS * COLUMNS] = [
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::views::control_layout_vectors;
 
     #[test]
     fn selector_boxes_match_blink() {
@@ -427,5 +428,28 @@ mod tests {
             assert!(close(&cell.label, &label), "{i}: {cell:?}");
             assert!(close(&cell.select, &select), "{i}: {cell:?}");
         }
+    }
+
+    #[test]
+    fn controls_lie_where_blink_puts_them() {
+        control_layout_vectors::each(8.0, 2880, |blink| {
+            let scale = blink.scale;
+            let cells = blink.all("table.joystick-selector td").to_vec();
+            let selects = blink.all("table.joystick-selector select").to_vec();
+            let metrics = SelectorMetrics {
+                labels: std::array::from_fn(|i| selects[i].rect[0] - cells[i].lines[0][0]),
+                select_width: blink.select_width.expect("a select"),
+                select_height: selects[0].rect[3],
+                label_extent: [0.0; 2],
+                select_extent: [0.0; 2],
+            };
+            let ours = selector_layout(blink.controls, &metrics, scale);
+            for ((cell, td), select) in ours.iter().zip(cells).zip(selects) {
+                blink.check("td", &cell.rect, &td.rect);
+                blink.check("label", &cell.label[..1], &td.lines[0][..1]);
+                let across = |r: [f64; 4]| [r[0], r[2]];
+                blink.check("select", &across(cell.select), &across(select.rect));
+            }
+        });
     }
 }
