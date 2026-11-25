@@ -76,7 +76,14 @@ const colour = options.colour ?? "srgb";
 if (colour !== "srgb" && colour !== "display") fail(USAGE);
 const tooltipLog = "tooltips" in options ? process.env.ASRS_TOOLTIP_LOG : undefined;
 if ("tooltips" in options && tooltipLog === undefined) fail("--tooltips needs ASRS_TOOLTIP_LOG");
-const scenario = parseScenario(path.basename(scenarioFile, ".json"), fs.readFileSync(scenarioFile, "utf8"));
+// What is thrown here would wait in Electron's own error box.
+const scenario = (() => {
+  try {
+    return parseScenario(path.basename(scenarioFile, ".json"), fs.readFileSync(scenarioFile, "utf8"));
+  } catch (e) {
+    return fail((e as Error).message);
+  }
+})();
 if (scenario.page === "app" && (scenario.window.width < 800 || scenario.window.height < 400)) {
   fail(`scenario ${scenario.name}: the hub window has a minimum size of 800x400`);
 }
