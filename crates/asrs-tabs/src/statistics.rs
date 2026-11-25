@@ -3,6 +3,7 @@
 //! string beside it, and the time range is a [`Select`].
 
 use std::rc::Rc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use asrs_js::json;
 use asrs_js::math;
@@ -12,6 +13,7 @@ use asrs_js::sort::{self, Slot};
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time;
 use asrs_js::value::{JsObject, JsValue, ToJs};
+use asrs_log::log::LogValueSet;
 use asrs_log::log::robot_state::{
     AKIT_TIMESTAMP_KEYS, RobotMode, RobotStateRange, get_robot_state_ranges,
 };
@@ -30,6 +32,8 @@ pub mod values;
 
 const UPDATE_PERIOD_MS: f64 = 100.0;
 const DEFAULT_DT: f64 = 0.02;
+/// The samples a field needs for a thread to be worth it.
+const PARALLEL_SAMPLES: usize = 500;
 const MAX_BINS: f64 = 1000.0;
 
 const TIME_RANGE_OPTIONS: [(&str, &str); 7] = [
@@ -361,7 +365,7 @@ impl StatisticsController {
         }
 
         let config = configs::statistics();
-        let mut fields = Vec::new();
+        let mut jobs = Vec::new();
         let mut index = 0usize;
         while index < sources.len() {
             let source = &sources[index];
@@ -386,30 +390,15 @@ impl StatisticsController {
             }
 
             if eq_str(&source.item_type, "independent") {
-                field_command(
-                    cx,
-                    &mut fields,
-                    &sample_times,
-                    &bins,
-                    (min, step),
-                    source,
-                    None,
-                )?;
+                jobs.push(FieldJob::new(cx, source, None));
             } else {
                 for child in children {
-                    field_command(
-                        cx,
-                        &mut fields,
-                        &sample_times,
-                        &bins,
-                        (min, step),
-                        child,
-                        Some(source),
-                    )?;
+                    jobs.push(FieldJob::new(cx, child, Some(source)));
                 }
             }
             index += 1;
         }
+        let fields = field_commands(&jobs, &sample_times, &bins, (min, step))?;
 
         self.command = StatisticsCommand {
             change_counter: self.command.change_counter + 1.0,
@@ -421,31 +410,80 @@ impl StatisticsController {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
+/// One field's samples, and those it is measured against.
+struct FieldJob<'a> {
+    source: &'a SourceListItemState,
+    data: Option<LogValueSet<f64>>,
+    ref_data: Option<LogValueSet<f64>>,
+}
+
+impl<'a> FieldJob<'a> {
+    fn new(
+        cx: &mut (impl StatisticsCx + ?Sized),
+        source: &'a SourceListItemState,
+        ref_source: Option<&SourceListItemState>,
+    ) -> Self {
+        let log = cx.tab_log();
+        let number =
+            |key: &JsString| log.get_number(key, f64::NEG_INFINITY, f64::INFINITY, None, None);
+        FieldJob {
+            source,
+            data: number(&source.log_key),
+            ref_data: ref_source.and_then(|r| number(&r.log_key)),
+        }
+    }
+}
+
+/// Every job's field, in order, or the first one's error.
+fn field_commands(
+    jobs: &[FieldJob<'_>],
+    sample_times: &[f64],
+    bins: &[f64],
+    range: (f64, f64),
+) -> Result<Vec<StatisticsField>, JsError> {
+    let run = |job: &FieldJob<'_>| field_command(job, sample_times, bins, range);
+    let cores = std::thread::available_parallelism().map_or(1, usize::from);
+    if cores == 1 || jobs.len() < 2 || sample_times.len() < PARALLEL_SAMPLES {
+        return jobs.iter().map(run).collect();
+    }
+    let next = AtomicUsize::new(0);
+    let work = || {
+        let mut done = Vec::new();
+        loop {
+            let i = next.fetch_add(1, Ordering::Relaxed);
+            let Some(job) = jobs.get(i) else {
+                return done;
+            };
+            done.push((i, run(job)));
+        }
+    };
+    let mut fields: Vec<_> = jobs.iter().map(|_| None).collect();
+    std::thread::scope(|scope| {
+        let others: Vec<_> = (1..cores.min(jobs.len()))
+            .map(|_| scope.spawn(work))
+            .collect();
+        let mut done = work();
+        for other in others {
+            done.extend(other.join().expect("a statistics thread"));
+        }
+        for (i, field) in done {
+            fields[i] = Some(field);
+        }
+    });
+    fields.into_iter().flatten().collect()
+}
+
 fn field_command(
-    cx: &mut (impl StatisticsCx + ?Sized),
-    fields: &mut Vec<StatisticsField>,
+    job: &FieldJob<'_>,
     sample_times: &[f64],
     bins: &[f64],
     (min, step): (f64, f64),
-    source: &SourceListItemState,
-    ref_source: Option<&SourceListItemState>,
-) -> Result<(), JsError> {
-    let (data, ref_data) = {
-        let log = cx.tab_log();
-        (
-            log.get_number(
-                &source.log_key,
-                f64::NEG_INFINITY,
-                f64::INFINITY,
-                None,
-                None,
-            ),
-            ref_source.and_then(|r| {
-                log.get_number(&r.log_key, f64::NEG_INFINITY, f64::INFINITY, None, None)
-            }),
-        )
-    };
+) -> Result<StatisticsField, JsError> {
+    let FieldJob {
+        source,
+        data,
+        ref_data,
+    } = job;
 
     let mut index = 0usize;
     let mut samples: Vec<JsValue> = Vec::with_capacity(sample_times.len());
@@ -465,7 +503,7 @@ fn field_command(
     }
 
     let mut index = 0usize;
-    let ref_samples: Option<Vec<JsValue>> = ref_data.map(|ref_data| {
+    let ref_samples: Option<Vec<JsValue>> = ref_data.as_ref().map(|ref_data| {
         sample_times
             .iter()
             .map(|&sample_time| {
@@ -495,21 +533,27 @@ fn field_command(
         }
     }
 
-    let mut slots: Vec<Slot<JsValue>> = samples
-        .iter()
-        .map(|v| match v {
-            JsValue::Undefined => Slot::Undefined,
-            other => Slot::Value(other.clone()),
-        })
-        .collect();
-    sort::array_sort_slots(&mut slots, |a, b| subtract(a, b).unwrap_or(f64::NAN));
-    let samples: Vec<JsValue> = slots
-        .into_iter()
-        .map(|slot| match slot {
-            Slot::Value(v) => v,
-            Slot::Undefined | Slot::Hole => JsValue::Undefined,
-        })
-        .collect();
+    let numbers: Option<Vec<f64>> = samples.iter().map(JsValue::as_f64).collect();
+    let samples: Vec<JsValue> = if let Some(mut numbers) = numbers {
+        sort::array_sort(&mut numbers, |a, b| a - b);
+        numbers.into_iter().map(num).collect()
+    } else {
+        let mut slots: Vec<Slot<JsValue>> = samples
+            .iter()
+            .map(|v| match v {
+                JsValue::Undefined => Slot::Undefined,
+                other => Slot::Value(other.clone()),
+            })
+            .collect();
+        sort::array_sort_slots(&mut slots, |a, b| subtract(a, b).unwrap_or(f64::NAN));
+        slots
+            .into_iter()
+            .map(|slot| match slot {
+                Slot::Value(v) => v,
+                Slot::Undefined | Slot::Hole => JsValue::Undefined,
+            })
+            .collect()
+    };
 
     let mut histogram_counts = vec![0.0; bins.len()];
     for value in &samples {
@@ -534,13 +578,12 @@ fn field_command(
         .get("color")
         .map(|c| JsValue::String(c.clone()))
         .unwrap_or(JsValue::Undefined);
-    fields.push(StatisticsField {
+    Ok(StatisticsField {
         title: source.log_key.clone(),
         color,
         histogram_counts,
         stats: stats_obj,
-    });
-    Ok(())
+    })
 }
 
 fn num(x: f64) -> JsValue {

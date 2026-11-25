@@ -150,44 +150,52 @@ pub fn clip_line_cull(pts: [P; 2], clip: ClipRect, cull_right: bool, out: &mut V
     } else {
         (1, 0, true)
     };
-    let mut result = Vec::with_capacity(4);
     if tmp[i0].x >= clip.right && tmp[i1].x > clip.left && cull_right {
         return;
     }
+    let mut result = [pts[0]; 4];
+    let mut count = 0;
+    let mut add = |p: P| {
+        result[count] = p;
+        count += 1;
+    };
     if tmp[i1].x <= clip.left || tmp[i0].x >= clip.right {
         let x = if tmp[i1].x <= clip.left {
             clip.left
         } else {
             clip.right
         };
-        result.extend(tmp.map(|p| P { x, y: p.y }));
+        for p in tmp {
+            add(P { x, y: p.y });
+        }
         reverse = false;
     } else {
         if tmp[i0].x < clip.left {
-            result.push(P {
+            add(P {
                 x: clip.left,
                 y: tmp[i0].y,
             });
-            result.push(P {
+            add(P {
                 x: clip.left,
                 y: sect_clamp_with_vertical(tmp[0], tmp[1], clip.left),
             });
         } else {
-            result.push(tmp[i0]);
+            add(tmp[i0]);
         }
         if tmp[i1].x > clip.right {
-            result.push(P {
+            add(P {
                 x: clip.right,
                 y: sect_clamp_with_vertical(tmp[0], tmp[1], clip.right),
             });
-            result.push(P {
+            add(P {
                 x: clip.right,
                 y: tmp[i1].y,
             });
         } else {
-            result.push(tmp[i1]);
+            add(tmp[i1]);
         }
     }
+    let result = &mut result[..count];
     if reverse {
         result.reverse();
     }
@@ -283,12 +291,12 @@ fn set_coord(p: &mut P, y: bool, v: f32) {
     }
 }
 
-pub fn chop_quad_at_y_extrema(src: [P; 3]) -> Vec<[P; 3]> {
+pub fn chop_quad_at_y_extrema(src: [P; 3]) -> impl Iterator<Item = [P; 3]> {
     chop_quad_at_extrema(src, true)
 }
 
 /// `SkChopQuadAtYExtrema` (`y`) or `SkChopQuadAtXExtrema`.
-fn chop_quad_at_extrema(src: [P; 3], y: bool) -> Vec<[P; 3]> {
+fn chop_quad_at_extrema(src: [P; 3], y: bool) -> impl Iterator<Item = [P; 3]> {
     let (a, b, c) = (coord(src[0], y), coord(src[1], y), coord(src[2], y));
     let mut middle = b;
     if is_not_monotonic(a, b, c) {
@@ -297,13 +305,15 @@ fn chop_quad_at_extrema(src: [P; 3], y: bool) -> Vec<[P; 3]> {
             let extremum = coord(d[2], y);
             set_coord(&mut d[1], y, extremum);
             set_coord(&mut d[3], y, extremum);
-            return vec![[d[0], d[1], d[2]], [d[2], d[3], d[4]]];
+            return [Some([d[0], d[1], d[2]]), Some([d[2], d[3], d[4]])]
+                .into_iter()
+                .flatten();
         }
         middle = if (a - b).abs() < (b - c).abs() { a } else { c };
     }
     let mut out = src;
     set_coord(&mut out[1], y, middle);
-    vec![out]
+    [Some(out), None].into_iter().flatten()
 }
 
 fn vline(x: f32, y0: f32, y1: f32, reverse: bool) -> Piece {

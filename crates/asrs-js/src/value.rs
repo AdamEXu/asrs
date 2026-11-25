@@ -503,20 +503,23 @@ pub fn array_index(key: &[u16]) -> Option<u32> {
     (value <= 4_294_967_294).then_some(value as u32)
 }
 
+/// The hasher of maps keyed by field and property names. Iteration order must never depend on it.
+pub type KeyState = foldhash::fast::RandomState;
+
 /// An ordinary JS object's own enumerable string-keyed properties, iterated in JS property
 /// order. Assigning to an existing key keeps its position; removing a key and adding it again
 /// moves it to the end (for non-index keys).
 #[derive(Clone)]
 pub struct JsObject<V = JsValue> {
     indexed: BTreeMap<u32, (JsString, V)>,
-    named: IndexMap<JsString, V>,
+    named: IndexMap<JsString, V, KeyState>,
 }
 
 impl<V> Default for JsObject<V> {
     fn default() -> Self {
         JsObject {
             indexed: BTreeMap::new(),
-            named: IndexMap::new(),
+            named: IndexMap::default(),
         }
     }
 }

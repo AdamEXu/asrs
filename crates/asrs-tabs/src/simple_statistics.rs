@@ -61,6 +61,8 @@ fn elem(x: &[JsValue], i: f64) -> JsValue {
         .unwrap_or(JsValue::Undefined)
 }
 
+static UNDEFINED: JsValue = JsValue::Undefined;
+
 /// An element of the array `quantile` selects in, with the identity `===` compares objects by:
 /// the index it had in the copy.
 #[derive(Clone)]
@@ -151,7 +153,24 @@ impl SelectArray {
         Ok(())
     }
 
+    fn value(&self, i: f64) -> &JsValue {
+        match array_index(i) {
+            Some(i) => self.items.get(i).map_or(&UNDEFINED, |e| &e.value),
+            None => self
+                .named
+                .iter()
+                .find(|(k, _)| same_key(*k, i))
+                .map_or(&UNDEFINED, |(_, e)| &e.value),
+        }
+    }
+
     fn swap(&mut self, i: f64, j: f64) -> Result<()> {
+        if let (Some(i), Some(j)) = (array_index(i), array_index(j))
+            && i.max(j) < self.items.len()
+        {
+            self.items.swap(i, j);
+            return Ok(());
+        }
         let a = self.get(i);
         let b = self.get(j);
         self.set(i, b)?;
@@ -192,7 +211,7 @@ impl Indexed for SelectArray {
     }
 
     fn at(&self, i: f64) -> JsValue {
-        self.get(i).value
+        self.value(i).clone()
     }
 }
 
@@ -234,6 +253,9 @@ fn prim_to_f64(p: &Prim) -> Result<f64> {
 }
 
 fn rel(a: &JsValue, b: &JsValue) -> Option<std::cmp::Ordering> {
+    if let (JsValue::Number(x), JsValue::Number(y)) = (a, b) {
+        return x.partial_cmp(y);
+    }
     let a = primitive(a);
     let b = primitive(b);
     if let (Prim::Str(x), Prim::Str(y)) = (&a, &b) {
@@ -411,7 +433,7 @@ fn quickselect(arr: &mut SelectArray, k: f64, left: f64, right: f64) -> Result<(
         let mut j = right;
         arr.swap(left, k)?;
 
-        if gt(&arr.get(right).value, &t.value) {
+        if gt(arr.value(right), &t.value) {
             arr.swap(left, right)?;
         }
 
@@ -423,13 +445,13 @@ fn quickselect(arr: &mut SelectArray, k: f64, left: f64, right: f64) -> Result<(
             i += 1.0;
             j -= 1.0;
 
-            while lt(&arr.get(i).value, &t.value) {
+            while lt(arr.value(i), &t.value) {
                 if stuck(i, 1.0) {
                     return Err(StatsError::NeverCompletes);
                 }
                 i += 1.0;
             }
-            while gt(&arr.get(j).value, &t.value) {
+            while gt(arr.value(j), &t.value) {
                 if stuck(j, -1.0) {
                     return Err(StatsError::NeverCompletes);
                 }
