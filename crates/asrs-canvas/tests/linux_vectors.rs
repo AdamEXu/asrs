@@ -240,7 +240,13 @@ fn a_scaled_display_turns_hinting_off() {
     );
     let kept = backend.metrics(&page);
     assert_eq!((kept.ascent, kept.descent), (9.0, 2.0));
+    let label = FontSpec::parse("12px system-ui").unwrap();
+    let descent = |backend: &mut dyn TextBackend| {
+        measure_text(backend, &label, "center", "top", "+3.3s").actual_bounding_box_descent
+    };
+    assert_eq!(descent(backend.as_mut()), 10.125);
     assert!(backend.set_device_scale(1.0));
+    assert_eq!(descent(backend.as_mut()), 9.125);
     assert_eq!(*backend.raw_mask(glyph, 1.0, 1.0, 0).unwrap(), *mask);
 }
 
