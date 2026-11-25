@@ -1,0 +1,339 @@
+{
+  "entry": "dom",
+  "backend": "blink",
+  "inputs": [
+    "../assets/minimal.json"
+  ],
+  "fixture": {
+    "geometry": "real",
+    "seed": 1075,
+    "assets": "../assets/minimal.json",
+    "images": {
+      "bundledAssets/Field2d_2026FRCFieldV1/image.png": [
+        3900,
+        1800
+      ]
+    },
+    "steps": [
+      {
+        "log": [
+          [
+            "putBoolean",
+            "/Flag",
+            0,
+            1
+          ],
+          [
+            "putNumber",
+            "/Pos",
+            0,
+            1
+          ],
+          [
+            "putString",
+            "/Text",
+            0,
+            1
+          ],
+          [
+            "putBoolean",
+            "/Flag",
+            1,
+            "5"
+          ],
+          [
+            "putNumber",
+            "/Pos",
+            1,
+            "5"
+          ],
+          [
+            "putString",
+            "/Text",
+            1,
+            "5"
+          ],
+          [
+            "putBoolean",
+            "/Flag",
+            2,
+            true
+          ],
+          [
+            "putNumber",
+            "/Pos",
+            2,
+            true
+          ],
+          [
+            "putString",
+            "/Text",
+            2,
+            true
+          ],
+          [
+            "putBoolean",
+            "/Flag",
+            3,
+            null
+          ],
+          [
+            "putNumber",
+            "/Pos",
+            3,
+            null
+          ],
+          [
+            "putString",
+            "/Text",
+            3,
+            null
+          ],
+          [
+            "putBoolean",
+            "/Flag",
+            4,
+            [
+              4,
+              "a"
+            ]
+          ],
+          [
+            "putNumber",
+            "/Pos",
+            4,
+            [
+              4,
+              "a"
+            ]
+          ],
+          [
+            "putString",
+            "/Text",
+            4,
+            [
+              4,
+              "a"
+            ]
+          ],
+          [
+            "putBoolean",
+            "/Flag",
+            5,
+            {
+              "o": [
+                [
+                  "a",
+                  true
+                ]
+              ]
+            }
+          ],
+          [
+            "putNumber",
+            "/Pos",
+            5,
+            {
+              "o": [
+                [
+                  "a",
+                  true
+                ]
+              ]
+            }
+          ],
+          [
+            "putString",
+            "/Text",
+            5,
+            {
+              "o": [
+                [
+                  "a",
+                  true
+                ]
+              ]
+            }
+          ],
+          [
+            "putBoolean",
+            "/Flag",
+            6,
+            ""
+          ],
+          [
+            "putNumber",
+            "/Pos",
+            6,
+            ""
+          ],
+          [
+            "putString",
+            "/Text",
+            6,
+            ""
+          ],
+          [
+            "putBoolean",
+            "/Flag",
+            7,
+            false
+          ],
+          [
+            "putNumber",
+            "/Pos",
+            7,
+            false
+          ],
+          [
+            "putString",
+            "/Text",
+            7,
+            false
+          ],
+          [
+            "putBoolean",
+            "/Flag",
+            8,
+            0
+          ],
+          [
+            "putNumber",
+            "/Pos",
+            8,
+            0
+          ],
+          [
+            "putString",
+            "/Text",
+            8,
+            0
+          ],
+          [
+            "putBoolean",
+            "/Flag",
+            9,
+            []
+          ],
+          [
+            "putNumber",
+            "/Pos",
+            9,
+            []
+          ],
+          [
+            "putString",
+            "/Text",
+            9,
+            []
+          ],
+          [
+            "putString",
+            "/Lines",
+            0,
+            "an error"
+          ],
+          [
+            "putString",
+            "/Lines",
+            1,
+            "a warning"
+          ],
+          [
+            "putString",
+            "/Lines",
+            2,
+            "plain"
+          ]
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 5
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.restoreState(\"/Lines\")"
+      },
+      {
+        "eval": "window.selection.setSelectedTime(2.5)"
+      },
+      {
+        "advance": 100
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "canvas",
+          "selection",
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          },
+          {
+            "kind": "dom",
+            "selector": "div.controls-content > :not([hidden])",
+            "attributes": [
+              "title",
+              "src"
+            ]
+          }
+        ],
+        "label": "selected"
+      },
+      {
+        "eval": "window.selection.setHoveredTime(6)"
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "commands",
+          "canvas"
+        ],
+        "label": "hovered"
+      },
+      {
+        "log": [
+          [
+            "putString",
+            "/Lines",
+            3,
+            5
+          ],
+          [
+            "putString",
+            "/Lines",
+            4,
+            "after"
+          ]
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          "commands",
+          "state",
+          "canvas",
+          "selection",
+          {
+            "kind": "dom",
+            "selector": "div.renderer-content > :not([hidden])"
+          },
+          {
+            "kind": "dom",
+            "selector": "div.controls-content > :not([hidden])",
+            "attributes": [
+              "title",
+              "src"
+            ]
+          }
+        ],
+        "label": "threw"
+      }
+    ]
+  }
+}

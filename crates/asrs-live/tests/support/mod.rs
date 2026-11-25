@@ -757,9 +757,9 @@ pub fn log_op(
         op[3..].iter().map(js_arg).collect::<Result<_, _>>()?;
     let num = |i: usize| args[i].as_f64().expect("number");
     match method.as_str() {
-        "putNumber" => log.put_number(&key, num(0), num(1)),
-        "putBoolean" => log.put_boolean(&key, num(0), args[1].as_bool().expect("bool")),
-        "putString" => log.put_string(&key, num(0), args[1].as_str().expect("string").clone()),
+        "putNumber" => log.put_number(&key, num(0), num(1))?,
+        "putBoolean" => log.put_boolean(&key, num(0), args[1].as_bool().expect("bool"))?,
+        "putString" => log.put_string(&key, num(0), args[1].as_str().expect("string").clone())?,
         "putJSON" => log.put_json(&key, num(0), args[1].as_str().expect("string").clone())?,
         "putRaw" => match &args[1] {
             asrs_js::value::JsValue::Bytes(b) => log.put_raw(&key, num(0), b.clone())?,
@@ -809,7 +809,7 @@ pub fn log_op(
                 .iter()
                 .map(|v| v.as_f64().expect("number"))
                 .collect(),
-        ),
+        )?,
         "putBooleanArray" => log.put_boolean_array(
             &key,
             num(0),
@@ -819,7 +819,7 @@ pub fn log_op(
                 .iter()
                 .map(|v| v.as_bool().expect("bool"))
                 .collect(),
-        ),
+        )?,
         "putStringArray" => log.put_string_array(
             &key,
             num(0),
@@ -829,7 +829,7 @@ pub fn log_op(
                 .iter()
                 .map(|v| v.as_str().expect("string").clone())
                 .collect(),
-        ),
+        )?,
         "createBlankField" => {
             let ty = match num(0) as u8 {
                 0 => LoggableType::Raw,

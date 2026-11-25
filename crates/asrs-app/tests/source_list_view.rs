@@ -239,7 +239,7 @@ fn run(headless: &mut HeadlessCapture, scale: f32, blink: &[(String, Vec<String>
         {
             let mut log = model.page().shared_log().borrow_mut();
             for (i, key) in ["/A", "/B", "/C", "/D", "/E"].into_iter().enumerate() {
-                log.put_number(&JsString::from(key), 0.0, i as f64);
+                log.put_number(&JsString::from(key), 0.0, i as f64).unwrap();
             }
         }
         let (tabs, page) = model.tabs_mut();

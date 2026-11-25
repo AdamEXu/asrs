@@ -8,7 +8,7 @@ use asrs_js::number;
 use asrs_js::string::{JsString, TextDecoder};
 use asrs_js::time::Clock;
 use asrs_log::log::struct_decoder::MAX_ARRAY_LENGTH;
-use asrs_log::log::{Log, MapValue};
+use asrs_log::log::{Log, LogError, MapValue};
 use asrs_log::units;
 
 use crate::worker::{Abort, DecodeWorker, Request, Response};
@@ -23,6 +23,13 @@ enum Step {
     Bounds,
     Fail,
     Abort(Abort),
+}
+
+/// Only a JS throw reaches here: every write is a decoded message, never raw bytes.
+impl From<LogError> for Step {
+    fn from(_: LogError) -> Self {
+        Step::Fail
+    }
 }
 
 /// `RRLOGCommon.ts`'s `MessageSchema`, one variant per on-wire type id.
@@ -525,9 +532,9 @@ impl RrLogDecoder {
                             &JsString::from("RUNNING"),
                             self.last_timestamp + 0.05,
                             true,
-                        );
+                        )?;
                     } else if ascii_eq(&key, "OPMODE_POST_STOP") {
-                        log.put_boolean(&JsString::from("RUNNING"), self.last_timestamp, false);
+                        log.put_boolean(&JsString::from("RUNNING"), self.last_timestamp, false)?;
                     }
                 } else if let MapValue::Map(entries) = &msg
                     && let Some(MapValue::BigInt(rr_timestamp)) = entries
@@ -540,10 +547,10 @@ impl RrLogDecoder {
 
                 let timestamp = self.last_timestamp;
                 match &msg {
-                    MapValue::Bool(b) => log.put_boolean(&key, timestamp, *b),
-                    MapValue::Number(x) => log.put_number(&key, timestamp, *x),
-                    MapValue::BigInt(v) => log.put_number(&key, timestamp, *v as f64),
-                    MapValue::Text(s) => log.put_string(&key, timestamp, s.clone()),
+                    MapValue::Bool(b) => log.put_boolean(&key, timestamp, *b)?,
+                    MapValue::Number(x) => log.put_number(&key, timestamp, *x)?,
+                    MapValue::BigInt(v) => log.put_number(&key, timestamp, *v as f64)?,
+                    MapValue::Text(s) => log.put_string(&key, timestamp, s.clone())?,
                     MapValue::Map(entries) => {
                         let field = |name: &str| {
                             entries
@@ -564,17 +571,15 @@ impl RrLogDecoder {
                                         "a pose heading that is not a number",
                                     )));
                                 };
-                                log.put_pose(&key, timestamp, translation, *rotation);
+                                log.put_pose(&key, timestamp, translation, *rotation)?;
                             }
                             _ => {
-                                log.put_unknown_map(&key, timestamp, &msg, true)
-                                    .map_err(|_| Step::Fail)?;
+                                log.put_unknown_map(&key, timestamp, &msg, true)?;
                             }
                         }
                     }
                     _ => {
-                        log.put_unknown_map(&key, timestamp, &msg, true)
-                            .map_err(|_| Step::Fail)?;
+                        log.put_unknown_map(&key, timestamp, &msg, true)?;
                     }
                 }
             }

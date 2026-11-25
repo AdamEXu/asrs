@@ -209,9 +209,17 @@ impl ConsoleController {
         Ok(())
     }
 
-    fn lines(field: &JsString, log: &Log) -> Vec<ConsoleLine> {
+    fn lines(field: &JsString, log: &Log) -> Result<Vec<ConsoleLine>, JsError> {
         let mut lines = Vec::new();
         if log.get_type(field) == Some(LoggableType::String) {
+            if let Some(data) = log.get_foreign_range(field, f64::NEG_INFINITY, f64::INFINITY)
+                && let Some(value) = data.values.iter().find(|value| value.as_str().is_none())
+            {
+                return Err(match value {
+                    JsValue::Undefined => ops::cannot_read(value, "toLowerCase"),
+                    _ => JsError::type_error("value.toLowerCase is not a function"),
+                });
+            }
             if let Some(data) = log.get_string(field, f64::NEG_INFINITY, f64::INFINITY, None, None)
             {
                 for (timestamp, value) in data.timestamps.iter().zip(&data.values) {
@@ -273,7 +281,7 @@ impl ConsoleController {
             }
         }
         array_sort(&mut lines, |a, b| a.timestamp - b.timestamp);
-        lines
+        Ok(lines)
     }
 }
 
@@ -371,7 +379,7 @@ impl<Cx: TabCx + ?Sized> TabController<Cx> for ConsoleController {
                     let lines = if field.is_empty() {
                         Vec::new()
                     } else {
-                        Self::lines(field, &log)
+                        Self::lines(field, &log)?
                     };
                     (true, lines)
                 }

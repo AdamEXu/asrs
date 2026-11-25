@@ -394,21 +394,7 @@ impl Nt4Source {
 /// `field in this.lowBandwidthDataSubscriptions`: `in` also finds `Object.prototype`'s own
 /// properties, so a field named after one never gets a data subscription.
 fn subscription_present(subscriptions: &JsObject<f64>, field: &JsString) -> bool {
-    const PROTO: [&str; 12] = [
-        "__proto__",
-        "constructor",
-        "__defineGetter__",
-        "__defineSetter__",
-        "hasOwnProperty",
-        "__lookupGetter__",
-        "__lookupSetter__",
-        "isPrototypeOf",
-        "propertyIsEnumerable",
-        "toString",
-        "valueOf",
-        "toLocaleString",
-    ];
-    subscriptions.get_key(field).is_some() || PROTO.iter().any(|p| *field == js(p))
+    subscriptions.get_key(field).is_some() || ops::is_object_prototype_member(field)
 }
 
 /// The callbacks `NT4Source` registers on its client. Everything a callback may touch is
@@ -524,7 +510,7 @@ fn put_topic_value(
             "boolean" => {
                 return Ok(match value {
                     JsValue::Bool(b) => {
-                        log.put_boolean(key, timestamp, *b);
+                        log.put_boolean(key, timestamp, *b)?;
                         true
                     }
                     _ => false,
@@ -533,7 +519,7 @@ fn put_topic_value(
             "int" | "float" | "double" => {
                 return Ok(match value {
                     JsValue::Number(n) => {
-                        log.put_number(key, timestamp, *n);
+                        log.put_number(key, timestamp, *n)?;
                         true
                     }
                     _ => false,
@@ -542,7 +528,7 @@ fn put_topic_value(
             "string" => {
                 return Ok(match value {
                     JsValue::String(s) => {
-                        log.put_string(key, timestamp, s.clone());
+                        log.put_string(key, timestamp, s.clone())?;
                         true
                     }
                     _ => false,
@@ -558,7 +544,7 @@ fn put_topic_value(
                                 .iter()
                                 .map(|v| v.as_bool().unwrap_or_default())
                                 .collect(),
-                        );
+                        )?;
                         true
                     }
                     None => false,
@@ -574,7 +560,7 @@ fn put_topic_value(
                                 .iter()
                                 .map(|v| v.as_f64().unwrap_or_default())
                                 .collect(),
-                        );
+                        )?;
                         true
                     }
                     None => false,
@@ -590,7 +576,7 @@ fn put_topic_value(
                                 .iter()
                                 .map(|v| v.as_str().cloned().unwrap_or_default())
                                 .collect(),
-                        );
+                        )?;
                         true
                     }
                     None => false,
@@ -854,7 +840,7 @@ impl Nt4Tuner {
                         JsValue::Number(clean),
                         cx,
                     )?;
-                    window_log.borrow_mut().put_number(key, timestamp, clean);
+                    window_log.borrow_mut().put_number(key, timestamp, clean)?;
                 }
                 TunedValue::Boolean(value) => {
                     self.client.borrow_mut().add_timestamped_sample(
@@ -863,7 +849,7 @@ impl Nt4Tuner {
                         JsValue::Bool(value),
                         cx,
                     )?;
-                    window_log.borrow_mut().put_boolean(key, timestamp, value);
+                    window_log.borrow_mut().put_boolean(key, timestamp, value)?;
                 }
             }
         }
