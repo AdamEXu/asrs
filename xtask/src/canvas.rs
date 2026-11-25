@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -7,7 +8,7 @@ use asrs_parity::pixel::{self, Stats};
 use asrs_parity::vectors as parity_vectors;
 
 use crate::oracle::{self, Paths};
-use crate::{Result, cargo};
+use crate::{Result, cargo, host};
 
 const USAGE: &str = "usage: cargo xtask canvas <command>
 
@@ -18,19 +19,24 @@ host it runs on. References land in target/parity/canvas/<os>/.
 commands:
   ref [<scene>...]      Chromium references: scenes/*.json, ref/<scene>.{cpu,gpu}.png, and with no
                         scene named also measure.jsonl and dom/<scene>@{1,2}x.{png,json}
-  lut [--check]         calibrate parity/vectors/canvas/lut-<os>.bin from the calibration scenes and
-                        the platform text backend (asrs-cli canvas lut)
+  lut [--lcd] [--check] calibrate parity/vectors/canvas/lut-<os>.bin from the calibration scenes and
+                        the platform text backend (asrs-cli canvas lut), or with --lcd
+                        lut-<os>-lcd.bin from the DOM calibration scenes, where DOM text is LCD:
+                        Windows, and Linux under stock.conf
+  dom [--check]         capture the DOM text scenes at device scale 1 and 2 into
+                        parity/vectors/canvas/scenes-windows/ or scenes-linux-<font profile>/, with
+                        each text box's antialiasing (`mode`: lcd or grayscale)
   measure [--check]     write parity/vectors/canvas/measure-<os>.jsonl.zst
   scenes                write parity/vectors/canvas/scenes-<os>/: the display lists and CPU
-                        references of the text scenes `asrs-cli` tests against on that platform, and on
-                        Windows the DOM text captures
+                        references of the text scenes `asrs-cli` tests against on that platform
   diff <port dir> [<scene>...]
                         gate <port dir>/<scene>.png (straight RGBA, like getImageData) against the
                         references; writes <port dir>/report.json and diff/<scene>.png
   run <program> [<arg>...] [-- <scene>...]
                         run `<program> <arg>... <scenes dir> <port dir> [<scene>...]`, then diff
-  stable                regenerate the references and the LUT twice from scratch and require
-                        identical bytes, and the LUT to equal the committed one
+  stable                regenerate the references and the LUTs twice from scratch and require
+                        identical bytes, and the LUTs to equal the committed ones, as must the DOM
+                        text scenes where there are some for this host
   heatmap               run the upstream Heatmap fixtures on Chromium's CPU canvas, replay them
                         with asrs-cli heatmap, and gate recorded fields and the shadow canvas
                         exactly and the output RGBA at a max channel delta of 1
@@ -38,9 +44,11 @@ commands:
 
 Gates against the CPU canvas: pixel scenes at most 0.2 % pixelmatch (YIQ 0.1) and no blob over
 64 px; text scenes 0 % and max channel delta 24. Every scene: pixelmatch distance to the GPU
-canvas at most Chromium's own CPU-to-GPU distance.";
+canvas at most Chromium's own CPU-to-GPU distance. Where that canvas is software (gpuFeatureStatus of
+info.json) the distance is reported and not enforced.";
 
 const ELECTRON_FLAGS: &[&str] = &["--force-color-profile=srgb", "--lang=en-US"];
+pub(crate) const DOM_SCALES: [&str; 2] = ["1", "2"];
 const PIXEL_MAX_PCT: f64 = 0.2;
 const PIXEL_MAX_BLOB: u64 = 64;
 const TEXT_MAX_CHANNEL: u8 = 24;
@@ -51,7 +59,9 @@ pub fn run(args: &[String]) -> Result {
     let check = rest.iter().any(|a| a == "--check");
     match args.first().map(String::as_str) {
         Some("ref") => reference(&paths, &reference_dir(&paths), rest),
+        Some("lut") if rest.iter().any(|a| a == "--lcd") => lcd_lut(&paths, check),
         Some("lut") => lut(&paths, check),
+        Some("dom") => dom(&paths, check),
         Some("measure") => measure(&paths, check),
         Some("scenes") => pin_scenes(&paths),
         Some("diff") => match rest.split_first() {
@@ -147,16 +157,25 @@ pub(crate) fn reference(paths: &Paths, out: &Path, scenes: &[String]) -> Result 
     electron(paths, &args)?;
     if scenes.is_empty() {
         electron(paths, &["measure".to_owned(), path_arg(out)])?;
-        for scale in ["1", "2"] {
-            electron_with(
-                paths,
-                &[format!("--force-device-scale-factor={scale}")],
-                &["dom".to_owned(), path_arg(out), scale.to_owned()],
-            )?;
-        }
+        dom_scenes(paths, &["dom"], out)?;
         write(&stamp, format!("{}\n", generator_hash(paths)?).as_bytes())?;
     }
     eprintln!("canvas references in {}", out.display());
+    Ok(())
+}
+
+/// Runs a DOM capture mode of the oracle at each device scale.
+pub(crate) fn dom_scenes(paths: &Paths, mode: &[&str], out: &Path) -> Result {
+    for scale in DOM_SCALES {
+        let mut args = vec![mode[0].to_owned(), path_arg(out)];
+        args.extend(mode[1..].iter().map(|a| (*a).to_owned()));
+        args.push(scale.to_owned());
+        electron_with(
+            paths,
+            &[format!("--force-device-scale-factor={scale}")],
+            &args,
+        )?;
+    }
     Ok(())
 }
 
@@ -176,17 +195,219 @@ fn fit_lut(paths: &Paths, scratch: &Path) -> Result<Vec<u8>> {
     check_fonts(paths)?;
     oracle::build_harness(paths)?;
     electron(paths, &["canvas-lut".to_owned(), path_arg(scratch)])?;
-    let out = scratch.join("lut.bin");
+    fit(paths, "lut", scratch, &scratch.join("lut.bin"))
+}
+
+fn fit(paths: &Paths, command: &str, reference: &Path, out: &Path) -> Result<Vec<u8>> {
     let status = asrs_cli(paths)?
-        .args(["canvas", "lut"])
-        .arg(scratch)
-        .arg(&out)
+        .args(["canvas", command])
+        .arg(reference)
+        .arg(out)
         .status()
         .map_err(|e| format!("running asrs-cli: {e}"))?;
     if !status.success() {
-        return Err(format!("asrs-cli canvas lut failed ({status})"));
+        return Err(format!("asrs-cli canvas {command} failed ({status})"));
     }
-    oracle::read(&out)
+    oracle::read(out)
+}
+
+fn lcd_text() -> bool {
+    match platform() {
+        "windows" => true,
+        "linux" => host::font_profile().as_deref() == Some("stock"),
+        _ => false,
+    }
+}
+
+fn fit_lcd_lut(paths: &Paths, scratch: &Path) -> Result<Vec<u8>> {
+    if !lcd_text() {
+        return Err(
+            "DOM text is not LCD here (Windows, or Linux with FONTCONFIG_FILE=<dir>/stock.conf)"
+                .to_owned(),
+        );
+    }
+    check_fonts(paths)?;
+    oracle::build_harness(paths)?;
+    clear_dir(&scratch.join("lcd"))?;
+    dom_scenes(paths, &["canvas-lut", "dom"], scratch)?;
+    fit(paths, "lcd", &scratch.join("lcd"), &scratch.join("lcd.bin"))
+}
+
+fn clear_dir(dir: &Path) -> Result {
+    if dir.exists() {
+        fs::remove_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    Ok(())
+}
+
+/// Where a table or DOM scene was recorded, kept beside it: the Linux ones come from another
+/// architecture than that platform's other references.
+fn provenance(paths: &Paths, info: &Path) -> Result<Vec<(String, Json)>> {
+    let info = read_json(info)?;
+    let mut fields = Vec::new();
+    for k in ["electron", "chrome", "arch", "osRelease"] {
+        let value = info.get(k).ok_or_else(|| format!("info.json has no {k}"))?;
+        fields.push((k.to_owned(), value.clone()));
+    }
+    if platform() == "linux" {
+        let profile = host::font_profile().unwrap_or_default();
+        fields.push(("profile".to_owned(), Json::string(&profile)));
+    }
+    let generator = oracle::hash_tree(
+        &paths.root,
+        &[
+            "oracle/src/canvas",
+            "oracle/src/canvasMain.ts",
+            "crates/asrs-canvas/src/text",
+        ],
+    )?;
+    fields.push(("generator".to_owned(), Json::string(&generator)));
+    Ok(fields)
+}
+
+fn set_provenanced(
+    paths: &Paths,
+    info: &Path,
+    key: &str,
+    entry: impl IntoIterator<Item = (&'static str, Json)>,
+) -> Result {
+    let mut fields = provenance(paths, info)?;
+    fields.extend(entry.into_iter().map(|(k, v)| (k.to_owned(), v)));
+    let json = Json::object(fields.iter().map(|(k, v)| (k.as_str(), v.clone())));
+    set_manifest_field(paths, platform(), key, json)
+}
+
+fn lcd_lut(paths: &Paths, check: bool) -> Result {
+    let scratch = reference_dir(paths).join("lut");
+    let bytes = fit_lcd_lut(paths, &scratch)?;
+    let name = format!("lut-{}-lcd.bin", platform());
+    let committed = vectors_dir(paths).join(&name);
+    if check {
+        return if oracle::read(&committed)? == bytes {
+            eprintln!("{name} is up to date");
+            Ok(())
+        } else {
+            Err(format!("regenerated {name} differs from the committed one"))
+        };
+    }
+    write(&committed, &bytes)?;
+    set_provenanced(
+        paths,
+        &scratch.join("info.json"),
+        "lcdLut",
+        [
+            ("file", Json::string(&name)),
+            ("content", Json::string(&oracle::hash_bytes(&bytes))),
+        ],
+    )?;
+    eprintln!("wrote parity/vectors/canvas/{name}");
+    Ok(())
+}
+
+/// The committed DOM text scenes of this host: their directory and manifest key.
+fn dom_vectors(paths: &Paths) -> Result<(PathBuf, String)> {
+    let (dir, key) = match (platform(), host::font_profile().as_deref()) {
+        ("windows", _) => ("scenes-windows".to_owned(), "dom".to_owned()),
+        ("linux", Some(p @ ("gray" | "stock"))) => {
+            (format!("scenes-linux-{p}"), format!("dom-{p}"))
+        }
+        ("linux", _) => return Err("FONTCONFIG_FILE is not gray.conf or stock.conf".to_owned()),
+        (os, _) => return Err(format!("no DOM text scenes are kept for {os}")),
+    };
+    Ok((vectors_dir(paths).join(dir), key))
+}
+
+/// The DOM captures under `dir` as they are committed: file name and bytes.
+fn dom_files(dir: &Path) -> Result<Vec<(String, Vec<u8>)>> {
+    let mut files = Vec::new();
+    for name in files_under(dir)? {
+        let Some(scene) = name.strip_suffix(".json") else {
+            continue;
+        };
+        let captured = read_json(&dir.join(&name))?;
+        let rows = captured.get("rows").and_then(Json::as_array);
+        let rows = rows
+            .ok_or_else(|| format!("{name}: no rows"))?
+            .iter()
+            .map(|row| {
+                let fields = ["id", "rect", "mode"].map(|key| {
+                    let value = row.get(key).cloned();
+                    Ok((
+                        key,
+                        value.ok_or_else(|| format!("{name}: a row has no {key}"))?,
+                    ))
+                });
+                Ok(Json::object(
+                    fields.into_iter().collect::<Result<Vec<_>>>()?,
+                ))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        let pinned = Json::object([
+            ("scene", Json::string(scene)),
+            (
+                "scale",
+                captured.get("scale").cloned().unwrap_or(Json::Null),
+            ),
+            ("rows", Json::Array(rows)),
+        ]);
+        let image = oracle::read(&dir.join(format!("{scene}.png")))?;
+        files.push((name.clone(), format!("{}\n", pinned.to_pretty()).into()));
+        files.push((format!("{scene}.png"), image));
+    }
+    Ok(files)
+}
+
+fn different_dom_files(committed: &Path, files: &[(String, Vec<u8>)]) -> Result<Vec<String>> {
+    let mut differing = Vec::new();
+    for (name, bytes) in files {
+        if fs::read(committed.join(name)).ok().as_ref() != Some(bytes) {
+            differing.push(format!("{name} (against the committed one)"));
+        }
+    }
+    for name in files_under(committed)? {
+        if name.starts_with("dom-") && !files.iter().any(|(n, _)| *n == name) {
+            differing.push(format!("{name} (committed, not captured)"));
+        }
+    }
+    Ok(differing)
+}
+
+fn dom(paths: &Paths, check: bool) -> Result {
+    let (vectors, key) = dom_vectors(paths)?;
+    check_fonts(paths)?;
+    oracle::build_harness(paths)?;
+    let scratch = reference_dir(paths).join(&key);
+    clear_dir(&scratch)?;
+    dom_scenes(paths, &["dom"], &scratch)?;
+    let files = dom_files(&scratch.join("dom"))?;
+    if check {
+        let differing = different_dom_files(&vectors, &files)?;
+        return if differing.is_empty() {
+            eprintln!("{}: {} files identical", vectors.display(), files.len());
+            Ok(())
+        } else {
+            Err(format!(
+                "DOM text scenes differ:\n  {}",
+                differing.join("\n  ")
+            ))
+        };
+    }
+    let mut entries = Vec::new();
+    for (name, bytes) in &files {
+        write(&vectors.join(name), bytes)?;
+        entries.push(Json::object([
+            ("file", Json::string(name)),
+            ("content", Json::string(&oracle::hash_bytes(bytes))),
+        ]));
+    }
+    set_provenanced(
+        paths,
+        &scratch.join("info.json"),
+        &key,
+        [("files", Json::Array(entries))],
+    )?;
+    eprintln!("wrote {} files to {}", files.len(), vectors.display());
+    Ok(())
 }
 
 pub(crate) fn lut(paths: &Paths, check: bool) -> Result {
@@ -260,9 +481,6 @@ fn write_pinned(paths: &Paths, reference: &Path) -> Result {
             ("content", Json::string(&oracle::hash_bytes(&image))),
         ]));
     }
-    if platform() == "windows" {
-        pin_dom_scenes(reference, &dir, &mut entries)?;
-    }
     let count = entries.len();
     update_manifest(
         paths,
@@ -271,37 +489,6 @@ fn write_pinned(paths: &Paths, reference: &Path) -> Result {
         Json::Array(entries),
     )?;
     eprintln!("wrote {count} scenes to {}", dir.display());
-    Ok(())
-}
-
-/// The DOM text captures, with the text boxes' ids and rects: LCD text that the Windows backend's
-/// three-channel masks are tested against.
-fn pin_dom_scenes(reference: &Path, dir: &Path, entries: &mut Vec<Json>) -> Result {
-    for theme in ["light", "dark"] {
-        for scale in [1, 2] {
-            let name = format!("dom-text-{theme}@{scale}x");
-            let scene = read_json(&reference.join(format!("dom/{name}.json")))?;
-            let rows = scene.get("rows").and_then(Json::as_array);
-            let rows = rows.ok_or_else(|| format!("{name}: no rows"))?.iter();
-            let rows = rows
-                .map(|row| {
-                    let field = |key| row.get(key).cloned().unwrap_or(Json::Null);
-                    Json::object([("id", field("id")), ("rect", field("rect"))])
-                })
-                .collect();
-            let scene = Json::object([("scene", Json::string(&name)), ("rows", Json::Array(rows))]);
-            let image = oracle::read(&reference.join(format!("dom/{name}.png")))?;
-            write(
-                &dir.join(format!("{name}.json")),
-                format!("{}\n", scene.to_pretty()).as_bytes(),
-            )?;
-            write(&dir.join(format!("{name}.png")), &image)?;
-            entries.push(Json::object([
-                ("scene", Json::string(&name)),
-                ("content", Json::string(&oracle::hash_bytes(&image))),
-            ]));
-        }
-    }
     Ok(())
 }
 
@@ -586,7 +773,49 @@ fn stats_json(s: &Stats) -> Json {
     ])
 }
 
-fn gate(scene: &SceneInfo, port_cpu: &Stats, port_gpu: &Stats, cpu_gpu: &Stats) -> Vec<String> {
+/// Whether the GPU-distance rule binds on the host the references come from.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum GpuRule {
+    Enforced,
+    /// Chromium's GPU canvas is software and equals its CPU canvas, so the rule would turn the
+    /// gate against the CPU canvas into exact equality.
+    Reported,
+}
+
+/// `disabled_software` is what Chromium says where there is no GPU process (the Linux hosts) and
+/// `unavailable_software` where it finds no usable adapter (the Windows hosts).
+fn gpu_rule(status: &Json) -> Result<GpuRule> {
+    let canvas = status.get("2d_canvas").and_then(Json::as_str);
+    let canvas = canvas.ok_or("gpuFeatureStatus has no 2d_canvas")?;
+    Ok(match canvas.to_string_lossy().as_str() {
+        "disabled_software" | "unavailable_software" => GpuRule::Reported,
+        _ => GpuRule::Enforced,
+    })
+}
+
+fn reference_gpu_rule(reference: &Path) -> Result<GpuRule> {
+    let path = reference.join("info.json");
+    let info = read_json(&path)?;
+    let status = info.get("gpuFeatureStatus").unwrap_or(&Json::Null);
+    gpu_rule(status).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn gpu_distance(port_gpu: &Stats, cpu_gpu: &Stats) -> Option<String> {
+    (port_gpu.mismatch > cpu_gpu.mismatch).then(|| {
+        format!(
+            "{:.3} % from the GPU canvas, Chromium CPU is {:.3} %",
+            port_gpu.mismatch_pct, cpu_gpu.mismatch_pct
+        )
+    })
+}
+
+fn gate(
+    scene: &SceneInfo,
+    rule: GpuRule,
+    port_cpu: &Stats,
+    port_gpu: &Stats,
+    cpu_gpu: &Stats,
+) -> Vec<String> {
     let mut failures = Vec::new();
     match scene.gate.as_str() {
         "text" => {
@@ -606,21 +835,20 @@ fn gate(scene: &SceneInfo, port_cpu: &Stats, port_gpu: &Stats, cpu_gpu: &Stats) 
             }
         }
     }
-    if port_gpu.mismatch > cpu_gpu.mismatch {
-        failures.push(format!(
-            "{:.3} % from the GPU canvas, Chromium CPU is {:.3} %",
-            port_gpu.mismatch_pct, cpu_gpu.mismatch_pct
-        ));
+    if rule == GpuRule::Enforced {
+        failures.extend(gpu_distance(port_gpu, cpu_gpu));
     }
     failures
 }
 
 pub(crate) fn diff(reference: &Path, port: &Path, wanted: &[String]) -> Result {
     let names = scene_names(reference, wanted)?;
+    let rule = reference_gpu_rule(reference)?;
     let diff_dir = port.join("diff");
     fs::create_dir_all(&diff_dir).map_err(|e| format!("{}: {e}", diff_dir.display()))?;
     let mut rows = Vec::new();
     let mut failed = Vec::new();
+    let mut reported = Vec::new();
     eprintln!(
         "{:<24} {:>9} {:>6} {:>4} | {:>9} {:>9} | result",
         "scene", "vs cpu %", "blob", "ch", "vs gpu %", "cpu-gpu %"
@@ -660,7 +888,11 @@ pub(crate) fn diff(reference: &Path, port: &Path, wanted: &[String]) -> Result {
                 continue;
             }
         };
-        let failures = gate(&scene, &port_cpu.stats, &port_gpu, &cpu_gpu);
+        let failures = gate(&scene, rule, &port_cpu.stats, &port_gpu, &cpu_gpu);
+        let distance = gpu_distance(&port_gpu, &cpu_gpu).filter(|_| rule == GpuRule::Reported);
+        if distance.is_some() {
+            reported.push(name.clone());
+        }
         if port_cpu.stats.exact_mismatch > 0 {
             pixel::write_png(
                 &diff_dir.join(format!("{name}.png")),
@@ -675,10 +907,10 @@ pub(crate) fn diff(reference: &Path, port: &Path, wanted: &[String]) -> Result {
             s.max_channel,
             port_gpu.mismatch_pct,
             cpu_gpu.mismatch_pct,
-            if failures.is_empty() {
-                "ok".to_owned()
-            } else {
-                format!("FAIL: {}", failures.join("; "))
+            match (failures.is_empty(), &distance) {
+                (true, None) => "ok".to_owned(),
+                (true, Some(d)) => format!("ok (not enforced: {d})"),
+                (false, _) => format!("FAIL: {}", failures.join("; ")),
             }
         );
         if !failures.is_empty() {
@@ -692,6 +924,11 @@ pub(crate) fn diff(reference: &Path, port: &Path, wanted: &[String]) -> Result {
                 "failures",
                 Json::Array(failures.iter().map(|f| Json::string(f)).collect()),
             ),
+            ("gpuRuleEnforced", Json::Bool(rule == GpuRule::Enforced)),
+            (
+                "gpuDistance",
+                distance.map_or(Json::Null, |d| Json::string(&d)),
+            ),
             ("portVsCpu", stats_json(&port_cpu.stats)),
             ("portVsGpu", stats_json(&port_gpu)),
             ("cpuVsGpu", stats_json(&cpu_gpu)),
@@ -701,6 +938,12 @@ pub(crate) fn diff(reference: &Path, port: &Path, wanted: &[String]) -> Result {
         &port.join("report.json"),
         format!("{}\n", Json::Array(rows).to_pretty()).as_bytes(),
     )?;
+    if rule == GpuRule::Reported {
+        eprintln!(
+            "canvas: the GPU canvas is software here, so the GPU-distance rule is reported only: {} scenes beyond it",
+            reported.len()
+        );
+    }
     if failed.is_empty() {
         eprintln!("canvas: every scene within its gate");
         Ok(())
@@ -904,10 +1147,22 @@ fn stable(paths: &Paths) -> Result {
         fs::remove_dir_all(&base).map_err(|e| format!("{}: {e}", base.display()))?;
     }
     let runs = [base.join("a"), base.join("b")];
-    let mut luts = Vec::new();
+    let mut luts: Vec<(String, Vec<u8>)> = Vec::new();
+    let mut dom = Vec::new();
     for dir in &runs {
         reference(paths, dir, &[])?;
-        luts.push(fit_lut(paths, &dir.join("lut"))?);
+        let lut = dir.join("lut");
+        luts.push((format!("lut-{}.bin", platform()), fit_lut(paths, &lut)?));
+        if lcd_text() {
+            let bytes = fit_lcd_lut(paths, &lut)?;
+            luts.push((format!("lut-{}-lcd.bin", platform()), bytes));
+        }
+        if let Ok((vectors, _)) = dom_vectors(paths) {
+            dom.extend(different_dom_files(
+                &vectors,
+                &dom_files(&dir.join("dom"))?,
+            )?);
+        }
     }
     let (a, b) = (files_under(&runs[0])?, files_under(&runs[1])?);
     if a != b {
@@ -919,17 +1174,24 @@ fn stable(paths: &Paths) -> Result {
             differing.push(rel.clone());
         }
     }
-    let committed = oracle::read(&vectors_dir(paths).join(format!("lut-{}.bin", platform())))?;
-    if luts.iter().any(|l| *l != committed) {
-        differing.push(format!(
-            "lut-{}.bin (against the committed one)",
-            platform()
-        ));
+    for (name, bytes) in &luts {
+        if oracle::read(&vectors_dir(paths).join(name))? != *bytes {
+            differing.push(format!("{name} (against the committed one)"));
+        }
     }
+    differing.extend(dom);
+    differing.sort();
+    differing.dedup();
     if differing.is_empty() {
         eprintln!(
-            "canvas stable: {} files identical across two runs; LUT equals the committed one",
-            a.len()
+            "canvas stable: {} files identical across two runs; {} equal the committed ones",
+            a.len(),
+            luts.iter()
+                .map(|(name, _)| name.as_str())
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>()
+                .join(" and ")
         );
         Ok(())
     } else {
@@ -944,6 +1206,147 @@ fn stable(paths: &Paths) -> Result {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn status(canvas: &str) -> Json {
+        Json::object([("2d_canvas", Json::string(canvas))])
+    }
+
+    #[test]
+    fn the_gpu_rule_binds_on_hardware_canvases() {
+        for hardware in ["enabled", "enabled_on", "enabled_force", "enabled_readback"] {
+            assert_eq!(gpu_rule(&status(hardware)).unwrap(), GpuRule::Enforced);
+        }
+        for software in ["disabled_software", "unavailable_software"] {
+            assert_eq!(gpu_rule(&status(software)).unwrap(), GpuRule::Reported);
+        }
+        assert_eq!(gpu_rule(&status("anything")).unwrap(), GpuRule::Enforced);
+        assert!(gpu_rule(&Json::Null).is_err());
+    }
+
+    #[test]
+    fn the_gpu_rule_of_each_recorded_host() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../parity/vectors/canvas");
+        for (os, rule) in [
+            ("macos", GpuRule::Enforced),
+            ("linux", GpuRule::Reported),
+            ("windows", GpuRule::Reported),
+        ] {
+            let manifest = read_json(&root.join(format!("{os}.json"))).unwrap();
+            let host = manifest.get("host").unwrap();
+            let status = host.get("chromiumRasterizer").unwrap().get("featureStatus");
+            assert_eq!(gpu_rule(status.unwrap()).unwrap(), rule, "{os}");
+        }
+    }
+
+    /// A scene whose GPU canvas equals its CPU canvas, and a port `off` pixels from both.
+    fn diff_scene(name: &str, canvas: &str, off: usize) -> (Result, Json) {
+        let dir = std::env::temp_dir().join(format!("asrs-canvas-{name}-{}", std::process::id()));
+        let (reference, port) = (dir.join("ref-dir"), dir.join("port"));
+        let info = Json::object([("gpuFeatureStatus", status(canvas))]);
+        write(&reference.join("info.json"), info.to_compact().as_bytes()).unwrap();
+        let scene = r#"{"gate":"pixel","background":[255,255,255]}"#;
+        write(&reference.join("scenes/s.json"), scene.as_bytes()).unwrap();
+        fs::create_dir_all(reference.join("ref")).unwrap();
+        fs::create_dir_all(&port).unwrap();
+        let mut image = pixel::Rgba {
+            width: 100,
+            height: 100,
+            data: vec![255; 40000],
+        };
+        pixel::write_png(&reference.join("ref/s.cpu.png"), &image).unwrap();
+        pixel::write_png(&reference.join("ref/s.gpu.png"), &image).unwrap();
+        for i in 0..off {
+            image.data[i * 8..i * 8 + 3].fill(0);
+        }
+        pixel::write_png(&port.join("s.png"), &image).unwrap();
+        let result = diff(&reference, &port, &[]);
+        let report = read_json(&port.join("report.json")).unwrap();
+        fs::remove_dir_all(&dir).unwrap();
+        (result, report)
+    }
+
+    #[test]
+    fn a_port_further_from_the_gpu_canvas_fails_only_where_that_is_hardware() {
+        let row = |report: &Json, key: &str| report.as_array().unwrap()[0].get(key).cloned();
+        let (enforced, report) = diff_scene("hardware", "enabled", 10);
+        assert!(enforced.is_err());
+        assert_eq!(row(&report, "gpuRuleEnforced"), Some(Json::Bool(true)));
+        let failures = row(&report, "failures").unwrap();
+        let failure = failures.as_array().unwrap()[0].as_str().unwrap();
+        assert!(failure.to_string_lossy().contains("from the GPU canvas"));
+
+        let (reported, report) = diff_scene("software", "unavailable_software", 10);
+        assert!(reported.is_ok());
+        assert_eq!(row(&report, "gpuRuleEnforced"), Some(Json::Bool(false)));
+        let distance = row(&report, "gpuDistance").unwrap();
+        assert!(
+            distance
+                .as_str()
+                .unwrap()
+                .to_string_lossy()
+                .contains("0.100 %")
+        );
+
+        let (cpu_gate, _) = diff_scene("software-cpu", "unavailable_software", 30);
+        assert!(cpu_gate.is_err());
+        assert!(diff_scene("exact", "enabled", 0).0.is_ok());
+    }
+
+    #[test]
+    fn a_reference_without_a_feature_status_is_refused() {
+        let dir = std::env::temp_dir().join(format!("asrs-canvas-none-{}", std::process::id()));
+        write(&dir.join("info.json"), b"{}").unwrap();
+        assert!(reference_gpu_rule(&dir).is_err());
+        fs::remove_dir_all(&dir).unwrap();
+        assert!(reference_gpu_rule(&dir).is_err());
+    }
+
+    /// Every text box of the committed DOM scenes says how Chromium antialiased it, and the pixels
+    /// of the grey ones agree.
+    #[test]
+    fn committed_dom_text_boxes_carry_their_mode() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../parity/vectors/canvas");
+        for (dir, lcd) in [
+            ("scenes-windows", true),
+            ("scenes-linux-stock", true),
+            ("scenes-linux-gray", false),
+        ] {
+            let mut captures = 0;
+            for file in files_under(&root.join(dir)).unwrap() {
+                let Some(name) = file.strip_suffix(".json").filter(|f| f.starts_with("dom-"))
+                else {
+                    continue;
+                };
+                captures += 1;
+                let scene = read_json(&root.join(dir).join(&file)).unwrap();
+                let image = pixel::read_png(&root.join(dir).join(format!("{name}.png"))).unwrap();
+                let modes = host::text_modes(&scene, &image)
+                    .unwrap_or_else(|e| panic!("{dir}/{name}: {e}"));
+                let scale = name.rsplit('@').next().unwrap().trim_end_matches('x');
+                for (id, mode) in &modes {
+                    if name.starts_with("dom-text-") {
+                        assert_eq!(
+                            *mode,
+                            lcd && host::lcd_sized(id, scale),
+                            "{dir}/{name} {id}"
+                        );
+                    }
+                    assert!(lcd || !mode, "{dir}/{name} {id}");
+                }
+                let count = |of: bool| modes.iter().filter(|(_, m)| *m == of).count();
+                let boxes = match name.split('-').nth(1).unwrap() {
+                    "text" => 65,
+                    "lcd" => 38,
+                    _ => 26,
+                };
+                assert_eq!(modes.len(), boxes, "{dir}/{name}");
+                if lcd && !name.starts_with("dom-text-") {
+                    assert!(count(true) > 0 && count(false) > 0, "{dir}/{name}");
+                }
+            }
+            assert_eq!(captures, 12, "{dir}");
+        }
+    }
 
     #[test]
     fn a_recorded_font_cannot_change() {

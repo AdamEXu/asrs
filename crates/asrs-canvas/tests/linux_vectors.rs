@@ -1,9 +1,11 @@
 #![cfg(target_os = "linux")]
 
+mod dom_text;
+
 use std::collections::BTreeMap;
 
 use asrs_canvas::text::linux::Fontations;
-use asrs_canvas::text::lut::{self, MaskGammaLut};
+use asrs_canvas::text::lut::{self, LcdGammaLut, MaskGammaLut};
 use asrs_canvas::text::{FontSpec, TextBackend, TextMetrics, measure_text, platform_backend};
 use asrs_js::math::pow;
 use asrs_parity::json::{self, Json};
@@ -37,6 +39,27 @@ fn embedded_lut_is_skias_table() {
     for k in 0..lut::ROWS {
         assert_eq!(lut.row(k).as_slice(), skia_row(k), "row {k}");
     }
+}
+
+#[test]
+fn embedded_lcd_lut_is_skias_table() {
+    let lcd = LcdGammaLut::embedded().expect("lut-linux-lcd.bin is committed");
+    dom_text::check_lcd_lut(&lcd, &MaskGammaLut::embedded().unwrap());
+}
+
+/// DOM text under the font profile in use: `gray.conf`, or the stock rules, which are LCD.
+#[test]
+fn masks_reproduce_dom_text() {
+    if !fonts_are_pinned(&dom_text::FONTS) {
+        return;
+    }
+    let gray = std::env::var("FONTCONFIG_FILE").is_ok_and(|rules| rules.ends_with("/gray.conf"));
+    let dir = if gray {
+        "scenes-linux-gray"
+    } else {
+        "scenes-linux-stock"
+    };
+    dom_text::check_redraw(&mut Fontations::new().unwrap(), dir);
 }
 
 const FIELDS: [&str; 10] = [

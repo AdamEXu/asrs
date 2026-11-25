@@ -4,7 +4,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { encode, toTree } from "./cve1";
-import { domScenes } from "./canvas/dom";
+import { domCalibrationScenes, domScenes, type DomScene } from "./canvas/dom";
+import { textMode } from "./canvas/textMode";
 import { encodePng } from "./canvas/png";
 import { uiHtml, uiScenes } from "./canvas/ui";
 import { heatmapFixtures } from "./heatmap/fixtures";
@@ -24,6 +25,8 @@ modes:
   canvas [<scene>...]     replay display-list scenes on the CPU and GPU canvas
   measure                 TextMetrics of the label corpus under every font, align and baseline
   canvas-lut              replay the mask-gamma calibration scenes on the CPU canvas
+  canvas-lut dom <scale>  capture the DOM LCD calibration scenes at device scale 1 or 2, with the
+                          same Electron flags as dom
   heatmap                 run the upstream Heatmap.update fixtures on a real page and record
                           the setData arguments, store contents and CPU-canvas pixels
   dom <scale>             capture the DOM text scenes at device scale 1 or 2; Electron must be
@@ -37,7 +40,9 @@ const args = process.argv.slice(process.argv.findIndex((a) => /canvasMain\.mjs$/
 const [mode, outArg, ...rest] = args;
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-if ((mode === "dom" || mode === "ui") && rest[0] !== "1" && rest[0] !== "2") fail(USAGE);
+const domLut = mode === "canvas-lut" && rest[0] === "dom";
+const scaleArg = domLut ? rest[1] : rest[0];
+if ((mode === "dom" || mode === "ui" || domLut) && scaleArg !== "1" && scaleArg !== "2") fail(USAGE);
 
 function fail(message: string): never {
   console.error(message);
@@ -53,13 +58,14 @@ function sceneJson(scene: Scene): string {
   return JSON.stringify(scene) + "\n";
 }
 
-async function page(width: number, height: number): Promise<BrowserWindow> {
+async function page(width: number, height: number, acrylic = false): Promise<BrowserWindow> {
   const win = new BrowserWindow({
     show: false,
     width,
     height,
     useContentSize: true,
     paintWhenInitiallyHidden: true,
+    ...(acrylic ? { backgroundMaterial: "acrylic" as const, titleBarStyle: "hidden" as const } : {}),
     webPreferences: { backgroundThrottling: false }
   });
   return win;
@@ -100,46 +106,58 @@ async function measure(win: BrowserWindow, out: string) {
   console.error(`  measure: ${lines.length} records`);
 }
 
-async function dom(out: string, scale: string) {
-  const dir = path.join(out, "dom");
-  fs.mkdirSync(dir, { recursive: true });
+async function dom(out: string, scaleArg: string, scenes: DomScene[]) {
+  const scale = Number(scaleArg);
+  fs.mkdirSync(out, { recursive: true });
   const displays = screen.getAllDisplays().map((d) => ({ scaleFactor: d.scaleFactor, colorSpace: d.colorSpace, colorDepth: d.colorDepth }));
-  for (const scene of domScenes()) {
-    const html = path.join(dir, `${scene.name}.html`);
+  for (const scene of scenes) {
+    const html = path.join(out, `${scene.name}.html`);
     const script = `<script src="${pathToFileURL(path.join(here, "canvasPage.js")).href}"></script>`;
     fs.writeFileSync(html, scene.html.replace("</body>", `${script}</body>`));
-    const win = await page(scene.width, scene.height);
+    if (scene.dark !== undefined) nativeTheme.themeSource = scene.dark ? "dark" : "light";
+    const win = await page(scene.width, scene.height, scene.acrylic === true);
     await win.loadFile(html);
     await win.webContents.executeJavaScript("document.fonts.ready.then(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))))");
     const boxes = await win.webContents.executeJavaScript("domBoxes()");
-    if (boxes.devicePixelRatio !== Number(scale)) {
+    if (boxes.devicePixelRatio !== scale) {
       throw new Error(`devicePixelRatio is ${boxes.devicePixelRatio}, expected ${scale}; pass --force-device-scale-factor=${scale}`);
     }
-    const image = await win.webContents.capturePage();
-    const size = image.getSize(Number(scale));
-    const bitmap = image.toBitmap({ scaleFactor: Number(scale) });
-    const rgba = Buffer.alloc(bitmap.length);
-    for (let i = 0; i < bitmap.length; i += 4) {
-      rgba[i] = bitmap[i + 2];
-      rgba[i + 1] = bitmap[i + 1];
-      rgba[i + 2] = bitmap[i];
-      rgba[i + 3] = bitmap[i + 3];
-    }
+    if (boxes.rows.length === 0) throw new Error(`${scene.name}: no text boxes`);
+    const { size, rgba, at } = await captureRgba(win, scale);
     for (const patch of boxes.patches as { color: string; rect: number[] }[]) {
-      const x = Math.floor((patch.rect[0] + patch.rect[2] / 2) * Number(scale));
-      const y = Math.floor((patch.rect[1] + patch.rect[3] / 2) * Number(scale));
-      const i = (y * size.width + x) * 4;
-      const got = "#" + [0, 1, 2].map((c) => rgba[i + c].toString(16).padStart(2, "0")).join("");
+      const pixel = at(patch.rect[0] + patch.rect[2] / 2, patch.rect[1] + patch.rect[3] / 2);
+      const got = "#" + pixel.slice(0, 3).map((c) => c.toString(16).padStart(2, "0")).join("");
       if (got !== patch.color) {
         throw new Error(`colour patch ${patch.color} captured as ${got}; start Electron with --force-color-profile=srgb`);
       }
     }
-    const base = path.join(dir, `${scene.name}@${scale}x`);
+    const rows = (boxes.rows as { id: string; rect: number[] }[]).map((row) => ({
+      ...row,
+      mode: textMode({ width: size.width, height: size.height, rgba }, row.rect.map((v) => v * scale), `${scene.name}@${scale}x ${row.id}`, scene.colors?.[row.id])
+    }));
+    for (const [i, a] of rows.entries()) {
+      const other = rows.slice(i + 1).find((b) => a.mode !== b.mode && overlap(a.rect, b.rect));
+      if (other !== undefined) throw new Error(`${scene.name}: ${a.id} (${a.mode}) and ${other.id} (${other.mode}) share pixels`);
+    }
+    const base = path.join(out, `${scene.name}@${scale}x`);
     fs.writeFileSync(`${base}.png`, encodePng(size.width, size.height, rgba));
-    writeJson(`${base}.json`, { scene: scene.name, scale: Number(scale), width: size.width, height: size.height, displays, ...boxes });
+    writeJson(`${base}.json`, { scene: scene.name, scale, width: size.width, height: size.height, displays, ...boxes, rows });
     win.destroy();
     console.error(`  ${scene.name}@${scale}x`);
   }
+}
+
+function overlap(a: number[], b: number[]): boolean {
+  return a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3];
+}
+
+function domLutScenes(out: string) {
+  const scenes = domCalibrationScenes();
+  for (const scene of scenes) {
+    const { name, kind, color, background, rows } = scene;
+    writeJson(path.join(out, "scenes", `${name}.json`), { name, kind, color, background, rows });
+  }
+  return scenes;
 }
 
 async function captureRgba(win: BrowserWindow, scale: number) {
@@ -295,7 +313,13 @@ async function main() {
   if (outArg === undefined || mode === undefined) fail(USAGE);
   const out = path.resolve(outArg);
   if (mode === "dom") {
-    await dom(out, rest[0]);
+    info(out);
+    await dom(path.join(out, "dom"), scaleArg, domScenes(path.join(here, "..", "upstream")));
+    return;
+  }
+  if (domLut) {
+    info(out);
+    await dom(path.join(out, "lcd"), scaleArg, domLutScenes(path.join(out, "lcd")));
     return;
   }
   if (mode === "ui") {
