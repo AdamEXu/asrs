@@ -505,6 +505,7 @@ impl Rows<'_> {
                 let line_top = y - self.text_box.0;
                 layer = layer.children(selected.recoloured(self.grid, rect, |color| {
                     let text = plain(text, cell_style(font), blend(color)).form_control();
+                    let text = if style.faint { text.grayscale() } else { text };
                     vec![self.grid.text(text, [x, line_top])]
                 }));
             }

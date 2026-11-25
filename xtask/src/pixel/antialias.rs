@@ -93,13 +93,13 @@ pub fn mode(image: &Rgb, rect: Rect, scale: f64, color: [u8; 3]) -> Option<Mode>
     }
 }
 
-/// The mode of every box on both sides: how many are LCD, grayscale and unclear upstream, and
-/// those where the port has another.
+/// The mode of every box: how many are LCD and grayscale upstream, how many are unclear on either
+/// side, and those where the port has the other mode.
 pub struct Compared {
     pub lcd: usize,
     pub grayscale: usize,
     pub unclear: usize,
-    pub differing: Vec<(Rect, Mode, Option<Mode>)>,
+    pub differing: Vec<(Rect, Mode, Mode)>,
 }
 
 pub fn compare<'a>(
@@ -115,7 +115,8 @@ pub fn compare<'a>(
         differing: Vec::new(),
     };
     for ink in inks {
-        let Some(expected) = mode(reference, ink.rect, scale, ink.color) else {
+        let of = |image| mode(image, ink.rect, scale, ink.color);
+        let (Some(expected), Some(actual)) = (of(reference), of(port)) else {
             out.unclear += 1;
             continue;
         };
@@ -123,8 +124,7 @@ pub fn compare<'a>(
             Mode::Lcd => out.lcd += 1,
             Mode::Grayscale => out.grayscale += 1,
         }
-        let actual = mode(port, ink.rect, scale, ink.color);
-        if actual != Some(expected) {
+        if actual != expected {
             out.differing.push((ink.rect, expected, actual));
         }
     }
@@ -175,6 +175,6 @@ mod tests {
         let same = compare(inks.iter(), &lcd, &lcd, 1.0);
         assert_eq!((same.lcd, same.grayscale, same.differing.len()), (1, 0, 0));
         let other = compare(inks.iter(), &lcd, &gray, 1.0);
-        assert_eq!(other.differing, [(RECT, Mode::Lcd, Some(Mode::Grayscale))]);
+        assert_eq!(other.differing, [(RECT, Mode::Lcd, Mode::Grayscale)]);
     }
 }
