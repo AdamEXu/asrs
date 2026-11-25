@@ -359,7 +359,7 @@ diff --git a/src/directx_renderer.rs b/src/directx_renderer.rs
  }
  
  #[inline]
-@@ -2054,5 +2057,97 @@
+@@ -2054,5 +2057,98 @@
              (number >> 16) & 0xFFFF,
              number & 0xFFFF
          ))
@@ -369,6 +369,7 @@ diff --git a/src/directx_renderer.rs b/src/directx_renderer.rs
 +#[cfg(test)]
 +mod tests {
 +    use super::*;
++    use std::prelude::v1::test;
 +    use windows::Win32::Foundation::HMODULE;
 +
 +    fn create_devices() -> Option<DirectXRendererDevices> {

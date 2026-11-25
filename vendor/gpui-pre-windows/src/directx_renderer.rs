@@ -2063,6 +2063,7 @@ mod dxgi {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::prelude::v1::test;
     use windows::Win32::Foundation::HMODULE;
 
     fn create_devices() -> Option<DirectXRendererDevices> {
