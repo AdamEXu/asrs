@@ -85,6 +85,7 @@ const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(90);
 const STABLE_ATTEMPTS: usize = 120;
 /// The Electron driver's `--js-flags=--random-seed`.
 const RANDOM_SEED: u64 = 1;
+const RLOG_PORT: u16 = 5800;
 /// The Electron driver's `WINDOW_ORIGIN`: its window's offset into the primary work area.
 const WINDOW_ORIGIN: f64 = 16.0;
 /// 2026-11-01T00:00:00Z, before upstream's beta expires.
@@ -164,6 +165,7 @@ struct Options {
     work_areas: Vec<(Option<u32>, (f64, f64))>,
     robot: Option<u16>,
     points: Option<PathBuf>,
+    live: Option<u16>,
     no_captures: bool,
     tooltips: Option<PathBuf>,
 }
@@ -172,8 +174,7 @@ fn options(args: &[String]) -> Result<Options, String> {
     let (mut scenario, mut out, mut inputs, mut probes) = (None, None, None, None);
     let (mut bundled_assets, mut licenses) = (None, None);
     let mut work_areas = Vec::new();
-    let mut robot = None;
-    let mut points = None;
+    let (mut robot, mut live, mut points) = (None, None, None);
     let mut no_captures = false;
     let mut tooltips = None;
     let (mut scales, mut themes) = (Vec::new(), Vec::new());
@@ -192,6 +193,7 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--no-captures" => no_captures = true,
             "--points" => points = Some(PathBuf::from(value()?)),
             "--robot" => robot = Some(value()?.parse().map_err(|_| "--robot is a port")?),
+            "--live" => live = Some(value()?.parse().map_err(|_| "--live is a port")?),
             "--tooltips" => tooltips = Some(PathBuf::from(value()?)),
             "--work-area" => {
                 let text = value()?;
@@ -223,6 +225,7 @@ fn options(args: &[String]) -> Result<Options, String> {
         work_areas,
         robot,
         points,
+        live,
         no_captures,
         tooltips,
     })
@@ -292,6 +295,19 @@ pub fn run(args: &[String]) -> Result<(), String> {
             .context()
             .update(|cx| cx.set_global(RobotPort(port))),
         None if scenario.robot => return Err(format!("{name} needs --robot")),
+        None => {}
+    }
+    match options.live {
+        Some(live) => headless.context().update(|cx| {
+            crate::live::set_dial(
+                cx,
+                Arc::new(move |host, port| match (host, port) {
+                    ("127.0.0.1", RLOG_PORT) => (host.to_owned(), live),
+                    _ => (host.to_owned(), port),
+                }),
+            );
+        }),
+        None if scenario.live => return Err(format!("{name} needs --live")),
         None => {}
     }
     let tooltips = match &options.tooltips {
@@ -733,6 +749,27 @@ impl Variant<'_> {
         }
         self.settle();
         Ok(())
+    }
+
+    /// Sockets answer in real time, so the simulated clock goes as fast as the real one.
+    fn wait_title(&mut self, text: &str, not: bool) -> Result<(), String> {
+        let start = Instant::now();
+        loop {
+            let title = self.with_hub(|hub, _, _| hub.model().title().to_string_lossy())?;
+            if (title == text) != not {
+                break;
+            }
+            if start.elapsed() > IDLE_TIMEOUT {
+                return Err(format!(
+                    "timed out waiting for the title, {title:?}, to change"
+                ));
+            }
+            let before = Instant::now();
+            std::thread::sleep(Duration::from_millis(1));
+            self.tick_by(before.elapsed())?;
+        }
+        self.tick()?;
+        self.tick()
     }
 
     /// The download service runs on its own thread, so this waits in real time.
@@ -1180,6 +1217,7 @@ impl Variant<'_> {
             Action::Prompt { page, index, size } => self.switch_prompt(*page, *index, *size)?,
             Action::Hub => self.switch_to_hub()?,
             Action::Download(shows) => self.wait_download(shows)?,
+            Action::Title { text, not } => self.wait_title(text, *not)?,
             Action::SelectAll => self.edit(EditCommand::SelectAll)?,
             Action::Copy(name) => {
                 self.headless.context().update(|cx| {

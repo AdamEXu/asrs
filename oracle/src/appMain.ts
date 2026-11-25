@@ -20,7 +20,7 @@ import { encodePng } from "./canvas/png";
 declare const __UPSTREAM_DIR__: string;
 
 const USAGE = `usage: electron <switches> appMain.mjs <scenario.json> <out dir> --scale=<1|2> --theme=<light|dark>
-         [--gl=<mode>] [--colour=srgb|display] [--robot=<port>] [--tooltips]
+         [--gl=<mode>] [--colour=srgb|display] [--robot=<port>] [--live=<port>] [--tooltips]
 
 Starts upstream's bundles/main.js with an isolated userData directory and drives it through the
 scenario with executeJavaScript and sendInputEvent. --gl picks the GL backend switches of a
@@ -28,12 +28,14 @@ scenario with "gl": true: native (macOS default), swiftshader (Linux and Windows
 d3d11-warp. --colour=srgb (default) has Chromium composite in sRGB; --colour=display keeps the
 display's colour space and stores its ICC profile as display.icc. The driver names the Electron
 switches it needs when they are missing. --robot is where a scenario's robotServer listens: main's
-connections to port 22 of 127.0.0.1 go there. Results go to <out dir>: run.json, captures/, files/,
+connections to port 22 of 127.0.0.1 go there. --live is the same for a scenario's live server and the
+RLOG port. Results go to <out dir>: run.json, captures/, files/,
 inputs/ and, with --colour=display, display.icc. --tooltips (macOS, with oracle/tools/tooltips.m
 loaded) records the page's tooltips at each capture instead of its pixels.`;
 
 const WINDOW_ORIGIN = 16;
 const RANDOM_SEED = 1;
+const RLOG_PORT = 5800;
 const RUN_TIMEOUT_MS = 480_000;
 const READY_TIMEOUT_MS = 90_000;
 const IDLE_TIMEOUT_MS = 60_000;
@@ -73,16 +75,25 @@ if (theme !== "light" && theme !== "dark") fail(USAGE);
 const glMode = (options.gl ?? (process.platform === "darwin" ? "native" : "swiftshader")) as GlMode;
 if (!["native", "swiftshader", "d3d11-warp"].includes(glMode)) fail(USAGE);
 const robotPort = Number(options.robot);
+const livePort = Number(options.live);
 const colour = options.colour ?? "srgb";
 if (colour !== "srgb" && colour !== "display") fail(USAGE);
 const tooltipLog = "tooltips" in options ? process.env.ASRS_TOOLTIP_LOG : undefined;
 if ("tooltips" in options && tooltipLog === undefined) fail("--tooltips needs ASRS_TOOLTIP_LOG");
-const scenario = parseScenario(path.basename(scenarioFile, ".json"), fs.readFileSync(scenarioFile, "utf8"));
+// What is thrown here would wait in Electron's own error box.
+const scenario = (() => {
+  try {
+    return parseScenario(path.basename(scenarioFile, ".json"), fs.readFileSync(scenarioFile, "utf8"));
+  } catch (e) {
+    return fail((e as Error).message);
+  }
+})();
 if (scenario.page === "app" && (scenario.window.width < 800 || scenario.window.height < 400)) {
   fail(`scenario ${scenario.name}: the hub window has a minimum size of 800x400`);
 }
 
 if (scenario.robot && !Number.isInteger(robotPort)) fail(`scenario ${scenario.name} needs --robot`);
+if (scenario.live && !Number.isInteger(livePort)) fail(`scenario ${scenario.name} needs --live`);
 
 const switches: [string, string?][] = [
   ["force-device-scale-factor", String(scale)],
@@ -149,7 +160,9 @@ net.fetch = refuseNetwork as typeof net.fetch;
 
 const connect = Socket.prototype.connect;
 Socket.prototype.connect = function (this: Socket, ...args: any[]) {
-  const target = args[0];
+  // `net.createConnection` passes its normalized arguments on as one array.
+  const target = Array.isArray(args[0]) ? args[0][0] : args[0];
+  if (scenario.live && target?.host === "127.0.0.1" && target.port === RLOG_PORT) target.port = livePort;
   if (scenario.robot && target?.host === "127.0.0.1" && target.port === 22) return connect.call(this, { ...target, port: robotPort });
   return (connect as any).apply(this, args);
 } as any;
@@ -812,6 +825,10 @@ async function perform(action: Action, index: number) {
     await nextFrames();
   } else if ("copy" in action) {
     await copy(contents, action.copy);
+  } else if ("title" in action) {
+    const matches = async () => ((await exec<string>("document.title")) === action.title) !== (action.not ?? false);
+    await until(`the title ${action.not ? "not to be" : "to be"} ${JSON.stringify(action.title)}`, READY_TIMEOUT_MS, matches);
+    await nextFrames();
   } else if ("focus" in action) {
     await emulateFocus(contents, action.focus);
   } else if ("traverse" in action) {

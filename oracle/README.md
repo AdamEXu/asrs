@@ -1451,6 +1451,7 @@ Scenario file:
 | `prefs`, `userData` | `{}` | prefs merged by upstream over its defaults; extra files seeded into userData: JSON values, or `{"$file": path}` for a file under `parity/scenarios` |
 | `robot` | | `{account, files, stall}`: the robot `robotServer.ts` plays for the run on 127.0.0.1, where the scenario's `prefs.robotAddress` points |
 | `titleBar` | `false` | the points of mouse and wheel actions in the hub were measured under the 38 px title bar that macOS and Windows have above the viewer. Linux has none: there the driver moves points in the viewer above the tab controls up by it |
+| `live` | | `{rlog: path}`: xtask serves this RLOG file once on 127.0.0.1 and closes 1.5 s later, where the RLOG port 5800 of 127.0.0.1 leads |
 | `actions` | | in order, below |
 
 Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-files` message;
@@ -1481,6 +1482,7 @@ alert, an alert or progress text that starts so, or that much of its progress ba
 clipboard, written to `files/clipboard/<name>.txt`),
 `{"focus": boolean}` (whether the window's page counts as active and focused, through
 `Emulation.setFocusEmulationEnabled`; false until then; windows opened later need their own),
+`{"title": text, "not"?: boolean}` (waits until the hub's title is, or is not, this),
 `{"traverse": name, "count"?: n, "back"?: boolean}` (presses Tab, or Shift+Tab, `n` times and writes
 `document.activeElement` after each, or as it is, to `files/focus/<name>.json`: what it is, whether
 Tab reaches it, its box, its ring and an input's value and selection; `pixel` compares them),

@@ -10,7 +10,7 @@ use std::process::Command;
 use asrs_parity::json::{self, Json};
 use asrs_parity::pixel::{self, Rgba};
 
-use crate::app::Robot;
+use crate::app::{Live, Robot};
 use crate::oracle::Paths;
 use crate::{Result, app, cargo, gl, workspace_root};
 pub(crate) use gates::TIMELINE_TOLERANCE;
@@ -957,6 +957,38 @@ fn primary_work_area(run_json: &Path) -> Option<(f64, f64)> {
     })
 }
 
+/// The `--scale` and `--theme` options of each process a scenario's port run takes: one for all
+/// variants, or one each where a live server answers once.
+fn port_runs(scenario: &Path, flags: &[String]) -> Result<Vec<Vec<String>>> {
+    let json = read_json(scenario)?;
+    if json.get("live").is_none() {
+        return Ok(vec![flags.to_vec()]);
+    }
+    let picked = |flag: &str, all: [&str; 2]| -> Vec<String> {
+        let given: Vec<String> = flags
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .filter(|pair| pair[0] == flag)
+            .map(|pair| pair[1].clone())
+            .collect();
+        match given.is_empty() {
+            true => all.map(str::to_owned).to_vec(),
+            false => given,
+        }
+    };
+    let themes = picked("--theme", ["light", "dark"]);
+    Ok(picked("--scale", ["1", "2"])
+        .iter()
+        .flat_map(|scale| {
+            themes.iter().map(move |theme| {
+                let flags = ["--scale", scale, "--theme", theme];
+                flags.map(str::to_owned).to_vec()
+            })
+        })
+        .collect())
+}
+
 fn run_port(options: &PortOptions) -> Result<PathBuf> {
     let exe = port_binary()?;
     let scenarios = workspace_root().join("parity/scenarios");
@@ -1016,48 +1048,55 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
             });
         let file = scenarios.join(format!("{name}.json"));
         let paths = Paths::new()?;
-        let robot = Robot::start(&paths, &file)?;
-        let mut command = Command::new(&exe);
-        if read_json(&file)?.get("gl") == Some(&Json::Bool(true)) {
-            gl::pair_port(&paths, gl::default_mode()?, &mut command)?;
-        }
-        let status = command
-            .arg("--parity-scenario")
-            .arg(&file)
-            .arg("--out")
-            .arg(&out)
-            .args(
-                inputs
-                    .iter()
-                    .flat_map(|i| [std::ffi::OsStr::new("--inputs"), i.as_os_str()]),
-            )
-            .arg("--bundled-assets")
-            .arg(workspace_root().join("reference/AdvantageScope/bundledAssets"))
-            .arg("--licenses")
-            .arg(workspace_root().join("target/oracle/upstream/src/licenses.json"))
-            .args(
-                work_areas
-                    .into_iter()
-                    .flat_map(|area| ["--work-area".to_owned(), area]),
-            )
-            .args(
-                points
-                    .then_some([std::ffi::OsStr::new("--points"), upstream.as_os_str()])
-                    .into_iter()
-                    .flatten(),
-            )
-            .args(
-                robot
-                    .iter()
-                    .flat_map(|r| ["--robot".to_owned(), r.port.to_string()]),
-            )
-            .args(&options.flags)
-            .env("ASRS_CACHE", &paths.cache)
-            .current_dir(workspace_root())
-            .status()
-            .map_err(|e| format!("running {}: {e}", exe.display()))?;
-        if !status.success() {
-            failures.push(format!("{name} ({status})"));
+        for flags in port_runs(&file, &options.flags)? {
+            let robot = Robot::start(&paths, &file)?;
+            let live = Live::start(&paths, &file)?;
+            let mut command = Command::new(&exe);
+            if read_json(&file)?.get("gl") == Some(&Json::Bool(true)) {
+                gl::pair_port(&paths, gl::default_mode()?, &mut command)?;
+            }
+            let status = command
+                .arg("--parity-scenario")
+                .arg(&file)
+                .arg("--out")
+                .arg(&out)
+                .args(
+                    inputs
+                        .iter()
+                        .flat_map(|i| [std::ffi::OsStr::new("--inputs"), i.as_os_str()]),
+                )
+                .arg("--bundled-assets")
+                .arg(workspace_root().join("reference/AdvantageScope/bundledAssets"))
+                .arg("--licenses")
+                .arg(workspace_root().join("target/oracle/upstream/src/licenses.json"))
+                .args(
+                    work_areas
+                        .iter()
+                        .flat_map(|area| ["--work-area".to_owned(), area.clone()]),
+                )
+                .args(
+                    points
+                        .then_some([std::ffi::OsStr::new("--points"), upstream.as_os_str()])
+                        .into_iter()
+                        .flatten(),
+                )
+                .args(
+                    robot
+                        .iter()
+                        .flat_map(|r| ["--robot".to_owned(), r.port.to_string()]),
+                )
+                .args(
+                    live.iter()
+                        .flat_map(|l| ["--live".to_owned(), l.port.to_string()]),
+                )
+                .args(&flags)
+                .env("ASRS_CACHE", &paths.cache)
+                .current_dir(workspace_root())
+                .status()
+                .map_err(|e| format!("running {}: {e}", exe.display()))?;
+            if !status.success() {
+                failures.push(format!("{name} ({status})"));
+            }
         }
     }
     if failures.is_empty() {
