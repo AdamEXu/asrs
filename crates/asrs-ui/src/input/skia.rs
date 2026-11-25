@@ -62,7 +62,9 @@ pub fn over(dst: &mut Pixmap, src: &Pixmap) {
 /// `PaintTextField`'s background, which it draws without antialiasing: a pixel is in when its
 /// centre is, with the straight edges rounded as `SkScan::FillRect` rounds them.
 pub fn fill_aliased_rrect(pixmap: &mut Pixmap, rect: [f64; 4], radius: f64, rgba: u32) {
-    blend_where(pixmap, rgba, |px, py| in_aliased_rrect(rect, radius, px, py));
+    blend_where(pixmap, rgba, |px, py| {
+        in_aliased_rrect(rect, radius, px, py)
+    });
 }
 
 /// Its border, which only a GPU antialiases all the same: a stroke along `rect`.
