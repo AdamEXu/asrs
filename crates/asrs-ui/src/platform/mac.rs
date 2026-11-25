@@ -21,7 +21,7 @@ use objc2_app_kit::{
     NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
     NSWindow, NSWindowOrderingMode, NSWritingDirection,
 };
-use objc2_core_foundation::{CFData, CGRect};
+use objc2_core_foundation::{CFArray, CFData, CFRetained, CFString, CGRect};
 use objc2_core_graphics::{
     CGBitmapInfo, CGColorRenderingIntent, CGColorSpace, CGDataProvider, CGImage, CGImageAlphaInfo,
     CGImageByteOrderInfo, kCGColorSpaceSRGB,
@@ -62,6 +62,21 @@ pub(super) fn add_recent_document(path: &Path) {
 pub(super) fn init() {
     if MainThreadMarker::new().is_some() {
         install_wheel_monitor();
+    }
+}
+
+pub(super) fn name_fonts(cx: &App) {
+    #[link(name = "CoreText", kind = "framework")]
+    unsafe extern "C" {
+        fn CTFontManagerCopyAvailableFontFamilyNames() -> Option<NonNull<CFArray<CFString>>>;
+    }
+    // SAFETY: the function takes nothing and returns a retained array of strings.
+    let names = unsafe {
+        CTFontManagerCopyAvailableFontFamilyNames().map(|names| CFRetained::from_raw(names))
+    };
+    if let Some(names) = names {
+        cx.text_system()
+            .set_font_names(names.iter().map(|name| name.to_string()).collect());
     }
 }
 

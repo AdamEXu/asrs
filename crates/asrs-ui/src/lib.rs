@@ -48,6 +48,8 @@ pub mod webview;
 use gpui::{AnyWindowHandle, App, Entity, Render, Window, WindowOptions};
 
 pub fn init(cx: &mut App) {
+    #[cfg(target_os = "macos")]
+    platform::name_fonts(cx);
     gpui_kit::init(cx);
     input::init(cx);
     // The kit's root paints it under every window's view, over the hub's vibrancy or acrylic.
