@@ -51,6 +51,7 @@ impl From<LogError> for Thrown {
     fn from(e: LogError) -> Self {
         match e {
             LogError::Proto(e) => Thrown::error(e.js_name(), e.js_message().to_string_lossy()),
+            LogError::Thrown(e) => Thrown::error(e.name, e.message),
             LogError::StackOverflow => {
                 Thrown::error("RangeError", "Maximum call stack size exceeded")
             }

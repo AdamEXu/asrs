@@ -26,9 +26,13 @@ fn sample_log(fields: &[Json], samples: f64) -> Log {
         let string = || JsString::from("x".repeat(number("length") as usize).as_str());
         let key = JsString::from(text("key").as_str());
         match text("type").as_str() {
-            "number" => log.put_number(&key, number("start"), number("value")),
-            "string" => log.put_string(&key, number("start"), string()),
-            "string[]" => log.put_string_array(&key, number("start"), vec![string()]),
+            "number" => log
+                .put_number(&key, number("start"), number("value"))
+                .unwrap(),
+            "string" => log.put_string(&key, number("start"), string()).unwrap(),
+            "string[]" => log
+                .put_string_array(&key, number("start"), vec![string()])
+                .unwrap(),
             other => panic!("field type {other}"),
         }
     }

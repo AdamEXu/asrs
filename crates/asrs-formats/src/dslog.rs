@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 
 use asrs_js::math;
 use asrs_js::string::{JsString, TextDecoder};
-use asrs_log::log::Log;
+use asrs_log::log::{Log, LogError};
 
 use crate::worker::{Abort, DecodeWorker, Request, Response};
 
@@ -360,6 +360,75 @@ impl<'a> DsEventsReader<'a> {
     }
 }
 
+fn put_entry(log: &mut Log, entry: DsLogEntry) -> Result<(), LogError> {
+    log.put_number(
+        &JsString::from("/DSLog/TripTimeMS"),
+        entry.timestamp,
+        entry.trip_time_ms,
+    )?;
+    log.put_number(
+        &JsString::from("/DSLog/PacketLoss"),
+        entry.timestamp,
+        entry.packet_loss,
+    )?;
+    log.put_number(
+        &JsString::from("/DSLog/BatteryVoltage"),
+        entry.timestamp,
+        entry.battery_volts,
+    )?;
+    log.put_number(
+        &JsString::from("/DSLog/CPUUtilization"),
+        entry.timestamp,
+        entry.cpu_utilization,
+    )?;
+    log.put_boolean(
+        &JsString::from("/DSLog/Status/Brownout"),
+        entry.timestamp,
+        entry.brownout,
+    )?;
+    log.put_boolean(
+        &JsString::from("/DSLog/Status/Watchdog"),
+        entry.timestamp,
+        entry.watchdog,
+    )?;
+    log.put_boolean(
+        &JsString::from("/DSLog/Status/DSTeleop"),
+        entry.timestamp,
+        entry.ds_teleop,
+    )?;
+    log.put_boolean(
+        &JsString::from("/DSLog/Status/DSDisabled"),
+        entry.timestamp,
+        entry.ds_disabled,
+    )?;
+    log.put_boolean(
+        &JsString::from("/DSLog/Status/RobotTeleop"),
+        entry.timestamp,
+        entry.robot_teleop,
+    )?;
+    log.put_boolean(
+        &JsString::from("/DSLog/Status/RobotAuto"),
+        entry.timestamp,
+        entry.robot_auto,
+    )?;
+    log.put_boolean(
+        &JsString::from("/DSLog/Status/RobotDisabled"),
+        entry.timestamp,
+        entry.robot_disabled,
+    )?;
+    log.put_number(
+        &JsString::from("/DSLog/CANUtilization"),
+        entry.timestamp,
+        entry.can_utilization,
+    )?;
+    log.put_number_array(
+        &JsString::from("/DSLog/PowerDistributionCurrents"),
+        entry.timestamp,
+        entry.power_distribution_currents,
+    )?;
+    Ok(())
+}
+
 /// dsLogWorker's `onmessage` for its `start` request. `files` is `request.data`: a `null` slot
 /// is skipped and an absent slot reads `undefined`, which passes the `!== null` check and
 /// throws inside the reader constructor.
@@ -374,73 +443,13 @@ pub fn run_worker(files: &[Option<&[u8]>], post: &mut impl FnMut(Response)) -> R
                 post(Response::Failed);
                 return Ok(());
             }
+            let mut wrote = Ok(());
             ds_log.for_each(&mut |entry| {
-                log.put_number(
-                    &JsString::from("/DSLog/TripTimeMS"),
-                    entry.timestamp,
-                    entry.trip_time_ms,
-                );
-                log.put_number(
-                    &JsString::from("/DSLog/PacketLoss"),
-                    entry.timestamp,
-                    entry.packet_loss,
-                );
-                log.put_number(
-                    &JsString::from("/DSLog/BatteryVoltage"),
-                    entry.timestamp,
-                    entry.battery_volts,
-                );
-                log.put_number(
-                    &JsString::from("/DSLog/CPUUtilization"),
-                    entry.timestamp,
-                    entry.cpu_utilization,
-                );
-                log.put_boolean(
-                    &JsString::from("/DSLog/Status/Brownout"),
-                    entry.timestamp,
-                    entry.brownout,
-                );
-                log.put_boolean(
-                    &JsString::from("/DSLog/Status/Watchdog"),
-                    entry.timestamp,
-                    entry.watchdog,
-                );
-                log.put_boolean(
-                    &JsString::from("/DSLog/Status/DSTeleop"),
-                    entry.timestamp,
-                    entry.ds_teleop,
-                );
-                log.put_boolean(
-                    &JsString::from("/DSLog/Status/DSDisabled"),
-                    entry.timestamp,
-                    entry.ds_disabled,
-                );
-                log.put_boolean(
-                    &JsString::from("/DSLog/Status/RobotTeleop"),
-                    entry.timestamp,
-                    entry.robot_teleop,
-                );
-                log.put_boolean(
-                    &JsString::from("/DSLog/Status/RobotAuto"),
-                    entry.timestamp,
-                    entry.robot_auto,
-                );
-                log.put_boolean(
-                    &JsString::from("/DSLog/Status/RobotDisabled"),
-                    entry.timestamp,
-                    entry.robot_disabled,
-                );
-                log.put_number(
-                    &JsString::from("/DSLog/CANUtilization"),
-                    entry.timestamp,
-                    entry.can_utilization,
-                );
-                log.put_number_array(
-                    &JsString::from("/DSLog/PowerDistributionCurrents"),
-                    entry.timestamp,
-                    entry.power_distribution_currents,
-                );
+                if wrote.is_ok() {
+                    wrote = put_entry(&mut log, entry);
+                }
             })?;
+            wrote.map_err(|_| Abort::Threw)?;
         }
         None => return Err(Abort::Threw),
     }
@@ -452,9 +461,14 @@ pub fn run_worker(files: &[Option<&[u8]>], post: &mut impl FnMut(Response)) -> R
                 post(Response::Failed);
                 return Ok(());
             }
+            let mut wrote = Ok(());
             ds_events.for_each(&mut |entry| {
-                log.put_string(&JsString::from("/DSEvents"), entry.timestamp, entry.text);
+                if wrote.is_ok() {
+                    wrote =
+                        log.put_string(&JsString::from("/DSEvents"), entry.timestamp, entry.text);
+                }
             })?;
+            wrote.map_err(|_| Abort::Threw)?;
         }
         None => return Err(Abort::Threw),
     }

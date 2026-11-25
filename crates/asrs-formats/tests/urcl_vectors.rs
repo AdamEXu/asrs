@@ -90,20 +90,24 @@ fn parse_record(
     v: &Value,
 ) -> Result<(), String> {
     match type_.to_string_lossy().as_str() {
-        "boolean" => log.put_boolean(key, timestamp, log_field::boolean(v)?),
-        "int" | "int64" | "float" | "double" => {
-            log.put_number(key, timestamp, log_field::number(v)?)
-        }
-        "string" => log.put_string(key, timestamp, log_field::js_string(v)?),
-        "boolean[]" => {
-            log.put_boolean_array(key, timestamp, log_field::array(v, log_field::boolean)?)
-        }
-        "int[]" | "int64[]" | "float[]" | "double[]" => {
-            log.put_number_array(key, timestamp, log_field::array(v, log_field::number)?)
-        }
-        "string[]" => {
-            log.put_string_array(key, timestamp, log_field::array(v, log_field::js_string)?)
-        }
+        "boolean" => log
+            .put_boolean(key, timestamp, log_field::boolean(v)?)
+            .unwrap(),
+        "int" | "int64" | "float" | "double" => log
+            .put_number(key, timestamp, log_field::number(v)?)
+            .unwrap(),
+        "string" => log
+            .put_string(key, timestamp, log_field::js_string(v)?)
+            .unwrap(),
+        "boolean[]" => log
+            .put_boolean_array(key, timestamp, log_field::array(v, log_field::boolean)?)
+            .unwrap(),
+        "int[]" | "int64[]" | "float[]" | "double[]" => log
+            .put_number_array(key, timestamp, log_field::array(v, log_field::number)?)
+            .unwrap(),
+        "string[]" => log
+            .put_string_array(key, timestamp, log_field::array(v, log_field::js_string)?)
+            .unwrap(),
         "json" => log
             .put_json(key, timestamp, log_field::js_string(v)?)
             .map_err(|e| format!("{e:?}"))?,

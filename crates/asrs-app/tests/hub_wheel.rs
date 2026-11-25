@@ -209,7 +209,7 @@ fn zoom(headless: &mut HeadlessCapture, scale: f32, stall: Duration) -> ([f64; 2
                 let mut log = model.page().shared_log().borrow_mut();
                 let key = JsString::from("/Value");
                 for t in 0..=100 {
-                    log.put_number(&key, f64::from(t), f64::from(t));
+                    log.put_number(&key, f64::from(t), f64::from(t)).unwrap();
                 }
             })
         })
