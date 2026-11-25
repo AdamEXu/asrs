@@ -80,7 +80,7 @@ app.whenReady().then(() => {
       const areas = screen.getAllDisplays().map(({ workArea: a }) => [a.x, a.y, a.width, a.height].map((v) => v.toFixed(1)));
       out("displays [" + areas.map((a) => "[" + a.join(", ") + "]").join(", ") + "]");
     } else if (request.op === "centred") {
-      const win = new BrowserWindow({ width: 1100, height: 650, minWidth: 800, minHeight: 400, show: false });
+      const win = new BrowserWindow({ width: 900, height: 500, minWidth: 200, minHeight: 100, show: false });
       await wait(300);
       const { x, y } = win.getBounds();
       out("centred [" + x.toFixed(1) + ", " + y.toFixed(1) + "]");
@@ -858,22 +858,22 @@ async fn lists(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
     );
     probe::post_keys(&[ESCAPE]);
     sleep(cx, 700).await;
-    let hub = cx
-        .update(|cx| windows::open_hub(cx, None, blank))
-        .expect("hub")
+    let satellite = cx
+        .update(|cx| windows::open_satellite(cx, "u", SatellitePlacement::Unplaced, blank))
+        .expect("satellite")
         .0;
     sleep(cx, 900).await;
-    let first = handle_of(cx, hub);
-    let bounds = with_window(cx, first, |w| platform::window_bounds(w)).expect("bounds");
+    let placed = handle_of(cx, satellite);
+    let bounds = with_window(cx, placed, |w| platform::window_bounds(w)).expect("bounds");
     let request = r#"{"op":"centred"}"#;
     let theirs = electron.request(cx, request, "centred ").await;
     let ours = format!("{:?}", [bounds.0, bounds.1]);
     report.check(
-        "a first launch's hub",
+        "a window without a place",
         ours == theirs,
         format!("{ours}, Electron {theirs}"),
     );
-    cx.update(|cx| windows::close(cx, hub));
+    cx.update(|cx| windows::close(cx, satellite));
     sleep(cx, 600).await;
     let one = set_screens(&port, &["2880x1800+0+0".to_owned()]);
     report.check("one screen", one, "");
