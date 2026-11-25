@@ -44,6 +44,12 @@ struct RunKey {
     fade: Option<(Lu, Lu)>,
 }
 
+#[derive(Clone, Copy)]
+struct Ink {
+    color: [u8; 3],
+    fade: Option<(Lu, Lu)>,
+}
+
 struct Run {
     image: Option<(i32, i32, Arc<RenderImage>)>,
     bytes: usize,
@@ -140,8 +146,7 @@ impl TextSystem {
         fragment: &dom::Fragment,
         fraction: Lu,
         scale: f32,
-        color: [u8; 3],
-        fade: Option<(Lu, Lu)>,
+        Ink { color, fade }: Ink,
     ) -> Option<(i32, i32, Arc<RenderImage>)> {
         self.clock += 1;
         let clock = self.clock;
@@ -620,8 +625,10 @@ impl Element for Text {
                     fragment,
                     x.rem_euclid(64),
                     scale,
-                    self.color,
-                    fade,
+                    Ink {
+                        color: self.color,
+                        fade,
+                    },
                 ) {
                     images.push((x.div_euclid(64) + left, baseline + top, image));
                 }
