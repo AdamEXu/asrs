@@ -66,7 +66,8 @@ commands on a host (cargo xtask host <name> ...):
                           run a command in the checkout inside the desktop session and wait. One
                           runs at a time on a host, whoever started it; the others queue.
                           Both set ASRS_GL, the rasterizer of 3D references (--gl native,
-                          swiftshader or d3d11-warp; default swiftshader), and on Linux
+                          swiftshader or d3d11-warp; default swiftshader on Linux and
+                          d3d11-warp on Windows), and on Linux
                           FONTCONFIG_FILE (--fonts gray, the default, for grayscale DOM text, or
                           stock for LCD)
   fetch [<dir>]           copy target/parity[/<dir>] from the host into target/parity/<name>/
@@ -150,7 +151,7 @@ const HOSTS: [Host; 3] = [
         os: Os::Windows,
         arch: "x86_64",
         reference: true,
-        gl: "swiftshader",
+        gl: "d3d11-warp",
         vm: Vm::Script(VmScript {
             dir: "vms/win11-x64",
             dir_variable: "ASRS_WINDOWS_VM",
@@ -166,7 +167,7 @@ const HOSTS: [Host; 3] = [
         os: Os::Windows,
         arch: "aarch64",
         reference: false,
-        gl: "swiftshader",
+        gl: "d3d11-warp",
         vm: Vm::Script(VmScript {
             dir: "/Volumes/T9/vms/win11-arm",
             dir_variable: "ASRS_WINDOWS_ARM_VM",
@@ -2063,8 +2064,10 @@ mod tests {
         assert_eq!(options.command, "cargo test --gl");
         let options = RunOptions::parse(linux, &args("cargo test")).unwrap();
         assert_eq!(options.fonts, Some("gray"));
-        let options = RunOptions::parse(windows, &args("--gl d3d11-warp cargo run")).unwrap();
+        let options = RunOptions::parse(windows, &args("cargo run")).unwrap();
         assert_eq!((options.fonts, options.gl), (None, "d3d11-warp"));
+        let options = RunOptions::parse(windows, &args("--gl swiftshader cargo run")).unwrap();
+        assert_eq!(options.gl, "swiftshader");
         assert!(RunOptions::parse(windows, &args("--fonts gray cargo run")).is_err());
         assert!(RunOptions::parse(linux, &args("--fonts lcd cargo run")).is_err());
         assert!(RunOptions::parse(linux, &[]).is_err());

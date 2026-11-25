@@ -1,5 +1,5 @@
-use std::sync::Arc;
-use std::sync::mpsc;
+use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, mpsc};
 use std::time::Duration;
 
 use asrs_field3d::render::{
@@ -37,12 +37,37 @@ fn pixel(bgra: &[u8], x: u32, y: u32) -> [u8; 4] {
     [bgra[o], bgra[o + 1], bgra[o + 2], bgra[o + 3]]
 }
 
-fn renderer() -> Option<Renderer> {
+// Devices opened and dropped on several threads at once crash inside WARP (3 runs of 15).
+static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
+
+struct Gpu {
+    renderer: Renderer,
+    _turn: MutexGuard<'static, ()>,
+}
+
+impl Deref for Gpu {
+    type Target = Renderer;
+    fn deref(&self) -> &Renderer {
+        &self.renderer
+    }
+}
+
+impl DerefMut for Gpu {
+    fn deref_mut(&mut self) -> &mut Renderer {
+        &mut self.renderer
+    }
+}
+
+fn renderer() -> Option<Gpu> {
     if asrs_parity::ci::skip_in_ci("render_gpu", "a GPU") {
         return None;
     }
+    let turn = ONE_AT_A_TIME.lock().unwrap_or_else(PoisonError::into_inner);
     match Renderer::new() {
-        Ok(r) => Some(r),
+        Ok(renderer) => Some(Gpu {
+            renderer,
+            _turn: turn,
+        }),
         Err(e) => {
             eprintln!("skipping: {e}");
             None
@@ -75,9 +100,9 @@ fn readback_is_top_row_first_with_the_background_clear() {
 
 #[test]
 fn render_thread_delivers_the_latest_frame_and_wakes() {
-    if renderer().is_none() {
+    let Some(_gpu) = renderer() else {
         return;
-    }
+    };
     let (tx, rx) = mpsc::channel();
     let thread = RenderThread::spawn(move || {
         let _ = tx.send(());
@@ -131,9 +156,9 @@ fn a_lost_device_is_an_error_and_another_renderer_takes_over() {
 #[cfg(feature = "parity")]
 #[test]
 fn the_render_thread_replaces_a_lost_device() {
-    if renderer().is_none() {
+    let Some(_gpu) = renderer() else {
         return;
-    }
+    };
     let (tx, rx) = mpsc::channel();
     let thread = RenderThread::spawn(move || {
         let _ = tx.send(());

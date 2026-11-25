@@ -19,6 +19,7 @@ pub(crate) fn default_mode() -> Result<&'static str> {
     match std::env::var(VARIABLE) {
         Ok(mode) if !mode.is_empty() => parse(&mode).map_err(|e| format!("{VARIABLE}: {e}")),
         _ if cfg!(target_os = "macos") => Ok("native"),
+        _ if cfg!(windows) => Ok("d3d11-warp"),
         _ => Ok("swiftshader"),
     }
 }
@@ -54,16 +55,14 @@ pub(crate) fn pair_port(paths: &Paths, mode: &str, command: &mut Command) -> Res
         command.env(ADAPTER_VARIABLE, adapter);
     }
     if mode == "swiftshader" {
-        let icd = swiftshader_icd(paths)?;
         if cfg!(windows) {
-            // The Vulkan loader in the Electron dist: a machine without a GPU driver has none.
-            let path = std::env::var_os("PATH").unwrap_or_default();
-            let dist = icd.parent().map(PathBuf::from).unwrap_or_default();
-            let dirs = std::iter::once(dist).chain(std::env::split_paths(&path));
-            let path = std::env::join_paths(dirs).map_err(|e| e.to_string())?;
-            command.env("PATH", path);
+            return Err(
+                "on Windows the port pairs with d3d11-warp: the Vulkan loader ignores \
+                 VK_ICD_FILENAMES in the hosts' elevated sessions"
+                    .to_owned(),
+            );
         }
-        command.env("VK_ICD_FILENAMES", icd);
+        command.env("VK_ICD_FILENAMES", swiftshader_icd(paths)?);
     }
     Ok(())
 }
@@ -110,5 +109,12 @@ mod tests {
         }
         assert!(parse("swiftshader").is_ok());
         assert!(parse("lavapipe").is_err());
+    }
+
+    #[test]
+    fn every_software_mode_pins_the_ports_adapter() {
+        for mode in MODES {
+            assert_eq!(port_adapter(mode).is_some(), mode != "native");
+        }
     }
 }

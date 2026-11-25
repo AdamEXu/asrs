@@ -32,7 +32,7 @@ display.icc beside the captures; `normalize` converts those to sRGB.
                   every variant (scales x themes) of each scenario (default: all), into
                   target/parity/app/<label>/<scenario>/<scale>x-<theme>/ (label default `run`).
                   --gl native|swiftshader|d3d11-warp picks the 3D switches (default ASRS_GL, or
-                  native on macOS and swiftshader elsewhere)
+                  native on macOS, swiftshader on Linux and d3d11-warp on Windows)
   tooltips [<scenario>...]
                   (macOS) the tooltips upstream gives AppKit at each capture of the scenarios
                   that have a reference in parity/tooltips, or of the named ones, where they

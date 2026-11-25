@@ -19,7 +19,7 @@ dark and light. Files land in target/parity/field3d/<os>/.
 commands:
   ref [<scene>...]    capture the references (ref/<scene>@<n>x-<theme>.png) with the 3D switches
                       of ASRS_GL (native, swiftshader or d3d11-warp; default native on macOS,
-                      swiftshader elsewhere)
+                      swiftshader on Linux, d3d11-warp on Windows)
   run [--manifest] [<scene>...]
                       render with the port (example field3d_scenes) into port/ and apply gate 4:
                       SSIM >= 0.995, interior pixels (over 2 px from an edge of the port's id and
