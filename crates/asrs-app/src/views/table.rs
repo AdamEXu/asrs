@@ -769,7 +769,7 @@ impl<H: FrameHost> HubFrame<H> {
                 let selected_past = selected.as_ref().filter(covered).is_some_and(past);
                 // A sticky cell is a layer, and a selection that goes on past it is drawn beyond its
                 // opaque background.
-                let sticky = |element| text::scroller(overflows && selected_past, element);
+                let sticky = |element| text::grayscale_layer(overflows && selected_past, element);
                 if let Some(selected) = selected.as_ref().filter(covered) {
                     let backend = &mut **self.text.backend();
                     let text = doc.text(index);
