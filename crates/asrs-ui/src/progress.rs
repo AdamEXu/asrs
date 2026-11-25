@@ -5,6 +5,7 @@ use asrs_canvas::Pixmap;
 use gpui_kit::{Bounds, IntoElement, Pixels, Styled, canvas};
 
 use crate::input::skia;
+use crate::svg::Backend;
 
 const TRACK: [f64; 3] = [239.0, 239.0, 239.0];
 const ACCENT: [f64; 3] = [0.0, 117.0, 255.0];
@@ -57,7 +58,11 @@ fn raster(width: u32, height: u32, value: f64, scale: f64) -> Option<Pixmap> {
         let mut pixel = [0.0; 4];
         over(&mut pixel, TRACK, clip);
         if x < value_width {
-            over(&mut pixel, ACCENT, clip);
+            let alpha = match Backend::HOST {
+                Backend::Graphite => clip,
+                Backend::Raster => clip * clip,
+            };
+            over(&mut pixel, ACCENT, alpha);
         }
         let ring = clip - rounded_coverage(inner, radius - scale, x, y);
         over(&mut pixel, BORDER, ring.max(0.0) * clip * BORDER_ALPHA);
