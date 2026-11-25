@@ -190,6 +190,9 @@ struct DeferredStroke {
 /// The points a stroke needs for a thread to be worth it.
 const DEFER_POINTS: usize = 256;
 
+/// The strokes computed together, which bounds the coverage held at once.
+const DEFER_STROKES: usize = 64;
+
 impl DeferredStroke {
     fn spans(&self, width: u32, height: u32) -> Spans {
         let device = stroke::stroke_path(&self.path, &self.style).mapped(&self.ctm);
@@ -1405,6 +1408,9 @@ impl<'a> Raster<'a> {
                     clip: self.state.clip.clone(),
                     source: paint,
                 });
+                if self.deferred.len() >= DEFER_STROKES {
+                    self.paint_deferred();
+                }
             }
             return;
         }
@@ -2464,6 +2470,10 @@ mod tests {
         long(&mut c, "purple", 70.0);
         c.push(Call::ClearRect(150.0, 30.0, 40.0, 40.0));
         long(&mut c, "black", 100.0);
+        for i in 0..2 * DEFER_STROKES + 5 {
+            c.set_line_width(1.0 + (i % 9) as f64);
+            long(&mut c, "rgba(40, 90, 10, 0.1)", (i % 130) as f64);
+        }
 
         let mut together = Raster::new(c.width, c.height).unwrap();
         together.run(&c.calls);
