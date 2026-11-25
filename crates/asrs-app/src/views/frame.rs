@@ -278,7 +278,6 @@ impl Places {
 
 pub struct HubFrame<H: FrameHost> {
     host: H,
-    draws: u64,
     shell: HubShell,
     started: Instant,
     /// `Date.now()` then.
@@ -425,7 +424,6 @@ impl<H: FrameHost> HubFrame<H> {
         geometry.sync(host.hub(cx));
         HubFrame {
             host,
-            draws: 0,
             shell: HubShell::default(),
             started: Instant::now(),
             opened: asrs_js::time::Clock::now(&asrs_js::time::SystemClock),
@@ -462,11 +460,6 @@ impl<H: FrameHost> HubFrame<H> {
 
     pub fn host(&self) -> &H {
         &self.host
-    }
-
-    /// How often the window has been drawn.
-    pub fn draws(&self) -> u64 {
-        self.draws
     }
 
     pub fn host_mut(&mut self) -> &mut H {
@@ -1170,7 +1163,6 @@ impl<H: FrameHost> Render for HubFrame<H> {
         if self.tab_key.is_none() {
             self.tab_key = Some(Self::intercept_tab(window, cx));
         }
-        self.draws += 1;
         self.host.begin_draw(cx);
         let appearance = Appearance::of(window, cx);
         let theme = appearance.theme();

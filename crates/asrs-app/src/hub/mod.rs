@@ -268,6 +268,11 @@ impl Hub {
         self.moving
     }
 
+    /// How often the window has drawn the page.
+    pub fn draws(&self) -> u64 {
+        self.repaint.draws()
+    }
+
     pub(crate) fn begin_draw(&mut self) {
         self.repaint.begin_draw();
     }

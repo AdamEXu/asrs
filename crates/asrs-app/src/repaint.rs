@@ -12,11 +12,17 @@ pub(crate) struct Repaint {
     /// The next draw was asked for by [`Repaint::frame`] only to settle.
     asked: bool,
     drawing: bool,
+    draws: u64,
 }
 
 impl Repaint {
     pub(crate) fn settling(&self) -> bool {
         self.settling > 0
+    }
+
+    /// How often the page has been drawn.
+    pub(crate) fn draws(&self) -> u64 {
+        self.draws
     }
 
     /// A task ran. The ones drawing runs are part of the draw.
@@ -36,6 +42,7 @@ impl Repaint {
             self.changed();
         }
         self.drawing = true;
+        self.draws += 1;
     }
 
     pub(crate) fn end_draw(&mut self) {

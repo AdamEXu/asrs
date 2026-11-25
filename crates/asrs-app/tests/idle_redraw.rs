@@ -13,18 +13,16 @@ use std::time::Duration;
 
 use asrs_app::hub::Hub;
 use asrs_app::main_process::{self, MainProcess, SatelliteConfig};
-use asrs_app::views::frame::HubFrame;
-use asrs_app::views::hub_host::HubEntityHost;
-use asrs_app::views::satellite_host::SatelliteHost;
-use asrs_app::windows::{self, Windows};
+use asrs_app::satellite::Satellite;
+use asrs_app::windows::{self, WindowId, Windows};
 use asrs_js::ops;
 use asrs_js::value::JsValue;
 use asrs_model::messages::{MainToHub, NamedMessage};
 use asrs_model::selection::Selection;
 use asrs_model::tab_type::TabType;
 use asrs_ui::gpui::{
-    AnyWindowHandle, AppContext, Entity, Modifiers, TestAppContext, VisualTestContext,
-    WindowHandle, WindowVisibility, point, px,
+    AnyWindowHandle, AppContext, Entity, MouseMoveEvent, PlatformInput, TestAppContext,
+    WindowVisibility, point, px,
 };
 
 const HOME: &str = "ASRS_IDLE_REDRAW_HOME";
@@ -80,9 +78,10 @@ fn run_in_a_fresh_home(test: &str) {
 /// The app's hub, with a satellite of its one tab beside Documentation.
 struct Page {
     cx: TestAppContext,
+    id: WindowId,
     hub: Entity<Hub>,
-    window: WindowHandle<HubFrame<HubEntityHost>>,
-    satellite: WindowHandle<HubFrame<SatelliteHost>>,
+    window: AnyWindowHandle,
+    satellite: Option<(Entity<Satellite>, AnyWindowHandle)>,
 }
 
 impl Page {
@@ -95,22 +94,18 @@ impl Page {
             main_process::start(cx, &[], events);
         });
         cx.run_until_parked();
-        cx.update(|cx| {
+        let (id, hub, window) = cx.update(|cx| {
             let (id, hub) = MainProcess::hub_windows(cx).remove(0);
-            let hub = hub.upgrade().expect("the hub");
             let window = Windows::handle(cx, id).expect("the hub's window");
-            let opened = MainProcess::open_satellite(
-                cx,
-                SatelliteConfig::New {
-                    parent: id,
-                    uuid: JsValue::string(UUID),
-                    type_value: JsValue::Number(TabType::Table.number()),
-                },
-            );
-            let satellite = Windows::handle(cx, opened.expect("a satellite")).expect("its window");
-            (hub, window, satellite)
-        })
-        .into_page(cx)
+            (id, hub.upgrade().expect("the hub"), window)
+        });
+        Page {
+            cx,
+            id,
+            hub,
+            window,
+            satellite: None,
+        }
     }
 
     fn message(&mut self, name: MainToHub, data: JsValue) {
@@ -124,9 +119,27 @@ impl Page {
     }
 
     fn select(&mut self, kind: TabType) {
-        let satellites = JsValue::Array(vec![JsValue::string(UUID)]);
+        if let Some((_, window)) = self.satellite.take() {
+            self.cx
+                .update_window(window, |_, window, _| window.remove_window())
+                .expect("the window is open");
+            self.cx.run_until_parked();
+        }
         self.message(MainToHub::RestoreState, restore_state(kind));
-        self.message(MainToHub::SetActiveSatellites, satellites);
+        let parent = self.id;
+        self.satellite = self.cx.update(|cx| {
+            let config = SatelliteConfig::New {
+                parent,
+                uuid: JsValue::string(UUID),
+                type_value: JsValue::Number(kind.number()),
+            };
+            let opened = MainProcess::open_satellite(cx, config)?;
+            let pages = MainProcess::satellite_windows(cx);
+            let (_, page) = pages.into_iter().find(|(id, _)| *id == opened)?;
+            Some((page, Windows::handle(cx, opened)?))
+        });
+        assert!(self.satellite.is_some());
+        self.cx.run_until_parked();
     }
 
     fn open_log(&mut self) {
@@ -182,17 +195,19 @@ impl Page {
         for _ in 0..count {
             self.cx.background_executor.advance_clock(FRAME);
             self.cx.run_until_parked();
-            self.frame(self.window.into());
-            self.frame(self.satellite.into());
+            self.frame(self.window);
+            if let Some((_, window)) = &self.satellite {
+                self.frame(*window);
+            }
         }
     }
 
-    fn draws(&mut self) -> [u64; 2] {
-        let hub = self.window.update(&mut self.cx, |frame, _, _| frame.draws());
-        let satellite = self
-            .satellite
-            .update(&mut self.cx, |frame, _, _| frame.draws());
-        [hub.expect("the hub"), satellite.expect("the satellite")]
+    fn draws(&self) -> [u64; 2] {
+        self.cx.read(|cx| {
+            let satellite = self.satellite.as_ref();
+            let satellite = satellite.map_or(0, |(page, _)| page.read(cx).draws());
+            [self.hub.read(cx).draws(), satellite]
+        })
     }
 
     /// How often the hub and the satellite are drawn in `count` frames.
@@ -217,24 +232,17 @@ impl Page {
         assert_eq!(self.drawn_in(120), [0, 0], "{what}");
     }
 
-    fn visual(&mut self) -> VisualTestContext {
-        VisualTestContext::from_window(self.window.into(), &self.cx)
-    }
-}
-
-trait IntoPage {
-    fn into_page(self, cx: TestAppContext) -> Page;
-}
-
-impl IntoPage for (Entity<Hub>, AnyWindowHandle, AnyWindowHandle) {
-    fn into_page(self, cx: TestAppContext) -> Page {
-        let (hub, window, satellite) = self;
-        Page {
-            cx,
-            hub,
-            window: window.downcast().expect("a hub window"),
-            satellite: satellite.downcast().expect("a satellite window"),
-        }
+    fn mouse_move(&mut self, x: f32, y: f32) {
+        let event = PlatformInput::MouseMove(MouseMoveEvent {
+            position: point(px(x), px(y)),
+            ..MouseMoveEvent::default()
+        });
+        self.cx
+            .update_window(self.window, |_, window, cx| {
+                window.dispatch_event(event, cx)
+            })
+            .expect("the window is open");
+        self.cx.run_until_parked();
     }
 }
 
@@ -324,8 +332,7 @@ mod body {
         };
         let mut shown = Vec::new();
         for x in [600.0, 700.0] {
-            let mut visual = page.visual();
-            visual.simulate_mouse_move(point(px(x), px(200.0)), None, Modifiers::default());
+            page.mouse_move(x, 200.0);
             let [hub, satellite] = page.drawn_in(30);
             assert!((1..15).contains(&hub), "the pointer: {hub}");
             assert!((1..15).contains(&satellite), "the pointer: {satellite}");
@@ -340,7 +347,7 @@ mod body {
         page.open_log();
         page.select(TabType::LineGraph);
         page.assert_idle("before");
-        let window = page.window.into();
+        let window = page.window;
         page.cx
             .simulate_window_visibility_change(window, WindowVisibility::Hidden);
         page.settle();
