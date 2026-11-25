@@ -37,7 +37,8 @@ records which rasterizers are in use).
 Another Linux machine can run the `local` commands and the suites with the same fonts and a
 display of the same size, without touching its own desktop: unpack the fonts with
 xtask/hosts/linux/fonts.sh and run `FONTCONFIG_FILE=<dir>/gray.conf
-xtask/hosts/linux/display.sh <command>`. It is a check on another architecture, not a reference.
+xtask/hosts/linux/display.sh <command>`. It is a check on another architecture, not a reference,
+except that the DOM text scenes and the LCD table were recorded on x86_64 (linux.json says so).
 
 Checkouts are C:\work\asrs and ~/asrs, oracle packs C:\work\asrs-pack.tar.zst and
 ~/asrs-pack.tar.zst. ASRS_HOST_DIR=<name> replaces `asrs` in those paths (and suffixes the Windows
