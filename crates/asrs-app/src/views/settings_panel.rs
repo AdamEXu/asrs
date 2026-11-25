@@ -60,8 +60,9 @@ pub(super) struct SettingsPanel {
     pub key: usize,
     pub probe: &'static str,
     pub controls: [f64; 4],
-    /// The border box; its first pixel column is the `border-left`.
+    /// The border box, `border` of it on the left the `border-left`.
     pub rect: [f64; 4],
+    pub border: f64,
     pub content: Div,
     pub content_height: f64,
 }
@@ -80,10 +81,11 @@ impl<H: FrameHost> HubFrame<H> {
             probe,
             controls,
             rect,
+            border,
             content,
             content_height,
         } = panel;
-        let border = match appearance {
+        let edge = match appearance {
             Appearance::Dark => 0x000000,
             Appearance::Light => 0xdddddd,
         };
@@ -109,17 +111,17 @@ impl<H: FrameHost> HubFrame<H> {
                     .absolute()
                     .left_0()
                     .top_0()
-                    .w(px(1.0))
+                    .w(px(border as f32))
                     .h(px(height as f32))
-                    .bg(rgb(border)),
+                    .bg(rgb(edge)),
             )
             .child(
                 div()
                     .id((probe, key))
                     .absolute()
-                    .left(px(1.0))
+                    .left(px(border as f32))
                     .top_0()
-                    .w(px((width - 1.0) as f32))
+                    .w(px((width - border) as f32))
                     .h(px(height as f32))
                     .overflow_hidden()
                     .track_scroll(&handle)
@@ -134,9 +136,9 @@ impl<H: FrameHost> HubFrame<H> {
             .child(
                 div()
                     .absolute()
-                    .left(px(1.0))
+                    .left(px(border as f32))
                     .top_0()
-                    .w(px((width - 1.0) as f32))
+                    .w(px((width - border) as f32))
                     .h(px(height as f32))
                     .child(bars),
             );

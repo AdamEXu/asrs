@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 
 use asrs_hub::hub::HubModel;
 use asrs_js::math;
+use asrs_model::layout_unit::{border, centred, device, percent, zoomed};
 use asrs_tabs::form::{self, NumberInput};
 use asrs_tabs::joysticks::JoysticksController;
 use asrs_tabs::points::{Dimension, PointsController, PointsSelect};
@@ -28,11 +29,11 @@ use asrs_ui::tooltip::titled;
 use asrs_ui::scroll;
 
 use super::super::frame::{FrameHost, HubFrame};
-use super::super::number::FormNumber;
+use super::super::number::{FormNumber, input_chrome};
 use super::super::select::FormSelect;
 use super::super::settings_panel::{SettingsPanel, tab_key};
 use super::super::source_list::{centred_offset, place_in};
-use super::{local, lu, tab_index, with_controller};
+use super::{local, tab_index, with_controller};
 
 const MAX_WIDTH: f64 = 200.0;
 const TOP_MARGIN: f64 = 5.0;
@@ -42,10 +43,8 @@ const TALL_INSET: f64 = 145.0;
 const TALL_MAX_HEIGHT: f64 = 120.0;
 /// `div.setting-blocks input` and `select`: `margin: 5px; width: 70%`.
 const MARGIN: f64 = 5.0;
-const WIDTH_FRACTION: f64 = 0.7;
+const WIDTH_PERCENT: f64 = 70.0;
 const SELECT_HEIGHT: f64 = 25.0;
-/// The UA's 2 px border and 1 px (block) or 2 px (inline) padding on both sides of an input.
-const INPUT_CHROME: [f64; 2] = [8.0, 6.0];
 const SPLIT_TOP: f64 = 8.0;
 const ROTATE_TITLES: &[&str] = &[
     "Rotate swerve module layout counter-clockwise",
@@ -201,13 +200,16 @@ pub struct Panel {
 }
 
 /// Where a `fix-second` panel puts its parts inside `div.controls-content`, in client
-/// coordinates of its unscrolled content.
+/// coordinates of its unscrolled content. The lengths its methods work with are in device px.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct PanelLayout {
-    /// The border box; its first pixel column is the `border-left`.
+    scale: f64,
+    /// The border box in CSS px, `border` of it on the left the `border-left`.
     panel: [f64; 4],
+    border: f64,
     content_x: f64,
     content_width: f64,
+    /// In CSS px.
     content_height: f64,
     titles: [f64; 3],
     inputs: [f64; 3],
@@ -215,38 +217,66 @@ struct PanelLayout {
 }
 
 impl PanelLayout {
-    /// `bar` is what a scrollbar takes of the panel where it overflows.
-    fn new([x, y, w, h]: [f64; 4], bar: f64) -> PanelLayout {
-        let width = math::min2(lu(w * 0.4), MAX_WIDTH);
-        let panel = [x + w - width - 1.0, y, width + 1.0, h];
+    /// `bar` is what a scrollbar takes of the panel where it overflows, in CSS px.
+    fn new(controls: [f64; 4], bar: f64, scale: f64) -> PanelLayout {
+        let [x, y, w, h] = controls.map(|v| device(v, scale));
+        let length = |v: f64| zoomed(v, scale);
+        let edge = border(1.0, scale);
+        let width = math::min2(percent(w, 40.0), length(MAX_WIDTH));
+        let panel = [x + w - width - edge, y, width + edge, h];
+        let min_height = length(INPUT_MIN_HEIGHT);
         let tall = math::max2(
-            math::min2(math::max2(h - TALL_INSET, 0.0), TALL_MAX_HEIGHT),
-            INPUT_MIN_HEIGHT,
+            math::min2(
+                math::max2(h - length(TALL_INSET), 0.0),
+                length(TALL_MAX_HEIGHT),
+            ),
+            min_height,
         );
-        let step = TITLE_HEIGHT + INPUT_MIN_HEIGHT;
-        let titles = [0.0, 1.0, 2.0].map(|i| y + TOP_MARGIN + i * step);
-        let content_height = TOP_MARGIN + 3.0 * TITLE_HEIGHT + 2.0 * INPUT_MIN_HEIGHT + tall;
+        let title_height = length(TITLE_HEIGHT);
+        let top = length(TOP_MARGIN);
+        let titles = [0.0, 1.0, 2.0].map(|i| y + top + i * (title_height + min_height));
+        let content_height = top + 3.0 * title_height + 2.0 * min_height + tall;
         let content_width = if content_height > h {
-            width - bar
+            width - length(bar)
         } else {
             width
         };
         PanelLayout {
-            panel,
-            content_x: panel[0] + 1.0,
+            scale,
+            panel: panel.map(|v| v / scale),
+            border: edge / scale,
+            content_x: panel[0] + edge,
             content_width,
-            content_height,
+            content_height: content_height / scale,
             titles,
-            inputs: titles.map(|t| t + TITLE_HEIGHT),
+            inputs: titles.map(|t| t + title_height),
             tall,
         }
     }
 
+    fn css(&self, rect: [f64; 4]) -> [f64; 4] {
+        rect.map(|v| v / self.scale)
+    }
+
+    fn length(&self, v: f64) -> f64 {
+        zoomed(v, self.scale)
+    }
+
+    fn title(&self, i: usize) -> [f64; 4] {
+        self.css([
+            self.content_x,
+            self.titles[i],
+            self.content_width,
+            self.length(TITLE_HEIGHT),
+        ])
+    }
+
     /// An inline control of border-box size `size` with its margins, centred in a column.
-    fn control(&self, column: [f64; 2], top: f64, size: [f64; 2]) -> [f64; 4] {
+    fn control(&self, column: [f64; 2], i: usize, size: [f64; 2]) -> [f64; 4] {
         let [left, width] = column;
-        let x = left + lu((width - size[0] - 2.0 * MARGIN) / 2.0) + MARGIN;
-        [x, top + MARGIN, size[0], size[1]]
+        let margin = self.length(MARGIN);
+        let x = left + centred(width, size[0] + 2.0 * margin) + margin;
+        self.css([x, self.inputs[i] + margin, size[0], size[1]])
     }
 
     fn column(&self) -> [f64; 2] {
@@ -254,27 +284,29 @@ impl PanelLayout {
     }
 
     fn halves(&self) -> [[f64; 2]; 2] {
-        let half = lu(self.content_width * 0.5);
+        let half = percent(self.content_width, 50.0);
         [[self.content_x, half], [self.content_x + half, half]]
     }
 
-    fn number(&self, column: [f64; 2], top: f64, line: f64) -> [f64; 4] {
-        let width = lu(column[1] * WIDTH_FRACTION) + INPUT_CHROME[0];
-        self.control(column, top, [width, line + INPUT_CHROME[1]])
+    fn number(&self, column: [f64; 2], i: usize, line: f64) -> [f64; 4] {
+        let [across, down] = input_chrome(self.scale);
+        let width = percent(column[1], WIDTH_PERCENT) + across;
+        self.control(column, i, [width, device(line, self.scale) + down])
     }
 
-    fn select(&self, column: [f64; 2], top: f64) -> [f64; 4] {
-        self.control(column, top, [lu(column[1] * WIDTH_FRACTION), SELECT_HEIGHT])
+    fn select(&self, column: [f64; 2], i: usize) -> [f64; 4] {
+        let width = percent(column[1], WIDTH_PERCENT);
+        self.control(column, i, [width, self.length(SELECT_HEIGHT)])
     }
 
-    fn split(&self, top: f64) -> [f64; 4] {
-        let width = lu(self.content_width * 0.8);
-        [
-            self.content_x + lu(self.content_width * 0.5) - width / 2.0,
-            top + SPLIT_TOP,
+    fn split(&self, i: usize) -> [f64; 4] {
+        let width = percent(self.content_width, 80.0);
+        self.css([
+            self.content_x + percent(self.content_width, 50.0) - width / 2.0,
+            self.inputs[i] + self.length(SPLIT_TOP),
             width,
-            lu(self.tall * 0.65),
-        ]
+            percent(self.tall, 65.0),
+        ])
     }
 }
 
@@ -463,20 +495,17 @@ impl<H: FrameHost> HubFrame<H> {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
-        let layout = PanelLayout::new(controls, scroll::style(cx).reserved());
+        let bar = scroll::style(cx).reserved();
+        let layout = PanelLayout::new(controls, bar, f64::from(scale));
         let theme = appearance.theme();
         let line = editor_line(scale, cx);
-        let origin = [layout.content_x, layout.panel[1], 0.0, 0.0];
+        let content_x = layout.panel[0] + layout.border;
+        let origin = [content_x, layout.panel[1], 0.0, 0.0];
         let mut content = div();
         for (i, (title, block)) in panel.blocks.iter().enumerate() {
             let (width, _) = text::measure(cx, &title_style(), title, scale);
-            let box_rect = [
-                layout.content_x,
-                layout.titles[i],
-                layout.content_width,
-                TITLE_HEIGHT,
-            ];
-            let offset = centred_offset(layout.content_width, width).unwrap_or(0.0);
+            let box_rect = layout.title(i);
+            let offset = centred_offset(box_rect[2], width, f64::from(scale)).unwrap_or(0.0);
             let (x, dx) = place_in(box_rect[0], offset, f64::from(scale));
             let place = focus::place((*title, key), window, cx);
             content = content.child(
@@ -491,7 +520,6 @@ impl<H: FrameHost> HubFrame<H> {
                         ),
                     ),
             );
-            let top = layout.inputs[i];
             let numbers: &[(Control, [f64; 2])] = match block {
                 Block::Number(control) => &[(*control, layout.column())],
                 Block::Halves([a, b]) => {
@@ -501,7 +529,7 @@ impl<H: FrameHost> HubFrame<H> {
                 Block::Select(_) | Block::Rotate => &[],
             };
             for (control, column) in numbers {
-                let rect = layout.number(*column, top, line);
+                let rect = layout.number(*column, i, line);
                 if let Some(field) = self.number_field(key, *control, rect, scale, window, cx) {
                     let element = local(rect, origin).child(field);
                     content =
@@ -509,7 +537,7 @@ impl<H: FrameHost> HubFrame<H> {
                 }
             }
             if let Block::Select(control) = block {
-                let rect = layout.select(layout.column(), top);
+                let rect = layout.select(layout.column(), i);
                 if let Some(select) = self.select_control(key, *control, rect, scale, window, cx) {
                     content = content.child(probed(
                         control.probe(),
@@ -518,7 +546,7 @@ impl<H: FrameHost> HubFrame<H> {
                 }
             }
             if let Block::Rotate = block {
-                let rect = layout.split(top);
+                let rect = layout.split(i);
                 content = content.child(probed(
                     "div.orientation-switcher",
                     self.rotate_switcher(key, rect, origin, appearance, scale, cx),
@@ -530,6 +558,7 @@ impl<H: FrameHost> HubFrame<H> {
             probe: panel.probe,
             controls,
             rect: layout.panel,
+            border: layout.border,
             content,
             content_height: layout.content_height,
         };
@@ -580,42 +609,72 @@ impl<H: FrameHost> HubFrame<H> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::views::control_layout_vectors;
 
     #[test]
     fn panel_boxes_match_blink() {
-        let layout = PanelLayout::new([300.0, 450.0, 800.0, 200.0], 0.0);
-        let [title, _, _] = layout.inputs;
+        let layout = PanelLayout::new([300.0, 450.0, 800.0, 200.0], 0.0, 1.0);
         assert_eq!(layout.panel, [899.0, 450.0, 201.0, 200.0]);
         assert_eq!(
-            layout.number(layout.column(), title, 15.0),
+            layout.number(layout.column(), 0, 15.0),
             [926.0, 480.0, 148.0, 21.0]
         );
         let [left, right] = layout.halves();
+        assert_eq!(layout.number(left, 1, 15.5), [911.0, 540.0, 78.0, 21.5]);
+        assert_eq!(layout.number(right, 1, 15.5), [1011.0, 540.0, 78.0, 21.5]);
+        assert_eq!(layout.split(2), [920.0, 603.0, 160.0, 35.75]);
         assert_eq!(
-            layout.number(left, layout.inputs[1], 15.5),
-            [911.0, 540.0, 78.0, 21.5]
-        );
-        assert_eq!(
-            layout.number(right, layout.inputs[1], 15.5),
-            [1011.0, 540.0, 78.0, 21.5]
-        );
-        assert_eq!(layout.split(layout.inputs[2]), [920.0, 603.0, 160.0, 35.75]);
-        assert_eq!(
-            layout.select(layout.column(), layout.inputs[1]),
+            layout.select(layout.column(), 1),
             [930.0, 540.0, 140.0, 25.0]
         );
         assert_eq!(
-            layout.select(layout.column(), layout.inputs[2]),
+            layout.select(layout.column(), 2),
             [930.0, 600.0, 140.0, 25.0]
         );
 
-        let taller = PanelLayout::new([300.0, 400.0, 800.0, 250.0], 0.0);
-        assert_eq!(taller.split(taller.inputs[2]), [920.0, 553.0, 160.0, 68.25]);
-        let shorter = PanelLayout::new([300.0, 470.0, 800.0, 180.0], 0.0);
-        assert_eq!(
-            shorter.split(shorter.inputs[2]),
-            [920.0, 623.0, 160.0, 26.0]
-        );
+        let taller = PanelLayout::new([300.0, 400.0, 800.0, 250.0], 0.0, 1.0);
+        assert_eq!(taller.split(2), [920.0, 553.0, 160.0, 68.25]);
+        let shorter = PanelLayout::new([300.0, 470.0, 800.0, 180.0], 0.0, 1.0);
+        assert_eq!(shorter.split(2), [920.0, 623.0, 160.0, 26.0]);
         assert_eq!(shorter.content_height, 185.0);
+    }
+
+    #[test]
+    fn controls_lie_where_blink_puts_them() {
+        for (tab_type, compared) in [(9.0, 1280), (11.0, 1280)] {
+            control_layout_vectors::each(tab_type, compared, |blink| {
+                let scale = blink.scale;
+                let [_, down] = input_chrome(scale);
+                let inputs: Vec<_> = blink.all("div.setting-blocks input").to_vec();
+                let line = inputs[0].rect[3] - down / scale;
+                let layout = PanelLayout::new(blink.controls, 0.0, scale);
+                let panel = blink.all("div.setting-blocks")[0].rect;
+                blink.check("panel", &layout.panel, &panel);
+                let blocks = [0, 2, 4].map(|i| blink.all("div.setting-blocks > div")[i].rect);
+                for (i, block) in blocks.iter().enumerate() {
+                    blink.check("title", &layout.title(i), block);
+                }
+                for input in inputs {
+                    let [left, right] = layout.halves();
+                    let (column, i) = match input.class.as_str() {
+                        "max-speed" => (layout.column(), 0),
+                        "dimensions-width" => (left, 0),
+                        "dimensions-height" => (right, 0),
+                        "size-x" => (left, 1),
+                        _ => (right, 1),
+                    };
+                    let ours = layout.number(column, i, line);
+                    blink.check(&input.class, &ours, &input.rect);
+                }
+                for select in blink.all("div.setting-blocks select").to_vec() {
+                    let i = if select.class == "orientation" { 1 } else { 2 };
+                    let ours = layout.select(layout.column(), i);
+                    blink.check(&select.class, &ours, &select.rect);
+                }
+                for split in blink.all("div.setting-blocks div.split").to_vec() {
+                    blink.check(&split.class, &layout.split(2), &split.rect);
+                }
+            });
+        }
     }
 }

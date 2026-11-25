@@ -2,6 +2,8 @@ pub mod canvas_tabs;
 pub mod cell_text;
 pub mod console;
 pub mod console_layout;
+#[cfg(test)]
+mod control_layout_vectors;
 pub mod documentation;
 pub mod download;
 pub mod field3d;

@@ -13,7 +13,7 @@ mod swerve;
 use std::collections::{HashMap, HashSet};
 
 use asrs_hub::hub::HubModel;
-use asrs_js::math;
+use asrs_model::layout_unit::lu;
 use asrs_model::tab_type::TabType;
 use asrs_ui::gpui::{AnyElement, App, Context, Div, Styled, Window, div, px};
 use asrs_ui::theme::Appearance;
@@ -85,11 +85,6 @@ fn with_renderer<T: 'static, R>(
 ) -> Option<R> {
     let tab = hub.tabs_mut().0.tab_mut(index)?;
     Some(f(tab.renderer.downcast_mut::<T>()?))
-}
-
-/// A CSS length in LayoutUnits, truncated as `LayoutUnit(float)` truncates.
-fn lu(v: f64) -> f64 {
-    math::trunc(v * 64.0) / 64.0
 }
 
 fn local(rect: [f64; 4], origin: [f64; 4]) -> Div {
