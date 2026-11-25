@@ -23,7 +23,7 @@ use asrs_ui::gpui::{
 use asrs_ui::icon::{Icon, IconFit, IconSource};
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, PlainText, TextField};
 use asrs_ui::symbols::Symbol;
-use asrs_ui::text::{Measurer, Text, TextStyle};
+use asrs_ui::text::{Measurer, Text, TextStyle, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 use asrs_ui::tooltip::{covering, titled, untitled};
 
@@ -42,6 +42,7 @@ const ROW_HEIGHT: f64 = 30.0;
 /// The box of an inline element in a row.
 const INLINE_HEIGHT: f32 = 18.0;
 const TUNING_INPUT_WIDTH: f64 = 56.0;
+const WARNING: &str = " \u{26A0}";
 const BOOLEAN_WIDTH: f64 = 9.0;
 const RESULTS_ITEM_HEIGHT: f64 = 25.0;
 const RESULTS_MAX_HEIGHT: f64 = 290.0;
@@ -617,6 +618,16 @@ impl SidebarView {
         let title = row.title.to_string_lossy();
         // `div.field-item`'s `mask-image`.
         let fade = |text: Text| text.fade(item_width - 30.0, item_width - 10.0);
+        // What the snapped boxes before an inline part leave of its exact place.
+        let scale = window.scale_factor();
+        let mut dropped = 0.0;
+        let mut advance = |style: &TextStyle, text: &str, cx: &mut App| {
+            let (width, _) = asrs_ui::text::measure(cx, style, text, scale);
+            let at = dropped;
+            dropped += snap_remainder(width as f32, scale);
+            at
+        };
+        advance(&label_style(italic, bold), &title, cx);
         let mut title_text = fade(Text::new(title, label_style(italic, bold)).color(theme.text));
         if row.known_label {
             title_text = title_text.underline();
@@ -624,6 +635,7 @@ impl SidebarView {
         let title_el = div().relative().child(title_text);
         label = label.child(untitled(title_el));
         if row.full_key.as_ref().is_some_and(|k| !k.is_empty()) && !row.warning_hidden {
+            let dx = advance(&label_style(italic, bold), WARNING, cx);
             label = label.child(titled(
                 row.warning_title.to_string_lossy(),
                 div()
@@ -631,7 +643,9 @@ impl SidebarView {
                     .h(px(INLINE_HEIGHT))
                     .cursor(asrs_ui::gpui::CursorStyle::PointingHand)
                     .child(fade(
-                        Text::new(" \u{26A0}", label_style(italic, bold)).color(theme.text),
+                        Text::new(WARNING, label_style(italic, bold))
+                            .color(theme.text)
+                            .subpixel(dx, 0.0),
                     ))
                     .on_click(cx.listener(move |view, _, _, cx| {
                         view.input(cx, |s, _| s.warning_click(flat));
@@ -640,10 +654,12 @@ impl SidebarView {
         }
         if let Some(type_label) = &row.type_label {
             let opacity = if row.generated { 0.3 / 0.6 } else { 0.3 };
+            let dx = advance(&label_style(false, false), "", cx);
             label = label.child(
                 div().opacity(opacity).child(fade(
                     Text::new(type_label.to_string_lossy(), label_style(false, false))
-                        .color(theme.text),
+                        .color(theme.text)
+                        .subpixel(dx, 0.0),
                 )),
             );
         }
