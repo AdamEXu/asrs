@@ -23,7 +23,7 @@ use asrs_hub::hub::HubModel;
 use asrs_js::json;
 use asrs_js::string::JsString;
 use asrs_js::value::{JsValue, ToJs};
-use asrs_log::log::Log;
+use asrs_log::log::{Log, LogError};
 use asrs_model::messages::{MainToHub, NamedMessage};
 use asrs_model::preferences::{Field3dMode, Preferences};
 use asrs_model::selection::Selection;
@@ -277,29 +277,29 @@ fn scenes() -> Vec<SceneSpec> {
 }
 
 /// What the reference log has nothing of: a 24-segment mechanism and 64 points, both moving.
-fn add_bench_fields(log: &mut Log) {
+fn add_bench_fields(log: &mut Log) -> Result<(), LogError> {
     let key = |name: &str| JsString::from(name);
     let mech = |name: &str| JsString::from(format!("{MECHANISM}/{name}"));
-    log.put_string(&mech(".type"), 0.0, key("Mechanism2d"));
-    log.put_string(&mech("backgroundColor"), 0.0, key("#000020"));
-    log.put_number_array(&mech("dims"), 0.0, vec![4.0, 4.0]);
-    log.put_number(&mech("root/x"), 0.0, 2.0);
-    log.put_number(&mech("root/y"), 0.0, 0.5);
+    log.put_string(&mech(".type"), 0.0, key("Mechanism2d"))?;
+    log.put_string(&mech("backgroundColor"), 0.0, key("#000020"))?;
+    log.put_number_array(&mech("dims"), 0.0, vec![4.0, 4.0])?;
+    log.put_number(&mech("root/x"), 0.0, 2.0)?;
+    log.put_number(&mech("root/y"), 0.0, 0.5)?;
     let mut line = "root".to_owned();
     let mut angles = Vec::new();
     for i in 0..24 {
         line = format!("{line}/l{i}");
-        log.put_string(&mech(&format!("{line}/.type")), 0.0, key("line"));
-        log.put_number(&mech(&format!("{line}/length")), 0.0, 0.2);
-        log.put_number(&mech(&format!("{line}/weight")), 0.0, 6.0);
-        log.put_string(&mech(&format!("{line}/color")), 0.0, key("#ff8000"));
+        log.put_string(&mech(&format!("{line}/.type")), 0.0, key("line"))?;
+        log.put_number(&mech(&format!("{line}/length")), 0.0, 0.2)?;
+        log.put_number(&mech(&format!("{line}/weight")), 0.0, 6.0)?;
+        log.put_string(&mech(&format!("{line}/color")), 0.0, key("#ff8000"))?;
         angles.push(mech(&format!("{line}/angle")));
     }
     for step in 0..3000 {
         let time = START + f64::from(step) * 0.02;
         for (i, angle) in angles.iter().enumerate() {
             let at = f64::from(step) * 0.05 + i as f64;
-            log.put_number(angle, time, 10.0 * asrs_js::math::sin(at));
+            log.put_number(angle, time, 10.0 * asrs_js::math::sin(at))?;
         }
         let corners: Vec<[f64; 2]> = (0..64)
             .map(|i| {
@@ -310,8 +310,9 @@ fn add_bench_fields(log: &mut Log) {
                 ]
             })
             .collect();
-        log.put_translation_array(&key(CORNERS), time, &corners);
+        log.put_translation_array(&key(CORNERS), time, &corners)?;
     }
+    Ok(())
 }
 
 struct Page<'a> {
@@ -594,7 +595,7 @@ fn main() {
     page.wait_idle();
     let expanded = page.model(|model| {
         let mut log = model.page().shared_log().borrow_mut();
-        add_bench_fields(&mut log);
+        add_bench_fields(&mut log).expect("ordinary keys");
         let mut keys = std::collections::BTreeSet::new();
         for key in log.get_field_keys() {
             let key = key.to_string_lossy();
