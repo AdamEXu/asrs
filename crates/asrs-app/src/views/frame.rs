@@ -356,7 +356,7 @@ fn drag_text_style(bold: bool) -> TextStyle {
 /// A CSS `box-shadow`; GPUI's blur radius is the Gaussian's sigma, half the CSS blur.
 fn box_shadow(color: u32, blur: f32, spread: f32) -> BoxShadow {
     let [r, g, b, a] = color.to_be_bytes();
-    let c: asrs_ui::gpui::Hsla = rgba(u32::from_be_bytes([r, g, b, a])).into();
+    let c: Hsla = rgba(u32::from_be_bytes([r, g, b, a])).into();
     BoxShadow {
         color: c,
         offset: point(px(0.0), px(0.0)),
