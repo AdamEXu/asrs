@@ -21,6 +21,7 @@ pub mod gpui {
     };
 }
 
+mod backdrop;
 pub mod button;
 pub mod canvas_view;
 pub mod caption;

@@ -4,6 +4,11 @@
 //! origin's sub-pixel position and the scale, so a frame that repaints known text only blits.
 //! Each window keeps its own cache, evicted least recently used first past a byte or entry
 //! budget, and evicted images leave that window's sprite atlas on its next text paint.
+//!
+//! Where Chromium draws LCD text (Windows, and Linux under fontconfig rules that ask for it), a run
+//! is blended per channel onto the colours the frame painted behind it, which its key then holds
+//! too. It stays grayscale in a window that is not opaque, under CSS opacity, behind an image or a
+//! gradient, where [`Text::grayscale`] says so, and where the backend has no LCD masks.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -11,17 +16,18 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use asrs_canvas::text::caret;
-use asrs_canvas::text::dom::{self, Layout, Lu};
+use asrs_canvas::text::dom::{self, Layout, LcdExtent, Lu};
 use asrs_canvas::text::font::FontKey;
-use asrs_canvas::text::lut::MaskGammaLut;
+use asrs_canvas::text::lut::{LcdGammaLut, MaskGammaLut};
 use asrs_canvas::text::{FixedAdvance, TextBackend, platform_backend};
 use gpui_kit::{
     App, AvailableSpace, Bounds, ContentMask, Corners, Element, ElementId, Global, GlobalElementId,
-    InspectorElementId, IntoElement, LayoutId, Pixels, Refineable, RenderImage, Rgba, SharedString,
-    Style, StyleRefinement, Styled, Window, WindowId, fill, point, px, size,
+    InspectorElementId, IntoElement, LayoutId, Pixels, Refineable, RenderImage, Rgba, Scene,
+    SharedString, Style, StyleRefinement, Styled, Window, WindowId, fill, point, px, size,
 };
 use image::{Frame, RgbaImage};
 
+use crate::backdrop::{self, Backdrop, Rect};
 use crate::selection::colors::SelectionColors;
 
 pub use asrs_canvas::text::FontSpec;
@@ -33,6 +39,10 @@ pub use asrs_canvas::text::dom::{
 pub const CACHE_BYTES: usize = 32 << 20;
 pub const CACHE_ENTRIES: usize = 4096;
 
+/// How many backgrounds one run is kept blended onto: a background that animates makes a new image
+/// every frame.
+const LCD_IMAGES: usize = 4;
+
 #[derive(Clone, PartialEq, Eq, Hash)]
 struct RunKey {
     font: FontKey,
@@ -42,8 +52,26 @@ struct RunKey {
     scale: u32,
 }
 
+/// What an LCD image holds besides its glyphs.
+#[derive(Clone, Copy, PartialEq, Eq)]
+struct LcdKey {
+    background: [u8; 3],
+    alpha: u8,
+}
+
+struct LcdImage {
+    key: LcdKey,
+    image: Arc<RenderImage>,
+    used: u64,
+}
+
+type Placed = (i32, i32, Arc<RenderImage>);
+
 struct Run {
-    image: Option<(i32, i32, Arc<RenderImage>)>,
+    /// `Some(None)` for a run with no ink.
+    image: Option<Option<Placed>>,
+    lcd_extent: Option<LcdExtent>,
+    lcd: Vec<LcdImage>,
     bytes: usize,
     used: u64,
 }
@@ -55,6 +83,11 @@ struct RunCache {
     evicted: Vec<Arc<RenderImage>>,
 }
 
+fn image_bytes(image: &RenderImage) -> usize {
+    let size = image.size(0);
+    size.width.0 as usize * size.height.0 as usize * 4
+}
+
 /// Counts of one window's glyph-run cache.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct CacheStats {
@@ -64,10 +97,19 @@ pub struct CacheStats {
     pub evicted: u64,
 }
 
+#[derive(Default)]
+struct WindowText {
+    cache: RunCache,
+    stats: CacheStats,
+    backdrop: Backdrop,
+    grayscale: bool,
+}
+
 pub struct TextSystem {
     backend: Box<dyn TextBackend>,
     lut: MaskGammaLut,
-    windows: HashMap<WindowId, (RunCache, CacheStats)>,
+    lcd_lut: Option<LcdGammaLut>,
+    windows: HashMap<WindowId, WindowText>,
     clock: u64,
     budget: (usize, usize),
 }
@@ -77,6 +119,7 @@ impl Default for TextSystem {
         TextSystem {
             backend: platform_backend().unwrap_or_else(|| Box::new(FixedAdvance)),
             lut: MaskGammaLut::embedded().unwrap_or_else(MaskGammaLut::identity),
+            lcd_lut: LcdGammaLut::embedded(),
             windows: HashMap::new(),
             clock: 0,
             budget: (CACHE_BYTES, CACHE_ENTRIES),
@@ -97,16 +140,23 @@ impl TextSystem {
         system
             .windows
             .get(&window)
-            .map_or_else(CacheStats::default, |(cache, stats)| CacheStats {
-                entries: cache.runs.len(),
-                bytes: cache.bytes,
-                ..*stats
+            .map_or_else(CacheStats::default, |window| CacheStats {
+                entries: window.cache.runs.len(),
+                bytes: window.cache.bytes,
+                ..window.stats
             })
+    }
+
+    /// Draws all text of `window` in grayscale: Chromium decides per layer, and a page that is not
+    /// opaque is one layer that is not.
+    pub fn set_grayscale(cx: &mut App, window: WindowId) {
+        let system = cx.default_global::<TextSystem>();
+        system.windows.entry(window).or_default().grayscale = true;
     }
 
     fn evict(&mut self, window: WindowId) {
         let (bytes, entries) = self.budget;
-        let Some((cache, stats)) = self.windows.get_mut(&window) else {
+        let Some(WindowText { cache, stats, .. }) = self.windows.get_mut(&window) else {
             return;
         };
         if cache.bytes <= bytes && cache.runs.len() <= entries {
@@ -126,81 +176,217 @@ impl TextSystem {
             if let Some(run) = cache.runs.remove(&key) {
                 cache.bytes -= run.bytes;
                 stats.evicted += 1;
-                cache.evicted.extend(run.image.map(|(_, _, image)| image));
+                cache
+                    .evicted
+                    .extend(run.image.flatten().map(|(_, _, image)| image));
+                cache
+                    .evicted
+                    .extend(run.lcd.into_iter().map(|lcd| lcd.image));
             }
         }
     }
 
-    fn run(
+    /// Adds what draws `fragment` from `x` and `baseline` to `out`, and its grayscale image to
+    /// `inked`.
+    fn draw(
         &mut self,
         window: WindowId,
-        font: &FontSpec,
         fragment: &dom::Fragment,
-        fraction: Lu,
-        scale: f32,
-        color: [u8; 3],
-    ) -> Option<(i32, i32, Arc<RenderImage>)> {
+        ink: &Ink<'_>,
+        (x, baseline): (Lu, i32),
+        out: &mut Vec<Drawn>,
+        inked: Option<&mut Vec<Placed>>,
+    ) {
         self.clock += 1;
-        let clock = self.clock;
+        let Ink { font, scale, .. } = *ink;
+        let fraction = x.rem_euclid(64);
+        let x = x.div_euclid(64);
         let key = RunKey {
             font: font.key(),
             text: fragment.text.clone(),
-            color,
+            color: ink.color,
             fraction,
             scale: scale.to_bits(),
         };
-        let (cache, stats) = self.windows.entry(window).or_default();
-        if let Some(run) = cache.runs.get_mut(&key) {
-            run.used = clock;
-            return run.image.clone();
-        }
-        let image = dom::rasterize(
-            self.backend.as_mut(),
-            &self.lut,
-            &fragment.glyphs,
-            fraction,
-            scale,
-            color,
-        )
-        .and_then(|run| {
-            let mut bgra = Vec::with_capacity(run.alpha.len() * 4);
-            match &run.rgba {
-                Some(rgba) => {
-                    for p in rgba.as_chunks::<4>().0 {
-                        bgra.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
-                    }
-                }
-                None => {
-                    for &a in &run.alpha {
-                        bgra.extend_from_slice(&[color[2], color[1], color[0], a]);
+        let backend = self.backend.as_mut();
+        let WindowText {
+            cache,
+            stats,
+            backdrop,
+            ..
+        } = self.windows.entry(window).or_default();
+        let run = cache.runs.entry(key).or_insert_with(|| {
+            let bytes = fragment.text.len() + 64;
+            cache.bytes += bytes;
+            Run {
+                image: None,
+                lcd_extent: None,
+                lcd: Vec::new(),
+                bytes,
+                used: 0,
+            }
+        });
+        run.used = self.clock;
+        let before = run.bytes;
+
+        let mut regions = None;
+        if let (Some(scene), Some(_)) = (ink.lcd, &self.lcd_lut) {
+            let extent = *run
+                .lcd_extent
+                .get_or_insert_with(|| dom::lcd_extent(backend, &fragment.glyphs, fraction, scale));
+            match extent {
+                LcdExtent::Blank => regions = Some(Vec::new()),
+                LcdExtent::Grayscale => {}
+                LcdExtent::Rect([left, top, width, height]) => {
+                    let (left, top) = (x + left, baseline + top);
+                    let extent = [left, top, left + width, top + height];
+                    backdrop.read(scene);
+                    match backdrop::intersect(extent, ink.clip) {
+                        Some(visible) => regions = backdrop.regions(visible),
+                        None => regions = Some(Vec::new()),
                     }
                 }
             }
-            let buffer = RgbaImage::from_raw(run.width, run.height, bgra)?;
-            Some((
-                run.left,
-                run.top,
-                Arc::new(RenderImage::new(vec![Frame::new(buffer)])),
-            ))
-        });
-        let bytes = image.as_ref().map_or(0, |(_, _, i)| {
-            let s = i.size(0);
-            s.width.0 as usize * s.height.0 as usize * 4
-        }) + fragment.text.len()
-            + 64;
-        stats.rasterized += 1;
-        cache.bytes += bytes;
-        cache.runs.insert(
-            key,
-            Run {
-                image: image.clone(),
-                bytes,
-                used: clock,
-            },
-        );
+        }
+
+        let mut run_bytes = 0;
+        if regions.is_none() || inked.is_some() {
+            let image = run.image.get_or_insert_with(|| {
+                stats.rasterized += 1;
+                let run = dom::rasterize(
+                    backend,
+                    &self.lut,
+                    &fragment.glyphs,
+                    fraction,
+                    scale,
+                    ink.color,
+                );
+                let placed = run.and_then(|run| gray_image(run, ink.color));
+                run_bytes += placed
+                    .as_ref()
+                    .map_or(0, |(_, _, image)| image_bytes(image));
+                placed
+            });
+            if let Some((left, top, image)) = image {
+                let placed = (x + *left, baseline + *top, image.clone());
+                if let Some(inked) = inked {
+                    inked.push(placed.clone());
+                }
+                if regions.is_none() {
+                    out.push(Drawn {
+                        x: placed.0,
+                        y: placed.1,
+                        image: placed.2,
+                        clip: None,
+                    });
+                }
+            }
+        }
+        run.bytes += run_bytes;
+        for (clip, background) in regions.into_iter().flatten() {
+            let key = LcdKey {
+                background,
+                alpha: ink.alpha,
+            };
+            let (Some(LcdExtent::Rect([left, top, ..])), Some(lcd_lut)) =
+                (run.lcd_extent, &self.lcd_lut)
+            else {
+                break;
+            };
+            let at = match run.lcd.iter().position(|image| image.key == key) {
+                Some(at) => at,
+                None => {
+                    stats.rasterized += 1;
+                    let lcd_ink = dom::LcdInk {
+                        color: ink.color,
+                        alpha: ink.alpha,
+                        background,
+                    };
+                    let luts = (&self.lut, lcd_lut);
+                    let image = dom::rasterize_lcd(
+                        backend,
+                        luts,
+                        &fragment.glyphs,
+                        fraction,
+                        scale,
+                        lcd_ink,
+                    );
+                    let Some(image) = lcd_image(image) else {
+                        break;
+                    };
+                    if run.lcd.len() >= LCD_IMAGES {
+                        let oldest = (0..run.lcd.len()).min_by_key(|&i| run.lcd[i].used);
+                        let old = run.lcd.swap_remove(oldest.expect("images")).image;
+                        run.bytes -= image_bytes(&old);
+                        stats.evicted += 1;
+                        cache.evicted.push(old);
+                    }
+                    run.bytes += image_bytes(&image);
+                    run.lcd.push(LcdImage {
+                        key,
+                        image,
+                        used: 0,
+                    });
+                    run.lcd.len() - 1
+                }
+            };
+            run.lcd[at].used = self.clock;
+            out.push(Drawn {
+                x: x + left,
+                y: baseline + top,
+                image: run.lcd[at].image.clone(),
+                clip: Some(clip),
+            });
+        }
+        cache.bytes = cache.bytes + run.bytes - before;
         self.evict(window);
-        image
     }
+}
+
+/// What all of a [`Text`]'s fragments are drawn with.
+struct Ink<'a> {
+    font: &'a FontSpec,
+    scale: f32,
+    color: [u8; 3],
+    alpha: u8,
+    /// What the frame has painted so far, if the text may be LCD.
+    lcd: Option<&'a Scene>,
+    clip: Rect,
+}
+
+struct Drawn {
+    x: i32,
+    y: i32,
+    image: Arc<RenderImage>,
+    /// Set for an LCD image: where it has the background it was blended onto.
+    clip: Option<Rect>,
+}
+
+fn gray_image(run: dom::RunImage, color: [u8; 3]) -> Option<Placed> {
+    let mut bgra = Vec::with_capacity(run.alpha.len() * 4);
+    match &run.rgba {
+        Some(rgba) => {
+            for p in rgba.as_chunks::<4>().0 {
+                bgra.extend_from_slice(&[p[2], p[1], p[0], p[3]]);
+            }
+        }
+        None => {
+            for &a in &run.alpha {
+                bgra.extend_from_slice(&[color[2], color[1], color[0], a]);
+            }
+        }
+    }
+    let buffer = RgbaImage::from_raw(run.width, run.height, bgra)?;
+    let image = Arc::new(RenderImage::new(vec![Frame::new(buffer)]));
+    Some((run.left, run.top, image))
+}
+
+fn lcd_image(mut run: dom::LcdImage) -> Option<Arc<RenderImage>> {
+    for p in run.rgba.as_chunks_mut::<4>().0 {
+        p.swap(0, 2);
+    }
+    let buffer = RgbaImage::from_raw(run.width, run.height, run.rgba)?;
+    Some(Arc::new(RenderImage::new(vec![Frame::new(buffer)])))
 }
 
 /// Lays `text` out at device scale `scale`, in a content box `available` CSS px wide or at its
@@ -363,6 +549,8 @@ pub struct Text {
     underline: bool,
     cut: Option<f64>,
     selected: Option<Rgba>,
+    alpha: f32,
+    grayscale: bool,
     gpui: StyleRefinement,
     /// Each width the measure function returned, snapped as GPUI will snap the box, with the
     /// exact width it stands for: lines wrap and align at the exact width, as in Chromium.
@@ -382,6 +570,8 @@ impl Text {
             underline: false,
             cut: None,
             selected: None,
+            alpha: 1.0,
+            grayscale: false,
             gpui: StyleRefinement::default(),
             measured: Rc::default(),
         }
@@ -389,6 +579,18 @@ impl Text {
 
     pub fn color(mut self, rgb: u32) -> Self {
         self.color = [(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8];
+        self
+    }
+
+    /// The colour's alpha, which unlike CSS opacity leaves text in LCD.
+    pub fn alpha(mut self, alpha: f32) -> Self {
+        self.alpha = alpha;
+        self
+    }
+
+    /// Text that Chromium puts on a layer that is not opaque, such as one behind a CSS mask.
+    pub fn grayscale(mut self) -> Self {
+        self.grayscale = true;
         self
     }
 
@@ -533,6 +735,13 @@ impl Element for Text {
         if let Some(room) = self.cut {
             dom::cut(&mut layout, dom::lu_round((room * f64::from(scale)) as f32));
         }
+        let window_id = window.window_handle().window_id();
+        let system = cx.default_global::<TextSystem>();
+        if system.lcd_lut.is_some()
+            && let Some(text) = system.windows.get_mut(&window_id)
+        {
+            text.backdrop.clear();
+        }
         let origin = (
             dom::lu_round((f32::from(bounds.origin.x) + self.subpixel.0) * scale),
             dom::lu_round((f32::from(bounds.origin.y) + self.subpixel.1) * scale),
@@ -553,11 +762,14 @@ impl Element for Text {
         let scale = window.scale_factor();
         let window_id = window.window_handle().window_id();
         let system = cx.default_global::<TextSystem>();
-        if let Some((cache, _)) = system.windows.get_mut(&window_id) {
-            for image in cache.evicted.drain(..) {
-                let _ = window.drop_image(image);
-            }
+        let text = system.windows.entry(window_id).or_default();
+        for image in text.cache.evicted.drain(..) {
+            let _ = window.drop_image(image);
         }
+        let may_be_lcd = system.lcd_lut.is_some()
+            && !self.grayscale
+            && !text.grayscale
+            && window.element_opacity() >= 1.0;
         let Prepaint { layout, origin } = prepaint;
         let mut selection = Vec::new();
         if self.selected.is_some() {
@@ -575,67 +787,89 @@ impl Element for Text {
                 }
             }
         }
-        let mut images = Vec::new();
-        let mut underlines = Vec::new();
-        for line in &layout.lines {
-            let baseline = (origin.1 + line.baseline + 32).div_euclid(64);
-            let first = images.len();
-            for fragment in &line.fragments {
-                let x = origin.0 + fragment.x;
-                if let Some((left, top, image)) = system.run(
-                    window_id,
-                    &self.style.font,
-                    fragment,
-                    x.rem_euclid(64),
-                    scale,
-                    self.color,
-                ) {
-                    images.push((x.div_euclid(64) + left, baseline + top, image));
-                }
-            }
-            if self.underline
-                && let (Some(start), Some(end)) = (line.fragments.first(), line.fragments.last())
-            {
-                let left = (origin.0 + start.x) as f32 / 64.0;
-                let right = (origin.0 + end.x + end.width) as f32 / 64.0;
-                let size = self.style.font.size * scale;
-                let inked = &images[first..];
-                underlines.extend(underline::segments(left, right, baseline, size, inked));
-            }
-        }
+        let to_px = |v: i32| px(v as f32 / scale);
+        let bounds_of = |[x, y, w, h]: [i32; 4]| Bounds {
+            origin: point(to_px(x), to_px(y)),
+            size: size(to_px(w), to_px(h)),
+        };
         let clip = (self.style.overflow != Overflow::Visible).then_some(ContentMask { bounds });
+        let alpha = Some(self.alpha);
         window.with_content_mask(clip, |window| {
-            let to_px = |v: i32| px(v as f32 / scale);
             if let Some(background) = self.selected {
-                for [x, y, w, h] in selection {
-                    let rect = Bounds {
-                        origin: point(to_px(x), to_px(y)),
-                        size: size(to_px(w), to_px(h)),
-                    };
-                    window.paint_quad(fill(rect, background));
+                window.with_element_opacity(alpha, |window| {
+                    for rect in selection {
+                        window.paint_quad(fill(bounds_of(rect), background));
+                    }
+                });
+            }
+            let painted = window.painted_scene().len();
+            let mask = window.content_mask().bounds;
+            let edge = |v: Pixels| f32::from(v) * scale;
+            let ink = Ink {
+                font: &self.style.font,
+                scale,
+                color: self.color,
+                alpha: (self.alpha * 255.0).round() as u8,
+                lcd: may_be_lcd.then(|| window.painted_scene()),
+                clip: [
+                    edge(mask.left()).floor() as i32,
+                    edge(mask.top()).floor() as i32,
+                    edge(mask.right()).ceil() as i32,
+                    edge(mask.bottom()).ceil() as i32,
+                ],
+            };
+            let mut images = Vec::new();
+            let mut underlines = Vec::new();
+            for line in &layout.lines {
+                let baseline = (origin.1 + line.baseline + 32).div_euclid(64);
+                let mut inked = self.underline.then(Vec::new);
+                for fragment in &line.fragments {
+                    let at = (origin.0 + fragment.x, baseline);
+                    system.draw(window_id, fragment, &ink, at, &mut images, inked.as_mut());
+                }
+                if let (Some(inked), Some(start), Some(end)) =
+                    (inked, line.fragments.first(), line.fragments.last())
+                {
+                    let left = (origin.0 + start.x) as f32 / 64.0;
+                    let right = (origin.0 + end.x + end.width) as f32 / 64.0;
+                    let size = self.style.font.size * scale;
+                    underlines.extend(underline::segments(left, right, baseline, size, &inked));
                 }
             }
             let [r, g, b] = self.color.map(|c| f32::from(c) / 255.0);
-            for s in underlines {
-                let rect = Bounds {
-                    origin: point(to_px(s.x), to_px(s.y)),
-                    size: size(to_px(s.width), to_px(s.height)),
-                };
-                let color = Rgba {
-                    r,
-                    g,
-                    b,
-                    a: s.coverage,
-                };
-                window.paint_quad(fill(rect, color));
-            }
-            for (x, y, image) in images {
+            window.with_element_opacity(alpha, |window| {
+                for s in underlines {
+                    let color = Rgba {
+                        r,
+                        g,
+                        b,
+                        a: s.coverage,
+                    };
+                    let rect = bounds_of([s.x, s.y, s.width, s.height]);
+                    window.paint_quad(fill(rect, color));
+                }
+            });
+            for Drawn { x, y, image, clip } in images {
                 let s = image.size(0);
-                let rect = Bounds {
-                    origin: point(to_px(x), to_px(y)),
-                    size: size(to_px(s.width.0), to_px(s.height.0)),
+                let rect = bounds_of([x, y, s.width.0, s.height.0]);
+                let (mask, opacity) = match clip {
+                    Some([l, t, r, b]) => {
+                        let bounds = bounds_of([l, t, r - l, b - t]);
+                        (Some(ContentMask { bounds }), None)
+                    }
+                    None => (None, alpha),
                 };
-                let _ = window.paint_image(rect, rect, Corners::default(), image, 0, false);
+                window.with_content_mask(mask, |window| {
+                    window.with_element_opacity(opacity, |window| {
+                        let _ = window.paint_image(rect, rect, Corners::default(), image, 0, false);
+                    });
+                });
+            }
+            if system.lcd_lut.is_some()
+                && let Some(text) = system.windows.get_mut(&window_id)
+            {
+                let now = window.painted_scene().len();
+                text.backdrop.skip(painted..now);
             }
         });
         #[cfg(feature = "parity")]

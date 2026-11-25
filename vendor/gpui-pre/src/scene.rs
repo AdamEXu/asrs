@@ -1,3 +1,4 @@
+// Modified by asrs: see patches/gpui-pre-0.3.12.patch in the asrs repository.
 // todo("windows"): remove
 #![cfg_attr(windows, allow(dead_code))]
 
@@ -70,6 +71,15 @@ impl Scene {
 
     pub fn len(&self) -> usize {
         self.paint_operations.len()
+    }
+
+    /// The primitives of a range of paint operations, in paint order.
+    pub fn primitives(&self, range: Range<usize>) -> impl Iterator<Item = &Primitive> {
+        let operations = self.paint_operations.get(range).unwrap_or_default();
+        operations.iter().filter_map(|operation| match operation {
+            PaintOperation::Primitive(primitive) => Some(primitive),
+            PaintOperation::StartLayer(_) | PaintOperation::EndLayer => None,
+        })
     }
 
     pub fn push_layer(&mut self, bounds: Bounds<ScaledPixels>) {

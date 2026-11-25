@@ -303,8 +303,9 @@ standalone `Cargo.toml` in `asrs-libm-lgpl/`.
 - Version: 0.3.12, from https://github.com/zed-industries/zed
 - Used in: `vendor/gpui-pre/`, modified by asrs. The changes are recorded in
   [`patches/gpui-pre-0.3.12.patch`](patches/gpui-pre-0.3.12.patch), which modifies
-  `src/app/headless_app_context.rs`, `src/taffy.rs`, `src/util.rs` and `src/window.rs`. Each
-  of those files starts with a line stating that asrs modified it.
+  `src/app/headless_app_context.rs`, `src/elements/div.rs`, `src/scene.rs`, `src/tab_stop.rs`,
+  `src/taffy.rs`, `src/util.rs` and `src/window.rs`. Each of those files starts with a line
+  stating that asrs modified it.
 
 ## gpui-pre-scheduler (vendored and modified)
 
