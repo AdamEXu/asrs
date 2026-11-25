@@ -8,23 +8,20 @@ use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::gpui::{
     App, Context, CursorStyle, DispatchPhase, Div, InteractiveElement, KeyDownEvent, Keystroke,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Render, Rgba, ScrollEvent,
-    Stateful, Styled, Window, canvas, div, px,
+    Stateful, Styled, Window, canvas, deferred, div, px,
 };
 use asrs_ui::parity::{Recorder, TextRun, record_text};
 use asrs_ui::platform::EditCommand;
+use asrs_ui::scroll::{self, Extent, Request, Scrollbars, scrollbars};
 use asrs_ui::selection;
 use asrs_ui::text::{Align, Text, TextStyle, snap_remainder};
+use asrs_ui::theme::Appearance;
 
 use super::layout::{LuRect, TextBlock, snapped};
 use super::text::{self, DocumentText, PageText};
 use crate::views::cell_text::css;
 use crate::views::frame::wheel_of;
-
-/// An arrow key's step in px.
-const LINE_STEP: f64 = 40.0;
-/// How much of the window a Page Up or Page Down goes by at least, and the most device px it leaves.
-const PAGE_FRACTION: f64 = 0.875;
-const PAGE_OVERLAP: f64 = 40.0;
+use crate::views::scrollers::smooth;
 
 /// The scroll position of the document.
 pub struct PageScroll {
@@ -33,6 +30,11 @@ pub struct PageScroll {
     client: f64,
     scale: f32,
     wheel: WheelScroll,
+    bars: Scrollbars,
+    /// What the scrollbar takes of the window's width.
+    reserved: Lu,
+    /// Whether the document's background is dark.
+    dark: bool,
     started: Instant,
 }
 
@@ -44,6 +46,9 @@ impl PageScroll {
             client: 0.0,
             scale: 1.0,
             wheel: WheelScroll::default(),
+            bars: Scrollbars::default(),
+            reserved: 0,
+            dark: false,
             started: cx.background_executor().now(),
         }
     }
@@ -56,6 +61,7 @@ impl PageScroll {
     /// Takes the sizes of the document and of the window, and advances a running animation.
     pub fn lay_out<V: Render>(&mut self, height: Lu, window: &mut Window, cx: &mut Context<'_, V>) {
         self.scale = window.scale_factor();
+        self.dark = Appearance::of(window, cx) == Appearance::Dark;
         self.client = f64::from(f32::from(window.viewport_size().height));
         self.max = (css(snapped(height), self.scale) - self.client).max(0.0);
         if let Some([_, to]) = self.wheel.animate(self.now(cx)) {
@@ -65,6 +71,25 @@ impl PageScroll {
         if self.wheel.animating() {
             window.request_animation_frame();
         }
+    }
+
+    /// The document's width in device px, next to its scrollbar.
+    pub fn width(&self, window: &Window) -> Lu {
+        device_width(window) - self.reserved
+    }
+
+    /// Gives the scrollbar the room a document of `height` needs; whether its width changed.
+    pub fn reserve(&mut self, height: Lu, window: &Window, cx: &App) -> bool {
+        let scale = window.scale_factor();
+        let client = f64::from(f32::from(window.viewport_size().height));
+        let overflows = css(snapped(height), scale) > client;
+        let bar = scroll::style(cx).reserved() * f64::from(scale);
+        let reserved = if overflows {
+            asrs_js::math::round(bar) as Lu * 64
+        } else {
+            0
+        };
+        std::mem::replace(&mut self.reserved, reserved) != reserved
     }
 
     /// `document.documentElement.scrollTop`.
@@ -92,34 +117,31 @@ impl PageScroll {
 
     /// The document's scrolling keys; whether this is one.
     pub fn key(&mut self, keystroke: &Keystroke, cx: &App) -> bool {
-        let modifiers = keystroke.modifiers;
-        if modifiers.control || modifiers.alt || modifiers.function {
+        let Some(step) = scroll::step(keystroke) else {
             return false;
-        }
-        let page = (self.client * PAGE_FRACTION)
-            .max(self.client - PAGE_OVERLAP / f64::from(self.scale))
-            .max(1.0);
-        let end = self.max + self.client;
-        let by = match keystroke.key.as_str() {
-            "up" if modifiers.platform => -end,
-            "down" if modifiers.platform => end,
-            _ if modifiers.platform => return false,
-            "up" => -LINE_STEP,
-            "down" => LINE_STEP,
-            "pageup" => -page,
-            "pagedown" => page,
-            "space" if modifiers.shift => -page,
-            "space" => page,
-            "home" => -end,
-            "end" => end,
-            _ => return false,
         };
-        let wheel = Wheel {
-            delta: [0.0, -by],
-            precise: false,
-        };
-        self.scroll(wheel, f64::INFINITY, cx);
+        let (client, max) = ([0.0, self.client], [0.0, self.max]);
+        let [_, by] = step.delta(client, max, f64::from(self.scale));
+        self.smooth(by, cx);
         true
+    }
+
+    fn smooth(&mut self, by: f64, cx: &App) {
+        self.scroll(smooth([0.0, by]), f64::INFINITY, cx);
+    }
+
+    fn scroll_to(&mut self, to: f64) {
+        self.wheel.stop();
+        self.offset = to.clamp(0.0, self.max);
+    }
+
+    fn extent(&self) -> Extent {
+        Extent {
+            content: [0.0, self.max + self.client],
+            offset: [0.0, self.top()],
+            axes: [false, true],
+            dark: self.dark,
+        }
     }
 }
 
@@ -170,6 +192,18 @@ pub fn root<V: ScrolledPage>(
             });
         },
     );
+    let page = cx.entity().downgrade();
+    let extent = view.scroll().extent();
+    let bars = scrollbars(&view.scroll().bars, extent, move |request, _, cx| {
+        let _ = page.update(cx, |view, cx| {
+            match request {
+                Request::Press => {}
+                Request::To([_, to]) => view.scroll().scroll_to(to),
+                Request::By([_, by]) => view.scroll().smooth(by, cx),
+            }
+            cx.notify();
+        });
+    });
     let mut root = div().id(id);
     if view.text().cursor() {
         root = root.cursor(CursorStyle::IBeam);
@@ -178,6 +212,7 @@ pub fn root<V: ScrolledPage>(
         .size_full()
         .overflow_hidden()
         .child(listeners.absolute().size_full())
+        .child(deferred(div().absolute().inset_0().child(bars)))
         .on_action(cx.listener(|view, _: &selection::Copy, window, cx| {
             text::run(view, EditCommand::Copy, window, cx)
         }))
@@ -336,7 +371,7 @@ pub fn recording(cx: &App) -> bool {
 }
 
 /// The window's width in whole device px.
-pub fn device_width(window: &Window) -> Lu {
+fn device_width(window: &Window) -> Lu {
     let width = f64::from(f32::from(window.viewport_size().width));
     asrs_js::math::round(width * f64::from(window.scale_factor())) as Lu * 64
 }

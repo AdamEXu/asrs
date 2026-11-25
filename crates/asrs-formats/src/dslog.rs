@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 
 use asrs_js::math;
 use asrs_js::string::{JsString, TextDecoder};
-use asrs_log::log::Log;
+use asrs_log::log::{Log, LogError};
 
 use crate::worker::{Abort, DecodeWorker, Request, Response};
 
@@ -360,6 +360,64 @@ impl<'a> DsEventsReader<'a> {
     }
 }
 
+struct DsLogKeys {
+    trip_time_ms: JsString,
+    packet_loss: JsString,
+    battery_volts: JsString,
+    cpu_utilization: JsString,
+    brownout: JsString,
+    watchdog: JsString,
+    ds_teleop: JsString,
+    ds_disabled: JsString,
+    robot_teleop: JsString,
+    robot_auto: JsString,
+    robot_disabled: JsString,
+    can_utilization: JsString,
+    power_distribution_currents: JsString,
+}
+
+impl DsLogKeys {
+    fn new() -> Self {
+        DsLogKeys {
+            trip_time_ms: JsString::from("/DSLog/TripTimeMS"),
+            packet_loss: JsString::from("/DSLog/PacketLoss"),
+            battery_volts: JsString::from("/DSLog/BatteryVoltage"),
+            cpu_utilization: JsString::from("/DSLog/CPUUtilization"),
+            brownout: JsString::from("/DSLog/Status/Brownout"),
+            watchdog: JsString::from("/DSLog/Status/Watchdog"),
+            ds_teleop: JsString::from("/DSLog/Status/DSTeleop"),
+            ds_disabled: JsString::from("/DSLog/Status/DSDisabled"),
+            robot_teleop: JsString::from("/DSLog/Status/RobotTeleop"),
+            robot_auto: JsString::from("/DSLog/Status/RobotAuto"),
+            robot_disabled: JsString::from("/DSLog/Status/RobotDisabled"),
+            can_utilization: JsString::from("/DSLog/CANUtilization"),
+            power_distribution_currents: JsString::from("/DSLog/PowerDistributionCurrents"),
+        }
+    }
+}
+
+fn put_entry(log: &mut Log, keys: &DsLogKeys, entry: DsLogEntry) -> Result<(), LogError> {
+    let time = entry.timestamp;
+    log.put_number(&keys.trip_time_ms, time, entry.trip_time_ms)?;
+    log.put_number(&keys.packet_loss, time, entry.packet_loss)?;
+    log.put_number(&keys.battery_volts, time, entry.battery_volts)?;
+    log.put_number(&keys.cpu_utilization, time, entry.cpu_utilization)?;
+    log.put_boolean(&keys.brownout, time, entry.brownout)?;
+    log.put_boolean(&keys.watchdog, time, entry.watchdog)?;
+    log.put_boolean(&keys.ds_teleop, time, entry.ds_teleop)?;
+    log.put_boolean(&keys.ds_disabled, time, entry.ds_disabled)?;
+    log.put_boolean(&keys.robot_teleop, time, entry.robot_teleop)?;
+    log.put_boolean(&keys.robot_auto, time, entry.robot_auto)?;
+    log.put_boolean(&keys.robot_disabled, time, entry.robot_disabled)?;
+    log.put_number(&keys.can_utilization, time, entry.can_utilization)?;
+    log.put_number_array(
+        &keys.power_distribution_currents,
+        time,
+        entry.power_distribution_currents,
+    )?;
+    Ok(())
+}
+
 /// dsLogWorker's `onmessage` for its `start` request. `files` is `request.data`: a `null` slot
 /// is skipped and an absent slot reads `undefined`, which passes the `!== null` check and
 /// throws inside the reader constructor.
@@ -374,38 +432,14 @@ pub fn run_worker(files: &[Option<&[u8]>], post: &mut impl FnMut(Response)) -> R
                 post(Response::Failed);
                 return Ok(());
             }
-            let trip_time_ms = JsString::from("/DSLog/TripTimeMS");
-            let packet_loss = JsString::from("/DSLog/PacketLoss");
-            let battery_voltage = JsString::from("/DSLog/BatteryVoltage");
-            let cpu_utilization = JsString::from("/DSLog/CPUUtilization");
-            let brownout = JsString::from("/DSLog/Status/Brownout");
-            let watchdog = JsString::from("/DSLog/Status/Watchdog");
-            let ds_teleop = JsString::from("/DSLog/Status/DSTeleop");
-            let ds_disabled = JsString::from("/DSLog/Status/DSDisabled");
-            let robot_teleop = JsString::from("/DSLog/Status/RobotTeleop");
-            let robot_auto = JsString::from("/DSLog/Status/RobotAuto");
-            let robot_disabled = JsString::from("/DSLog/Status/RobotDisabled");
-            let can_utilization = JsString::from("/DSLog/CANUtilization");
-            let power_distribution_currents = JsString::from("/DSLog/PowerDistributionCurrents");
+            let keys = DsLogKeys::new();
+            let mut wrote = Ok(());
             ds_log.for_each(&mut |entry| {
-                log.put_number(&trip_time_ms, entry.timestamp, entry.trip_time_ms);
-                log.put_number(&packet_loss, entry.timestamp, entry.packet_loss);
-                log.put_number(&battery_voltage, entry.timestamp, entry.battery_volts);
-                log.put_number(&cpu_utilization, entry.timestamp, entry.cpu_utilization);
-                log.put_boolean(&brownout, entry.timestamp, entry.brownout);
-                log.put_boolean(&watchdog, entry.timestamp, entry.watchdog);
-                log.put_boolean(&ds_teleop, entry.timestamp, entry.ds_teleop);
-                log.put_boolean(&ds_disabled, entry.timestamp, entry.ds_disabled);
-                log.put_boolean(&robot_teleop, entry.timestamp, entry.robot_teleop);
-                log.put_boolean(&robot_auto, entry.timestamp, entry.robot_auto);
-                log.put_boolean(&robot_disabled, entry.timestamp, entry.robot_disabled);
-                log.put_number(&can_utilization, entry.timestamp, entry.can_utilization);
-                log.put_number_array(
-                    &power_distribution_currents,
-                    entry.timestamp,
-                    entry.power_distribution_currents,
-                );
+                if wrote.is_ok() {
+                    wrote = put_entry(&mut log, &keys, entry);
+                }
             })?;
+            wrote.map_err(|_| Abort::Threw)?;
         }
         None => return Err(Abort::Threw),
     }
@@ -417,10 +451,14 @@ pub fn run_worker(files: &[Option<&[u8]>], post: &mut impl FnMut(Response)) -> R
                 post(Response::Failed);
                 return Ok(());
             }
-            let ds_events_key = JsString::from("/DSEvents");
+            let key = JsString::from("/DSEvents");
+            let mut wrote = Ok(());
             ds_events.for_each(&mut |entry| {
-                log.put_string(&ds_events_key, entry.timestamp, entry.text);
+                if wrote.is_ok() {
+                    wrote = log.put_string(&key, entry.timestamp, entry.text);
+                }
             })?;
+            wrote.map_err(|_| Abort::Threw)?;
         }
         None => return Err(Abort::Threw),
     }

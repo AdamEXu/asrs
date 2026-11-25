@@ -128,7 +128,8 @@ fn run(args: &[Value]) -> Result<Value, String> {
                 if let Some(log) = source.base().log() {
                     let key = js_string(&arg(op, 1))?;
                     log.borrow_mut()
-                        .put_number(&key, number(&arg(op, 2))?, number(&arg(op, 3))?);
+                        .put_number(&key, number(&arg(op, 2))?, number(&arg(op, 3))?)
+                        .map_err(|e| format!("{e:?}"))?;
                 }
             }
             "output" => {

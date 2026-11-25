@@ -590,6 +590,7 @@ pub struct HubModel {
     page: HubPage,
     tabs: Tabs<HubPage>,
     sidebar: Sidebar,
+    sidebar_periodic_ended: bool,
     filenames: Filenames,
     historical: Vec<SourceEntry>,
     platform: Platform,
@@ -748,6 +749,7 @@ impl HubModel {
             page,
             tabs,
             sidebar,
+            sidebar_periodic_ended: false,
             filenames,
             historical: Vec::new(),
             platform: Platform::default(),
@@ -1395,7 +1397,13 @@ impl HubModel {
                 if self.sidebar.next_timeout().is_some() {
                     self.sidebar.fire_timeouts(host.now());
                 }
-                self.with_sidebar(Sidebar::periodic);
+                // Upstream's loop ends where `periodic` throws; its timeouts still fire.
+                if !self.sidebar_periodic_ended
+                    && let Err(e) = sidebar_result(self.with_sidebar(Sidebar::periodic))
+                {
+                    self.sidebar_periodic_ended = true;
+                    host.exception("requestAnimationFrame", format!("{e}"));
+                }
                 host.request_animation_frame(HubFrame::Sidebar);
             }
             HubFrame::Tabs => {
@@ -2281,7 +2289,12 @@ impl HubModel {
             .page
             .log
             .borrow()
-            .get_field_tree(true, &JsString::new())
+            .get_field_tree(
+                true,
+                &JsString::new(),
+                &mut self.page.realm.object_prototype,
+            )
+            .map_err(TabsError::Thrown)?
             .contains_key("NT");
         if !has_nt {
             host.send_main_message(error_message(
@@ -2370,13 +2383,10 @@ fn uncaught<T>(task: &'static str, result: Result<T, TabsError>, host: &mut dyn 
 
 /// What upstream's sidebar throws where the port's stops with `outcome`.
 fn sidebar_result(outcome: EventOutcome) -> Result<(), TabsError> {
-    let message = match outcome {
-        EventOutcome::Ok => return Ok(()),
-        EventOutcome::MergedFilenameMissing => {
-            "Cannot read properties of undefined (reading 'replace')"
-        }
-    };
-    Err(TabsError::Thrown(JsError::new("TypeError", message)))
+    match outcome {
+        EventOutcome::Ok => Ok(()),
+        EventOutcome::Threw(error) => Err(TabsError::Thrown(error)),
+    }
 }
 
 /// What `set-assets` reports about load failures.

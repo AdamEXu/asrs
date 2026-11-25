@@ -1,0 +1,386 @@
+{
+  "scene": "dom-lcd-light@1x",
+  "scale": 1,
+  "rows": [
+    {
+      "id": "size-23",
+      "rect": [
+        10,
+        10,
+        86.53125,
+        26
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-23.5",
+      "rect": [
+        310,
+        10,
+        88.421875,
+        28
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-24",
+      "rect": [
+        610,
+        10,
+        90.296875,
+        28
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-24.02",
+      "rect": [
+        10,
+        82,
+        90.359375,
+        28
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-24.5",
+      "rect": [
+        310,
+        82,
+        92.1875,
+        29
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-25",
+      "rect": [
+        610,
+        82,
+        94.0625,
+        29
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-47",
+      "rect": [
+        10,
+        154,
+        176.828125,
+        55
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-48",
+      "rect": [
+        310,
+        154,
+        180.59375,
+        56
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-48.02",
+      "rect": [
+        610,
+        154,
+        180.65625,
+        56
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-48.5",
+      "rect": [
+        10,
+        226,
+        182.46875,
+        56
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-49",
+      "rect": [
+        310,
+        226,
+        184.359375,
+        57
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opaque-box",
+      "rect": [
+        10,
+        300,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "translucent-box",
+      "rect": [
+        310,
+        300,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "translucent-text",
+      "rect": [
+        610,
+        300,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opacity-text",
+      "rect": [
+        10,
+        340,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opacity-parent",
+      "rect": [
+        310,
+        340,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opacity-parent-opaque",
+      "rect": [
+        610,
+        340,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opacity-parent-two-boxes",
+      "rect": [
+        10,
+        380,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opacity-composited",
+      "rect": [
+        310,
+        380,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "will-change-transform",
+      "rect": [
+        610,
+        380,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "will-change-transform-opaque",
+      "rect": [
+        10,
+        420,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "translate-whole",
+      "rect": [
+        313,
+        422,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "translate-fraction",
+      "rect": [
+        613.2999877929688,
+        422.3999938964844,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "translate-3d",
+      "rect": [
+        10,
+        460,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "translate-3d-opaque",
+      "rect": [
+        310,
+        460,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "scaled",
+      "rect": [
+        610,
+        460.5,
+        162.5390625,
+        20
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "rotated",
+      "rect": [
+        8.744383811950684,
+        499.9951171875,
+        130.83059692382813,
+        25.03155517578125
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "filter",
+      "rect": [
+        310,
+        500,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "backdrop-filter",
+      "rect": [
+        610,
+        500,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "mask",
+      "rect": [
+        10,
+        540,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "blend-mode",
+      "rect": [
+        310,
+        540,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "rounded-clip",
+      "rect": [
+        610,
+        540,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "rounded-clip-opaque",
+      "rect": [
+        10,
+        580,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "scroller",
+      "rect": [
+        310,
+        580,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "scroller-opaque",
+      "rect": [
+        610,
+        580,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "shadowed",
+      "rect": [
+        10,
+        620,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "isolated",
+      "rect": [
+        310,
+        620,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "fixed",
+      "rect": [
+        610,
+        620,
+        130.03125,
+        16
+      ],
+      "mode": "grayscale"
+    }
+  ]
+}

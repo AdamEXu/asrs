@@ -10,8 +10,10 @@ use asrs_js::math::bigint::BigInt;
 use asrs_js::math::floor;
 use asrs_js::math::int::{to_uint8, to_uint32};
 use asrs_js::number;
+use asrs_js::ops;
 use asrs_js::sort::array_sort;
 use asrs_js::string::{JsString, text_encode};
+use asrs_js::value::JsValue;
 use asrs_log::log::log_value_sets::LogValueSetAny;
 
 use crate::export::ExportError;
@@ -26,6 +28,7 @@ pub enum Sample<'a> {
     BooleanArray(&'a [bool]),
     NumberArray(&'a [f64]),
     StringArray(&'a [JsString]),
+    Foreign(&'a JsValue),
 }
 
 impl<'a> Sample<'a> {
@@ -39,6 +42,7 @@ impl<'a> Sample<'a> {
             LogValueSetAny::NumberArray(set) => Sample::NumberArray(&set.values[index]),
             LogValueSetAny::StringArray(set) => Sample::StringArray(&set.values[index]),
             LogValueSetAny::Empty(_) => unreachable!("Empty fields are filtered out"),
+            LogValueSetAny::Foreign(_, set) => Sample::Foreign(&set.values[index]),
         }
     }
 }
@@ -53,6 +57,7 @@ fn truthy(v: &Sample<'_>) -> bool {
         | Sample::BooleanArray(_)
         | Sample::NumberArray(_)
         | Sample::StringArray(_) => true,
+        Sample::Foreign(value) => ops::to_boolean(value),
     }
 }
 
@@ -76,6 +81,7 @@ fn js_string(v: &Sample<'_>) -> JsString {
             join(items.iter().map(|n| JsString::from(number::to_string(*n))))
         }
         Sample::StringArray(items) => join(items.iter().map(|s| (*s).clone())),
+        Sample::Foreign(value) => ops::to_string(value),
     }
 }
 
@@ -96,6 +102,7 @@ fn js_number(v: &Sample<'_>) -> f64 {
         Sample::Boolean(b) => f64::from(u8::from(*b)),
         Sample::Number(n) => *n,
         Sample::String(s) => number::to_number(s.units()),
+        Sample::Foreign(value) => ops::value_to_number(value).unwrap_or(f64::NAN),
         _ => number::to_number(js_string(v).units()),
     }
 }
@@ -329,7 +336,7 @@ impl Record {
                     .map(|s| to_uint8(number::to_number(s.units())))
                     .collect(),
             ),
-            Sample::Boolean(_) | Sample::Number(_) => RecordData::Undefined,
+            Sample::Boolean(_) | Sample::Number(_) | Sample::Foreign(_) => RecordData::Undefined,
         };
         Record {
             entry,

@@ -1049,52 +1049,60 @@ fn run_log_step(log: &SharedLog, calls: &[Value]) -> Result<(), JsError> {
         };
         let log = &mut *log.borrow_mut();
         match method.as_str() {
-            "putBoolean" => log.put_boolean(
-                &key(0)?,
-                num(1)?,
-                matches!(args.get(2), Some(Value::Bool(true))),
-            ),
-            "putNumber" => log.put_number(&key(0)?, num(1)?, num(2)?),
+            "putBoolean" => log
+                .put_boolean(
+                    &key(0)?,
+                    num(1)?,
+                    matches!(args.get(2), Some(Value::Bool(true))),
+                )
+                .unwrap(),
+            "putNumber" => log.put_number(&key(0)?, num(1)?, num(2)?).unwrap(),
             "putString" => {
                 let s = match args.get(2) {
                     Some(Value::String(s)) => JsString::from_units(s.units().to_vec()),
                     other => return Err(bad(&format!("putString value {other:?}"))),
                 };
-                log.put_string(&key(0)?, num(1)?, s)
+                log.put_string(&key(0)?, num(1)?, s).unwrap()
             }
-            "putBooleanArray" => log.put_boolean_array(
-                &key(0)?,
-                num(1)?,
-                args.get(2)
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| bad("putBooleanArray value is an array"))?
-                    .iter()
-                    .map(|v| matches!(v, Value::Bool(true)))
-                    .collect(),
-            ),
-            "putNumberArray" => log.put_number_array(
-                &key(0)?,
-                num(1)?,
-                args.get(2)
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| bad("putNumberArray value is an array"))?
-                    .iter()
-                    .map(|v| v.as_f64().unwrap_or(f64::NAN))
-                    .collect(),
-            ),
-            "putStringArray" => log.put_string_array(
-                &key(0)?,
-                num(1)?,
-                args.get(2)
-                    .and_then(Value::as_array)
-                    .ok_or_else(|| bad("putStringArray value is an array"))?
-                    .iter()
-                    .map(|v| match v {
-                        Value::String(s) => JsString::from_units(s.units().to_vec()),
-                        _ => JsString::new(),
-                    })
-                    .collect(),
-            ),
+            "putBooleanArray" => log
+                .put_boolean_array(
+                    &key(0)?,
+                    num(1)?,
+                    args.get(2)
+                        .and_then(Value::as_array)
+                        .ok_or_else(|| bad("putBooleanArray value is an array"))?
+                        .iter()
+                        .map(|v| matches!(v, Value::Bool(true)))
+                        .collect(),
+                )
+                .unwrap(),
+            "putNumberArray" => log
+                .put_number_array(
+                    &key(0)?,
+                    num(1)?,
+                    args.get(2)
+                        .and_then(Value::as_array)
+                        .ok_or_else(|| bad("putNumberArray value is an array"))?
+                        .iter()
+                        .map(|v| v.as_f64().unwrap_or(f64::NAN))
+                        .collect(),
+                )
+                .unwrap(),
+            "putStringArray" => log
+                .put_string_array(
+                    &key(0)?,
+                    num(1)?,
+                    args.get(2)
+                        .and_then(Value::as_array)
+                        .ok_or_else(|| bad("putStringArray value is an array"))?
+                        .iter()
+                        .map(|v| match v {
+                            Value::String(s) => JsString::from_units(s.units().to_vec()),
+                            _ => JsString::new(),
+                        })
+                        .collect(),
+                )
+                .unwrap(),
             "putRaw" => {
                 let bytes = match args.get(2) {
                     Some(Value::Bytes(b)) => b.clone(),
@@ -1121,6 +1129,7 @@ fn run_log_step(log: &SharedLog, calls: &[Value]) -> Result<(), JsError> {
                     _ => 0.0,
                 };
                 log.put_pose(&key(0)?, num(1)?, translation, rotation)
+                    .unwrap()
             }
             "putUnknownStruct" => log
                 .put_unknown_struct(&key(0)?, num(1)?, &js(2)?, false)

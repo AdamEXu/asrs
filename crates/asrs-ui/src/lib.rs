@@ -35,6 +35,7 @@ pub mod menu;
 pub mod parity;
 pub mod platform;
 pub mod progress;
+pub mod scroll;
 pub mod selection;
 pub mod svg;
 pub mod symbols;

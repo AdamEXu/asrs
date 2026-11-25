@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use asrs_js::ops;
 use asrs_js::string::JsString;
 use asrs_js::value::KeyState;
 use asrs_log::log::log_key_utils::{
@@ -27,7 +28,7 @@ struct Failed;
 /// everything else ends the request.
 fn caught(result: Result<(), LogError>) -> Result<(), Abort> {
     match result {
-        Ok(()) | Err(LogError::Proto(_) | LogError::StackOverflow) => Ok(()),
+        Ok(()) | Err(LogError::Proto(_) | LogError::Thrown(_) | LogError::StackOverflow) => Ok(()),
         Err(LogError::NeverCompletes) => Err(Abort::NeverReturns),
         Err(LogError::Unmodeled(what)) => Err(Abort::Unmodeled(what)),
     }
@@ -213,60 +214,55 @@ impl WpilogWorker {
         type_: &JsString,
         type_name: Option<&str>,
         record: &WpilogRecord<'_>,
-    ) -> Result<(), Abort> {
+    ) -> Result<(), LogError> {
         let timestamp = record.timestamp() / 1000000.0;
         let log = &mut self.log;
         match type_name {
             Some("boolean") => {
                 if let Ok(value) = record.boolean() {
-                    log.put_boolean(key, timestamp, value);
+                    log.put_boolean(key, timestamp, value)?;
                 }
             }
             Some("int" | "int64") => {
                 if let Ok(value) = record.integer() {
-                    log.put_number(key, timestamp, value);
+                    log.put_number(key, timestamp, value)?;
                 }
             }
             Some("float") => {
                 if let Ok(value) = record.float() {
-                    log.put_number(key, timestamp, value);
+                    log.put_number(key, timestamp, value)?;
                 }
             }
             Some("double") => {
                 if let Ok(value) = record.double() {
-                    log.put_number(key, timestamp, value);
+                    log.put_number(key, timestamp, value)?;
                 }
             }
-            Some("string") => log.put_string(key, timestamp, record.string()),
-            Some("boolean[]") => log.put_boolean_array(key, timestamp, record.boolean_array()),
+            Some("string") => log.put_string(key, timestamp, record.string())?,
+            Some("boolean[]") => log.put_boolean_array(key, timestamp, record.boolean_array())?,
             Some("int[]" | "int64[]") => {
                 if let Ok(value) = record.integer_array() {
-                    log.put_number_array(key, timestamp, value);
+                    log.put_number_array(key, timestamp, value)?;
                 }
             }
             Some("float[]") => {
                 if let Ok(value) = record.float_array() {
-                    log.put_number_array(key, timestamp, value);
+                    log.put_number_array(key, timestamp, value)?;
                 }
             }
             Some("double[]") => {
                 if let Ok(value) = record.double_array() {
-                    log.put_number_array(key, timestamp, value);
+                    log.put_number_array(key, timestamp, value)?;
                 }
             }
             Some("string[]") => {
                 if let Ok(value) = record.string_array() {
-                    log.put_string_array(key, timestamp, value);
+                    log.put_string_array(key, timestamp, value)?;
                 }
             }
-            Some("json") => caught(log.put_json(key, timestamp, record.string()))?,
+            Some("json") => log.put_json(key, timestamp, record.string())?,
             Some("msgpack") => {
-                return caught(log.put_msgpack(
-                    &mut self.realm,
-                    key,
-                    timestamp,
-                    record.raw().into(),
-                ));
+                return log.put_msgpack(&mut self.realm, key, timestamp, record.raw().into());
             }
             _ => {
                 let raw = record.raw();
@@ -278,27 +274,22 @@ impl WpilogWorker {
                     } else {
                         schema
                     };
-                    return caught(log.put_struct(key, timestamp, raw.into(), &schema, array));
+                    return log.put_struct(key, timestamp, raw.into(), &schema, array);
                 }
                 if type_.starts_with(&js(PHOTON_PREFIX), None) {
                     let schema = schema_type(type_, PHOTON_PREFIX);
-                    return caught(log.put_photon_struct(key, timestamp, raw.into(), &schema));
+                    return log.put_photon_struct(key, timestamp, raw.into(), &schema);
                 }
                 if type_.starts_with(&js(PROTO_PREFIX), None) {
                     let schema = schema_type(type_, PROTO_PREFIX);
-                    return caught(log.put_proto(
-                        &mut self.realm,
-                        key,
-                        timestamp,
-                        raw.into(),
-                        &schema,
-                    ));
+                    return log.put_proto(&mut self.realm, key, timestamp, raw.into(), &schema);
                 }
-                caught(log.put_raw(key, timestamp, raw.clone()))?;
+                log.put_raw(key, timestamp, raw.clone())?;
                 if let Some(parser) = custom_schemas::get(type_) {
                     match parser(log, key, timestamp, &raw) {
                         Ok(()) | Err(SchemaError::Threw) => {}
-                        Err(SchemaError::Log(error)) => caught(Err(error))?,
+                        Err(SchemaError::Log(error)) if error.is_throw() => {}
+                        Err(SchemaError::Log(error)) => return Err(error),
                     }
                     log.set_generated_parent(key);
                 }
@@ -307,17 +298,22 @@ impl WpilogWorker {
         Ok(())
     }
 
+    /// `key in entryTypes`.
+    fn has_entry(&self, key: &JsString) -> bool {
+        self.entry_types.contains_key(key) || ops::is_object_prototype_member(key)
+    }
+
     fn parse_field(
         &mut self,
         mut key: JsString,
         skip_message: bool,
         post: &mut dyn FnMut(Response),
     ) -> Result<(), Abort> {
-        if !self.entry_types.contains_key(&key) {
+        if !self.has_entry(&key) {
             if key.starts_with(&js("/"), None) {
                 key = key.slice(1.0, None);
             }
-            if !self.entry_types.contains_key(&key) {
+            if !self.has_entry(&key) {
                 return Ok(());
             }
         }
@@ -331,9 +327,12 @@ impl WpilogWorker {
                     return Err(Abort::Threw);
                 }
                 if let Some((record, _)) = decoder.record_at(position as usize) {
-                    self.put_record(&key, &type_, type_name.as_deref(), &record)?;
+                    caught(self.put_record(&key, &type_, type_name.as_deref(), &record))?;
                 }
             }
+        } else if ops::is_object_prototype_member(&key) {
+            // `dataRecordPositions[key].forEach` on the inherited member.
+            return Err(Abort::Threw);
         }
 
         if let Some(clear_time) = self.clear_time {
@@ -356,6 +355,10 @@ impl WpilogWorker {
                 key: child_key,
                 data,
             });
+        }
+        if !has_root && ops::is_object_prototype_member(&key) {
+            // `getField` returns the inherited member, which has no `toSerialized`.
+            return Err(Abort::Threw);
         }
         if !has_root && let Some(field) = self.log.get_field(&key) {
             fields.push(FieldResponse {
