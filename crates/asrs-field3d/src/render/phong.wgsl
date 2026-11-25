@@ -1,7 +1,9 @@
 // Ported from three.js r168 (MIT, Copyright 2010-2024 three.js authors). See THIRD_PARTY_NOTICES.md.
 
 // MeshPhongMaterial from three 0.168 (meshphong.glsl.js and its chunks), statement for statement,
-// so the arithmetic order matches the GLSL that ANGLE compiles.
+// so the arithmetic order matches the GLSL that ANGLE compiles. angle_epilogue, gl_normalize,
+// gl_normalize2 and spot_light_coord come from the backend's own file, because ANGLE's
+// translation of them differs per backend.
 
 const MAX_HEMI: u32 = 4u;
 const MAX_POINT: u32 = 8u;
@@ -40,7 +42,7 @@ struct SpotShadow {
 
 struct Frame {
     projection: mat4x4<f32>,
-    // hemisphere, point, spot, always 0 (see opaque)
+    // hemisphere, point, spot, always 0 (see opaque in metal.wgsl)
     counts: vec4<u32>,
     // ANGLE's runtime clip-space factors: y flip (-1) and depth sign (+1)
     clip_factors: vec4<f32>,
@@ -99,20 +101,6 @@ struct VertexOut {
     @location(7) spot_coord3: vec4<f32>,
 };
 
-// ANGLE's Metal epilogue for gl_Position, with its factors read from a uniform as ANGLE does so
-// the compiler cannot fold them into the matrix product: depth sign, GL's [-w, w] depth mapped
-// to [0, w], and y flipped because WebGL renders bottom-up into its drawing buffer and render
-// targets alike. Drawing upside down puts the multisample pattern and the fill rule's
-// tie-breaks on the same image pixels as upstream's; readback and texture sampling both see
-// GL's row order.
-fn angle_epilogue(clip: vec4<f32>) -> vec4<f32> {
-    var out = clip;
-    out.z = out.z * frame.clip_factors.y;
-    out.z = (out.z + out.w) * 0.5;
-    out.y = out.y * frame.clip_factors.x;
-    return out;
-}
-
 fn finish_vertex(v: VertexIn, object_normal: vec3<f32>, mv_input: vec4<f32>) -> VertexOut {
     var out: VertexOut;
     out.uv = v.uv;
@@ -130,14 +118,14 @@ fn finish_vertex(v: VertexIn, object_normal: vec3<f32>, mv_input: vec4<f32>) -> 
     if (draw.flags.y != 0u) {
         transformed_normal = -transformed_normal;
     }
-    out.normal = fast_normalize(transformed_normal);
+    out.normal = gl_normalize(transformed_normal);
     let mv_position = draw.model_view * mv_input;
     out.clip = angle_epilogue(frame.projection * mv_position);
     out.view_position = -mv_position.xyz;
 
     // worldpos_vertex and shadowmap_vertex
     let world_position = draw.model * mv_input;
-    let shadow_world_normal = fast_normalize((vec4<f32>(transformed_normal, 0.0) * frame.view).xyz);
+    let shadow_world_normal = gl_normalize((vec4<f32>(transformed_normal, 0.0) * frame.view).xyz);
     var coords = array<vec4<f32>, MAX_SPOT_SHADOWS>();
     for (var i = 0u; i < frame.shadow_counts.x; i++) {
         let shadow_world_position = world_position + vec4<f32>(shadow_world_normal * frame.spot_shadow[i].params.z, 0.0);
@@ -167,43 +155,6 @@ fn vs_instanced(v: VertexIn, i: InstanceIn) -> VertexOut {
     return finish_vertex(v, object_normal, mv_position);
 }
 
-// An opaque copy of v: frame.counts.w is always 0, and the compiler cannot see that.
-fn opaque(v: vec4<f32>) -> vec4<f32> {
-    return bitcast<vec4<f32>>(bitcast<vec4<u32>>(v) ^ vec4<u32>(frame.counts.w));
-}
-
-// spotLightMatrix[i] * shadowWorldPosition in the operation order Metal's fast-math compiler
-// gives ANGLE's translation of shadowmap_vertex, which reassociates each light's product its own
-// way: w, y, x, z for light 0, y, x, z, w for light 1 and x, y, z, w for light 2, each fused. The
-// receiver's depth is compared against the shadow map's at full precision, so any other order
-// turns 1-ulp differences into shadow acne on different pixels. The opaque steps stop the
-// compiler from reordering the sum for this shader. The orders were measured for upstream's three
-// spot lights against ANGLE's Metal backend on Apple GPUs only: D3D11 and SwiftShader compile
-// upstream's GLSL their own way, so T10 has to measure them again per backend.
-fn spot_light_coord(light: u32, m: mat4x4<f32>, v: vec4<f32>) -> vec4<f32> {
-    if (light == 0u) {
-        var acc = opaque(m[3] * v.w);
-        acc = opaque(fma(m[1], vec4<f32>(v.y), acc));
-        acc = opaque(fma(m[0], vec4<f32>(v.x), acc));
-        return fma(m[2], vec4<f32>(v.z), acc);
-    }
-    if (light == 1u) {
-        var acc = opaque(m[1] * v.y);
-        acc = opaque(fma(m[0], vec4<f32>(v.x), acc));
-        acc = opaque(fma(m[2], vec4<f32>(v.z), acc));
-        return fma(m[3], vec4<f32>(v.w), acc);
-    }
-    var acc = opaque(m[0] * v.x);
-    acc = opaque(fma(m[1], vec4<f32>(v.y), acc));
-    acc = opaque(fma(m[2], vec4<f32>(v.z), acc));
-    return fma(m[3], vec4<f32>(v.w), acc);
-}
-
-// metal::fast::normalize, which ANGLE emits for GLSL normalize.
-fn fast_normalize(v: vec3<f32>) -> vec3<f32> {
-    return v * inverseSqrt(dot(v, v));
-}
-
 fn f_schlick(f0: vec3<f32>, f90: f32, dot_vh: f32) -> vec3<f32> {
     let fresnel = exp2((-5.55473 * dot_vh - 6.98316) * dot_vh);
     return f0 * (1.0 - fresnel) + (f90 * fresnel);
@@ -214,7 +165,7 @@ fn d_blinn_phong(shininess: f32, dot_nh: f32) -> f32 {
 }
 
 fn brdf_blinn_phong(light_dir: vec3<f32>, view_dir: vec3<f32>, normal: vec3<f32>, specular_color: vec3<f32>, shininess: f32) -> vec3<f32> {
-    let half_dir = fast_normalize(light_dir + view_dir);
+    let half_dir = gl_normalize(light_dir + view_dir);
     let dot_nh = saturate(dot(normal, half_dir));
     let dot_vh = saturate(dot(view_dir, half_dir));
     let f = f_schlick(specular_color, 1.0, dot_vh);
@@ -281,7 +232,7 @@ fn fs(in: VertexOut, @builtin(front_facing) front_facing: bool) -> FragmentOut {
     }
 
     let face_direction = select(-1.0, 1.0, front_facing);
-    var normal = fast_normalize(in.normal);
+    var normal = gl_normalize(in.normal);
     if (draw.flags.z != 0u) {
         normal *= face_direction;
     }
@@ -289,12 +240,12 @@ fn fs(in: VertexOut, @builtin(front_facing) front_facing: bool) -> FragmentOut {
     let material_diffuse = diffuse_color.rgb;
     let geometry_position = -in.view_position;
     let geometry_normal = normal;
-    let geometry_view_dir = fast_normalize(in.view_position);
+    let geometry_view_dir = gl_normalize(in.view_position);
 
     for (var i = 0u; i < frame.counts.y; i++) {
         let light = frame.point[i];
         let l_vector = light.position.xyz - geometry_position;
-        let direction = fast_normalize(l_vector);
+        let direction = gl_normalize(l_vector);
         let light_distance = length(l_vector);
         var color = light.color.xyz;
         color *= distance_attenuation(light_distance, light.params.x, light.params.y);
@@ -305,7 +256,7 @@ fn fs(in: VertexOut, @builtin(front_facing) front_facing: bool) -> FragmentOut {
     for (var i = 0u; i < frame.counts.z; i++) {
         let light = frame.spot[i];
         let l_vector = light.position.xyz - geometry_position;
-        let direction = fast_normalize(l_vector);
+        let direction = gl_normalize(l_vector);
         let angle_cos = dot(direction, light.direction.xyz);
         let spot_attenuation = smoothstep(light.params.z, light.params.w, angle_cos);
         var color = vec3<f32>(0.0);

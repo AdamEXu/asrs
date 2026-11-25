@@ -14,7 +14,7 @@ name = "asrs"
 path = "src/main.rs"
 
 [features]
-parity = ["asrs-ui/parity"]
+parity = ["asrs-field3d/parity", "asrs-ui/parity"]
 
 [dependencies]
 asrs-canvas = { path = "../asrs-canvas" }
@@ -55,6 +55,11 @@ workspace = true
 [[test]]
 name = "window_sizes"
 harness = false
+
+[[test]]
+name = "hidden_windows"
+harness = false
+required-features = ["parity"]
 
 [[test]]
 name = "documentation_window"

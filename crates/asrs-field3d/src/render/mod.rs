@@ -6,8 +6,11 @@
 //! shadows, `Line2`/`LineMaterial` fat lines, `Line`, `LineSegments` and `GridHelper`, readback,
 //! and the render thread that owns the device.
 
+mod adapter;
 mod edges;
 mod frame;
+#[cfg(any(target_os = "linux", windows))]
+mod gl_clip;
 mod gpu;
 mod mixed;
 mod scene;

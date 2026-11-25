@@ -422,6 +422,7 @@ dependencies = [
 name = "asrs-field3d"
 version = "0.1.0"
 dependencies = [
+ "ash",
  "asrs-canvas",
  "asrs-js",
  "asrs-log",
