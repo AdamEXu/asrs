@@ -835,9 +835,8 @@ async fn lists(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
     let theirs = electron
         .request(cx, r#"{"op":"displays"}"#, "displays ")
         .await;
-    let ours: Vec<[f64; 4]> = platform::x11_displays(2880.0)
-        .map(|d| d.displays.iter().map(|d| d.work_area).collect())
-        .unwrap_or_default();
+    let displays = platform::x11_displays(2880.0).expect("displays");
+    let ours: Vec<_> = displays.displays.iter().map(|d| d.work_area).collect();
     report.check(
         "work areas",
         format!("{ours:?}") == theirs,
