@@ -48,7 +48,7 @@ use crate::menus::bridge::{MenuAction, ScriptedMenu};
 use crate::menus::dispatch::{dispatch, run_edit};
 use crate::menus::model::{Command, MenuItem};
 use crate::satellite::{Satellite, SatelliteEvent};
-use crate::views::field3d::WwwRoot;
+use crate::views::field3d::{ReducedMotion, WwwRoot};
 use crate::views::frame::{FrameHost, HubFrame};
 use crate::views::hub_host::{HubEntityHost, boot_messages};
 use crate::views::satellite_host::SatelliteHost;
@@ -281,6 +281,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         windows::init(cx);
         cx.set_global(ForcedActive(false));
         cx.set_global(ForcedHost(Host::Native));
+        cx.set_global(ReducedMotion(true));
     });
     if let Some(file) = options.licenses.clone() {
         headless

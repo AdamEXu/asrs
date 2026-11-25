@@ -35,6 +35,7 @@ struct OpenPopup {
     window: AnyWindowHandle,
     cx: AsyncApp,
     _keys: Subscription,
+    _parent_closed: Subscription,
 }
 
 thread_local! {
@@ -214,6 +215,11 @@ fn show(
                 .ok();
         }
         let keys = intercept_keys(&view, cx);
+        let parent_closed = cx.on_window_closed(move |_, closed| {
+            if closed == parent.window_id() {
+                close_open_popup();
+            }
+        });
         OPEN.set(Some(OpenPopup {
             id,
             parent: parent.window_id(),
@@ -221,6 +227,7 @@ fn show(
             window: popup,
             cx: cx.to_async(),
             _keys: keys,
+            _parent_closed: parent_closed,
         }));
     });
 }

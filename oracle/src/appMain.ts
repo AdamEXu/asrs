@@ -327,6 +327,8 @@ app.on("browser-window-created", (_event, win) => {
     win.setFocusable(false);
     win.on("focus", () => errors.push(`a window took the focus during ${performing}`));
   }
+  // An X11 window manager gives a modal prompt the focus as it is shown.
+  if (process.platform === "linux") win.on("focus", () => win.blur());
   win.setIgnoreMouseEvents(true);
   // macOS still hands the page a move from the physical cursor when the window appears under
   // it, so every mouse event the scenario did not send is dropped.
@@ -947,6 +949,8 @@ app.whenReady().then(() => {
       respond({});
     }
   });
+  // Off macOS Chromium downloads a dictionary for the spelling marks in fields, past the hook above.
+  if (process.platform !== "darwin") session.defaultSession.setSpellCheckerEnabled(false);
   const preload = path.join(out, "tap-preload.js");
   fs.writeFileSync(preload, `require("electron").contextBridge.executeInMainWorld({ func: ${installTap.toString()}, args: [${scenario.gl}] });\n`);
   session.defaultSession.registerPreloadScript({ type: "frame", id: "asrs-parity-tap", filePath: preload });
