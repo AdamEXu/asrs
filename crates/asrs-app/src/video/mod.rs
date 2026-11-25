@@ -180,7 +180,11 @@ fn deliver(event: VideoEvent, cx: &mut App) {
         return;
     }
     let handle = handle_of(&event);
-    let Some(window) = cx.global::<Videos>().io.owners.get(&handle).copied() else {
+    let io = &cx.global::<Videos>().io;
+    if io.quitting.load(Ordering::SeqCst) {
+        return;
+    }
+    let Some(window) = io.owners.get(&handle).copied() else {
         return;
     };
     let closed = matches!(event, VideoEvent::Close { .. });
