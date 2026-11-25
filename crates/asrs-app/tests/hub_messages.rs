@@ -869,7 +869,11 @@ fn reopened_hub() {
         app.settle();
         assert_ne!(opened, first);
         let controls = app.page(opened, |hub| {
-            hub.tabs().tab(0).expect("the tab").controls_height().clone()
+            hub.tabs()
+                .tab(0)
+                .expect("the tab")
+                .controls_height()
+                .clone()
         });
         assert_eq!(controls, JsValue::Number(height));
     }
