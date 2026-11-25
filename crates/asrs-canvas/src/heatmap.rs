@@ -552,7 +552,11 @@ impl Layer {
         if !matches!(self.bitmap, Bitmap::Raster(_)) {
             let mut raster = match std::mem::replace(&mut self.bitmap, Bitmap::Blank) {
                 Bitmap::Shared(pixmap) => Raster::over(Arc::unwrap_or_clone(pixmap)),
-                _ => Raster::new(self.width, self.height)?,
+                _ => {
+                    #[cfg(test)]
+                    tests::RASTERS.with(|n| n.set(n.get() + 1));
+                    Raster::new(self.width, self.height)?
+                }
             };
             for (id, pixmap) in &self.images {
                 raster.add_image(id, pixmap.clone());
@@ -1017,6 +1021,23 @@ mod tests {
         heatmap.update(B, [90.0, 45.0], FIELD);
         heatmap.update(&[], [60.0, 30.0], FIELD);
         assert!(blank(&heatmap));
+    }
+
+    thread_local! {
+        pub(super) static RASTERS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
+
+    #[test]
+    fn a_heatmap_without_points_makes_no_canvas() {
+        let mut heatmap = Heatmap::new();
+        for size in [[2000.0, 1000.0], [2400.0, 1200.0]] {
+            heatmap.update(&[], size, FIELD);
+            heatmap.update(&[[90.0, 90.0]], size, FIELD);
+            heatmap.update(&[], size, FIELD);
+        }
+        assert_eq!(RASTERS.get(), 0);
+        heatmap.update(A, [2000.0, 1000.0], FIELD);
+        assert_eq!(RASTERS.get(), 2);
     }
 
     #[test]
