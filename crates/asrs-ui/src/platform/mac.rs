@@ -1085,8 +1085,8 @@ pub(super) mod probe {
 
     use gpui_kit::Window;
     use objc2::rc::Retained;
-    use objc2::runtime::{AnyClass, AnyObject, Bool, Imp, NSObject, NSObjectProtocol, Sel};
-    use objc2::{ClassType, MainThreadMarker, msg_send, sel};
+    use objc2::runtime::{AnyClass, AnyObject, Bool, NSObject, NSObjectProtocol, Sel};
+    use objc2::{MainThreadMarker, msg_send};
     use objc2_app_kit::{
         NSApplication, NSApplicationActivationPolicy, NSBitmapImageRep, NSControlStateValueOn,
         NSEvent, NSImage, NSMenu, NSMenuItem, NSScreen, NSWindow, NSWindowButton,
@@ -1446,6 +1446,8 @@ pub(super) mod probe {
         Some(ns_window(window)?.canBecomeMainWindow())
     }
 
+    type IsActive = extern "C-unwind" fn(&AnyObject, Sel) -> Bool;
+
     extern "C-unwind" fn active(_: &AnyObject, _: Sel) -> Bool {
         Bool::YES
     }
@@ -1453,15 +1455,15 @@ pub(super) mod probe {
     pub fn make_main(window: &Window) {
         let (Some(window), Some(is_active)) = (
             ns_window(window),
-            NSApplication::class().instance_method(sel!(isActive)),
+            <NSApplication as objc2::ClassType>::class().instance_method(objc2::sel!(isActive)),
         ) else {
             return;
         };
         super::perform_on_run_loop(move || {
             // SAFETY: the replacement has the signature of `isActive`.
             unsafe {
-                let active: extern "C-unwind" fn(&AnyObject, Sel) -> Bool = active;
-                let theirs = is_active.set_implementation(std::mem::transmute::<_, Imp>(active));
+                let active = std::mem::transmute::<IsActive, objc2::runtime::Imp>(active);
+                let theirs = is_active.set_implementation(active);
                 window.makeMainWindow();
                 is_active.set_implementation(theirs);
             }
