@@ -24,6 +24,7 @@ struct State {
     pool: Vec<Vec<u8>>,
     release_at: Option<Instant>,
     holds_targets: bool,
+    holds_models: bool,
     shutdown: bool,
     failure: Option<String>,
 }
@@ -122,8 +123,8 @@ impl RenderThread {
             .clone()
     }
 
-    /// Once no frame came for `delay`, frees the render targets, the shadow maps and the pooled
-    /// pixel buffers. The next frame makes them again.
+    /// Once no frame came for `delay`, frees the render targets, the shadow maps, the pooled
+    /// pixel buffers and the models' and textures' GPU copies. The next frame makes them again.
     pub fn release_after(&self, delay: Duration) {
         let mut state = self.shared.state.lock().expect("render state");
         state.release_at = Some(Instant::now() + delay);
@@ -132,6 +133,11 @@ impl RenderThread {
 
     pub fn cancel_release(&self) {
         self.shared.state.lock().expect("render state").release_at = None;
+    }
+
+    /// Whether the GPU still holds models or textures.
+    pub fn holds_models(&self) -> bool {
+        self.shared.state.lock().expect("render state").holds_models
     }
 
     /// Whether the last frame's targets are still there.
@@ -179,6 +185,7 @@ fn run(shared: &Shared, renderer: &mut Renderer, waker: &dyn Fn()) {
                     }
                     let buffer = state.pool.pop().unwrap_or_default();
                     state.holds_targets = true;
+                    state.holds_models = true;
                     break (frame, buffer);
                 }
                 match state.release_at {
@@ -187,8 +194,10 @@ fn run(shared: &Shared, renderer: &mut Renderer, waker: &dyn Fn()) {
                         state.pool = Vec::new();
                         drop(state);
                         renderer.release_targets();
+                        renderer.release_models();
                         state = shared.state.lock().expect("render state");
                         state.holds_targets = renderer.holds_targets();
+                        state.holds_models = false;
                     }
                     Some(at) => {
                         let wait = at.saturating_duration_since(Instant::now());

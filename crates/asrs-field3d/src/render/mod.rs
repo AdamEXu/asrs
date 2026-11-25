@@ -13,6 +13,7 @@ mod frame;
 mod gl_clip;
 mod gpu;
 mod mixed;
+mod release;
 mod scene;
 mod thread;
 

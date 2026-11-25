@@ -29,6 +29,59 @@ pub use workers::{
     spawn_load_field, spawn_load_robot, with_load_stack,
 };
 
+type Reload = dyn Fn() -> Option<Vec<Arc<BufferGeometry>>> + Send + Sync;
+
+/// A load that can run again and give the same geometries in the same order. Between `reload`
+/// and `forget` they stay loaded, so one pass over many meshes loads the model once.
+pub struct ModelSource {
+    load: Box<Reload>,
+    loaded: std::sync::Mutex<Option<Vec<Arc<BufferGeometry>>>>,
+}
+
+impl ModelSource {
+    pub fn new(
+        load: impl Fn() -> Option<Vec<Arc<BufferGeometry>>> + Send + Sync + 'static,
+    ) -> Self {
+        ModelSource {
+            load: Box::new(load),
+            loaded: std::sync::Mutex::new(None),
+        }
+    }
+
+    pub fn geometry(&self, index: usize) -> Option<Arc<BufferGeometry>> {
+        let mut loaded = self.loaded.lock().ok()?;
+        if loaded.is_none() {
+            *loaded = (self.load)();
+        }
+        loaded.as_ref()?.get(index).cloned()
+    }
+
+    pub fn forget(&self) {
+        if let Ok(mut loaded) = self.loaded.lock() {
+            *loaded = None;
+        }
+    }
+}
+
+impl std::fmt::Debug for ModelSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("ModelSource")
+    }
+}
+
+/// Mesh `index` of a [`ModelSource`].
+#[derive(Clone, Debug)]
+pub struct MeshSource {
+    pub model: Arc<ModelSource>,
+    pub index: usize,
+}
+
+impl MeshSource {
+    pub fn reload(&self) -> Option<Arc<BufferGeometry>> {
+        self.model.geometry(self.index)
+    }
+}
+
 /// What `optimizeGeometries` reads from a mesh's material: `transparent`, `opacity` and, when
 /// the material has one, `color`.
 #[derive(Clone, Debug, PartialEq)]

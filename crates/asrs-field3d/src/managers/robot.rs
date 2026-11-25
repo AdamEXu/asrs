@@ -296,7 +296,7 @@ impl RobotManager {
             for optimized in scene_meshes {
                 let mesh = optimized.to_render_mesh();
                 if index == 0
-                    && let Some(position) = mesh.geometry.geometry.attribute("position")
+                    && let Some(position) = mesh.geometry.data().attribute("position")
                 {
                     let bounds = Box3::from_buffer_attribute(position);
                     let d = &mut self.dimensions;

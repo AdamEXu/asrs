@@ -1,7 +1,10 @@
 // Ported from three.js r168 (MIT, Copyright 2010-2024 three.js authors). See THIRD_PARTY_NOTICES.md.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+
+use super::release;
+use crate::glb::MeshSource;
 
 use asrs_js::math;
 
@@ -26,23 +29,102 @@ fn next_material_id() -> u64 {
 #[derive(Debug)]
 pub struct Geometry {
     key: u64,
-    pub geometry: Arc<BufferGeometry>,
+    stored: Mutex<Stored>,
+    groups: Vec<Group>,
     bounding_sphere: Sphere,
+    source: Option<MeshSource>,
+    release_claimed: AtomicBool,
+}
+
+#[derive(Debug)]
+enum Stored {
+    Memory(Arc<BufferGeometry>),
+    /// Dropped after its upload; the model loads again for anything that needs the arrays,
+    /// and must give the same bytes.
+    Released {
+        digest: u64,
+    },
 }
 
 impl Geometry {
     /// Keeps a bounding sphere the geometry already carries (three never recomputes one that is
     /// set), otherwise computes it as the first render would.
     pub fn new(geometry: impl Into<Arc<BufferGeometry>>) -> Arc<Self> {
+        Self::with_source(geometry, None)
+    }
+
+    /// A geometry whose arrays may leave memory once uploaded, since `source` loads them again.
+    pub fn with_source(
+        geometry: impl Into<Arc<BufferGeometry>>,
+        source: Option<MeshSource>,
+    ) -> Arc<Self> {
         let geometry = geometry.into();
         let bounding_sphere = geometry
             .bounding_sphere
             .unwrap_or_else(|| geometry.new_bounding_sphere());
         Arc::new(Geometry {
             key: next_resource_id(),
-            geometry,
+            groups: geometry.groups.clone(),
+            stored: Mutex::new(Stored::Memory(geometry)),
             bounding_sphere,
+            source,
+            release_claimed: AtomicBool::new(false),
         })
+    }
+
+    /// The geometry, loaded again from its model once it left memory.
+    pub fn data(&self) -> Arc<BufferGeometry> {
+        let digest = match &*self.stored.lock().expect("geometry") {
+            Stored::Memory(geometry) => return geometry.clone(),
+            Stored::Released { digest } => *digest,
+        };
+        let reloaded = self.source.as_ref().and_then(MeshSource::reload);
+        match reloaded {
+            Some(geometry) if release::digest(&geometry) == digest => geometry,
+            _ => {
+                eprintln!("asrs: a 3D model no longer loads as it did");
+                Arc::new(BufferGeometry::new())
+            }
+        }
+    }
+
+    /// Whether the arrays are in memory.
+    pub fn is_in_memory(&self) -> bool {
+        self.in_memory().is_some()
+    }
+
+    pub fn groups(&self) -> &[Group] {
+        &self.groups
+    }
+
+    pub(crate) fn source(&self) -> Option<&MeshSource> {
+        self.source.as_ref()
+    }
+
+    /// Lets the arrays go soon, if the model can give them back and they are worth it.
+    pub(crate) fn release_later(self: &Arc<Self>) {
+        release::release_later(self);
+    }
+
+    pub(super) fn in_memory(&self) -> Option<Arc<BufferGeometry>> {
+        match &*self.stored.lock().expect("geometry") {
+            Stored::Memory(geometry) => Some(geometry.clone()),
+            Stored::Released { .. } => None,
+        }
+    }
+
+    pub(super) fn claim_release(&self, min_bytes: usize) -> bool {
+        let large = self
+            .in_memory()
+            .is_some_and(|g| release::size(&g) >= min_bytes);
+        self.source.is_some() && large && !self.release_claimed.swap(true, Ordering::Relaxed)
+    }
+
+    pub(super) fn released(&self, data: &Arc<BufferGeometry>, digest: u64) {
+        let mut stored = self.stored.lock().expect("geometry");
+        if matches!(&*stored, Stored::Memory(g) if Arc::ptr_eq(g, data)) {
+            *stored = Stored::Released { digest };
+        }
     }
 
     pub fn key(&self) -> u64 {
@@ -334,8 +416,7 @@ impl Mesh {
             Materials::Single(material) => vec![(material, None)],
             Materials::Array(materials) => self
                 .geometry
-                .geometry
-                .groups
+                .groups()
                 .iter()
                 .filter_map(|group| {
                     materials

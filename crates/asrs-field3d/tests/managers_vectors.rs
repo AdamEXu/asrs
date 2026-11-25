@@ -892,7 +892,7 @@ impl Case {
                     mesh.receive_shadow,
                     self.digests
                         .entry(mesh.geometry.key())
-                        .or_insert_with(|| geometry_digest(&mesh.geometry.geometry))
+                        .or_insert_with(|| geometry_digest(&mesh.geometry.data()))
                         .clone(),
                     materials,
                     instances,

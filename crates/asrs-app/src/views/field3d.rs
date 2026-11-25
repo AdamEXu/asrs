@@ -69,8 +69,7 @@ const TITLE_HEIGHT: f64 = 20.0;
 const FIELD_INPUT_HEIGHT: f64 = 40.0;
 const SELECT_HEIGHT: f64 = 24.0;
 const MOUSE_POINTER_ID: i32 = 1;
-/// How long a 3D view stays hidden before its render targets go, so that switching tabs costs
-/// nothing.
+/// How long a 3D view stays hidden before the GPU lets go of what it holds for it.
 pub const RELEASE_GRACE: Duration = Duration::from_secs(10);
 
 /// The directory holding upstream's `www`, which `TextureLoader` URLs (`../www/...`) resolve
@@ -333,8 +332,7 @@ pub struct Field3dViews {
     tabs: HashMap<usize, TabView>,
     shown: Option<Shown>,
     thread: Option<Result<RenderThread, String>>,
-    /// Whether the thread was told to free its targets and got neither a frame nor the tab back
-    /// since.
+    /// Whether the thread was told to free its targets and got no frame since.
     released: bool,
     in_flight: Option<InFlight>,
     queued: Option<(usize, Frame)>,
@@ -784,10 +782,10 @@ impl<H: FrameHost> HubFrame<H> {
         self.field3d.busy()
     }
 
-    /// Whether the 3D render thread holds render targets; `None` without one.
-    pub fn field3d_holds_targets(&self) -> Option<bool> {
+    /// Whether the 3D render thread holds render targets and models; `None` without one.
+    pub fn field3d_holds(&self) -> Option<(bool, bool)> {
         match &self.field3d.thread {
-            Some(Ok(thread)) => Some(thread.holds_targets()),
+            Some(Ok(thread)) => Some((thread.holds_targets(), thread.holds_models())),
             _ => None,
         }
     }

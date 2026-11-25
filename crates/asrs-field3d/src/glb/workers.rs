@@ -14,7 +14,7 @@ use asrs_model::preferences::Field3dMode;
 
 use super::loader::{GltfError, GltfScene, load_gltf};
 use super::optimize::{OptimizeError, OptimizedMesh, optimize};
-use super::{ObjectKind, SceneObject, object_by_name};
+use super::{MeshSource, ModelSource, ObjectKind, SceneObject, object_by_name};
 use crate::three::{Color, Quaternion, Vector3};
 
 /// Reads the bytes behind a model URL (`config.path` and the paths derived from it), the way
@@ -334,13 +334,48 @@ impl<T: Send + 'static> LoadJob<T> {
     }
 }
 
+fn field_meshes(field: &mut LoadedField) -> impl Iterator<Item = &mut OptimizedMesh> {
+    let pieces = field.pieces.iter_mut().map(|(_, mesh)| mesh);
+    field
+        .field
+        .iter_mut()
+        .chain(field.staged_pieces.iter_mut())
+        .chain(pieces)
+}
+
+fn attach<'a>(meshes: impl Iterator<Item = &'a mut OptimizedMesh>, model: &Arc<ModelSource>) {
+    for (index, mesh) in meshes.enumerate() {
+        mesh.source = Some(MeshSource {
+            model: model.clone(),
+            index,
+        });
+    }
+}
+
+/// `load_field` on a load thread. Its meshes can load again, so the renderer may drop them once
+/// they are on the GPU.
 pub fn spawn_load_field(
     config: Config3dField,
     options: LoadOptions,
     fetch: Arc<Fetch<'static>>,
     waker: impl Fn() + Send + 'static,
 ) -> LoadJob<LoadedField> {
-    LoadJob::spawn(move || load_field(&config, &options, &*fetch), waker)
+    LoadJob::spawn(
+        move || {
+            let mut field = load_field(&config, &options, &*fetch)?;
+            let model = Arc::new(ModelSource::new(move || {
+                let mut field = with_load_stack(|| load_field(&config, &options, &*fetch)).ok()?;
+                Some(
+                    field_meshes(&mut field)
+                        .map(|m| m.geometry.clone())
+                        .collect(),
+                )
+            }));
+            attach(field_meshes(&mut field), &model);
+            Ok(field)
+        },
+        waker,
+    )
 }
 
 pub fn spawn_load_robot(
@@ -351,7 +386,16 @@ pub fn spawn_load_robot(
     waker: impl Fn() + Send + 'static,
 ) -> LoadJob<Vec<Vec<OptimizedMesh>>> {
     LoadJob::spawn(
-        move || load_robot(&config, is_ftc, &options, &*fetch),
+        move || {
+            let mut robot = load_robot(&config, is_ftc, &options, &*fetch)?;
+            let model = Arc::new(ModelSource::new(move || {
+                let robot =
+                    with_load_stack(|| load_robot(&config, is_ftc, &options, &*fetch)).ok()?;
+                Some(robot.iter().flatten().map(|m| m.geometry.clone()).collect())
+            }));
+            attach(robot.iter_mut().flatten(), &model);
+            Ok(robot)
+        },
         waker,
     )
 }
