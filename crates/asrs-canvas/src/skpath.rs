@@ -303,7 +303,7 @@ impl SkPath {
     /// `SkPathEdgeIter`: every segment, with a closing line for each contour that does not end
     /// where it started.
     pub fn edges(&self) -> Vec<Edge> {
-        let mut out = Vec::new();
+        let mut out = Vec::with_capacity(self.verbs.len() + 1);
         let (mut pi, mut wi) = (0usize, 0usize);
         let mut move_pt = P { x: 0.0, y: 0.0 };
         let mut needs_close = false;

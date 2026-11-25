@@ -30,7 +30,7 @@ pub struct AboutEnv<'a> {
     pub arch: &'a str,
     /// `app.isPackaged`.
     pub packaged: bool,
-    /// `app.getVersion()`.
+    /// `AppIdentity::full_version`; upstream's is `app.getVersion()`.
     pub version: &'a str,
 }
 

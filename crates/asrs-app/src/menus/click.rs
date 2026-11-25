@@ -248,13 +248,14 @@ pub fn click(
     };
     match command {
         Command::About => {
+            let version = env.identity.full_version();
             let about = about(&AboutEnv {
                 app_name: env.identity.name,
                 distribution: build_constants::DISTRIBUTION,
                 platform: process_platform(env.platform),
                 arch: env.arch,
                 packaged: env.paths.packaged,
-                version: build_constants::VERSION,
+                version: &version,
             });
             out.push(Effect::MessageBox {
                 window: None,

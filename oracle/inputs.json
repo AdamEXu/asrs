@@ -103,6 +103,17 @@
     "src/historical/timers.ts",
     "src/shims.ts"
   ],
+  "decodeBench": [
+    "src/cve1.ts",
+    "src/decodeBench.ts",
+    "src/environment.ts",
+    "src/historical/dump.ts",
+    "src/historical/mainProcess.ts",
+    "src/historical/scheduler.ts",
+    "src/historical/session.ts",
+    "src/historical/timers.ts",
+    "src/shims.ts"
+  ],
   "decodeWorker": [
     "src/cve1.ts",
     "src/decodeWorker.ts",

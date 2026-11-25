@@ -8,7 +8,10 @@ use asrs_parity::Json;
 use asrs_parity::json;
 use asrs_parity::vectors;
 
+use asrs_model::app_identity::{AppIdentity, VERSION};
+
 use crate::bundle::{self, Bundle, ENTITLEMENTS, Os, at, contains, copy, copy_tree, run_tool};
+use crate::version::Version;
 use crate::{Result, workspace_root};
 
 const USAGE: &str = "usage: cargo xtask smoke [--target <triple>] [--no-docs]
@@ -20,6 +23,7 @@ target/smoke:
   association names .hoot;
 - on macOS, the code signature is valid, with the hardened runtime and exactly the entitlements of
   packaging/macos;
+- the program, and Info.plist or the Windows programs and the uninstall entry, name the version;
 - the program reads a recorded frame's match timer, which needs the OCR's compiled code to run;
 - it starts, opens a window, loads a log given as an argument and reports no errors (needs a
   display);
@@ -132,6 +136,7 @@ pub fn run(args: &[String]) -> Result {
     if smoke.bundle.os == Os::Macos {
         step("signature", smoke.signature())?;
     }
+    step("version", smoke.version())?;
     step("self-test", smoke.self_test())?;
     step("start", smoke.start())?;
     step("library", smoke.library())?;
@@ -359,6 +364,39 @@ impl Smoke {
         Ok(())
     }
 
+    fn version(&self) -> Result {
+        version_line(&self.exe(), &[])?;
+        let version = Version::current()?;
+        match self.bundle.os {
+            Os::Macos => {
+                let plist = self.program.join("Contents/Info.plist");
+                for (key, value) in [
+                    ("CFBundleShortVersionString", version.numbers()),
+                    ("CFBundleVersion", version.macos_build()),
+                ] {
+                    let mut command = Command::new("plutil");
+                    command.args(["-extract", key, "raw"]).arg(&plist);
+                    expect(key, &output(&mut command)?, &value)?;
+                }
+                Ok(())
+            }
+            Os::Windows => {
+                for file in [self.exe(), self.bundle.packages()[1].clone()] {
+                    let found = powershell(&format!(
+                        "$v = (Get-Item -LiteralPath '{}').VersionInfo
+                         \"$($v.FileVersionRaw) $($v.ProductVersionRaw) $($v.ProductVersion.Trim())\"",
+                        file.display()
+                    ))?;
+                    let numbers = version.windows();
+                    let name = file.display().to_string();
+                    expect(&name, &found, &format!("{numbers} {numbers} {VERSION}"))?;
+                }
+                Ok(())
+            }
+            Os::Linux => Ok(()),
+        }
+    }
+
     fn self_test(&self) -> Result {
         let report = self_test(&self.exe(), &self.frame, &[])?;
         self.check_report(&report, &self.library_path())?;
@@ -566,6 +604,11 @@ impl Smoke {
         let exe = installed.join("asrs.exe");
         let report = self_test(&exe, &self.frame, &[])?;
         self.check_report(&report, &installed.join(self.bundle.library_name()))?;
+        version_line(&exe, &[])?;
+        let entry =
+            "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\net.adamxu.asrs_is1";
+        let displayed = powershell(&format!("(Get-Item '{entry}').GetValue('DisplayVersion')"))?;
+        expect("DisplayVersion", &displayed, VERSION)?;
         let registered = powershell(
             "$c = 'HKCU:\\Software\\Classes'
              $progids = (Get-Item \"$c\\.wpilog\\OpenWithProgids\").Property
@@ -724,7 +767,20 @@ impl Smoke {
         let image = &self.bundle.packages()[1];
         let extract = [("APPIMAGE_EXTRACT_AND_RUN", Path::new("1"))];
         let report = self_test(image, &self.frame, &extract)?;
-        self.check_report(&report, &self.library_path())
+        self.check_report(&report, &self.library_path())?;
+        version_line(image, &extract)?;
+        run_tool(
+            Command::new(image)
+                .args(["--appimage-extract", "asrs.desktop"])
+                .current_dir(&self.dir),
+        )?;
+        let entry = self.dir.join("squashfs-root/asrs.desktop");
+        let text = fs::read_to_string(&entry).map_err(at(&entry))?;
+        let version = text
+            .lines()
+            .find_map(|line| line.strip_prefix("X-AppImage-Version="));
+        expect("X-AppImage-Version", version.unwrap_or_default(), VERSION)?;
+        run_tool(Command::new("desktop-file-validate").arg(&entry))
     }
 }
 
@@ -751,6 +807,29 @@ fn plist_keys(text: &str) -> Vec<String> {
         .collect();
     keys.sort();
     keys
+}
+
+fn expect(what: &str, found: &str, expected: &str) -> Result {
+    match found.trim() {
+        found if found == expected => Ok(()),
+        found => Err(format!("{what} is {found:?}, expected {expected:?}")),
+    }
+}
+
+fn output(command: &mut Command) -> Result<String> {
+    let output = command
+        .output()
+        .map_err(|e| format!("{:?}: {e}", command.get_program()))?;
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    } else {
+        Err(String::from_utf8_lossy(&output.stderr).into_owned())
+    }
+}
+
+fn version_line(exe: &Path, env: &[(&str, &Path)]) -> Result {
+    let printed = output(Command::new(exe).arg("--version").envs(env.iter().copied()))?;
+    expect("--version", &printed, &AppIdentity::RELEASE.version_line())
 }
 
 fn self_test(exe: &Path, frame: &Frame, env: &[(&str, &Path)]) -> Result<String> {
