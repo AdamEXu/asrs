@@ -610,7 +610,9 @@ impl SidebarView {
         let italic = row.full_key.is_some();
         let bold = row.label_bold == Some(true);
         let title = row.title.to_string_lossy();
-        let mut title_text = Text::new(title, label_style(italic, bold)).color(theme.text);
+        // `div.field-item`'s `mask-image`.
+        let fade = |text: Text| text.fade(item_width - 30.0, item_width - 10.0);
+        let mut title_text = fade(Text::new(title, label_style(italic, bold)).color(theme.text));
         if row.known_label {
             title_text = title_text.underline();
         }
@@ -623,7 +625,9 @@ impl SidebarView {
                     .id(("field-item-warning", flat))
                     .h(px(INLINE_HEIGHT))
                     .cursor(asrs_ui::gpui::CursorStyle::PointingHand)
-                    .child(Text::new(" \u{26A0}", label_style(italic, bold)).color(theme.text))
+                    .child(fade(
+                        Text::new(" \u{26A0}", label_style(italic, bold)).color(theme.text),
+                    ))
                     .on_click(cx.listener(move |view, _, _, cx| {
                         view.input(cx, |s, _| s.warning_click(flat));
                     })),
@@ -632,10 +636,10 @@ impl SidebarView {
         if let Some(type_label) = &row.type_label {
             let opacity = if row.generated { 0.3 / 0.6 } else { 0.3 };
             label = label.child(
-                div().opacity(opacity).child(
+                div().opacity(opacity).child(fade(
                     Text::new(type_label.to_string_lossy(), label_style(false, false))
                         .color(theme.text),
-                ),
+                )),
             );
         }
         if row.full_key.is_some() {
