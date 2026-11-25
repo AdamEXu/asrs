@@ -366,6 +366,23 @@ fn box_shadow(color: u32, blur: f32, spread: f32) -> BoxShadow {
     }
 }
 
+/// The shadow right of and below a box in the window's top left corner. GPUI paints shadows inside
+/// their box too, where CSS clips them away, which shows in a box without a background.
+fn shadow_outside(rect: [f64; 4], shadow: &BoxShadow) -> [asrs_ui::gpui::Div; 2] {
+    let [_, _, width, height] = rect;
+    let reach = f64::from(f32::from(shadow.blur_radius) * 3.0 + f32::from(shadow.spread_radius));
+    let reach = reach.ceil();
+    [
+        [width, 0.0, reach, height + reach],
+        [0.0, height, width, reach],
+    ]
+    .map(|strip| {
+        place(strip, (0.0, 0.0)).overflow_hidden().child(
+            place([0.0, 0.0, width, height], (strip[0], strip[1])).shadow(vec![shadow.clone()]),
+        )
+    })
+}
+
 /// `canvas.timeline-canvas`'s `border` and `border-radius`.
 const TIMELINE_BORDER: CanvasBorder = CanvasBorder {
     width: 1.0,
@@ -1371,7 +1388,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
             };
             root = root.child(probe(
                 FrameElement::SideBarShadow,
-                place(rect, (0.0, 0.0)).shadow(vec![shadow]),
+                place(rect, (0.0, 0.0)).children(shadow_outside(rect, &shadow)),
             ));
         }
         if let Some(rect) = layout.rect(FrameElement::ViewerBackground) {
