@@ -414,7 +414,8 @@ fn mode_name(mode: Field3dMode) -> &'static str {
 
 /// The share of a `"N%"` inline size; `None` for an unset or unparsable value.
 fn share(value: &str) -> Option<f64> {
-    value.strip_suffix('%')?.parse().ok()
+    let share: f64 = value.strip_suffix('%')?.parse().ok()?;
+    share.is_finite().then_some(share)
 }
 
 /// `canvas.field-3d-canvas.fixed`'s border box in `container`, at `left: 50%; top: 50%;
@@ -1530,6 +1531,7 @@ mod tests {
     fn canvas_sizes_are_percentages() {
         assert_eq!(share("75%"), Some(75.0));
         assert_eq!(share(""), None);
+        assert_eq!(share("NaN%"), None);
     }
 
     #[test]
