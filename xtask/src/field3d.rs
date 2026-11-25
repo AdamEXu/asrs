@@ -260,7 +260,13 @@ fn text(object: &Json, key: &str) -> String {
 }
 
 /// The pairing a run judged and the worst numbers it measured.
-fn manifest_entry(gl: &str, reference: &Json, adapter: &Json, rows: &[Json]) -> Json {
+fn manifest_entry(
+    gl: &str,
+    reference: &Json,
+    adapter: &Json,
+    rows: &[Json],
+    failed: &[String],
+) -> Json {
     let extreme = |key: &str, pick: fn(f64, f64) -> f64, from: f64| {
         Json::Number(
             rows.iter()
@@ -273,11 +279,6 @@ fn manifest_entry(gl: &str, reference: &Json, adapter: &Json, rows: &[Json]) -> 
         .iter()
         .map(|s| (*s).to_owned())
         .collect();
-    let failed = rows
-        .iter()
-        .filter(|r| r.get("pass") == Some(&Json::Bool(false)))
-        .map(|r| text(r, "capture"))
-        .collect::<Vec<_>>();
     let field = |key| reference.get(key).cloned().unwrap_or(Json::Null);
     Json::object([
         ("electronSwitches", strings(&switches)),
@@ -286,7 +287,7 @@ fn manifest_entry(gl: &str, reference: &Json, adapter: &Json, rows: &[Json]) -> 
         ("portEnvironment", strings(&gl::port_environment(gl))),
         ("portAdapter", adapter.clone()),
         ("captures", Json::Number(rows.len() as f64)),
-        ("failed", strings(&failed)),
+        ("failed", strings(failed)),
         ("ssimMin", extreme("ssim", f64::min, 1.0)),
         ("differingPctMax", extreme("differingPct", f64::max, 0.0)),
         (
@@ -501,7 +502,7 @@ fn run_port(paths: &Paths, wanted: &[String], manifest: bool) -> Result {
     }
     if manifest {
         let reference = read_json(&base.join("ref/host.json"))?;
-        let entry = manifest_entry(gl, &reference, &adapter, &rows);
+        let entry = manifest_entry(gl, &reference, &adapter, &rows, &failed);
         store_manifest(paths, gl, entry)?;
     }
     write(

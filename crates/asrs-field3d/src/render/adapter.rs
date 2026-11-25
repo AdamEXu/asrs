@@ -17,11 +17,13 @@ pub(super) struct Opened {
 }
 
 /// DX12 on Windows, as upstream's WebGL runs on D3D there, and Vulkan only where DX12 has no
-/// adapter at all. The other platforms have one backend each.
+/// adapter at all. Vulkan on Linux, and the GL backend gpui compiles in only where no Vulkan
+/// device opens: its adapters never come before a Vulkan one.
 fn backend_sets() -> Vec<wgpu::Backends> {
     match wgpu::Backends::from_env() {
         Some(backends) => vec![backends],
         None if cfg!(windows) => vec![wgpu::Backends::DX12, wgpu::Backends::VULKAN],
+        None if cfg!(target_os = "linux") => vec![wgpu::Backends::VULKAN, wgpu::Backends::GL],
         None => vec![wgpu::Backends::default()],
     }
 }

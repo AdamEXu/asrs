@@ -89,6 +89,12 @@ pub(super) fn open(
     desc: &wgpu::DeviceDescriptor<'_>,
 ) -> Option<(wgpu::Device, wgpu::Queue)> {
     const EXTENSION: &CStr = ash::ext::depth_clip_control::NAME;
+    // wgpu checks these only in request_device, which create_device_from_hal skips.
+    if !desc.required_limits.check_limits(&adapter.limits())
+        || !adapter.features().contains(desc.required_features)
+    {
+        return None;
+    }
     // SAFETY: the raw handles stay inside this function and are destroyed by nothing but the
     // device handed to wgpu, which is created from this adapter with the extensions and features
     // wgpu itself asks for plus one the adapter reports.
