@@ -374,7 +374,7 @@
     "focus/fields/macos-aarch64": {"cases":34,"content":"cd29a89af93f5280","generator":"b1039465fe4bcc2d","spec":"parity/specs/focus/fields.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "focus/rings/linux-x86_64": {"cases":2973,"content":"4af11b151b6e04ee","generator":"ce0911e933c0c396","spec":"parity/specs/focus/rings.entry.json","zone":"UTC","generatedOn":"linux-x86_64"},
     "focus/rings/macos-aarch64": {"cases":2973,"content":"07fe27deb95af4cd","generator":"ce0911e933c0c396","spec":"parity/specs/focus/rings.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "focus/text/macos-aarch64": {"cases":120,"content":"fc89fd4826ba2250","generator":"73f2cbba6d62e97c","spec":"parity/specs/focus/text.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "focus/text/macos-aarch64": {"cases":166,"content":"b496a094872dd39f","generator":"47f844f7af2dc0e7","spec":"parity/specs/focus/text.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "form/css-value": {"cases":163,"content":"74a4d1041416a7c8","generator":"f05335551b9fc335","spec":"parity/specs/form/css-value.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "form/number-input": {"cases":217,"content":"37ae5f43fb23c013","generator":"9bd6057a9f67b22a","spec":"parity/specs/form/number-input.entry.json","zone":"UTC","generatedOn":"macos-aarch64","backend":"blink"},
     "form/number-insert": {"cases":7040,"content":"e2819037fc446a45","generator":"229ce65005ea7677","spec":"parity/specs/form/number-insert.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
