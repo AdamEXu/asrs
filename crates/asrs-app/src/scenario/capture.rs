@@ -134,6 +134,7 @@ pub fn kind(action: &Action) -> &'static str {
         Action::SelectAll => "role",
         Action::Copy(_) => "copy",
         Action::Focus(_) => "focus",
+        Action::Title { .. } => "title",
         Action::Traverse { .. } => "traverse",
         Action::Hover(_) => "hover",
         Action::Capture { .. } => "capture",

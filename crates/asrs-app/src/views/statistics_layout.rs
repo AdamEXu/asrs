@@ -456,6 +456,6 @@ impl StatisticsGeometry for StatisticsLayout {
         let mut state = self.0.borrow_mut();
         state.set_rows(rows);
         let placed = state.place();
-        asrs_js::math::floor(css(round(placed.container[0]), placed.scale))
+        asrs_js::math::floor(css(placed.container[0], placed.scale) + 0.5)
     }
 }
