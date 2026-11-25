@@ -376,9 +376,7 @@ fn tooltip_log(paths: &Paths, out: &Path, command: &mut Command) -> Result {
     insert_library(paths, "tooltips", command)?;
     let log = out.with_extension("tooltips");
     fs::write(&log, "").map_err(|e| format!("{}: {e}", log.display()))?;
-    command
-        .arg("--tooltips")
-        .env("ASRS_TOOLTIP_LOG", log);
+    command.arg("--tooltips").env("ASRS_TOOLTIP_LOG", log);
     Ok(())
 }
 

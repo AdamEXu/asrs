@@ -4,7 +4,7 @@ use asrs_ui::gpui::{
 };
 use asrs_ui::platform::{self, NativeWindow};
 
-use super::{Rect, WindowId, WindowKind, WindowOptions, Windows};
+use super::{Rect, WindowId, WindowKind, WindowOptions, Windows, focus_events, placement};
 
 type Size = (f64, f64);
 
@@ -24,13 +24,18 @@ fn scripted_frame(options: &WindowOptions, cx: &App) -> Size {
     (0.0, 0.0)
 }
 
-fn gpui_options(options: &WindowOptions, show: bool, cx: &App) -> asrs_ui::gpui::WindowOptions {
+fn gpui_options(
+    options: &WindowOptions,
+    origin: Option<(f64, f64)>,
+    show: bool,
+    cx: &App,
+) -> asrs_ui::gpui::WindowOptions {
     let frame = scripted_frame(options, cx);
     let content = size(
         px((options.width - frame.0) as f32),
         px((options.height - frame.1) as f32),
     );
-    let bounds = match origin(options, cx) {
+    let bounds = match origin {
         Some((x, y)) => Bounds::new(point(px(x as f32), px(y as f32)), content),
         None => Bounds::centered(None, content, cx),
     };
@@ -71,30 +76,48 @@ fn gpui_options(options: &WindowOptions, show: bool, cx: &App) -> asrs_ui::gpui:
     }
 }
 
-fn origin(options: &WindowOptions, cx: &App) -> Option<(f64, f64)> {
-    options
-        .x
-        .zip(options.y)
-        .map(|(x, y)| (x.trunc(), y.trunc()))
-        .or_else(|| default_origin(options, cx))
-}
-
-/// Where Electron puts a window opened without `x` and `y`: its requested size centred on the
-/// primary screen, rounded on macOS (`NativeWindowMac` uses the full frame and never calls
-/// `[NSWindow center]`) and in whole numbers on Linux.
-fn default_origin(options: &WindowOptions, cx: &App) -> Option<(f64, f64)> {
-    let whole = if cfg!(target_os = "macos") {
-        f64::round
-    } else if cfg!(target_os = "linux") {
-        f64::floor
-    } else {
-        return None;
+/// Where Electron puts the window and the size it leaves it, for the platforms whose own placement
+/// does not see to it.
+fn place(options: &WindowOptions, cx: &App) -> (Option<(f64, f64)>, (f64, f64)) {
+    let size = (options.width, options.height);
+    let f = |p: asrs_ui::gpui::Pixels| f64::from(f32::from(p));
+    let Some(display) = cx.primary_display() else {
+        return (placement::given(options), size);
     };
-    let screen = cx.primary_display()?.bounds().size;
-    Some((
-        whole((f64::from(f32::from(screen.width)) - options.width) / 2.0),
-        whole((f64::from(f32::from(screen.height)) - options.height) / 2.0),
-    ))
+    let bounds = display.bounds();
+    if cfg!(target_os = "macos") {
+        let area = display.visible_bounds();
+        let work_area = Rect {
+            x: f(area.origin.x),
+            y: f(area.origin.y),
+            width: f(area.size.width),
+            height: f(area.size.height),
+        };
+        let screen = (f(bounds.size.width), f(bounds.size.height));
+        let placed = placement::mac(options, screen, work_area, platform::title_bar_height());
+        return (Some(placed.origin), placed.size);
+    }
+    if !cfg!(target_os = "linux") {
+        return (placement::given(options), size);
+    }
+    let displays = (cx.compositor_name() == "X11")
+        .then(|| platform::x11_displays(f(bounds.size.width)))
+        .flatten();
+    let area = displays
+        .as_ref()
+        .and_then(|displays| displays.of_window([0.0, 0.0, size.0, size.1]))
+        .map_or(
+            [0.0, 0.0, f(bounds.size.width), f(bounds.size.height)],
+            |display| display.work_area,
+        );
+    let [x, y, width, height] = area;
+    let work_area = Rect {
+        x,
+        y,
+        width,
+        height,
+    };
+    (Some(placement::x11(options, work_area)), size)
 }
 
 /// `window.getBounds()`.
@@ -138,12 +161,18 @@ fn track<V: Render>(
         cx.observe_window_activation(window, move |_, window, cx| {
             let manager = &mut cx.global_mut::<Windows>().manager;
             if window.is_window_active() {
-                manager.focus(id);
+                manager.became_key(id);
             } else {
                 manager.blur(id);
             }
         })
         .detach();
+        let focus = focus_events(window, cx, move |_, focused, _, cx| {
+            if focused {
+                cx.global_mut::<Windows>().manager.raised(id);
+            }
+        });
+        Windows::on_closed(cx, id, move |_| drop(focus));
         cx.observe_window_bounds(window, move |_, window, cx| {
             let bounds = bounds(window);
             cx.global_mut::<Windows>().manager.set_bounds(id, bounds);
@@ -215,12 +244,13 @@ fn finish(
 pub(super) fn open<V: Render>(
     cx: &mut App,
     id: WindowId,
-    options: WindowOptions,
+    mut options: WindowOptions,
     build: impl FnOnce(&mut Window, &mut App) -> Entity<V>,
 ) -> asrs_ui::gpui::Result<(AnyWindowHandle, Entity<V>)> {
     let deferred = cfg!(target_os = "macos");
     let frame = scripted_frame(&options, cx);
-    let origin = origin(&options, cx);
+    let origin;
+    (origin, (options.width, options.height)) = place(&options, cx);
     let parent = options
         .parent
         .and_then(|parent| Windows::handle(cx, parent))
@@ -231,8 +261,10 @@ pub(super) fn open<V: Render>(
                 .flatten()
         });
     let mut native = None;
-    let (handle, entity) =
-        asrs_ui::open_window(gpui_options(&options, !deferred, cx), cx, |window, cx| {
+    let (handle, entity) = asrs_ui::open_window(
+        gpui_options(&options, origin, !deferred, cx),
+        cx,
+        |window, cx| {
             let entity = build(window, cx);
             if options.kind == WindowKind::Hub {
                 platform::install_sidebar_vibrancy(window);
@@ -243,7 +275,8 @@ pub(super) fn open<V: Render>(
             track(id, frame, window, &entity, cx);
             native = platform::native_window(window);
             entity
-        })?;
+        },
+    )?;
     if let Some(native) = native {
         cx.global_mut::<Windows>().hidden.push(id);
         cx.spawn(async move |cx| {

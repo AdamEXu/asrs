@@ -3,7 +3,7 @@
 use gpui_kit::Window;
 use objc2::rc::Retained;
 use objc2::{MainThreadMarker, MainThreadOnly};
-use objc2_app_kit::{NSScreen, NSToolbar, NSWindow, NSWindowCollectionBehavior};
+use objc2_app_kit::{NSScreen, NSToolbar, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 
 use super::ns_window;
@@ -14,10 +14,7 @@ pub fn native(window: &Window) -> Option<NativeWindow> {
     ns_window(window).map(NativeWindow)
 }
 
-#[cfg(feature = "parity")]
 pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
-    use objc2_app_kit::NSWindowStyleMask;
-
     let Some(mtm) = MainThreadMarker::new() else {
         return (width, height);
     };
@@ -28,6 +25,11 @@ pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
     let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, height));
     let content = NSWindow::contentRectForFrameRect_styleMask(frame, style, mtm);
     (content.size.width, content.size.height)
+}
+
+pub fn title_bar_height() -> f64 {
+    const FRAME: f64 = 1000.0;
+    FRAME - titled_content_size(FRAME, FRAME).1
 }
 
 pub(super) fn add_hidden_inset_toolbar(window: &NSWindow) {
