@@ -17,7 +17,7 @@ use asrs_model::tab_controller::{Command, TabController};
 
 use crate::cx::TabCx;
 use crate::form::NumberInput;
-use crate::list_cx::{self, SourceListCx, js_error, source_state, with_env};
+use crate::list_cx::{self, SourceListCx, js_error, with_env};
 
 /// `Orientation` in `Field2dRenderer.ts`: quarter turns, `DEG_90` by default.
 const ORIENTATION_90: f64 = 1.0;
@@ -154,8 +154,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for SwerveController {
             return Ok(());
         };
         if let Some(sources) = state.get("sources") {
-            let items = source_state(sources)?;
-            with_env(cx, |env| self.source_list.set_state(env, items)).map_err(js_error)?;
+            list_cx::set_source_state(&mut self.source_list, cx, sources)?;
         }
         for input in SwerveInput::ALL {
             if let Some(n) = state.get(input.key()).and_then(JsValue::as_f64) {
@@ -211,7 +210,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for SwerveController {
         let mut rotation = 0.0_f64;
         let mut module_entries: Vec<JsValue> = Vec::new();
         let mut robot_entries: Vec<JsValue> = Vec::new();
-        for source in self.source_list.displayed_state(&log) {
+        for source in self.source_list.drawn_state(&log).map_err(js_error)? {
             let units = match source.options.get("units") {
                 Some(u) if u == &JsString::from("degrees") => RotationUnits::Degrees,
                 _ => RotationUnits::Radians,

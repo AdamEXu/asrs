@@ -1,0 +1,381 @@
+{
+  "about": "The sidebar's search field by keyboard (#375, #277, #282, #304): selected by Tab, its results while it is focused, arrow keys, a press elsewhere",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Graph",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "graph000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "search",
+      "count": 1
+    },
+    {
+      "key": "l"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "key": "e"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "wait": 200
+    },
+    {
+      "traverse": "typed",
+      "count": 0
+    },
+    {
+      "capture": "results",
+      "probes": []
+    },
+    {
+      "traverse": "left",
+      "count": 1
+    },
+    {
+      "capture": "left",
+      "probes": [
+        ".side-bar"
+      ]
+    },
+    {
+      "traverse": "back",
+      "count": 1,
+      "back": true
+    },
+    {
+      "capture": "back",
+      "probes": []
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "selected-up",
+      "count": 0
+    },
+    {
+      "key": "a"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "up-typed",
+      "count": 0
+    },
+    {
+      "key": "Down"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "down",
+      "count": 0
+    },
+    {
+      "key": "b"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "down-typed",
+      "count": 0
+    },
+    {
+      "key": "Left"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "key": "Up",
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "shift-up",
+      "count": 0
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "shift-down",
+      "count": 0
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "up",
+      "count": 0
+    },
+    {
+      "traverse": "after-up",
+      "count": 1
+    },
+    {
+      "capture": "after-up",
+      "probes": [
+        ".side-bar"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 87
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 87
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 87
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "pressed",
+      "count": 0
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "pressed-elsewhere",
+      "count": 0
+    },
+    {
+      "capture": "blurred",
+      "probes": [
+        ".side-bar"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "again",
+      "count": 1
+    },
+    {
+      "key": "e"
+    },
+    {
+      "wait": 300
+    },
+    {
+      "capture": "many-results",
+      "probes": []
+    },
+    {
+      "traverse": "results-back",
+      "count": 1,
+      "back": true
+    },
+    {
+      "capture": "results-focused",
+      "probes": []
+    },
+    {
+      "wait": 200
+    },
+    {
+      "traverse": "results-hidden",
+      "count": 0
+    },
+    {
+      "traverse": "results-next",
+      "count": 1
+    }
+  ]
+}

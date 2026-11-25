@@ -21,9 +21,10 @@ use asrs_formats::historical::{
 };
 use asrs_formats::worker::{Abort, DecodeWorker, Request, Response};
 use asrs_js::number;
+use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{Clock, Rng};
-use asrs_js::value::{JsObject, JsValue, ToJs};
+use asrs_js::value::{JsObject, JsValue};
 use asrs_live::nt4::{NetEvent, Nt4PublisherStatus};
 use asrs_live::rlog::MainCall;
 use asrs_live::{LiveDataSourceStatus, LiveLog, TimerQueue};
@@ -34,15 +35,12 @@ use asrs_log::realm::JsRealm;
 use asrs_log::util::{calc_mock_progress, clamp_value, scale_value};
 use asrs_model::assets::AdvantageScopeAssets;
 use asrs_model::build_constants::{DISTRIBUTION, Distribution, IS_LITE};
-use asrs_model::hub_state::SidebarState;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::preferences::Preferences;
 use asrs_model::selection::{Selection, TimeSupplier};
 use asrs_model::selection_impl::{SelectionContext, SelectionImpl, SharedLog};
 use asrs_model::source_list::{ListInput, ListOutput, Rect, SourceListDom};
-use asrs_model::source_list_config::{
-    SourceListItemState, SourceListTypeMemory, SourceListTypeMemoryEntry,
-};
+use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
 use asrs_tabs::console::controller::{ConsoleController, ConsoleRenderer};
@@ -101,9 +99,11 @@ pub enum HubFrame {
     Sidebar,
     /// `Tabs`' per-frame loop.
     Tabs,
-    /// Every source list's own loop (previews, and re-rendering on a theme change), then what the
-    /// renderers requested themselves.
+    /// The source lists' own loops (previews, and re-rendering on a theme change) on the tabs the
+    /// page starts with, then what the renderers requested themselves.
     SourceLists,
+    /// The same for the tabs added since, whose lists requested their frames after `Tabs` did.
+    LateSourceLists,
     /// `show-when-ready`.
     Show,
     /// A historical source's mock progress.
@@ -270,11 +270,8 @@ pub struct HubPage {
     assets: Option<Arc<AdvantageScopeAssets>>,
     assets_raw: JsValue,
     battery: bool,
-    type_memory: SourceListTypeMemory,
-    /// `window.typeMemory` as restored, which may hold entries of other shapes.
-    type_memory_raw: JsValue,
-    /// `type_memory` when last written into `type_memory_raw`.
-    type_memory_synced: SourceListTypeMemory,
+    /// `window.typeMemory`.
+    type_memory: JsValue,
     realm: JsRealm,
     clock: Rc<dyn Clock>,
     view: Box<dyn HubView>,
@@ -354,42 +351,9 @@ impl HubPage {
         &self.clock
     }
 
-    pub fn type_memory(&self) -> &SourceListTypeMemory {
+    /// `window.typeMemory`.
+    pub fn type_memory(&self) -> &JsValue {
         &self.type_memory
-    }
-
-    /// `window.typeMemory = data`. Source lists read the entries of the shape they write.
-    fn restore_type_memory(&mut self, data: &JsValue) {
-        self.type_memory = type_memory_entries(data);
-        self.type_memory_synced = self.type_memory.clone();
-        self.type_memory_raw = data.clone();
-    }
-
-    /// `window.typeMemory`: the restored value with the entries source lists wrote since.
-    fn type_memory_value(&mut self) -> Result<JsValue, &'static str> {
-        for (id, entries) in self.type_memory.iter() {
-            for (key, entry) in entries.iter() {
-                let synced = self
-                    .type_memory_synced
-                    .get_key(id)
-                    .and_then(|e| e.get_key(key));
-                if synced == Some(entry) {
-                    continue;
-                }
-                let JsValue::Object(ids) = &mut self.type_memory_raw else {
-                    return Err("type memory written into a value that is not an object");
-                };
-                if ids.get_key(id).is_none() {
-                    ids.insert(id.clone(), JsValue::Object(JsObject::new()));
-                }
-                let Some(JsValue::Object(raw)) = ids.get_units_mut(id.units()) else {
-                    return Err("type memory written under an id that is not an object");
-                };
-                raw.insert(key.clone(), entry.to_js());
-            }
-        }
-        self.type_memory_synced = self.type_memory.clone();
-        Ok(self.type_memory_raw.clone())
     }
 
     pub fn view(&self) -> &dyn HubView {
@@ -723,6 +687,7 @@ impl HubModel {
         let tabs = Tabs::new(Box::new(HubTabFactory::new()), &mut page);
         host.request_animation_frame(HubFrame::SourceLists);
         host.request_animation_frame(HubFrame::Tabs);
+        host.request_animation_frame(HubFrame::LateSourceLists);
         host.set_interval(HubInterval::SaveState, STATE_SAVE_PERIOD_MS);
         host.set_interval(HubInterval::SaveTypeMemory, TYPE_MEMORY_SAVE_PERIOD_MS);
         host.set_interval(HubInterval::TouchBarSlider, TOUCH_BAR_PERIOD_MS);
@@ -763,9 +728,7 @@ impl HubModel {
             assets: None,
             assets_raw: JsValue::Null,
             battery: false,
-            type_memory: SourceListTypeMemory::new(),
-            type_memory_raw: JsValue::Object(JsObject::new()),
-            type_memory_synced: SourceListTypeMemory::new(),
+            type_memory: JsValue::Object(JsObject::new()),
             realm,
             clock,
             view,
@@ -1362,12 +1325,10 @@ impl HubModel {
                 let state = self.save_state();
                 host.send_main_message(NamedMessage::new(HubToMain::SaveState, state));
             }
-            HubInterval::SaveTypeMemory => match self.page.type_memory_value() {
-                Ok(memory) => {
-                    host.send_main_message(NamedMessage::new(HubToMain::SaveTypeMemory, memory))
-                }
-                Err(what) => host.exception("setInterval", format!("unmodeled: {what}")),
-            },
+            HubInterval::SaveTypeMemory => {
+                let memory = self.page.type_memory.clone();
+                host.send_main_message(NamedMessage::new(HubToMain::SaveTypeMemory, memory));
+            }
             HubInterval::TouchBarSlider => {
                 if self.platform.platform == JsString::from("darwin") {
                     let mut range = self.page.log.borrow().get_timestamp_range();
@@ -1451,14 +1412,18 @@ impl HubModel {
                 }
             }
             HubFrame::SourceLists => {
-                let (_, mut errors) = self
-                    .tabs
-                    .source_list_input(&mut self.page, ListInput::Frame);
+                let mut errors = self.tabs.source_list_frames(&mut self.page, false);
                 errors.extend(self.tabs.animation_frame(&mut self.page));
                 for e in errors {
                     uncaught::<()>("requestAnimationFrame", Err(e.into()), host);
                 }
                 host.request_animation_frame(HubFrame::SourceLists);
+            }
+            HubFrame::LateSourceLists => {
+                for e in self.tabs.source_list_frames(&mut self.page, true) {
+                    uncaught::<()>("requestAnimationFrame", Err(e.into()), host);
+                }
+                host.request_animation_frame(HubFrame::LateSourceLists);
             }
             HubFrame::Show => host.send_main_message(NamedMessage::without_data(HubToMain::Show)),
             HubFrame::Source(uuid) => {
@@ -1932,22 +1897,17 @@ impl HubModel {
     /// `saveState()`.
     pub fn save_state(&self) -> JsValue {
         let mut o = JsObject::new();
-        o.insert("sidebar", self.sidebar.save_state().to_js());
+        o.insert("sidebar", self.sidebar.save_state());
         o.insert("tabs", self.tabs.save_state(&self.page));
         JsValue::Object(o)
     }
 
     /// `restoreState(state)`.
     fn restore_state(&mut self, state: &JsValue) -> Result<(), TabsError> {
-        let sidebar = state.get("sidebar").cloned().unwrap_or_default();
-        let Some(sidebar) = SidebarState::from_js(&sidebar) else {
-            return Err(TabsError::Unmodeled(
-                "restore-state with a sidebar of another shape",
-            ));
-        };
-        let outcome = self.with_sidebar(|s, env| s.restore_state(env, &sidebar));
+        let sidebar = ops::get(state, "sidebar")?;
+        let outcome = self.with_sidebar(|s, env| s.restore_state(env, &sidebar))?;
         sidebar_result(outcome)?;
-        let tabs = state.get("tabs").cloned().unwrap_or_default();
+        let tabs = ops::get(state, "tabs")?;
         self.tabs.restore_state(&mut self.page, &tabs)
     }
 
@@ -2023,7 +1983,7 @@ impl HubModel {
         match message.name {
             MainToHub::ShowWhenReady => host.request_animation_frame(HubFrame::Show),
             MainToHub::RestoreState => self.restore_state(data)?,
-            MainToHub::RestoreTypeMemory => self.page.restore_type_memory(data),
+            MainToHub::RestoreTypeMemory => self.page.type_memory = data.clone(),
             MainToHub::SetFullscreen => {
                 self.fullscreen = truthy(data);
                 self.update_fancy_window();
@@ -2106,8 +2066,7 @@ impl HubModel {
             MainToHub::RenameTab => self.tabs.rename_tab(&field("index"), field("name"))?,
             MainToHub::SourceListTypeResponse => {
                 let uuid = field("uuid");
-                let state = SourceListItemState::from_js(&field("state"))
-                    .ok_or(TabsError::Unmodeled("a source-list-type-response state"))?;
+                let state = SourceListItemState::restored(&field("state"));
                 if let JsValue::String(uuid) = &uuid {
                     let uuid = uuid.to_string_lossy();
                     let input = ListInput::TypeResponse {
@@ -2472,26 +2431,6 @@ pub fn assets_alert(old: &JsValue, new: &JsValue) -> AssetsAlert {
         }),
         recovered: !new_failed && old_failed,
     }
-}
-
-fn type_memory_entries(data: &JsValue) -> SourceListTypeMemory {
-    let mut memory = SourceListTypeMemory::new();
-    let JsValue::Object(ids) = data else {
-        return memory;
-    };
-    for (id, entries) in ids.iter() {
-        let JsValue::Object(entries) = entries else {
-            continue;
-        };
-        let mut map = JsObject::new();
-        for (key, entry) in entries.iter() {
-            if let Some(entry) = SourceListTypeMemoryEntry::from_js(entry) {
-                map.insert(key.clone(), entry);
-            }
-        }
-        memory.insert(id.clone(), map);
-    }
-    memory
 }
 
 #[cfg(test)]

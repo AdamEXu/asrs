@@ -11,16 +11,16 @@ use std::fmt;
 
 use asrs_js::json;
 use asrs_js::math;
+use asrs_js::ops;
 use asrs_js::sort::array_sort;
-use asrs_js::string::JsString;
-use asrs_js::value::{JsObject, ToJs};
+use asrs_js::string::{JsError, JsString};
+use asrs_js::value::{JsObject, JsValue, ToJs};
 use asrs_log::colors::ensure_theme_contrast;
 use asrs_log::log::{Log, StructuredType};
 
 use crate::source_list_config::{
     AutoAdvance, PreviewSetting, SourceListConfig, SourceListItemState,
-    SourceListOptionValueConfig, SourceListTypeConfig, SourceListTypeMemory,
-    SourceListTypeMemoryEntry,
+    SourceListOptionValueConfig, SourceListTypeConfig,
 };
 
 pub use preview::NumberPreview;
@@ -62,13 +62,19 @@ impl fmt::Display for SourceListError {
 
 impl std::error::Error for SourceListError {}
 
+impl From<JsError> for SourceListError {
+    fn from(e: JsError) -> Self {
+        SourceListError::Thrown(format!("{}: {}", e.name, e.message))
+    }
+}
+
 pub type Result<T = ()> = std::result::Result<T, SourceListError>;
 
 /// What upstream reads from `window` while a source list works.
 pub struct Env<'a> {
     pub log: &'a Log,
     /// `window.typeMemory`, shared by every source list.
-    pub type_memory: &'a mut SourceListTypeMemory,
+    pub type_memory: &'a mut JsValue,
     /// `prefers-color-scheme: dark`.
     pub dark: bool,
     pub dom: &'a mut dyn SourceListDom,
@@ -266,6 +272,8 @@ pub struct RenderedItem {
     /// The `type-name` text, e.g. `"Robot/Blue:"`, or empty.
     pub type_name: String,
     pub log_key: JsString,
+    /// The key span's `innerText`, where `null` is empty.
+    pub key_text: JsString,
     /// False draws the key struck through.
     pub available: bool,
     pub visible: bool,
@@ -489,25 +497,70 @@ impl SourceList {
 
     /// `getState(true)`: visible items whose field is available, children only while their
     /// parent is.
-    pub fn displayed_state(&self, log: &Log) -> Vec<SourceListItemState> {
+    pub fn displayed_state(&self, log: &Log) -> Result<Vec<SourceListItemState>> {
         let mut parent_available = false;
-        self.state
+        let mut displayed = Vec::new();
+        for item in &self.state {
+            item.require("logKey")?;
+            let available = is_field_available(log, item);
+            let type_config = self.type_config(&item.item_type);
+            if type_config.is_some_and(|t| t.parent_key.is_some()) {
+                parent_available = available;
+            }
+            let shown = if type_config.is_some_and(|t| t.child_of.is_some()) {
+                available && parent_available
+            } else {
+                available
+            };
+            if item.visible && shown {
+                displayed.push(item.clone());
+            }
+        }
+        Ok(displayed)
+    }
+
+    /// `getState(true)` for a command that draws the items.
+    pub fn drawn_state(&self, log: &Log) -> Result<Vec<SourceListItemState>> {
+        let displayed = self.displayed_state(log)?;
+        displayed
             .iter()
-            .filter(|item| {
-                let available = is_field_available(log, item);
-                let type_config = self.type_config(&item.item_type);
-                if type_config.is_some_and(|t| t.parent_key.is_some()) {
-                    parent_available = available;
-                }
-                let shown = if type_config.is_some_and(|t| t.child_of.is_some()) {
-                    available && parent_available
-                } else {
-                    available
-                };
-                item.visible && shown
-            })
-            .cloned()
-            .collect()
+            .try_for_each(|item| self.require_modeled(item))?;
+        Ok(displayed)
+    }
+
+    /// `getState()` for a command that reads the items `shows` picks.
+    pub fn state_for_command(
+        &self,
+        shows: impl Fn(&SourceListItemState) -> bool,
+    ) -> Result<&[SourceListItemState]> {
+        for item in &self.state {
+            item.require("visible")?;
+            if item.raw.is_some() && shows(item) {
+                self.require_modeled(item)?;
+            }
+        }
+        Ok(&self.state)
+    }
+
+    /// The commands read options as strings, so one that draws an item with other options is
+    /// not ported, except that reading any of `undefined` or `null` throws.
+    fn require_modeled(&self, item: &SourceListItemState) -> Result {
+        if item.raw.is_none() {
+            return Ok(());
+        }
+        let Some(type_config) = self.type_config(&item.item_type) else {
+            return Ok(());
+        };
+        let Some(first) = type_config.options.first() else {
+            return Ok(());
+        };
+        item.option(&first.key)?;
+        if !item.options_are_strings() {
+            return Err(SourceListError::Thrown(
+                "Unmodeled: drawing a source item whose options are not strings".to_owned(),
+            ));
+        }
+        Ok(())
     }
 
     pub fn active_fields(&self) -> Vec<JsString> {
@@ -526,6 +579,18 @@ impl SourceList {
         Ok(())
     }
 
+    /// `setState(value)` with whatever a layout holds: `clear()`, then
+    /// `value.forEach(addListItem)`.
+    pub fn restore(&mut self, env: &mut Env<'_>, value: &JsValue) -> Result {
+        self.clear();
+        let JsValue::Array(items) = value else {
+            ops::get(value, "forEach")?;
+            return Err(JsError::type_error("state.forEach is not a function").into());
+        };
+        let items = items.iter().map(SourceListItemState::restored).collect();
+        self.set_state(env, items)
+    }
+
     pub fn clear(&mut self) {
         self.state.clear();
         self.items.clear();
@@ -534,6 +599,9 @@ impl SourceList {
 
     /// Call when a new set of log fields may be available.
     pub fn refresh(&mut self, env: &mut Env<'_>) -> Result {
+        self.state
+            .iter()
+            .try_for_each(|item| item.require("logKey"))?;
         let displayed: Vec<&JsString> = self.state.iter().map(|item| &item.log_key).collect();
         let mut current: Vec<JsString> = Vec::new();
         for key in env.log.field_keys() {
@@ -581,17 +649,17 @@ impl SourceList {
         option_config.values = values.clone();
         for index in 0..self.state.len() {
             let item = &self.state[index];
-            let valid = item
-                .options
-                .get(option)
-                .is_some_and(|v| values.iter().any(|x| eq_str(v, &x.key)));
-            if eq_str(&item.item_type, type_key) && !valid {
+            item.require("type")?;
+            if !eq_str(&item.item_type, type_key) {
+                continue;
+            }
+            let value = item.option(option)?;
+            let valid = values.iter().any(|x| is_str(&value, &x.key));
+            if !valid {
                 let first = values
                     .first()
                     .ok_or_else(|| SourceListError::type_error("undefined", "key"))?;
-                self.state[index]
-                    .options
-                    .insert(option, JsString::from(first.key.as_str()));
+                self.state[index].set_option(option, &first.key)?;
                 self.update_item(env, index)?;
             }
         }
@@ -611,11 +679,7 @@ impl SourceList {
         let structured_type = env.log.get_structured_type(log_key).cloned();
 
         let memory = match &self.config.type_memory_id {
-            Some(id) if !id.is_empty() => env
-                .type_memory
-                .get(id)
-                .and_then(|entries| entries.get_key(log_key))
-                .cloned(),
+            Some(id) if !id.is_empty() => remembered(env.type_memory, id, log_key)?,
             _ => None,
         };
 
@@ -624,6 +688,7 @@ impl SourceList {
             .iter()
             .chain(supplemental.iter().flat_map(|s| s.iter()))
             .collect();
+        let nullish = with_supplemental.iter().find(|item| item.is_nullish());
         struct Possible<'c> {
             config: &'c SourceListTypeConfig,
             log_type: JsString,
@@ -661,6 +726,7 @@ impl SourceList {
             if final_type.is_empty() {
                 continue;
             }
+            nullish.map_or(Ok(()), |item| item.require("type"))?;
             possible.push(Possible {
                 config: type_config,
                 log_type: final_type,
@@ -677,53 +743,51 @@ impl SourceList {
         if self.config.auto_advance == AutoAdvance::Type(true) {
             array_sort(&mut possible, |a, b| a.uses as f64 - b.uses as f64);
         }
-        if let Some(memory) = &memory
-            && let Some(i) = possible
+        if let Some(memory) = &memory {
+            let remembered = ops::get(memory, "type")?;
+            if let Some(i) = possible
                 .iter()
-                .position(|p| eq_str(&memory.entry_type, &p.config.key))
-        {
-            let chosen = possible.remove(i);
-            possible.insert(0, chosen);
+                .position(|p| is_str(&remembered, &p.config.key))
+            {
+                let chosen = possible.remove(i);
+                possible.insert(0, chosen);
+            }
         }
         let best = &possible[0];
 
         let mut options: JsObject<JsString> = JsObject::new();
         for option_config in &best.config.options {
-            let value =
-                if self.config.auto_advance == AutoAdvance::Option(option_config.key.clone()) {
-                    let mut counts: Vec<(&SourceListOptionValueConfig, usize)> = option_config
-                        .values
-                        .iter()
-                        .map(|value| {
-                            let uses = with_supplemental
-                                .iter()
-                                .filter(|item| {
-                                    item.options
-                                        .get(&option_config.key)
-                                        .is_some_and(|v| eq_str(v, &value.key))
-                                })
-                                .count();
-                            (value, uses)
-                        })
-                        .collect();
-                    array_sort(&mut counts, |a, b| a.1 as f64 - b.1 as f64);
-                    let first = counts
-                        .first()
-                        .ok_or_else(|| SourceListError::type_error("undefined", "valueConfig"))?;
-                    JsString::from(first.0.key.as_str())
-                } else if let Some(remembered) = memory
-                    .as_ref()
-                    .and_then(|m| m.options.get(&option_config.key))
-                    .filter(|v| option_config.values.iter().any(|x| eq_str(v, &x.key)))
-                {
-                    remembered.clone()
-                } else {
-                    let first = option_config
-                        .values
-                        .first()
-                        .ok_or_else(|| SourceListError::type_error("undefined", "key"))?;
-                    JsString::from(first.key.as_str())
-                };
+            let value = if self.config.auto_advance
+                == AutoAdvance::Option(option_config.key.clone())
+            {
+                let mut counts: Vec<(&SourceListOptionValueConfig, usize)> = Vec::new();
+                for value in &option_config.values {
+                    let mut uses = 0;
+                    for item in &with_supplemental {
+                        if item.has_option(&option_config.key)?
+                            && is_str(&item.option(&option_config.key)?, &value.key)
+                        {
+                            uses += 1;
+                        }
+                    }
+                    counts.push((value, uses));
+                }
+                array_sort(&mut counts, |a, b| a.1 as f64 - b.1 as f64);
+                let first = counts
+                    .first()
+                    .ok_or_else(|| SourceListError::type_error("undefined", "valueConfig"))?;
+                JsString::from(first.0.key.as_str())
+            } else if let Some(remembered) = remembered_option(memory.as_ref(), &option_config.key)?
+                .filter(|v| option_config.values.iter().any(|x| eq_str(v, &x.key)))
+            {
+                remembered
+            } else {
+                let first = option_config
+                    .values
+                    .first()
+                    .ok_or_else(|| SourceListError::type_error("undefined", "key"))?;
+                JsString::from(first.key.as_str())
+            };
             options.insert(option_config.key.as_str(), value);
         }
         let state = SourceListItemState {
@@ -732,11 +796,12 @@ impl SourceList {
             log_type: best.log_type.clone(),
             visible: true,
             options,
+            raw: None,
         };
         match parent_index {
             Some(parent) => {
                 let mut insert = parent + 1;
-                while insert < self.state.len() && self.is_child(insert) {
+                while insert < self.state.len() && self.is_child(insert)? {
                     insert += 1;
                 }
                 self.add_list_item(env, state, Some(insert))
@@ -766,21 +831,19 @@ impl SourceList {
         }
         let same_list = payload.uuid == self.uuid;
         let count = self.items.len();
-        let is_valid_target = |list: &SourceList, target: usize| {
-            if payload.is_child {
-                if !same_list {
-                    return false;
-                }
-                list.parent_of(payload.index as isize) == list.parent_of(target as isize)
+        let is_valid_target = |list: &SourceList, target: usize| -> Result<bool> {
+            Ok(if payload.is_child {
+                same_list
+                    && list.parent_of(payload.index as isize)? == list.parent_of(target as isize)?
             } else {
-                !(target < count && list.is_child(target))
-            }
+                !(target < count && list.is_child(target)?)
+            })
         };
 
         let mut closest_dist = f64::INFINITY;
         let mut closest_index = 0;
         for index in 0..count {
-            if !is_valid_target(self, index) {
+            if !is_valid_target(self, index)? {
                 continue;
             }
             let dist = (y - env.dom.item_rect(&self.uuid, index).top()).abs();
@@ -789,7 +852,7 @@ impl SourceList {
                 closest_index = index;
             }
         }
-        if count > 0 && is_valid_target(self, count) {
+        if count > 0 && is_valid_target(self, count)? {
             let dist = (y - env.dom.item_rect(&self.uuid, count - 1).bottom()).abs();
             if dist < closest_dist {
                 closest_index = count;
@@ -820,7 +883,7 @@ impl SourceList {
             let mut n = 0;
             loop {
                 n += 1;
-                if start_index + n >= self.state.len() || !self.is_child(start_index + n) {
+                if start_index + n >= self.state.len() || !self.is_child(start_index + n)? {
                     break n;
                 }
             }
@@ -905,6 +968,9 @@ impl SourceList {
             }
         }
 
+        self.state
+            .iter()
+            .try_for_each(|item| item.require("type"))?;
         let log = env.log;
         let is_type_valid = |source_types: &[&str]| {
             dragged.iter().any(|field| {
@@ -995,6 +1061,7 @@ impl SourceList {
             let count = self.state.len().min(self.items.len());
             for index in 0..count {
                 let state = &self.state[index];
+                state.require("type")?;
                 let available = is_field_available(env.log, state);
                 let preview_setting = self
                     .type_config(&state.item_type)
@@ -1039,10 +1106,12 @@ impl SourceList {
         dom: &mut dyn SourceListDom,
         x: f64,
         y: f64,
-    ) -> Option<ItemDragStart> {
-        let (down_x, down_y) = self.mouse_down?;
+    ) -> Result<Option<ItemDragStart>> {
+        let Some((down_x, down_y)) = self.mouse_down else {
+            return Ok(None);
+        };
         if (x - down_x).abs() < DRAG_THRESHOLD_PX && (y - down_y).abs() < DRAG_THRESHOLD_PX {
-            return None;
+            return Ok(None);
         }
         let mut index = None;
         for i in 0..self.items.len() {
@@ -1056,10 +1125,12 @@ impl SourceList {
             }
         }
         self.mouse_down = None;
-        let index = index?;
+        let Some(index) = index else {
+            return Ok(None);
+        };
         let client_width = dom.item_client_width(&self.uuid, index);
         let rect = dom.item_rect(&self.uuid, index);
-        Some(ItemDragStart {
+        Ok(Some(ItemDragStart {
             x,
             y,
             offset_x: x - rect.left(),
@@ -1069,9 +1140,9 @@ impl SourceList {
                 uuid: self.uuid.clone(),
                 config_str: self.config_str.clone(),
                 index,
-                is_child: self.is_child(index),
+                is_child: self.is_child(index)?,
             },
-        })
+        }))
     }
 
     /// The type button of an item was clicked. Returns the prompt to send to main; its answer
@@ -1131,6 +1202,7 @@ impl SourceList {
             }
             None => {
                 self.render(env, &new_state)?;
+                self.remember(env, &new_state)?;
             }
         }
         if prompt.is_child {
@@ -1142,13 +1214,13 @@ impl SourceList {
             return Ok(());
         }
         let index = position.map_or(0, |i| i + 1);
-        if !self.is_child(index) {
+        if !self.is_child(index)? {
             return Ok(());
         }
         let mut child_count = 0;
         while index + child_count < self.state.len() {
             child_count += 1;
-            if !self.is_child(index + child_count) {
+            if !self.is_child(index + child_count)? {
                 break;
             }
         }
@@ -1167,23 +1239,23 @@ impl SourceList {
         };
         let is_child = item.created_as_child;
         let visible = !self.state[index].visible;
-        self.state[index].visible = visible;
+        self.state[index].set_visible(visible);
         self.update_item(env, index)?;
         if !is_child {
             let mut search = index + 1;
             while search < self.state.len() {
-                if !self.is_child(search) {
+                if !self.is_child(search)? {
                     break;
                 }
-                self.state[search].visible = visible;
+                self.state[search].set_visible(visible);
                 self.update_item(env, search)?;
                 search += 1;
             }
         } else if visible
-            && let Some(parent) = self.parent_of(index as isize)
+            && let Some(parent) = self.parent_of(index as isize)?
             && !self.state[parent].visible
         {
-            self.state[parent].visible = true;
+            self.state[parent].set_visible(true);
             self.update_item(env, parent)?;
         }
         Ok(())
@@ -1205,21 +1277,22 @@ impl SourceList {
     }
 
     /// The remove button of an item: removes it, and a parent's children with it.
-    pub fn remove(&mut self, index: usize) {
+    pub fn remove(&mut self, index: usize) -> Result {
         let Some(item) = self.items.get(index).filter(|item| item.interactive) else {
-            return;
+            return Ok(());
         };
         let is_child = item.created_as_child;
         let mut count = 0;
         while index + count < self.state.len() {
             count += 1;
-            if is_child || !self.is_child(index + count) {
+            if is_child || !self.is_child(index + count)? {
                 break;
             }
         }
         self.state.drain(index..index + count);
         self.items.drain(index..index + count);
         self.update_hand_icon();
+        Ok(())
     }
 
     /// The clear button: main is asked to confirm with `source-list-clear-prompt`.
@@ -1255,20 +1328,22 @@ impl SourceList {
             .map(|(_, v)| v.as_str())
     }
 
-    fn is_child(&self, index: usize) -> bool {
-        self.state
-            .get(index)
-            .and_then(|item| self.type_config(&item.item_type))
-            .is_some_and(|t| t.child_of.is_some())
+    fn is_child(&self, index: usize) -> Result<bool> {
+        let Some(item) = self.state.get(index) else {
+            return Ok(false);
+        };
+        item.require("type")?;
+        let type_config = self.type_config(&item.item_type);
+        Ok(type_config.is_some_and(|t| t.child_of.is_some()))
     }
 
     /// The nearest non-child item above `index`.
-    fn parent_of(&self, index: isize) -> Option<usize> {
+    fn parent_of(&self, index: isize) -> Result<Option<usize>> {
         let mut parent = index - 1;
-        while parent >= 0 && self.is_child(parent as usize) {
+        while parent >= 0 && self.is_child(parent as usize)? {
             parent -= 1;
         }
-        (parent >= 0).then_some(parent as usize)
+        Ok((parent >= 0).then_some(parent as usize))
     }
 
     fn update_hand_icon(&mut self) {
@@ -1322,22 +1397,36 @@ impl SourceList {
     }
 
     fn update_item(&mut self, env: &mut Env<'_>, index: usize) -> Result {
-        let (rendered, type_width) = self.render(env, &self.state[index].clone())?;
+        let (rendered, type_width) = self.render(env, &self.state[index])?;
         let view = &mut self.items[index].view;
         view.rendered = Some(rendered);
         view.type_width = Some(type_width);
-        Ok(())
+        self.remember(env, &self.state[index])
     }
 
-    /// `updateItem`'s computation, including its type-memory write; also the `--type-width`.
+    /// The end of `updateItem`, which throws with the item already drawn.
+    fn remember(&self, env: &mut Env<'_>, state: &SourceListItemState) -> Result {
+        let Some(id) = &self.config.type_memory_id else {
+            return Ok(());
+        };
+        let entry = ops::object([
+            ("type", state.member("type")?),
+            ("options", state.member("options")?),
+        ]);
+        remember(env.type_memory, id, &state.log_key, entry)
+    }
+
+    /// `updateItem`'s computation; also the `--type-width`.
     fn render(
         &self,
         env: &mut Env<'_>,
         state: &SourceListItemState,
     ) -> Result<(RenderedItem, f64)> {
-        let type_config = self
-            .type_config(&state.item_type)
-            .ok_or_else(|| SourceListError::UnknownType(state.item_type.clone()))?;
+        state.require("type")?;
+        let Some(type_config) = self.type_config(&state.item_type) else {
+            let item_type = state.member("type")?;
+            return Err(SourceListError::UnknownType(ops::to_string(&item_type)));
+        };
 
         let color = if type_config.color.starts_with('#') {
             match (&type_config.dark_color, env.dark) {
@@ -1345,10 +1434,20 @@ impl SourceList {
                 _ => type_config.color.clone(),
             }
         } else {
-            let option = state
-                .options
-                .get(&type_config.color)
-                .ok_or_else(|| SourceListError::type_error("undefined", "startsWith"))?;
+            let option = state.option(&type_config.color)?;
+            let option = match &option {
+                JsValue::String(option) => option,
+                JsValue::Undefined => {
+                    return Err(SourceListError::type_error("undefined", "startsWith"));
+                }
+                JsValue::Null => return Err(SourceListError::type_error("null", "startsWith")),
+                _ => {
+                    return Err(SourceListError::Thrown(
+                        "TypeError: state.options[typeConfig.color].startsWith is not a function"
+                            .to_owned(),
+                    ));
+                }
+            };
             if option.units().first() == Some(&(b'#' as u16)) {
                 option.to_string_lossy()
             } else if env.dark {
@@ -1364,15 +1463,10 @@ impl SourceList {
             components.push(&type_config.display);
         }
         for option_config in &type_config.options {
-            if option_config.show_in_type_name
-                && let Some(value) = option_config.values.iter().find(|v| {
-                    state
-                        .options
-                        .get(&option_config.key)
-                        .is_some_and(|key| eq_str(key, &v.key))
-                })
-            {
-                components.push(&value.display);
+            if option_config.show_in_type_name {
+                let key = state.option(&option_config.key)?;
+                let value = option_config.values.iter().find(|v| is_str(&key, &v.key));
+                components.extend(value.map(|v| v.display.as_str()));
             }
         }
         let type_name = format!(
@@ -1386,28 +1480,15 @@ impl SourceList {
             type_width += 3.0;
         }
 
-        if let Some(id) = &self.config.type_memory_id {
-            let entries = match env.type_memory.get_mut(id) {
-                Some(entries) => entries,
-                None => {
-                    env.type_memory.insert(id.as_str(), JsObject::new());
-                    env.type_memory.get_mut(id).expect("just inserted")
-                }
-            };
-            entries.insert(
-                state.log_key.clone(),
-                SourceListTypeMemoryEntry {
-                    entry_type: state.item_type.clone(),
-                    options: state.options.clone(),
-                },
-            );
-        }
-
         let rendered = RenderedItem {
             color,
             symbol_path: format!("symbols/sourceList/{}.svg", type_config.symbol),
             type_name,
             log_key: state.log_key.clone(),
+            key_text: match state.raw.as_ref().and_then(|raw| raw.get("logKey")) {
+                Some(JsValue::Null) => JsString::new(),
+                _ => state.log_key.clone(),
+            },
             available: is_field_available(env.log, state),
             visible: state.visible,
         };
@@ -1415,9 +1496,69 @@ impl SourceList {
     }
 }
 
-/// `isFieldAvailable`: the field still has the type the item was added with.
+fn is_str(value: &JsValue, s: &str) -> bool {
+    value.as_str().is_some_and(|value| eq_str(value, s))
+}
+
+/// `isFieldAvailable`: the field still has the type the item was added with. A `null` `logType`
+/// is the structured type of any field without one.
 pub fn is_field_available(log: &Log, item: &SourceListItemState) -> bool {
+    if item.raw.is_none() {
+        return log
+            .get_type(&item.log_key)
+            .is_some_and(|t| eq_str(&item.log_type, t.name()))
+            || log.get_structured_type(&item.log_key) == Some(&item.log_type);
+    }
+    let log_type = item.member("logType").unwrap_or_default();
+    let structured = match log.get_structured_type(&item.log_key) {
+        Some(structured) => structured.to_js(),
+        None => JsValue::Null,
+    };
     log.get_type(&item.log_key)
-        .is_some_and(|t| eq_str(&item.log_type, t.name()))
-        || log.get_structured_type(&item.log_key) == Some(&item.log_type)
+        .is_some_and(|t| is_str(&log_type, t.name()))
+        || ops::strict_equals(&structured, &log_type)
+}
+
+/// The entry `addField` finds for `log_key` with its two `in` checks: `None` for `null`. An
+/// inherited member (`constructor`) has neither a `type` nor `options`.
+fn remembered(memory: &JsValue, id: &str, log_key: &JsString) -> Result<Option<JsValue>> {
+    if !ops::has(memory, id)? {
+        return Ok(None);
+    }
+    let entries = ops::get(memory, id)?;
+    if !ops::has_key(&entries, log_key)? {
+        return Ok(None);
+    }
+    let entry = match ops::has_own(&entries, log_key)? {
+        true => ops::get_key(&entries, log_key)?,
+        false => JsValue::Object(JsObject::new()),
+    };
+    Ok(Some(entry).filter(|entry| !entry.is_null()))
+}
+
+/// `memory.options[key]` when it is a string, behind `key in memory.options`.
+fn remembered_option(memory: Option<&JsValue>, key: &str) -> Result<Option<JsString>> {
+    let Some(memory) = memory else {
+        return Ok(None);
+    };
+    let options = ops::get(memory, "options")?;
+    Ok(match ops::has(&options, key)? {
+        true => ops::get(&options, key)?.into_string(),
+        false => None,
+    })
+}
+
+/// `updateItem`'s `window.typeMemory[id][logKey] = entry`.
+fn remember(memory: &mut JsValue, id: &str, log_key: &JsString, entry: JsValue) -> Result {
+    let key = JsString::from(id);
+    if !ops::has(memory, id)? {
+        ops::set_key(memory, &key, JsValue::Object(JsObject::new()))?;
+    }
+    match memory {
+        JsValue::Object(ids) => match ids.get_units_mut(key.units()) {
+            Some(entries) => Ok(ops::set_key(entries, log_key, entry)?),
+            None => Ok(()),
+        },
+        _ => Ok(()),
+    }
 }

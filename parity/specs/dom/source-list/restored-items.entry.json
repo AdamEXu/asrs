@@ -1,0 +1,879 @@
+{
+  "entry": "dom",
+  "backend": "blink",
+  "inputs": [
+    "../logs/source-list.json"
+  ],
+  "fixture": {
+    "sourceLists": true,
+    "geometry": "real",
+    "steps": [
+      {
+        "log": "../logs/source-list.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "eval": "window.selection.setSelectedTime(2)"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": null}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": 5}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": null}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": [\"#ff0000\"]}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": \"abc\"}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": []}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": 5}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"reference\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"reference\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": null}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"reference\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": [1]}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"reference\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": 5, \"extra\": \"x\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"options\": {\"color\": \"#e5b31b\"}, \"visible\": true, \"logType\": \"Number\", \"logKey\": \"/Drive/LeftVelocity\", \"type\": \"independent\", \"pinned\": [1]}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": \"yes\", \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": 0, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": null, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": 5, \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": null, \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": {\"a\": 1}, \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": [\"reference\"], \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"constructor\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": 5, \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Missing\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": null, \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": 5, \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([[]])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([[1]])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([5])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([\"text\"])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([true])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}, {\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": null}, {\"type\": \"independent\", \"logKey\": \"/Arm/Angle\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.refresh()"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState(null)"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState(undefined)"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState({})"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState(5)"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState('abc')"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([null])"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.refresh()"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField('/Drive/RightVelocity')"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([undefined])"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.refresh()"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField('/Drive/RightVelocity')"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"reference\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true}, {\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.LIST.children[1].querySelector('button.hide').click()"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.LIST.children[0].querySelector('button.hide').click()"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.LIST.children[0].querySelector('button.type').click()"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.LIST.children[1].querySelector('button.type').click()"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Missing\", \"logType\": \"Number\", \"visible\": true, \"options\": null}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.setSelected(1)"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.leftSourceList.setState([{\"type\": \"stepped\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": null}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.rightSourceList.addField('/Drive/RightVelocity')"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.leftSourceList.setState([{\"type\": \"stepped\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": 5}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.rightSourceList.addField('/Drive/RightVelocity')"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.leftSourceList.setState([{\"type\": \"stepped\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": 5}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.rightSourceList.addField('/Drive/RightVelocity')"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.leftSourceList.setState([{\"type\": \"stepped\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.rightSourceList.addField('/Drive/RightVelocity')"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.leftSourceList.setState([])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 2
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": true}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": true, \"options\": {\"bumpers\": 5}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setOptionValues('robot','bumpers',[{key:'red',display:'Red'}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([null])"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setOptionValues('robot','bumpers',[{key:'red',display:'Red'}])"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": true}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setOptionValues('robot','bumpers',[{key:'red',display:'Red'}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": null, \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": {\"a\": 1}, \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": [\"/Drive/LeftVelocity\"], \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": true, \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}, null])"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.LIST.children[0].querySelector('button.remove').click()"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.LIST.children[0].querySelector('button.remove').click()"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.LIST.children[0].querySelector('button.hide').click()"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.LIST.children[0].querySelector('button.type').click()"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([null])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 2
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": {\"bumpers\": \"\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 2
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": null}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": {\"bumpers\": \"\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 2
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": \"abc\"}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": {\"bumpers\": \"\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 2
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": 5}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": {\"bumpers\": \"\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 2
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": {\"units\": \"degrees\", \"bumpers\": \"\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"robot\", \"logKey\": \"/Odometry/Pose2d\", \"logType\": \"Pose2d\", \"visible\": false, \"options\": {\"bumpers\": \"\"}}])"
+      },
+      {
+        "advance": 50
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "main": "restore-type-memory",
+        "data": null
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "main": "restore-type-memory",
+        "data": 5
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "main": "restore-type-memory",
+        "data": "abc"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": null
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": 5
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.setState([{\"type\": \"independent\", \"logKey\": \"/Drive/LeftVelocity\", \"logType\": \"Number\", \"visible\": true, \"options\": {\"color\": \"#e5b31b\"}}])"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      }
+    ]
+  }
+}

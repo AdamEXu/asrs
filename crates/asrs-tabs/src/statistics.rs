@@ -326,7 +326,7 @@ impl StatisticsController {
                 akit_key,
                 akit_timestamps,
                 log.get_timestamp_range(),
-                self.source_list.displayed_state(log),
+                self.source_list.drawn_state(log).map_err(js_error)?,
             )
         };
 

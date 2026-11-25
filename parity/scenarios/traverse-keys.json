@@ -1,0 +1,463 @@
+{
+  "about": "The arrow keys with every modifier in the statistics tab's number fields (#292)",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 6,
+              "title": "Stats",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2"
+                    }
+                  }
+                ],
+                "timeRange": "full",
+                "rangeMin": -2,
+                "rangeMax": 12.5,
+                "stepSize": 0.5
+              },
+              "controllerUUID": "stats000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 950,
+      "y": 550
+    },
+    {
+      "mouse": "down",
+      "x": 950,
+      "y": 550
+    },
+    {
+      "mouse": "up",
+      "x": 950,
+      "y": 550
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "range-min",
+      "count": 0
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-up",
+      "count": 0
+    },
+    {
+      "key": "Up",
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-shift-up",
+      "count": 0
+    },
+    {
+      "key": "Up",
+      "modifiers": [
+        "control"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-control-up",
+      "count": 0
+    },
+    {
+      "key": "Up",
+      "modifiers": [
+        "alt"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-alt-up",
+      "count": 0
+    },
+    {
+      "key": "Up",
+      "modifiers": [
+        "meta"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-meta-up",
+      "count": 0
+    },
+    {
+      "key": "Up",
+      "modifiers": [
+        "shift",
+        "control"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-shift-control-up",
+      "count": 0
+    },
+    {
+      "key": "Up",
+      "modifiers": [
+        "shift",
+        "alt"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-shift-alt-up",
+      "count": 0
+    },
+    {
+      "key": "Up",
+      "modifiers": [
+        "control",
+        "alt"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-control-alt-up",
+      "count": 0
+    },
+    {
+      "key": "Up",
+      "modifiers": [
+        "shift",
+        "meta"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-shift-meta-up",
+      "count": 0
+    },
+    {
+      "key": "Up",
+      "modifiers": [
+        "control",
+        "meta"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-control-meta-up",
+      "count": 0
+    },
+    {
+      "key": "Up",
+      "modifiers": [
+        "alt",
+        "meta"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-alt-meta-up",
+      "count": 0
+    },
+    {
+      "key": "Up",
+      "modifiers": [
+        "shift",
+        "control",
+        "alt"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-shift-control-alt-up",
+      "count": 0
+    },
+    {
+      "key": "Down"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-down",
+      "count": 0
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-shift-down",
+      "count": 0
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "control"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-control-down",
+      "count": 0
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "alt"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-alt-down",
+      "count": 0
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "meta"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-meta-down",
+      "count": 0
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "shift",
+        "control"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-shift-control-down",
+      "count": 0
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "shift",
+        "alt"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-shift-alt-down",
+      "count": 0
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "control",
+        "alt"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-control-alt-down",
+      "count": 0
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "shift",
+        "meta"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-shift-meta-down",
+      "count": 0
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "control",
+        "meta"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-control-meta-down",
+      "count": 0
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "alt",
+        "meta"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-alt-meta-down",
+      "count": 0
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "shift",
+        "control",
+        "alt"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "min-shift-control-alt-down",
+      "count": 0
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "key": "5"
+    },
+    {
+      "wait": 60
+    },
+    {
+      "key": "Up",
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "max-shift-up",
+      "count": 0
+    },
+    {
+      "key": "Down",
+      "modifiers": [
+        "control"
+      ]
+    },
+    {
+      "wait": 60
+    },
+    {
+      "traverse": "max-control-down",
+      "count": 0
+    },
+    {
+      "capture": "numbers",
+      "probes": [
+        ".stats-settings"
+      ]
+    }
+  ]
+}

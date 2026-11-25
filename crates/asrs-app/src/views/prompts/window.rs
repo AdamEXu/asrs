@@ -118,10 +118,9 @@ impl PromptWindow {
         let handle = window.window_handle();
         let this = cx.entity().downgrade();
         cx.intercept_keystrokes(move |event, window, cx| {
-            if window.window_handle() != handle {
+            if window.window_handle() != handle || platform::menu_takes_keys(window) {
                 return;
             }
-            let modifiers = event.keystroke.modifiers;
             let _ = this.update(cx, |view, cx| match event.keystroke.key.as_str() {
                 "enter" => {
                     if !platform::numpad_enter(cx) {
@@ -131,9 +130,11 @@ impl PromptWindow {
                         cx.stop_propagation();
                     }
                 }
-                "tab" if !modifiers.control && !modifiers.alt && !modifiers.platform => {
-                    view.tab(modifiers.shift, window, cx);
-                    cx.stop_propagation();
+                "tab" => {
+                    if let Some(back) = focus::tab_key(&event.keystroke) {
+                        view.tab(back, window, cx);
+                        cx.stop_propagation();
+                    }
                 }
                 _ => {}
             });

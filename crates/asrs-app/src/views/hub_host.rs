@@ -489,6 +489,10 @@ impl FrameHost for HubEntityHost {
         });
     }
 
+    fn scroll_side_bar(&mut self, focused: [f64; 2]) {
+        sidebar::scroll_to_focused(&self.sidebar_geometry, focused);
+    }
+
     fn take_touched_field(&mut self) -> Option<usize> {
         sidebar::take_touched_field(&self.sidebar_geometry)
     }

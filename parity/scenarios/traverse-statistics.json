@@ -1,0 +1,504 @@
+{
+  "about": "Tab (#375) through the statistics tab: a source list that scrolls to the focused button, number fields selected and committed, the list cleared with Enter",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 6,
+              "title": "Stats",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2"
+                    }
+                  },
+                  {
+                    "type": "independent",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2"
+                    }
+                  }
+                ],
+                "timeRange": "full",
+                "rangeMin": -2,
+                "rangeMax": 12.5,
+                "stepSize": 0.5
+              },
+              "controllerUUID": "stats000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "all",
+      "count": 40
+    },
+    {
+      "traverse": "all-back",
+      "count": 40,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "type",
+      "count": 14
+    },
+    {
+      "capture": "list-scrolled",
+      "probes": []
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "last",
+      "count": 28
+    },
+    {
+      "capture": "list-end",
+      "probes": []
+    },
+    {
+      "traverse": "range",
+      "count": 2
+    },
+    {
+      "capture": "number",
+      "probes": [
+        ".stats-settings"
+      ]
+    },
+    {
+      "key": "5"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "typed",
+      "count": 1
+    },
+    {
+      "capture": "typed",
+      "probes": [
+        ".stats-settings"
+      ]
+    },
+    {
+      "traverse": "typed-back",
+      "count": 1,
+      "back": true
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 200
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "values",
+      "count": 0
+    },
+    {
+      "traverse": "values-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 600,
+      "y": 200
+    },
+    {
+      "mouse": "up",
+      "x": 600,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "values-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 200
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "histogram",
+      "count": 0
+    },
+    {
+      "traverse": "histogram-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 200
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 200
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 200
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "histogram-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 585
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 585
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 585
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "setting-title",
+      "count": 0
+    },
+    {
+      "traverse": "setting-title-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 1000,
+      "y": 585
+    },
+    {
+      "mouse": "down",
+      "x": 1000,
+      "y": 585
+    },
+    {
+      "mouse": "up",
+      "x": 1000,
+      "y": 585
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "setting-title-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "clear",
+      "count": 4
+    },
+    {
+      "key": "Enter"
+    },
+    {
+      "wait": 100
+    },
+    {
+      "traverse": "cleared",
+      "count": 0
+    },
+    {
+      "traverse": "cleared-next",
+      "count": 3
+    },
+    {
+      "capture": "cleared",
+      "probes": []
+    }
+  ]
+}

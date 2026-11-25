@@ -1,0 +1,1232 @@
+{
+  "entry": "dom",
+  "backend": "blink",
+  "inputs": [
+    "../logs/source-list.json"
+  ],
+  "fixture": {
+    "sourceLists": true,
+    "geometry": "real",
+    "steps": [
+      {
+        "log": "../logs/source-list.json"
+      },
+      {
+        "main": "new-tab",
+        "data": 6
+      },
+      {
+        "eval": "window.selection.setSelectedTime(2)"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "type": "reference"
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "type": "reference",
+              "options": null
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "type": "reference",
+              "options": {}
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "type": "relativeError",
+              "options": {
+                "color": 5
+              }
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "type": "relativeError",
+              "options": {
+                "color": "#aabbcc"
+              }
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "type": "relativeError",
+              "options": {
+                "color": "#ff0000",
+                "extra": 1
+              },
+              "more": 2
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "type": "relativeError"
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "type": "relativeError",
+              "options": "abc"
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "type": "relativeError",
+              "options": [
+                "color"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "type": "relativeError",
+              "options": 5
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "type": "missing",
+              "options": {
+                "color": "#ff0000"
+              }
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "options": {
+                "color": "#ff0000"
+              }
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "type": 5,
+              "options": {}
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "type": [
+                "reference"
+              ],
+              "options": {}
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {}
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": null
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": 5
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": "text"
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": true
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": []
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": [
+              1
+            ]
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": null
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": 5
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": "text"
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": true
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": []
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": [
+            1
+          ]
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {}
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": 5
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": "text"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": true
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": []
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": [
+          {
+            "a": 1
+          }
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {}
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": null
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "statistics": {
+            "/Drive/LeftVelocity": {
+              "type": "absoluteError",
+              "options": {
+                "color": "#ff0000"
+              }
+            }
+          },
+          "other": 7
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Drive/LeftVelocity\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "main": "new-tab",
+        "data": 2
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": {
+              "type": "ghost"
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": {
+              "type": "ghost",
+              "options": null
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": {
+              "type": "ghost",
+              "options": {}
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": {
+              "type": "ghost",
+              "options": {
+                "color": 5
+              }
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": {
+              "type": "ghost",
+              "options": {
+                "color": "#00ff00"
+              }
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": {
+              "type": "ghost",
+              "options": {
+                "color": "#012345"
+              }
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": {
+              "type": "ghost",
+              "options": "abc"
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": {
+              "type": "ghost",
+              "options": [
+                "color"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": {
+              "type": "ghost",
+              "options": 5
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": {
+              "options": {
+                "color": "#00ff00",
+                "bumpers": "red"
+              }
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": {
+              "type": 5,
+              "options": {
+                "bumpers": "blue"
+              }
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": {
+              "type": "missing"
+            }
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": {}
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": null
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": 5
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": "text"
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": true
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": []
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": {
+            "/Odometry/Pose2d": [
+              1
+            ]
+          }
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": []
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": 5
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {
+          "field2d": null
+        }
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": {}
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.clear()"
+      },
+      {
+        "main": "restore-type-memory",
+        "data": 5
+      },
+      {
+        "eval": "window.tabs.tabList[window.tabs.selectedTab].controller.sourceList.addField(\"/Odometry/Pose2d\")"
+      },
+      {
+        "capture": [
+          "sourceLists"
+        ]
+      }
+    ]
+  }
+}

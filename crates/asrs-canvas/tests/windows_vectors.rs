@@ -266,6 +266,27 @@ fn fractional_sizes_are_floored_as_blink_floors_them() {
     check_probes(&mut backend, &probes);
 }
 
+/// The em-height baselines at those sizes, the button numbers' of the 2x `joysticks` scenario first.
+#[test]
+fn baselines_follow_the_floored_size() {
+    let Some(mut backend) = pinned_backend(&["10px sans-serif"]) else {
+        return;
+    };
+    let probes = probes("baselines");
+    assert_eq!(probes.len(), 12);
+    let mut wrong = Vec::new();
+    for p in &probes {
+        let font = FontSpec::parse(&p.font).unwrap();
+        let got = ["top", "middle", "bottom"].map(|baseline| {
+            measure_text(&mut backend, &font, "left", baseline, &p.text).alphabetic_baseline
+        });
+        if got[..] != p.metrics[..] {
+            wrong.push(format!("{}: {got:?} vs {:?}", p.font, p.metrics));
+        }
+    }
+    assert!(wrong.is_empty(), "{wrong:#?}");
+}
+
 /// Text no primary font covers, in scripts of most of Blink's fallback families, upright, bold
 /// and italic.
 #[test]

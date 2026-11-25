@@ -38,7 +38,6 @@ use asrs_model::preferences::Preferences;
 use asrs_model::selection::Selection;
 use asrs_model::selection_impl::{KeyTarget, SelectionImpl};
 use asrs_model::source_list::{ListInput, ListPointer, Rect, SourceList};
-use asrs_model::source_list_config::{SourceListTypeMemory, SourceListTypeMemoryEntry};
 use asrs_model::tab_controller::{TabCommand, TabController, TabRenderer, keyboard_clicks};
 use asrs_model::tab_type::TabType;
 use asrs_parity::cve1::Value;
@@ -57,7 +56,7 @@ use asrs_tabs::field3d::Field3dController;
 use asrs_tabs::joysticks::JoysticksController;
 use asrs_tabs::joysticks_renderer::JoysticksRenderer;
 use asrs_tabs::line_graph::{LineGraphController, ListId};
-use asrs_tabs::list_cx::{ListParts, SourceListCx, js_error, source_state, with_env};
+use asrs_tabs::list_cx::{ListParts, SourceListCx, js_error, with_env};
 use asrs_tabs::mechanism::MechanismController;
 use asrs_tabs::mechanism_renderer::MechanismRenderer;
 use asrs_tabs::points::{Dimension, PointsController, PointsSelect};
@@ -544,7 +543,7 @@ struct Host {
     assets_raw: JsValue,
     assets: Option<AdvantageScopeAssets>,
     /// `window.typeMemory`.
-    type_memory: SourceListTypeMemory,
+    type_memory: JsValue,
     dark: bool,
     /// `new Date().getTime()` — the same scripted clock the selection reads.
     clock: Rc<Cell<f64>>,
@@ -639,26 +638,6 @@ fn assets_from_js(data: &JsValue) -> Result<Option<AdvantageScopeAssets>, String
         }
     }
     Ok(Some(assets))
-}
-
-fn type_memory_from_js(data: &JsValue) -> Result<SourceListTypeMemory, String> {
-    let JsValue::Object(ids) = data else {
-        return Err(format!("type memory {data:?} is not an object"));
-    };
-    let mut memory = SourceListTypeMemory::new();
-    for (id, entries) in ids.iter() {
-        let JsValue::Object(entries) = entries else {
-            return Err(format!("type memory for {id:?} is not an object"));
-        };
-        let mut map = JsObject::new();
-        for (key, entry) in entries.iter() {
-            let entry = SourceListTypeMemoryEntry::from_js(entry)
-                .ok_or_else(|| format!("type memory entry {entry:?} has another shape"))?;
-            map.insert(key.clone(), entry);
-        }
-        memory.insert(id.clone(), map);
-    }
-    Ok(memory)
 }
 
 impl TabsHost for Host {
@@ -1681,8 +1660,8 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
             .strip_prefix("setState(")
             .and_then(|s| s.strip_suffix(')'))
         {
-            let items = source_state(&parse_arg(arg)?).map_err(|e| e.message)?;
-            with_env(host, |env| list.set_state(env, items)).map_err(|e| js_error(e).message)?;
+            let value = parse_arg(arg)?;
+            with_env(host, |env| list.restore(env, &value)).map_err(|e| js_error(e).message)?;
             return Ok(JsValue::Undefined);
         }
         if op == "getState()" {
@@ -1699,7 +1678,7 @@ fn eval_tab_suffix(r: &mut Runner, suffix: &str, index: &JsValue) -> Result<JsVa
                 .trim()
                 .parse::<f64>()
                 .map_err(|_| err("remove needs an index"))? as usize;
-            list.remove(i);
+            list.remove(i).map_err(|e| js_error(e).message)?;
             return Ok(JsValue::Undefined);
         }
         if let Some(arg) = op
@@ -1966,7 +1945,7 @@ fn replay(
         messages: Vec::new(),
         assets_raw: JsValue::Null,
         assets: None,
-        type_memory: SourceListTypeMemory::new(),
+        type_memory: JsValue::Object(JsObject::new()),
         dark: theme_dark,
         clock: clock_cell.clone(),
     };
@@ -1984,8 +1963,7 @@ fn replay(
         host.assets = assets_from_js(&assets).map_err(err)?;
     }
     if let Some(memory) = fixture.get("typeMemory") {
-        host.type_memory = type_memory_from_js(&js_json::to_js(&Value::from_json_lenient(memory))?)
-            .map_err(err)?;
+        host.type_memory = js_json::to_js(&Value::from_json_lenient(memory))?;
     }
     if let Some(prefs) = fixture.get("preferences") {
         let prefs = js_json::to_js(&Value::from_json_lenient(prefs))?;
@@ -2028,7 +2006,7 @@ fn replay(
                     host.assets_raw = data;
                 }
                 "restore-type-memory" => {
-                    host.type_memory = type_memory_from_js(&js_json::to_js(&data)?).map_err(err)?;
+                    host.type_memory = js_json::to_js(&data)?;
                 }
                 "set-version" => set_platform(&mut host.selection, &js_json::to_js(&data)?),
                 "set-fullscreen"
@@ -2321,7 +2299,7 @@ impl Runner {
                 }
             }
             "restore-type-memory" => {
-                self.host.type_memory = type_memory_from_js(data).map_err(unmodeled)?;
+                self.host.type_memory = data.clone();
             }
             "video-data" => {
                 for (uuid, controller) in self

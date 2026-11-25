@@ -1,0 +1,182 @@
+{
+  "about": "Tab (#375) through the metadata tab, whose table scrolls and holds nothing that takes the focus",
+  "actions": [
+    {
+      "open": [
+        "app:metadata"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": []
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 12,
+              "title": "Meta",
+              "controller": null,
+              "controllerUUID": "meta0000000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "all",
+      "count": 14
+    },
+    {
+      "traverse": "all-back",
+      "count": 14,
+      "back": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "table",
+      "count": 4
+    },
+    {
+      "capture": "table",
+      "probes": [
+        ".metadata-table-container"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "cell",
+      "count": 0
+    },
+    {
+      "traverse": "cell-next",
+      "count": 1
+    },
+    {
+      "wait": 500
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "up",
+      "x": 700,
+      "y": 300
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "cell-previous",
+      "count": 1,
+      "back": true
+    },
+    {
+      "wait": 500
+    }
+  ]
+}

@@ -11,7 +11,7 @@ use asrs_model::messages::{
     SelectionSetter,
 };
 use asrs_model::preferences::merge_preferences;
-use asrs_model::source_list_config::{SourceListItemState, SourceListTypeMemoryEntry};
+use asrs_model::source_list_config::SourceListItemState;
 use asrs_model::tab_type::TabType;
 
 const HUB_STATE: &str = r##"{"sidebar":{"width":300,"expanded":["/AdvantageKit","/Real\ud800"]},"tabs":{"selected":1,"tabs":[{"type":0,"title":"","controller":null,"controllerUUID":"a","renderer":null,"controlsHeight":0},{"type":1,"title":"Line Graph","controller":{"leftSources":[{"type":"stepped","logKey":"/x","logType":"Number","visible":true,"options":{"color":"#2b66a2"}}],"leftLockedRange":null},"controllerUUID":"b","renderer":{"x":-1.5e-7},"controlsHeight":200}]}}"##;
@@ -39,11 +39,6 @@ fn source_list_states_round_trip() {
     let parsed = json::parse_str(item).unwrap();
     let state = SourceListItemState::from_js(&parsed).unwrap();
     assert_eq!(json::stringify(&state.to_js()).unwrap().unwrap(), item);
-
-    let entry = r#"{"type":"robot","options":{"bumpers":""}}"#;
-    let parsed = json::parse_str(entry).unwrap();
-    let state = SourceListTypeMemoryEntry::from_js(&parsed).unwrap();
-    assert_eq!(json::stringify(&state.to_js()).unwrap().unwrap(), entry);
 }
 
 #[test]
