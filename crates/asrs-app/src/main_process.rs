@@ -861,7 +861,7 @@ impl MainProcess {
             arch: process_arch(),
             running_under_arm64_translation: false,
             packaged: PACKAGED,
-            version: build_constants::VERSION,
+            version: crate::IDENTITY.version,
             is_beta: IS_BETA,
             repository: RELEASE_PROFILE.repository,
             app_name: crate::IDENTITY.name,

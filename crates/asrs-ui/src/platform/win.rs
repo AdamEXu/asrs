@@ -2,6 +2,7 @@
 //! GPUI's window handles. Select lists are drawn (`crate::menu`), as Chromium draws its own.
 
 use std::cell::{Cell, RefCell};
+use std::os::windows::io::AsRawHandle;
 use std::rc::Rc;
 
 use gpui_kit::{
@@ -14,6 +15,7 @@ use windows::Win32::Graphics::Dwm::{
     DWM_SYSTEMBACKDROP_TYPE, DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
     DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
 };
+use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
 use windows::Win32::UI::Controls::MARGINS;
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -46,6 +48,13 @@ thread_local! {
 }
 
 pub(super) fn init() {}
+
+pub(super) fn attach_console() {
+    if std::io::stdout().as_raw_handle().is_null() {
+        // SAFETY: no pointers; without a console to attach to it fails and changes nothing.
+        let _ = unsafe { AttachConsole(ATTACH_PARENT_PROCESS) };
+    }
+}
 
 fn version() -> OSVERSIONINFOW {
     let mut info = OSVERSIONINFOW {
