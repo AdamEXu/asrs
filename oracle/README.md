@@ -1057,6 +1057,15 @@ advances in Courier differ (#273): only the vertical positions of those cells ar
 box of width 0: `pairs` for every pair of printable ASCII characters between two letters, `strings`
 for words, punctuation, other scripts and random mixtures of them.
 
+### Control layout
+
+`dom/control-layout/*` (`controls_lie_where_blink_puts_them` in `crates/asrs-app/src/views`) record
+Blink's boxes of the tabs' controls with `"geometry": "real"` at 1x, 1.25x, 1.5x, 2x and 3x, for 32
+places of the side bar and the controls' edge. `node oracle/tools/controlLayoutSpecs.mjs` writes the
+specs; edit the script, not the specs. Each capture's `/*control-layout*/` eval has the parts of one
+tab as `[selector, [[class, box, text rects], ...]]`. Font dependent widths are read from the
+recording, so the tests run everywhere.
+
 ### Mechanism and Points renderers
 
 `dom/mechanism/<case>` and `dom/points/<case>` (`crates/asrs-tabs/tests/mechanism_points_dom.rs`)
