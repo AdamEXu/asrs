@@ -463,12 +463,11 @@ fn settings(headless: &mut HeadlessCapture, scale: f32) -> usize {
         steps.push(step);
         rest = after;
     }
+    let recorded_at = |step: &[vectors::Record]| step[0].field("scale").and_then(Json::as_f64);
+    steps.retain(|step| recorded_at(step) == Some(f64::from(scale)));
     let mut compared = 0;
     for step in steps {
         let first = &step[0];
-        if first.field("scale").and_then(Json::as_f64) != Some(f64::from(scale)) {
-            continue;
-        }
         let style = first.string("style").expect("a style");
         let name = first.string("step").expect("a step");
         let (kind, height) = name.split_once('-').expect("a kind and a height");
@@ -539,8 +538,10 @@ fn main() {
         scrollbar(&mut headless, scale);
         classic(&mut headless, scale);
         focus(&mut headless, scale);
-        let compared = settings(&mut headless, scale);
-        assert!(compared > 0, "no recorded settings at {scale}x");
+        assert!(
+            settings(&mut headless, scale) > 0,
+            "no settings at {scale}x"
+        );
     }
     println!("hub_scroll: ok");
 }
