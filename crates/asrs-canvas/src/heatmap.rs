@@ -528,7 +528,7 @@ enum Bitmap {
 
 /// A canvas element plus its 2d context: a persistent `Raster`, or the all-no-op
 /// behavior a zero-sized canvas bitmap exhibits (draws do nothing, `getImageData`
-/// still validates its arguments and returns transparent pixels).
+/// still validates its arguments and returns transparent pixels, as it does of a blank one).
 struct Layer {
     bitmap: Bitmap,
     images: HashMap<String, Arc<Pixmap>>,
@@ -622,7 +622,11 @@ impl Layer {
         sw: f64,
         sh: f64,
     ) -> Result<ImageData, CanvasError> {
-        match self.raster() {
+        let raster = match self.bitmap {
+            Bitmap::Blank => None,
+            Bitmap::Raster(_) | Bitmap::Shared(_) => self.raster(),
+        };
+        match raster {
             Some(raster) => {
                 let call = Call::GetImageData {
                     sx,
@@ -953,4 +957,93 @@ fn point_template(radius: f64, blur: f64) -> Option<Pixmap> {
     let mut raster = Raster::new(size, size)?;
     raster.run(&list.calls);
     Some(raster.into_pixmap())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const PIXELS: [f64; 2] = [120.0, 60.0];
+    const FIELD: [f64; 2] = [16.0, 8.0];
+    const A: &[[f64; 2]] = &[[0.0, 0.0], [1.0, 1.0], [1.0, 1.0]];
+    const B: &[[f64; 2]] = &[[-6.0, -3.0], [2.0, 3.5]];
+
+    fn update(heatmap: &mut Heatmap, translations: &[[f64; 2]]) {
+        let outcome = heatmap.update(translations, PIXELS, FIELD);
+        assert_eq!(outcome.error, None);
+    }
+
+    fn pixels(heatmap: &mut Heatmap) -> [Vec<u8>; 2] {
+        [
+            heatmap.image_data().unwrap().unwrap().data,
+            heatmap.shadow_image_data().unwrap().unwrap().data,
+        ]
+    }
+
+    fn fresh(translations: &[[f64; 2]]) -> [Vec<u8>; 2] {
+        let mut heatmap = Heatmap::new();
+        update(&mut heatmap, translations);
+        pixels(&mut heatmap)
+    }
+
+    fn blank(heatmap: &Heatmap) -> bool {
+        let renderer = &heatmap.heatmap.as_ref().unwrap().renderer;
+        [&renderer.canvas, &renderer.shadow]
+            .iter()
+            .all(|layer| matches!(layer.bitmap, Bitmap::Blank))
+    }
+
+    #[test]
+    fn canvases_have_memory_only_while_there_are_points() {
+        let mut heatmap = Heatmap::new();
+        update(&mut heatmap, &[]);
+        assert!(blank(&heatmap) && heatmap.pixmap().is_none());
+        assert_eq!(heatmap.canvas_size(), Some((120, 60)));
+        let empty = pixels(&mut heatmap);
+        assert_eq!(empty, [vec![0; 120 * 60 * 4], vec![0; 120 * 60 * 4]]);
+        assert!(blank(&heatmap));
+
+        update(&mut heatmap, A);
+        assert!(!blank(&heatmap) && heatmap.pixmap().is_some());
+        assert_eq!(pixels(&mut heatmap), fresh(A));
+        assert!(heatmap.pixmap().is_some());
+
+        update(&mut heatmap, &[]);
+        assert!(blank(&heatmap) && heatmap.pixmap().is_none());
+        assert_eq!(pixels(&mut heatmap), empty);
+
+        update(&mut heatmap, B);
+        assert_eq!(pixels(&mut heatmap), fresh(B));
+        heatmap.update(B, [90.0, 45.0], FIELD);
+        heatmap.update(&[], [60.0, 30.0], FIELD);
+        assert!(blank(&heatmap));
+    }
+
+    #[test]
+    fn the_bitmap_is_shared_and_stays_as_it_was_for_those_who_hold_it() {
+        let mut heatmap = Heatmap::new();
+        update(&mut heatmap, A);
+        let held = heatmap.pixmap().unwrap().clone();
+        update(&mut heatmap, A);
+        assert!(Arc::ptr_eq(&held, heatmap.pixmap().unwrap()));
+        let before = held.data().to_vec();
+
+        update(&mut heatmap, B);
+        assert!(!Arc::ptr_eq(&held, heatmap.pixmap().unwrap()));
+        assert_eq!(held.data(), before);
+        assert_eq!(pixels(&mut heatmap), fresh(B));
+        update(&mut heatmap, A);
+        assert_eq!(pixels(&mut heatmap), fresh(A));
+        assert_eq!(heatmap.pixmap().unwrap().data(), before);
+    }
+
+    #[test]
+    fn a_bitmap_nobody_else_holds_is_drawn_on_again() {
+        let mut heatmap = Heatmap::new();
+        update(&mut heatmap, A);
+        let at = heatmap.pixmap().unwrap().data().as_ptr();
+        update(&mut heatmap, B);
+        assert_eq!(heatmap.pixmap().unwrap().data().as_ptr(), at);
+        assert_eq!(pixels(&mut heatmap), fresh(B));
+    }
 }

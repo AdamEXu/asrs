@@ -583,6 +583,23 @@ mod tests {
     }
 
     #[test]
+    fn a_pixmap_is_made_in_the_buffer_it_is_given() {
+        let t =
+            IccTransform::from_icc(&profile(ADOBE_RGB, curv(0x0233))).expect("Adobe RGB converts");
+        let rgba: Vec<u8> = (0..=255).cycle().step_by(37).take(4 * 35).collect();
+        let want: Vec<u8> = rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|&p| t.convert(p))
+            .collect();
+        let at = rgba.as_ptr();
+        let pixmap = t.pixmap(7, 5, rgba).unwrap();
+        assert_eq!(pixmap.data(), want);
+        assert_eq!(pixmap.data().as_ptr(), at);
+    }
+
+    #[test]
     fn srgb_is_untouched() {
         let mut para = b"para\0\0\0\0\0\x03\0\0".to_vec();
         for v in [2.4, 1.0 / 1.055, 0.055 / 1.055, 1.0 / 12.92, 0.04045] {

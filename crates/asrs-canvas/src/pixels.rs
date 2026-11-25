@@ -225,6 +225,21 @@ mod tests {
     }
 
     #[test]
+    fn a_pixmap_is_made_in_the_buffer_it_is_given() {
+        let rgba: Vec<u8> = (0..=255).cycle().step_by(37).take(4 * 35).collect();
+        let want: Vec<u8> = rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|&p| premultiply(p))
+            .collect();
+        let at = rgba.as_ptr();
+        let pixmap = pixmap_from_straight_rgba(7, 5, rgba).unwrap();
+        assert_eq!(pixmap.data(), want);
+        assert_eq!(pixmap.data().as_ptr(), at);
+    }
+
+    #[test]
     fn bgra_swaps_red_and_blue() {
         let pixmap = pixmap_from_straight_rgba(2, 1, [255, 0, 0, 255, 0, 0, 255, 128]).unwrap();
         assert_eq!(to_straight_bgra(&pixmap), [0, 0, 255, 255, 255, 0, 0, 128]);

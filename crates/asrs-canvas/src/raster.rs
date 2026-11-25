@@ -2736,4 +2736,42 @@ mod shade_tests {
         let (_, shades) = draw(&at(40.0, 28.0), &Arc::new((*image).clone()), shades);
         assert_eq!(shades.levels.len(), 1);
     }
+
+    #[test]
+    fn a_blank_canvas_draws_nothing() {
+        let blank = Arc::new(Pixmap::new(90, 60).unwrap());
+        for (x, width, height, angle, alpha) in [
+            (3.0, 90.0, 60.0, 0.0, 1.0),
+            (3.25, 90.0, 60.0, 0.0, 1.0),
+            (3.25, 50.5, 33.25, 0.0, 1.0),
+            (3.25, 180.0, 130.0, 0.0, 0.4),
+            (40.0, 70.5, 40.25, 0.3, 1.0),
+        ] {
+            for smoothing in [true, false] {
+                let mut c = Canvas2d::new(120, 80);
+                let mut fill = Gradient::linear(0.0, 0.0, 120.0, 80.0);
+                fill.add_color_stop(0.0, "rgba(255, 10, 3, 0.1)");
+                fill.add_color_stop(1.0, "rgb(7, 200, 255)");
+                c.set_fill_style(fill);
+                c.fill_rect(0.0, 0.0, 110.0, 80.0);
+                c.set_image_smoothing_enabled(smoothing);
+                c.rotate(angle);
+                c.set_global_alpha(alpha);
+                c.draw_image_scaled("a", x, 2.5, width, height);
+                c.fill_rect(9.0, 9.0, 20.5, 20.5);
+                let draw = |image: Option<&Arc<Pixmap>>| {
+                    let mut raster = Raster::new(c.width, c.height).unwrap();
+                    if let Some(image) = image {
+                        raster.add_image("a", image.clone());
+                    }
+                    raster.run(&c.calls);
+                    (raster.state(), raster.into_pixmap())
+                };
+                let (state, drawn) = draw(Some(&blank));
+                let (without_state, without) = draw(None);
+                assert!(drawn.data() == without.data(), "{x} {width} {angle}");
+                assert_eq!(state, without_state);
+            }
+        }
+    }
 }
