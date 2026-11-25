@@ -1,7 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
-  <rect x="100" y="100" width="824" height="824" rx="184" fill="#1b2733"/>
-  <path d="M180 360H330V250H520V400H844" stroke="#f2a541" stroke-width="48" stroke-linejoin="round" stroke-linecap="round" fill="none"/>
-  <path d="M180 570H430V500H700V620H844" stroke="#4fc3a1" stroke-width="48" stroke-linejoin="round" stroke-linecap="round" fill="none"/>
-  <path d="M180 790H270V710H600V790H844" stroke="#6ba4f4" stroke-width="48" stroke-linejoin="round" stroke-linecap="round" fill="none"/>
-  <path d="M640 200V824" stroke="#e8eef4" stroke-width="20" stroke-linecap="round" fill="none"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024"><rect width="824" height="824" x="100" y="100" fill="#1b2733" rx="184"/><path fill="none" stroke="#f2a541" stroke-linecap="round" stroke-linejoin="round" stroke-width="48" d="M180 360H330V250H520V400H844"/><path fill="none" stroke="#4fc3a1" stroke-linecap="round" stroke-linejoin="round" stroke-width="48" d="M180 570H430V500H700V620H844"/><path fill="none" stroke="#6ba4f4" stroke-linecap="round" stroke-linejoin="round" stroke-width="48" d="M180 790H270V710H600V790H844"/><path fill="none" stroke="#e8eef4" stroke-linecap="round" stroke-width="20" d="M640 200V824"/></svg>
