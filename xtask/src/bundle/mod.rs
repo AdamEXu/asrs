@@ -7,6 +7,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use crate::version::Version;
 use crate::{Result, docs, gpui, libm, licenses, workspace_root};
 
 pub use associations::extensions;
@@ -30,13 +31,13 @@ upstream's bundledAssets/ and www/textures/ (from assets/ or reference/Advantage
 documentation `cargo xtask docs` built (as docs/build, left out with --no-docs: it may not be
 published, see issue 310) and the `cargo xtask licenses` bundle including the library's LGPL text
 and source.
-The version is the workspace's. Needs cargo-about.";
+The version is the workspace's (see `cargo xtask version`). Needs cargo-about.";
 
 const WEBVIEW: &str = "asrs-webview";
 /// What asrs reads from upstream's files at run time.
 const UPSTREAM_DIRS: &[&str] = &["bundledAssets", "www/textures"];
 const NAME: &str = "asrs";
-pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+pub use asrs_model::app_identity::VERSION;
 /// What upstream's Electron needs.
 const MACOS_MINIMUM: &str = "12.0";
 
@@ -234,6 +235,7 @@ fn build(bundle: &Bundle) -> Result<PathBuf> {
         .env("ASRS_LIBM_LGPL_SHIP", "1")
         .env("ASRS_PACKAGED", "1")
         .env("ASRS_BUILD_DATE", build_date()?)
+        .env("ASRS_FILE_VERSION", Version::current()?.windows())
         .env_remove("ASRS_LIBM_LGPL_DEV")
         .current_dir(workspace_root());
     if bundle.os == Os::Macos && std::env::var_os("MACOSX_DEPLOYMENT_TARGET").is_none() {

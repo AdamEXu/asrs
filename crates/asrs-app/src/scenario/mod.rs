@@ -138,6 +138,11 @@ pub enum Action {
     Copy(String),
     /// Whether the windows count as active.
     Focus(bool),
+    /// Waits until the hub's title is, or with `not` stops being, this.
+    Title {
+        text: String,
+        not: bool,
+    },
     /// Presses Tab this many times and keeps what had the focus after each, or what has it now.
     Traverse {
         name: String,
@@ -189,6 +194,8 @@ pub struct Scenario {
     pub user_assets: Vec<(String, Seed)>,
     /// Whether connections go to the scenario's robot.
     pub robot: bool,
+    /// Whether RLOG connections go to the scenario's live server.
+    pub live: bool,
     /// Whether scrollbars take space: `scrollbars` is `classic`.
     pub classic_scrollbars: bool,
     pub actions: Vec<Action>,
@@ -234,7 +241,7 @@ pub fn default_window() -> (f64, f64) {
     (options.width, options.height)
 }
 
-const TOP_KEYS: [&str; 12] = [
+const TOP_KEYS: [&str; 13] = [
     "page",
     "window",
     "scales",
@@ -243,12 +250,13 @@ const TOP_KEYS: [&str; 12] = [
     "prefs",
     "userData",
     "robot",
+    "live",
     "scrollbars",
     "platforms",
     "actions",
     "about",
 ];
-const ACTION_KEYS: [&str; 22] = [
+const ACTION_KEYS: [&str; 23] = [
     "main",
     "open",
     "eval",
@@ -268,6 +276,7 @@ const ACTION_KEYS: [&str; 22] = [
     "role",
     "copy",
     "focus",
+    "title",
     "traverse",
     "hover",
     "capture",
@@ -439,6 +448,13 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
                 .as_bool()
                 .ok_or_else(|| format!("{kind} is not a boolean"))?,
         ),
+        "title" => Action::Title {
+            text: text().ok_or("title is not a text")?,
+            not: action
+                .get("not")
+                .and_then(JsValue::as_bool)
+                .unwrap_or(false),
+        },
         "traverse" => Action::Traverse {
             name: text().ok_or("traverse is not a name")?,
             count: number(action, "count", Some(0.0))? as usize,
@@ -558,6 +574,7 @@ impl Scenario {
                 .unwrap_or_else(|| JsValue::Object(Default::default())),
             user_assets,
             robot: root.get("robot").is_some(),
+            live: root.get("live").is_some(),
             classic_scrollbars: root
                 .get("scrollbars")
                 .and_then(JsValue::as_str)

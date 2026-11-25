@@ -675,9 +675,11 @@ impl Builder {
         let cull_right = !convex;
         let mut b = Builder { edges: Vec::new() };
         let mut pieces = Vec::new();
+        let mut quads = Vec::new();
         let mut finite = true;
         for e in path.edges() {
-            let quads: Vec<[P; 3]> = match e.verb {
+            quads.clear();
+            match e.verb {
                 Verb::Line => {
                     match clip {
                         Some(c) => {
@@ -691,8 +693,10 @@ impl Builder {
                     }
                     continue;
                 }
-                Verb::Quad => vec![e.quad_pts()],
-                Verb::Conic => crate::path::conic_to_quads(e.quad_pts(), e.weight, 0.25),
+                Verb::Quad => quads.push(e.quad_pts()),
+                Verb::Conic => {
+                    crate::path::add_conic_quads(e.quad_pts(), e.weight, 0.25, &mut quads);
+                }
                 Verb::Cubic => {
                     let pts = e.pts;
                     match clip {
@@ -712,8 +716,8 @@ impl Builder {
                     continue;
                 }
                 Verb::Move | Verb::Close => continue,
-            };
-            for q in quads {
+            }
+            for &q in &quads {
                 match clip {
                     Some(c) => {
                         pieces.clear();
@@ -871,11 +875,20 @@ enum Additive {
     },
     Rle {
         row: Vec<u8>,
+        /// The cells written since the last flush, from the first to past the last.
+        touched: (usize, usize),
         left: i32,
         top: i32,
         curr_y: i32,
         safe: bool,
     },
+}
+
+const UNTOUCHED: (usize, usize) = (usize::MAX, 0);
+
+fn touch(touched: &mut (usize, usize), from: usize, to: usize) {
+    touched.0 = touched.0.min(from);
+    touched.1 = touched.1.max(to);
 }
 
 fn catch_overflow(a: i32) -> u8 {
@@ -931,6 +944,7 @@ impl Ctx<'_> {
     fn flush(&mut self) {
         if let Additive::Rle {
             row,
+            touched,
             left,
             top,
             curr_y,
@@ -938,6 +952,8 @@ impl Ctx<'_> {
         } = &mut self.blitter
             && *curr_y >= *top
         {
+            let (x, end) = std::mem::replace(touched, UNTOUCHED);
+            let row = row.get_mut(x..end).unwrap_or_default();
             for a in row.iter_mut() {
                 *a = if *a > 247 {
                     255
@@ -947,8 +963,10 @@ impl Ctx<'_> {
                     *a
                 };
             }
-            self.out.anti_h(*left, *curr_y, row);
-            row.fill(0);
+            if !row.is_empty() {
+                self.out.anti_h(*left + x as i32, *curr_y, row);
+                row.fill(0);
+            }
             *curr_y = *top - 1;
         }
     }
@@ -976,7 +994,11 @@ impl Ctx<'_> {
         }
         self.check_y(y);
         if let Additive::Rle {
-            row, left, safe, ..
+            row,
+            touched,
+            left,
+            safe,
+            ..
         } = &mut self.blitter
         {
             let width = row.len() as i32;
@@ -986,10 +1008,14 @@ impl Ctx<'_> {
                 aa = &aa[(-x) as usize..];
                 x = 0;
             }
-            let len = (aa.len() as i32).min(width - x).max(0);
-            for i in 0..len {
-                let cell = &mut row[(x + i) as usize];
-                let sum = i32::from(*cell) + i32::from(aa[i as usize]);
+            let len = (aa.len() as i32).min(width - x).max(0) as usize;
+            if len == 0 {
+                return;
+            }
+            let x = x as usize;
+            touch(touched, x, x + len);
+            for (cell, &a) in row[x..x + len].iter_mut().zip(aa) {
+                let sum = i32::from(*cell) + i32::from(a);
                 *cell = if *safe {
                     sum.min(255) as u8
                 } else {
@@ -1009,15 +1035,20 @@ impl Ctx<'_> {
         }
         self.check_y(y);
         if let Additive::Rle {
-            row, left, safe, ..
+            row,
+            touched,
+            left,
+            safe,
+            ..
         } = &mut self.blitter
         {
             let x = x - *left;
-            if !(x >= 0 && x + width <= row.len() as i32) {
+            if !(x >= 0 && x + width <= row.len() as i32) || width <= 0 {
                 return;
             }
-            for i in 0..width {
-                let cell = &mut row[(x + i) as usize];
+            let x = x as usize;
+            touch(touched, x, x + width as usize);
+            for cell in &mut row[x..x + width as usize] {
                 let sum = i32::from(*cell) + i32::from(alpha);
                 *cell = if *safe {
                     sum.min(255) as u8
@@ -2004,6 +2035,7 @@ pub fn fill_path_clipped(
     } else {
         let blitter = Additive::Rle {
             row: vec![0; (sect[2] - sect[0]) as usize],
+            touched: UNTOUCHED,
             left: sect[0],
             top: sect[1],
             curr_y: sect[1] - 1,
@@ -2084,6 +2116,13 @@ fn try_blit_fat_anti_rect(path: &SkPath, clip: [i32; 4], out: &mut Spans) -> boo
     true
 }
 
+/// The order `SkAnalyticEdge` sorts by, `upper_y`, `x`, `dx`, above the edge's index, which takes
+/// no part in it.
+fn sort_key((index, edge): (usize, &Edge)) -> u128 {
+    let ordered = |v: i32| u128::from(v as u32 ^ 0x8000_0000);
+    ordered(edge.upper_y) << 96 | ordered(edge.x) << 64 | ordered(edge.dx) << 32 | index as u128
+}
+
 #[allow(clippy::too_many_arguments)]
 fn fill_edges(
     path: &SkPath,
@@ -2106,31 +2145,20 @@ fn fill_edges(
         return;
     }
     let count = edges.len();
+    let mut order: Vec<u128> = edges.iter().enumerate().map(sort_key).collect();
+    tq_sort(&mut order, &|a: &u128, b: &u128| a >> 32 < b >> 32);
     let mut l = List {
         e: Vec::with_capacity(count + 2),
     };
     l.e.push(Edge::blank());
     l.e.push(Edge::blank());
-    l.e.extend(edges);
-    let mut order: Vec<usize> = (2..count + 2).collect();
-    {
-        let e = &l.e;
-        tq_sort(&mut order, &|&a: &usize, &b: &usize| {
-            let (a, b) = (&e[a], &e[b]);
-            if a.upper_y != b.upper_y {
-                return a.upper_y < b.upper_y;
-            }
-            if a.x != b.x {
-                return a.x < b.x;
-            }
-            a.dx < b.dx
-        });
+    for (i, key) in order.into_iter().enumerate() {
+        let mut edge = edges[key as u32 as usize];
+        edge.prev = i + 1;
+        edge.next = i + 3;
+        l.e.push(edge);
     }
-    for w in order.windows(2) {
-        l.e[w[0]].next = w[1];
-        l.e[w[1]].prev = w[0];
-    }
-    let (first, last) = (order[0], order[count - 1]);
+    let (first, last) = (2, count + 1);
     {
         let h = &mut l.e[HEAD];
         h.prev = NONE;

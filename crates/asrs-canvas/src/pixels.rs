@@ -124,6 +124,9 @@ pub fn write_rect(pixmap: &mut Pixmap, image: &ImageData, x: i64, y: i64) {
     }
 }
 
+/// The output a thread is worth starting for.
+const BAND_BYTES: usize = 1 << 18;
+
 /// `src` as a compositor draws a transformed layer into a `width` x `height` device-pixel
 /// target: each target pixel centre is mapped back through `inverse` (`[a, b, c, d, e, f]`,
 /// `x' = a*x + c*y + e`, `y' = b*x + d*y + f`) and `src` is sampled bilinearly there, transparent
@@ -157,9 +160,8 @@ pub fn transform_bilinear(
         }
     };
     let row = width as usize * 4;
-    let pixels = out.data_mut();
-    for y in 0..height {
-        let py = f64::from(y) + 0.5;
+    let draw_row = |y: usize, pixels: &mut [u8]| {
+        let py = y as f64 + 0.5;
         for x in 0..width {
             let px = f64::from(x) + 0.5;
             let (x0, tx) = split(a * px + c * py + e - 0.5);
@@ -175,12 +177,30 @@ pub fn transform_bilinear(
                     top + (bottom - top) * ty
                 })
             };
-            let i = y as usize * row + x as usize * 4;
+            let i = x as usize * 4;
             for k in 0..4 {
                 pixels[i + k] = p[k].round().clamp(0.0, 255.0) as u8;
             }
         }
-    }
+    };
+    let cores = std::thread::available_parallelism().map_or(1, usize::from);
+    let threads = (out.data().len() / BAND_BYTES + 1).min(cores);
+    let band = (height as usize).div_ceil(threads);
+    std::thread::scope(|scope| {
+        let draw_row = &draw_row;
+        for (i, rows) in out.data_mut().chunks_mut(band * row).enumerate() {
+            let mut draw = move || {
+                for (j, pixels) in rows.chunks_mut(row).enumerate() {
+                    draw_row(i * band + j, pixels);
+                }
+            };
+            if threads == 1 {
+                draw();
+            } else {
+                scope.spawn(draw);
+            }
+        }
+    });
     Some(out)
 }
 

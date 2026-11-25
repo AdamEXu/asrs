@@ -7,7 +7,7 @@ use flate2::Compression;
 use flate2::write::GzEncoder;
 
 use super::associations::{desktop_types, mime_package};
-use super::{Bundle, at, copy, copy_tree, run_tool, write};
+use super::{Bundle, VERSION, at, copy, copy_tree, run_tool, write};
 use crate::{Result, oracle, sha256_hex, workspace_root};
 
 const ICON_SIZES: &[u32] = &[16, 32, 48, 64, 128, 256, 512];
@@ -108,10 +108,11 @@ fn appimage(bundle: &Bundle, stage: &Path) -> Result {
         RUNTIME_NOTICE,
     )?;
     integration(&dir.join("usr/share"), "asrs")?;
-    copy(
-        &dir.join("usr/share/applications/asrs.desktop"),
-        &dir.join("asrs.desktop"),
-    )?;
+    let entry = dir.join("usr/share/applications/asrs.desktop");
+    let text = fs::read_to_string(&entry).map_err(at(&entry))?;
+    let text = format!("{text}X-AppImage-Version={VERSION}\n");
+    write(&entry, &text)?;
+    write(&dir.join("asrs.desktop"), &text)?;
     for icon in ["asrs.png", ".DirIcon"] {
         copy(
             &workspace_root().join("packaging/icons/256.png"),
