@@ -172,5 +172,35 @@
       "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf": "705903ae1382f0150f115d6f10a30f5b2f3d6ade649c474afe6366c39174fb65",
       "/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf": "93cdc4ee9aa40e2afceecc63da0ca05ec7aab4bec991ece51a6b52389f48a477"
     }
+  },
+  "field3d": {
+    "x86_64": {
+      "swiftshader": {
+        "electronSwitches": [
+          "--enable-unsafe-swiftshader"
+        ],
+        "glRenderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+        "samples": 4,
+        "portEnvironment": [
+          "ASRS_FIELD3D_ADAPTER=swiftshader",
+          "VK_ICD_FILENAMES=<electron dist>/vk_swiftshader_icd.json"
+        ],
+        "portAdapter": {
+          "name": "SwiftShader Device (Subzero)",
+          "backend": "Vulkan",
+          "deviceType": "Cpu",
+          "driver": "SwiftShader driver",
+          "driverInfo": ""
+        },
+        "captures": 68,
+        "failed": [],
+        "ssimMin": 0.9999999454249211,
+        "differingPctMax": 0.006993006993006993,
+        "interiorMaxDelta": 1,
+        "interiorDifferingPctMax": 0.0008953085830249492,
+        "maxDelta": 1,
+        "outlierBlob": 0
+      }
+    }
   }
 }
