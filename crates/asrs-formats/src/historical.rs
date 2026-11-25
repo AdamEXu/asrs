@@ -529,8 +529,7 @@ impl HistoricalDataSource {
                 for field in fields {
                     let key = apply_key_prefix(&self.key_prefix, &field.key);
                     let mut data = field.data.structured_clone();
-                    data.timestamps =
-                        Arc::new(data.timestamps.iter().map(|t| t + self.offset).collect());
+                    data.shift_timestamps(self.offset);
                     cx.log.set_field(&key, LogField::from_serialized(data));
                     if field.generated_parent {
                         cx.log.set_generated_parent(&key);
@@ -799,6 +798,7 @@ mod tests {
     use asrs_log::log::proto_decoder::SerializedProtoDecoder;
 
     use super::*;
+    use crate::worker::FieldResponse;
 
     #[derive(Default)]
     struct Recorder {
@@ -996,6 +996,48 @@ mod tests {
                 "/Other"
             ]
         );
+    }
+
+    #[test]
+    fn a_fields_message_with_zero_offset_shares_the_timestamp_column() {
+        let (mut log, mut realm) = (
+            Log::new(true),
+            JsRealm::new(Box::new(SetRng::new(vec![0.5]))),
+        );
+        let mut host = Recorder::default();
+        let mut source = open("a.wpilog", &mut host, &mut log, &mut realm);
+        let data = reply(&source, vec![Some(Arc::from(&b"x"[..]))], None);
+        let mut cx = PageContext {
+            log: &mut log,
+            realm: &mut realm,
+            host: &mut host,
+        };
+        source.handle_main_message(&data, &mut cx);
+        let uuid = source.uuid().to_owned();
+        let initial = Response::Initial {
+            log: Box::new(Log::new(true).to_serialized()),
+            is_partial: true,
+        };
+        source.worker_message(&uuid, initial, &mut cx).unwrap();
+        assert!(source.log_is_partial());
+
+        let mut field = LogField::new(LoggableType::Number);
+        field.put_number(0.0, 1.0);
+        field.put_number(1.0, 2.0);
+        let data = field.to_serialized();
+        let shared = Arc::clone(&data.timestamps);
+        let fields = Response::Fields(vec![FieldResponse {
+            key: JsString::from("/A"),
+            data,
+            generated_parent: false,
+        }]);
+        source.worker_message(&uuid, fields, &mut cx).unwrap();
+        let merged = log
+            .get_field(&JsString::from("/A"))
+            .unwrap()
+            .to_serialized();
+        assert!(Arc::ptr_eq(&merged.timestamps, &shared));
+        assert_eq!(merged.timestamps.as_slice(), &[0.0, 1.0]);
     }
 
     #[test]
