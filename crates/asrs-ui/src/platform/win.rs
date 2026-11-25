@@ -312,6 +312,8 @@ pub(super) fn popup_window_opened(
     };
     cx.spawn(async move |_| {
         let px = |v: Pixels| f64::from(f32::from(v));
+        // Windows' own minimum, for a window with a frame, is taller than a one line tooltip.
+        native.set_content_size_limits(Some((1.0, 1.0)), None);
         native.set_content_origin(px(bounds.origin.x), px(bounds.origin.y));
         native.set_content_size(px(bounds.size.width), px(bounds.size.height));
     })
