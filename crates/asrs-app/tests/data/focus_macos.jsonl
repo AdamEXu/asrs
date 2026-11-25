@@ -112,6 +112,97 @@
 {"scenario":"traverse-console","traverse":"to-delete","index":5,"focused":{"element":"button.console-table-key-delete","title":"Remove from view","stop":true,"rect":[468.546875,90.5,25,25],"ring":true}}
 {"scenario":"traverse-console","traverse":"deleted","index":0,"focused":null}
 {"scenario":"traverse-console","traverse":"deleted-next","index":0,"focused":{"element":"button.export-button","title":"Export console log","stop":true,"rect":[859,90.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,48,42,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[352,48,80.75,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[822.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[797.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":5,"focused":{"element":"select.field-select","title":"Select field image","stop":true,"rect":[897.78125,583,99,24],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":6,"focused":{"element":"a.field-source","title":"Open field image source URL","stop":true,"rect":[996.78125,580.5,55.421875,27],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":7,"focused":{"element":"div","title":"Rotate field counter-clockwise","stop":true,"rect":[862.5,624,50,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":8,"focused":{"element":"div","title":"Rotate field clockwise","stop":true,"rect":[912.5,624,50,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":9,"focused":{"element":"div.selected","title":"Large robot size","stop":true,"rect":[987.5,624,33.328125,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":10,"focused":{"element":"div","title":"Medium robot size","stop":true,"rect":[1020.828125,624,33.328125,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":11,"focused":{"element":"div","title":"Small robot size","stop":true,"rect":[1054.15625,624,33.328125,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":12,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":13,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":14,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":15,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":16,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":17,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":18,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,48,42,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":19,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[352,48,80.75,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":20,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[822.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":21,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[797.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":22,"focused":{"element":"select.field-select","title":"Select field image","stop":true,"rect":[897.78125,564,99,24],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d","index":23,"focused":{"element":"a.field-source","title":"Open field image source URL","stop":true,"rect":[996.78125,561.5,55.421875,27],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":0,"focused":{"element":"select.field-select","title":"Select field image","stop":true,"rect":[897.78125,564,99,24],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":1,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[797.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":2,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[822.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":3,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[352,48,80.75,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":4,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,48,42,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":5,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":6,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":7,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":8,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":9,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":10,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":11,"focused":{"element":"div","title":"Small robot size","stop":true,"rect":[1054.15625,624,33.328125,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":12,"focused":{"element":"div","title":"Medium robot size","stop":true,"rect":[1020.828125,624,33.328125,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":13,"focused":{"element":"div.selected","title":"Large robot size","stop":true,"rect":[987.5,624,33.328125,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":14,"focused":{"element":"div","title":"Rotate field clockwise","stop":true,"rect":[912.5,624,50,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":15,"focused":{"element":"div","title":"Rotate field counter-clockwise","stop":true,"rect":[862.5,624,50,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":16,"focused":{"element":"a.field-source","title":"Open field image source URL","stop":true,"rect":[996.78125,561.5,55.421875,27],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":17,"focused":{"element":"select.field-select","title":"Select field image","stop":true,"rect":[897.78125,564,99,24],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":18,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[797.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":19,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[822.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":20,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[352,48,80.75,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":21,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,48,42,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":22,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-field-settings","traverse":"2d-back","index":23,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-switcher","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-field-settings","traverse":"2d-switcher","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,48,42,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-switcher","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[352,48,80.75,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-switcher","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[822.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-switcher","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[797.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-switcher","index":5,"focused":{"element":"select.field-select","title":"Select field image","stop":true,"rect":[897.78125,564,99,24],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-switcher","index":6,"focused":{"element":"a.field-source","title":"Open field image source URL","stop":true,"rect":[996.78125,561.5,55.421875,27],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-switcher","index":7,"focused":{"element":"div","title":"Rotate field counter-clockwise","stop":true,"rect":[862.5,624,50,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-switcher","index":8,"focused":{"element":"div","title":"Rotate field clockwise","stop":true,"rect":[912.5,624,50,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-switcher","index":9,"focused":{"element":"div.selected","title":"Large robot size","stop":true,"rect":[987.5,624,33.328125,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"2d-switcher","index":10,"focused":{"element":"div","title":"Medium robot size","stop":true,"rect":[1020.828125,624,33.328125,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,48,42,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[352,48,67.21875,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":3,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":4,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":5,"focused":{"element":"select.field-select","title":"Select field model","stop":true,"rect":[950.5,583,99,24],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":6,"focused":{"element":"div.xr-button","title":"Start XR streaming","stop":true,"rect":[952,624,96,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":7,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":8,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":9,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":10,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":11,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":12,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":13,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,48,42,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":14,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[352,48,67.21875,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d","index":15,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":0,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[352,48,67.21875,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,48,42,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":2,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":3,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":4,"focused":{"element":"button.tab-control.popup","title":"Pop out tab","stop":true,"rect":[1027,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":5,"focused":{"element":"button.tab-control.close","title":"Close tab","stop":true,"rect":[994,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":6,"focused":{"element":"button.tab-control.play","title":"Play","stop":true,"rect":[956,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":7,"focused":{"element":"button.tab-control.feedback","title":"Share feedback","stop":true,"rect":[918,8,28,28],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":8,"focused":{"element":"div.xr-button","title":"Start XR streaming","stop":true,"rect":[952,624,96,26],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":9,"focused":{"element":"select.field-select","title":"Select field model","stop":true,"rect":[950.5,564,99,24],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":10,"focused":{"element":"button.help","title":"Help","stop":true,"rect":[847.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":11,"focused":{"element":"button.clear","title":"Clear all fields","stop":true,"rect":[872.5,552.5,25,25],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":12,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[352,48,67.21875,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":13,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,48,42,32],"ring":true}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":14,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
+{"scenario":"traverse-field-settings","traverse":"3d-back","index":15,"focused":{"element":"button.tab-control.add-tab","title":"Add tab","stop":true,"rect":[1060,8,28,28],"ring":true}}
 {"scenario":"traverse-fields","traverse":"all","index":0,"focused":{"element":"input.side-bar-search","title":"Search fields","stop":true,"rect":[16,73,268,29],"ring":false,"value":"","selection":[0,0]}}
 {"scenario":"traverse-fields","traverse":"all","index":1,"focused":{"element":"div.tab","title":"","stop":true,"rect":[310,48,42,32],"ring":true}}
 {"scenario":"traverse-fields","traverse":"all","index":2,"focused":{"element":"div.tab.tab-selected","title":"","stop":true,"rect":[352,48,80.75,32],"ring":true}}

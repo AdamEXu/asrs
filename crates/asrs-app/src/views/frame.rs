@@ -54,6 +54,7 @@ use super::line_graph::LineGraphViews;
 use super::metadata::MetadataView;
 use super::page_text::PageSelection;
 use super::scrollers::{Area, Scrollers};
+use super::settings_panel::SettingsPanels;
 use super::source_list::{self, ListsGeometry};
 use super::statistics::StatisticsViews;
 use super::tab_bar::{self, TabBarGeometry};
@@ -300,6 +301,7 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) field_2d: Field2dViews,
     pub(super) field3d: Field3dViews,
     pub(super) canvas_tabs: CanvasTabViews,
+    pub(super) settings_panels: SettingsPanels,
     pub(super) table: TableViews,
     pub(super) console: ConsoleViews,
     pub(super) documentation: DocumentationViews,
@@ -442,6 +444,7 @@ impl<H: FrameHost> HubFrame<H> {
             field_2d: Field2dViews::default(),
             field3d: Field3dViews::default(),
             canvas_tabs: CanvasTabViews::default(),
+            settings_panels: SettingsPanels::default(),
             table: TableViews::default(),
             console: ConsoleViews::default(),
             documentation: DocumentationViews::default(),
@@ -570,7 +573,7 @@ impl<H: FrameHost> HubFrame<H> {
             self.host.scroll_side_bar([top, height]);
         }
         self.scroll_source_list(focused, bounds, window);
-        self.canvas_tabs.scroll_to(focused, bounds, window);
+        self.settings_panels.scroll_to(focused, bounds, window);
         self.scroll_statistics_settings(focused, bounds, window, cx);
         self.scroll_table(focused, cx);
     }

@@ -1,0 +1,132 @@
+{
+  "about": "Interaction (#412): the classic scrollbar of the 3D field settings, hovered and pressed, and what is laid out next to one",
+  "scrollbars": "classic",
+  "platforms": [
+    "darwin"
+  ],
+  "gl": true,
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 3,
+              "title": "3D",
+              "controller": {
+                "sources": [],
+                "game": "FRC:Evergreen"
+              },
+              "controllerUUID": "field3d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 100
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "top",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1094,
+      "y": 560
+    },
+    {
+      "mouse": "move",
+      "x": 1094,
+      "y": 561
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "hover",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "mouse": "down",
+      "x": 1094,
+      "y": 645
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "up",
+      "x": 1094,
+      "y": 645
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "paged",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "rest",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    }
+  ]
+}
