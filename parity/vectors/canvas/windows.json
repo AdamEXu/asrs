@@ -119,7 +119,7 @@
   "platform": "win32",
   "arch": "x64",
   "osRelease": "10.0.26300",
-  "generator": "91aad945528b7ad0",
+  "generator": "175f0d5e4374c3e2",
   "lut": {
     "file": "lut-windows.bin",
     "content": "126da49e80e8c6fd"
@@ -201,22 +201,120 @@
     {
       "scene": "gradientedges-light-2x",
       "content": "793d3ac952157f3b"
-    },
-    {
-      "scene": "dom-text-light@1x",
-      "content": "2dcdab8713fee00b"
-    },
-    {
-      "scene": "dom-text-light@2x",
-      "content": "0e65e0ca52079cf5"
-    },
-    {
-      "scene": "dom-text-dark@1x",
-      "content": "03f56a06e8d6719f"
-    },
-    {
-      "scene": "dom-text-dark@2x",
-      "content": "6f21a788022e512e"
     }
-  ]
+  ],
+  "lcdLut": {
+    "electron": "39.2.7",
+    "chrome": "142.0.7444.235",
+    "arch": "x64",
+    "osRelease": "10.0.26300",
+    "generator": "175f0d5e4374c3e2",
+    "file": "lut-windows-lcd.bin",
+    "content": "8deeabf4808a3d24"
+  },
+  "dom": {
+    "electron": "39.2.7",
+    "chrome": "142.0.7444.235",
+    "arch": "x64",
+    "osRelease": "10.0.26300",
+    "generator": "175f0d5e4374c3e2",
+    "files": [
+      {
+        "file": "dom-hub-dark@1x.json",
+        "content": "1681ed22a177830e"
+      },
+      {
+        "file": "dom-hub-dark@1x.png",
+        "content": "f2a02bd49715e859"
+      },
+      {
+        "file": "dom-hub-dark@2x.json",
+        "content": "2a8aadf8a443778e"
+      },
+      {
+        "file": "dom-hub-dark@2x.png",
+        "content": "2186fd61dfd7cd31"
+      },
+      {
+        "file": "dom-hub-light@1x.json",
+        "content": "d5f6449a10b03d7e"
+      },
+      {
+        "file": "dom-hub-light@1x.png",
+        "content": "d2586f6a8830134e"
+      },
+      {
+        "file": "dom-hub-light@2x.json",
+        "content": "7ce73639f98e186b"
+      },
+      {
+        "file": "dom-hub-light@2x.png",
+        "content": "e9a517f7f54d32f9"
+      },
+      {
+        "file": "dom-lcd-dark@1x.json",
+        "content": "1848c0f9ae29acf1"
+      },
+      {
+        "file": "dom-lcd-dark@1x.png",
+        "content": "8f30c02c1ea69de1"
+      },
+      {
+        "file": "dom-lcd-dark@2x.json",
+        "content": "90d4f026fe79a1a3"
+      },
+      {
+        "file": "dom-lcd-dark@2x.png",
+        "content": "461c77d1ad25fa72"
+      },
+      {
+        "file": "dom-lcd-light@1x.json",
+        "content": "e536393fec205faf"
+      },
+      {
+        "file": "dom-lcd-light@1x.png",
+        "content": "97e6836bce0e6c50"
+      },
+      {
+        "file": "dom-lcd-light@2x.json",
+        "content": "ee4f79b575f330f5"
+      },
+      {
+        "file": "dom-lcd-light@2x.png",
+        "content": "7d90d23f56f17f5d"
+      },
+      {
+        "file": "dom-text-dark@1x.json",
+        "content": "de4495e09ae2d32d"
+      },
+      {
+        "file": "dom-text-dark@1x.png",
+        "content": "03f56a06e8d6719f"
+      },
+      {
+        "file": "dom-text-dark@2x.json",
+        "content": "db072e332bc27699"
+      },
+      {
+        "file": "dom-text-dark@2x.png",
+        "content": "6f21a788022e512e"
+      },
+      {
+        "file": "dom-text-light@1x.json",
+        "content": "386a767b9f4a6638"
+      },
+      {
+        "file": "dom-text-light@1x.png",
+        "content": "2dcdab8713fee00b"
+      },
+      {
+        "file": "dom-text-light@2x.json",
+        "content": "cc2ce68989d8d018"
+      },
+      {
+        "file": "dom-text-light@2x.png",
+        "content": "0e65e0ca52079cf5"
+      }
+    ]
+  }
 }

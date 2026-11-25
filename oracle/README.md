@@ -556,8 +556,18 @@ Modes (`electron canvasMain.mjs <mode> <out dir>`):
 | `canvas [<scene>...]` | `scenes/<scene>.json` and `ref/<scene>.{cpu,gpu}.png`: `getImageData` of the scene on a `willReadFrequently` (CPU) canvas, the reference, and on the default (GPU) canvas |
 | `measure` | `measure.jsonl`: every `TextMetrics` field for each font, string, `textAlign` and `textBaseline` of the label corpus |
 | `canvas-lut` | the calibration scenes `calib-0` to `calib-7` (grey text at each 3-bit luminance) on the CPU canvas |
-| `dom <scale>` | `dom/<scene>@<scale>x.png` from `capturePage`, and `.json` with each row's box and per-character boxes; fails unless the colour patches come back exact |
+| `canvas-lut dom <scale>` | `lcd/`: the DOM LCD calibration scenes, `lcd-grey-<k>` (grey text at each 3-bit luminance) and `lcd-colour-<k>` (text whose channels fall in different ones), on opaque backgrounds; `scenes/<scene>.json` is their font, text and colours. |
+| `dom <scale>` | `dom/<scene>@<scale>x.png` from `capturePage`, and `.json` with each text box's rectangle, per-character boxes and `mode`; fails unless the colour patches come back exact |
 | `list` | scene names |
+
+`mode` is `lcd` or `grayscale`: how Chromium antialiased the box's text. It is LCD if some pixel
+needs a coverage per colour channel (`src/canvas/textMode.ts`): for grey text any pixel that is
+not grey, for coloured text any pixel that is not on the line between its two colours. The DOM
+scenes are `dom-text` (styles and colours on opaque pages), `dom-lcd` (sizes around Skia's 48
+device px limit, and the ways a page takes LCD text away: opacity, layers, filters, masks) and
+`dom-hub` (upstream's `hub.html` with its style sheets and stand-ins for what scripts fill in, in
+an acrylic window on Windows 11). Two boxes of different modes that share pixels are refused.
+`cargo xtask canvas dom` keeps them in `parity/vectors/canvas/`.
 
 PNGs are straight-alpha RGBA, written with filter 0 and zlib level 9 so equal pixels give equal
 files. `info.json` records the Electron and Chrome versions, platform, architecture and GPU

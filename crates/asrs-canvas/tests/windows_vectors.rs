@@ -1,17 +1,18 @@
 #![cfg(windows)]
 #![allow(clippy::disallowed_methods)]
 
+mod dom_text;
+
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::Path;
 
 use asrs_canvas::text::caret;
-use asrs_canvas::text::lut::{self, MaskGammaLut};
+use asrs_canvas::text::lut::{self, LcdGammaLut, MaskGammaLut};
 use asrs_canvas::text::win::DirectWrite;
 use asrs_canvas::text::win::settings::{Edging, TextSettings};
 use asrs_canvas::text::{FontSpec, TextBackend, TextMetrics, measure_text};
 use asrs_parity::json::{self, Json};
-use asrs_parity::pixel::{self, Rgb};
 use asrs_parity::vectors;
 use sha2::{Digest, Sha256};
 
@@ -425,179 +426,17 @@ fn carets_follow_shaped_text() {
     }
 }
 
-fn lerp32(src: u8, dst: u8, mask: u32) -> u8 {
-    let scale = (mask + (mask >> 4)) as i32;
-    let (src, dst) = (i32::from(src), i32::from(dst));
-    (dst + (((src - dst) * scale) >> 5)) as u8
-}
-
-/// `SkPack888ToRGB16` and `blend_lcd16_opaque`.
-fn blend_lcd16(dst: &mut [u8; 3], color: [u8; 3], mask: [u8; 3]) {
-    let packed = [mask[0] >> 3, mask[1] >> 2, mask[2] >> 3];
-    if packed == [31, 63, 31] {
-        *dst = color;
-    } else if packed != [0; 3] {
-        let five = [packed[0], packed[1] >> 1, packed[2]];
-        for c in 0..3 {
-            dst[c] = lerp32(color[c], dst[c], u32::from(five[c]));
-        }
-    }
-}
-
-const DOM_SAMPLES: [&str; 4] = [
-    "Robot/Drive/LeftVelocity",
-    "Teleoperated 0123456789 +4.37s",
-    "AVWAY Tij fi Wg",
-    "NT:/SmartDashboard/Auto Chooser",
-];
-
-/// A row of `oracle/src/canvas/dom.ts` as its font, text and, where it has one, colour.
-fn dom_row(id: &str, dark: bool) -> (String, String, Option<[u8; 3]>) {
-    let (style, index) = id.split_once('/').unwrap();
-    let index: usize = index.parse().unwrap();
-    if style == "color" {
-        let last = if dark { "#ffffff" } else { "#000000" };
-        let color = ["#2b66a2", "#af2437", "#e5b31b", "#3fa34d", last][index];
-        let channel = |i: usize| u8::from_str_radix(&color[i..i + 2], 16).unwrap();
-        let rgb = [channel(1), channel(3), channel(5)];
-        return (
-            format!("13px {SYSTEM}"),
-            format!("Color {color}"),
-            Some(rgb),
-        );
-    }
-    let (size, rest) = style.split_once('-').unwrap_or((style, ""));
-    let css = match rest {
-        "" => format!("{size} {SYSTEM}"),
-        "mono" => format!("{size} Courier, monospace"),
-        "mono-bold" => format!("bold {size} Courier, monospace"),
-        weight => format!("{weight} {size} {SYSTEM}"),
-    };
-    (css, DOM_SAMPLES[index].to_owned(), None)
-}
-
-/// DOM text of the render host, redrawn from three-channel masks through Skia's per-channel
-/// preblend and LCD16 blit, at the DOM's own box positions.
+/// DOM text of the render host, redrawn from three-channel masks at the DOM's own box positions.
 #[test]
 fn lcd_masks_reproduce_dom_text() {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/vectors/canvas");
-    let fonts = [
-        "12px system-ui",
-        "200 12px system-ui",
-        "600 12px system-ui",
-        "bold 12px system-ui",
-        "900 12px system-ui",
-        "15px Courier, monospace",
-        "bold 15px Courier, monospace",
-    ];
-    let Some(mut backend) = pinned_backend(&fonts) else {
+    let Some(mut backend) = pinned_backend(&dom_text::FONTS) else {
         return;
     };
-    let lut = MaskGammaLut::embedded().unwrap();
-    for (theme, scale) in [("light", 1u32), ("light", 2), ("dark", 1), ("dark", 2)] {
-        let name = format!("dom-text-{theme}@{scale}x");
-        let dark = theme == "dark";
-        let background = if dark { [0x22; 3] } else { [0xff; 3] };
-        let text_color = if dark { [0xee; 3] } else { [0x22; 3] };
-        let read = |ext: &str| root.join(format!("scenes-windows/{name}.{ext}"));
-        let png = pixel::read_png(&read("png")).unwrap();
-        let reference = pixel::composite(&png, background);
-        let scene = json::parse(&std::fs::read_to_string(read("json")).unwrap()).unwrap();
-        let rows = scene.get("rows").and_then(Json::as_array).unwrap();
-        assert_eq!(rows.len(), 65);
-        let mut ours = Rgb {
-            width: reference.width,
-            height: reference.height,
-            data: vec![background; reference.data.len()],
-        };
-        let mut in_box = vec![false; reference.data.len()];
-        let s = f64::from(scale);
-        for row in rows {
-            let id = row.get("id").unwrap().as_str().unwrap().to_string_lossy();
-            let (css, text, color) = dom_row(&id, dark);
-            let color = color.unwrap_or(text_color);
-            let rect: Vec<f64> = row
-                .get("rect")
-                .and_then(Json::as_array)
-                .unwrap()
-                .iter()
-                .map(|v| v.as_f64().unwrap())
-                .collect();
-            let spec = FontSpec::parse(&css).unwrap();
-            let device = FontSpec {
-                size: spec.size * scale as f32,
-                ..spec
-            };
-            let metrics = backend.metrics(&device);
-            let content = f64::from(metrics.ascent + metrics.descent);
-            let leading = ((rect[3] * s - content) / 2.0).floor();
-            let baseline = (rect[1] * s + leading + f64::from(metrics.ascent)).round() as i32;
-            let (x0, x1) = (
-                (rect[0] * s).floor() as i32,
-                ((rect[0] + rect[2]) * s).ceil() as i32,
-            );
-            let (y0, y1) = (
-                (rect[1] * s).floor() as i32,
-                ((rect[1] + rect[3]) * s).ceil() as i32,
-            );
-            for y in y0..y1 {
-                for x in x0..x1 {
-                    in_box[(y * ours.width as i32 + x) as usize] = true;
-                }
-            }
-            let origin = (rect[0] * s) as f32;
-            for g in backend.shape_run(&spec, &text, scale as f32).glyphs {
-                let biased = origin + g.x * scale as f32 + 0.125;
-                let ix = biased.floor();
-                let phase = ((biased - ix) * 4.0) as u8;
-                let lcd = backend.raw_lcd_mask(g.glyph, s, 1.0, phase);
-                let gray = backend.raw_mask(g.glyph, s, 1.0, phase);
-                let Some(gray) = gray else { continue };
-                let (left, top) = (ix as i32 + gray.left, baseline + gray.top);
-                for my in 0..gray.height as i32 {
-                    for mx in 0..gray.width as i32 {
-                        let (x, y) = (left + mx, top + my);
-                        if x < 0 || y < 0 || x >= ours.width as i32 || y >= ours.height as i32 {
-                            continue;
-                        }
-                        let i = (my * gray.width as i32 + mx) as usize;
-                        let dst = &mut ours.data[(y * reference.width as i32 + x) as usize];
-                        match &lcd {
-                            Some(lcd) => {
-                                let mut mask = [0; 3];
-                                for c in 0..3 {
-                                    let bucket = usize::from(color[c] >> 5);
-                                    mask[c] = lut.row(bucket)[usize::from(lcd.data[i * 3 + c])];
-                                }
-                                blend_lcd16(dst, color, mask);
-                            }
-                            None => {
-                                let a = f64::from(lut.apply(color, gray.data[i])) / 255.0;
-                                for c in 0..3 {
-                                    let (d, v) = (f64::from(dst[c]), f64::from(color[c]));
-                                    dst[c] = (d + (v - d) * a).round() as u8;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        let compared = pixel::compare(&reference, &ours, background).unwrap();
-        let mut boxed = 0;
-        let mut differing = 0;
-        let mut max = 0;
-        for i in (0..ours.data.len()).filter(|&i| in_box[i]) {
-            boxed += 1;
-            differing += u32::from(compared.mask[i]);
-            for c in 0..3 {
-                max = max.max(ours.data[i][c].abs_diff(reference.data[i][c]));
-            }
-        }
-        let percent = 100.0 * f64::from(differing) / f64::from(boxed);
-        eprintln!("{name}: {differing} of {boxed} ({percent:.4} %), max channel {max}");
-        let gate = if scale == 1 { 0.2 } else { 0.003 };
-        assert!(percent <= gate, "{name}: {percent:.4} %");
-        assert!(max <= 2, "{name}: max channel {max}");
-    }
+    dom_text::check_redraw(&mut backend, "scenes-windows", 2);
+}
+
+#[test]
+fn embedded_lcd_lut_is_skias_table() {
+    let lcd = LcdGammaLut::embedded().expect("lut-windows-lcd.bin is committed");
+    dom_text::check_lcd_lut(&lcd, &MaskGammaLut::embedded().unwrap());
 }

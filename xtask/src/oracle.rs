@@ -75,7 +75,7 @@ commands:
                       the upstream lines and functions the specs execute (V8 precise coverage;
                       `cargo xtask oracle coverage --help`)
   canvas [<scene>...] Chromium canvas references (same as `cargo xtask canvas ref`)
-  canvas-lut [--check]
+  canvas-lut [--lcd] [--check]
                       mask-gamma LUT for this platform (same as `cargo xtask canvas lut`)
   selftest            CVE-1 encoder and decoder self test
   smoke               run oracle/smoke/fn-requests.jsonl and compare with fn-expected.jsonl
@@ -224,7 +224,7 @@ pub fn run(args: &[String]) -> Result {
         Some("coverage") => coverage::run(&paths, rest),
         Some("dom-ab") => dom::ab(&paths, rest),
         Some("canvas") => canvas::reference(&paths, &canvas::reference_dir(&paths), rest),
-        Some("canvas-lut") => canvas::lut(&paths, rest.iter().any(|a| a == "--check")),
+        Some("canvas-lut") => canvas::run(&[&["lut".to_owned()], rest].concat()),
         Some("selftest") => run_entry(&paths, "selftest", DEFAULT_ZONE, &[]),
         Some("smoke") => smoke(&paths),
         Some("env") => print_env(&paths),

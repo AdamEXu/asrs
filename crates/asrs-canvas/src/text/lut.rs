@@ -84,6 +84,70 @@ impl MaskGammaLut {
     }
 }
 
+pub const LCD_BYTES: usize = 3 * BYTES;
+
+/// The preblend of LCD text as measured from Chromium: coverage tables per colour channel, of
+/// which a channel uses the one of its own 3-bit value in the text colour. Coverage comes out at
+/// the 5 bits a channel that Skia's LCD masks blend with, widened to 8.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LcdGammaLut(Box<[[[u8; 256]; ROWS]; 3]>);
+
+impl LcdGammaLut {
+    pub fn from_rows(rows: [[[u8; 256]; ROWS]; 3]) -> Self {
+        LcdGammaLut(Box::new(rows))
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() != LCD_BYTES {
+            return None;
+        }
+        let mut rows = Box::new([[[0u8; 256]; ROWS]; 3]);
+        for (row, chunk) in rows.iter_mut().flatten().zip(bytes.as_chunks::<256>().0) {
+            row.copy_from_slice(chunk);
+        }
+        Some(LcdGammaLut(rows))
+    }
+
+    pub fn to_bytes(&self) -> Vec<u8> {
+        self.0.iter().flatten().flatten().copied().collect()
+    }
+
+    pub fn row(&self, channel: usize, bucket: usize) -> &[u8; 256] {
+        &self.0[channel][bucket]
+    }
+
+    pub fn apply(&self, rgb: [u8; 3], coverage: [u8; 3]) -> [u8; 3] {
+        [0, 1, 2].map(|c| self.0[c][usize::from(rgb[c] >> 5)][usize::from(coverage[c])])
+    }
+
+    /// The table committed for the platform this was built for, if it has LCD text. On Linux it is
+    /// for fontconfig rules that ask for LCD (`stock.conf` of `xtask/hosts/linux/fonts.sh`).
+    pub fn embedded() -> Option<Self> {
+        #[cfg(target_os = "linux")]
+        return LcdGammaLut::from_bytes(include_bytes!(
+            "../../../../parity/vectors/canvas/lut-linux-lcd.bin"
+        ));
+        #[cfg(windows)]
+        return LcdGammaLut::from_bytes(include_bytes!(
+            "../../../../parity/vectors/canvas/lut-windows-lcd.bin"
+        ));
+        #[cfg(not(any(target_os = "linux", windows)))]
+        return None;
+    }
+}
+
+/// The colour `blend_lcd16_opaque` leaves where `color` text with coverage `mask`, after the
+/// preblend, covers the opaque `background`.
+pub fn blend_lcd(background: [u8; 3], color: [u8; 3], mask: [u8; 3]) -> [u8; 3] {
+    [0, 1, 2].map(|c| blend_lcd_channel(background[c], color[c], mask[c] >> 3))
+}
+
+pub fn blend_lcd_channel(background: u8, color: u8, mask5: u8) -> u8 {
+    let scale = i32::from(mask5 + (mask5 >> 4));
+    let (src, dst) = (i32::from(color), i32::from(background));
+    (dst + (((src - dst) * scale) >> 5)) as u8
+}
+
 fn to_luma(gamma: f64, v: f64) -> f64 {
     if gamma != 0.0 {
         pow(v, gamma)
@@ -200,6 +264,23 @@ mod tests {
             [row[0], row[50], row[100], row[178], row[255]],
             [0, 7, 110, 7, 7]
         );
+    }
+
+    #[test]
+    fn lcd_channels_use_their_own_row() {
+        let mut rows = [[[0u8; 256]; ROWS]; 3];
+        for (c, channel) in rows.iter_mut().enumerate() {
+            for (k, row) in channel.iter_mut().enumerate() {
+                row.fill((c * 10 + k) as u8);
+            }
+        }
+        let lut = LcdGammaLut::from_rows(rows);
+        assert_eq!(lut.apply([0x00, 0x7f, 0xff], [9, 9, 9]), [0, 13, 27]);
+        assert_eq!(lut.row(2, 5)[200], 25);
+        let bytes = lut.to_bytes();
+        assert_eq!((bytes.len(), bytes[(2 * ROWS + 5) * 256]), (LCD_BYTES, 25));
+        assert_eq!(LcdGammaLut::from_bytes(&bytes), Some(lut));
+        assert_eq!(LcdGammaLut::from_bytes(&bytes[1..]), None);
     }
 
     #[test]
