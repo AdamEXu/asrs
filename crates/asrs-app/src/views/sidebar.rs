@@ -23,7 +23,7 @@ use asrs_ui::gpui::{
 use asrs_ui::icon::{Icon, IconFit, IconSource};
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, PlainText, TextField};
 use asrs_ui::symbols::Symbol;
-use asrs_ui::text::{Measurer, Text, TextStyle, snap_remainder};
+use asrs_ui::text::{Measurer, Text, TextStyle, scroller, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 use asrs_ui::tooltip::{covering, titled, untitled};
 
@@ -628,7 +628,11 @@ impl SidebarView {
             at
         };
         advance(&label_style(italic, bold), &title, cx);
-        let mut title_text = fade(Text::new(title, label_style(italic, bold)).color(theme.text));
+        let mut title_text = fade(
+            Text::new(title, label_style(italic, bold))
+                .color(theme.text)
+                .grayscale(),
+        );
         if row.known_label {
             title_text = title_text.underline();
         }
@@ -645,6 +649,7 @@ impl SidebarView {
                     .child(fade(
                         Text::new(WARNING, label_style(italic, bold))
                             .color(theme.text)
+                            .grayscale()
                             .subpixel(dx, 0.0),
                     ))
                     .on_click(cx.listener(move |view, _, _, cx| {
@@ -659,6 +664,7 @@ impl SidebarView {
                 div().opacity(opacity).child(fade(
                     Text::new(type_label.to_string_lossy(), label_style(false, false))
                         .color(theme.text)
+                        .grayscale()
                         .subpixel(dx, 0.0),
                 )),
             );
@@ -1124,7 +1130,7 @@ impl Render for SidebarView {
                 view.scroll.wheel(wheel_of(event), now, scale);
                 cx.notify();
             }))
-            .child(content);
+            .child(scroller(content_height > side_bar[3], content));
         if let Some(results) = self.search_results(appearance, window, cx) {
             root = root.child(results);
         }

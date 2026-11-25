@@ -7,7 +7,7 @@ use asrs_parity::json::{self, Json};
 use asrs_parity::pixel::{self, Rgba};
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::text::probe::Probe;
-use asrs_ui::text::{Text, TextStyle, snap_remainder};
+use asrs_ui::text::{Text, TextStyle, faded, snap_remainder};
 use gpui_kit::{
     AppContext, Context, IntoElement, ParentElement, Render, Styled, Window, div, px, rgb, size,
 };
@@ -129,8 +129,7 @@ impl Render for View {
                     .absolute()
                     .left(px(b.x))
                     .top(px(b.y))
-                    .opacity(b.opacity)
-                    .child(t),
+                    .child(faded(b.opacity, t)),
             );
         }
         for &(x, y, color) in &scene.patches {

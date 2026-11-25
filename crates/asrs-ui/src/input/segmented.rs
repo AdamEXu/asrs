@@ -274,6 +274,7 @@ impl RenderOnce for SegmentedControl {
                                 .child(
                                     Text::new(label, font_style)
                                         .color(blend(text, background, SPLIT_BADGE_OPACITY))
+                                        .grayscale()
                                         .subpixel(
                                             (bx - bx.round()) / scale,
                                             (text_top - snapped) / scale,

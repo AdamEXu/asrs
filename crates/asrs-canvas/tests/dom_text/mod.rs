@@ -2,6 +2,7 @@
 
 use std::path::Path;
 
+use asrs_canvas::text::dom::{self, LcdExtent, LcdInk};
 use asrs_canvas::text::lut::{self, LcdGammaLut, MaskGammaLut};
 use asrs_canvas::text::{FontSpec, TextBackend};
 use asrs_parity::json::{self, Json};
@@ -66,12 +67,75 @@ pub fn check_lcd_lut(lcd: &LcdGammaLut, gray: &MaskGammaLut) {
     }
 }
 
-fn blend_gray(background: [u8; 3], color: [u8; 3], alpha: u8) -> [u8; 3] {
-    let a = f64::from(alpha) / 255.0;
-    [0, 1, 2].map(|c| {
-        let (d, v) = (f64::from(background[c]), f64::from(color[c]));
-        (d + (v - d) * a).round() as u8
-    })
+struct Ink<'a> {
+    text: &'a str,
+    spec: &'a FontSpec,
+    lcd: bool,
+    color: [u8; 3],
+    alpha: u8,
+}
+
+/// Draws a run onto the flat colour `image` has at its origin, as `asrs_ui::Text` does.
+fn draw(
+    backend: &mut dyn TextBackend,
+    (lut, lcd_lut): (&MaskGammaLut, &LcdGammaLut),
+    ink: &Ink<'_>,
+    (x, baseline): (f64, i32),
+    scale: f32,
+    image: &mut Rgb,
+) {
+    let glyphs = backend.shape_run(ink.spec, ink.text, scale).glyphs;
+    let origin = dom::lu_round(x as f32);
+    let (x, fraction) = (origin.div_euclid(64), origin.rem_euclid(64));
+    let (width, height) = (image.width as i32, image.height as i32);
+    let inside = |x: i32, y: i32| (0..width).contains(&x) && (0..height).contains(&y);
+    let at = move |x: i32, y: i32| (y * width + x) as usize;
+    let extent = dom::lcd_extent(backend, &glyphs, fraction, scale);
+    assert_eq!(
+        matches!(extent, LcdExtent::Rect(_)),
+        ink.lcd,
+        "{}: {extent:?}",
+        ink.text
+    );
+    if ink.lcd {
+        let background = image.data[at(x, baseline)];
+        let run = dom::rasterize_lcd(
+            backend,
+            (lut, lcd_lut),
+            &glyphs,
+            fraction,
+            scale,
+            LcdInk {
+                color: ink.color,
+                alpha: ink.alpha,
+                background,
+            },
+        )
+        .expect("a run");
+        for (i, p) in run.rgba.as_chunks::<4>().0.iter().enumerate() {
+            let (col, row) = (i as u32 % run.width, i as u32 / run.width);
+            let (px, py) = (x + run.left + col as i32, baseline + run.top + row as i32);
+            if p[3] != 0 && inside(px, py) {
+                image.data[at(px, py)] = [p[0], p[1], p[2]];
+            }
+        }
+        return;
+    }
+    let run = dom::rasterize(backend, lut, &glyphs, fraction, scale, ink.color).expect("a run");
+    for (i, a) in run.alpha.iter().enumerate() {
+        let (col, row) = (i as u32 % run.width, i as u32 / run.width);
+        let (px, py) = (x + run.left + col as i32, baseline + run.top + row as i32);
+        if !inside(px, py) {
+            continue;
+        }
+        let i = at(px, py);
+        let a = f64::from(*a) / 255.0 * f64::from(ink.alpha) / 255.0;
+        let under = image.data[i];
+        image.data[i] = [0, 1, 2].map(|c| {
+            let (d, v) = (f64::from(under[c]), f64::from(ink.color[c]));
+            (d + (v - d) * a).round() as u8
+        });
+    }
 }
 
 /// Redraws the `dom-text` scenes of `dir` with the port's masks, in the antialiasing mode the
@@ -135,48 +199,15 @@ pub fn check_redraw(backend: &mut dyn TextBackend, dir: &str, max_channel: u8) {
                     in_box[(y * ours.width as i32 + x) as usize] = true;
                 }
             }
-            let origin = (rect[0] * s) as f32;
-            for g in backend.shape_run(&spec, &text, scale as f32).glyphs {
-                let biased = origin + g.x * scale as f32 + 0.125;
-                let ix = biased.floor();
-                let phase = ((biased - ix) * 4.0) as u8;
-                let lcd = backend.raw_lcd_mask(g.glyph, s, 1.0, phase);
-                let gray = backend.raw_mask(g.glyph, s, 1.0, phase);
-                let Some(gray) = gray.filter(|m| m.width > 0 && m.height > 0) else {
-                    continue;
-                };
-                assert_eq!(lcd.is_some(), mode == "lcd", "{name} {id}: {mode}");
-                let mut paint =
-                    |mx: usize,
-                     my: usize,
-                     left: i32,
-                     top: i32,
-                     draw: &dyn Fn([u8; 3]) -> [u8; 3]| {
-                        let (x, y) = (ix as i32 + left + mx as i32, baseline + top + my as i32);
-                        if x < 0 || y < 0 || x >= ours.width as i32 || y >= ours.height as i32 {
-                            return;
-                        }
-                        let dst = &mut ours.data[(y * reference.width as i32 + x) as usize];
-                        *dst = draw(*dst);
-                    };
-                if let Some(mask) = &lcd {
-                    for (i, raw) in mask.data.as_chunks::<3>().0.iter().enumerate() {
-                        let width = mask.width as usize;
-                        let out = lcd_lut.apply(color, *raw);
-                        paint(i % width, i / width, mask.left, mask.top, &|dst| {
-                            lut::blend_lcd(dst, color, out)
-                        });
-                    }
-                } else {
-                    for (i, raw) in gray.data.iter().enumerate() {
-                        let width = gray.width as usize;
-                        let out = lut.apply(color, *raw);
-                        paint(i % width, i / width, gray.left, gray.top, &|dst| {
-                            blend_gray(dst, color, out)
-                        });
-                    }
-                }
-            }
+            let at = (rect[0] * s, baseline);
+            let ink = Ink {
+                text: &text,
+                spec: &spec,
+                lcd: mode == "lcd",
+                color,
+                alpha: 255,
+            };
+            draw(backend, (&lut, &lcd_lut), &ink, at, scale as f32, &mut ours);
         }
         let compared = pixel::compare(&reference, &ours, background).unwrap();
         let mut boxed = 0;
@@ -201,5 +232,101 @@ pub fn check_redraw(backend: &mut dyn TextBackend, dir: &str, max_channel: u8) {
         let gate = if scale == 1 { 0.2 } else { 0.003 };
         assert!(percent <= gate, "{name}: {percent:.4} %");
         assert!(max <= max_channel, "{name}: max channel {max}");
+    }
+}
+
+/// Redraws the boxes of the `dom-lcd` scenes of `dir` that differ in size and in what is under or
+/// in the text, each in the mode it has there.
+pub fn check_eligibility(backend: &mut dyn TextBackend, dir: &str, max_channel: u8) {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/vectors/canvas");
+    let luts = (
+        &MaskGammaLut::embedded().unwrap(),
+        &LcdGammaLut::embedded().unwrap(),
+    );
+    for (theme, scale) in [("light", 1u32), ("light", 2), ("dark", 1), ("dark", 2)] {
+        let name = format!("dom-lcd-{theme}@{scale}x");
+        let dark = theme == "dark";
+        let page = if dark { [0x22; 3] } else { [0xff; 3] };
+        let color = if dark { [0xee; 3] } else { [0x22; 3] };
+        let edge = if dark { 0xff } else { 0x00 };
+        let read = |ext: &str| root.join(format!("{dir}/{name}.{ext}"));
+        let png = pixel::read_png(&read("png")).unwrap();
+        let reference = pixel::composite(&png, page);
+        let scene = json::parse(&std::fs::read_to_string(read("json")).unwrap()).unwrap();
+        backend.set_device_scale(scale as f32);
+        let (mut checked, mut max) = (0, 0);
+        let drawn = |id: &str| {
+            id.starts_with("size-")
+                || matches!(id, "opaque-box" | "translucent-box" | "translucent-text")
+        };
+        for row in scene.get("rows").and_then(Json::as_array).unwrap() {
+            let string = |key: &str| row.get(key).unwrap().as_str().unwrap().to_string_lossy();
+            let (id, mode) = (string("id"), string("mode"));
+            if !drawn(&id) {
+                continue;
+            }
+            let size = id.strip_prefix("size-");
+            let (color, alpha, behind) = match &*id {
+                "opaque-box" => (color, 255, [if dark { 0x44 } else { 0xcc }; 3]),
+                "translucent-box" => {
+                    let tint = page[0] as f64 + (f64::from(edge) - f64::from(page[0])) * 0.05;
+                    (color, 255, [tint.round() as u8; 3])
+                }
+                "translucent-text" => ([edge; 3], 64, page),
+                _ => (color, 255, page),
+            };
+            let rect: Vec<f64> = row
+                .get("rect")
+                .and_then(Json::as_array)
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().unwrap())
+                .collect();
+            let text = if size.is_some() {
+                "Wolf 47"
+            } else {
+                "Auto Chooser 4.37"
+            };
+            let spec = FontSpec::parse(&format!("{}px {SYSTEM}", size.unwrap_or("14"))).unwrap();
+            let s = f64::from(scale);
+            let device = FontSpec {
+                size: spec.size * scale as f32,
+                ..spec
+            };
+            let ascent = f64::from(backend.metrics(&device).ascent);
+            let baseline = (rect[1] * s + ascent).round() as i32;
+            let mut ours = Rgb {
+                data: vec![behind; reference.data.len()],
+                ..reference
+            };
+            let ink = Ink {
+                text,
+                spec: &spec,
+                lcd: mode == "lcd",
+                color,
+                alpha,
+            };
+            let at = (rect[0] * s, baseline);
+            draw(backend, luts, &ink, at, scale as f32, &mut ours);
+            let columns = (rect[0] * s).floor() as usize..((rect[0] + rect[2]) * s) as usize;
+            for y in (rect[1] * s).ceil() as usize..((rect[1] + rect[3]) * s) as usize {
+                for x in columns.clone() {
+                    let i = y * reference.width as usize + x;
+                    for c in 0..3 {
+                        let off = ours.data[i][c].abs_diff(reference.data[i][c]);
+                        assert!(
+                            off <= max_channel,
+                            "{dir}/{name} {id}: {:?} vs {:?} at {x},{y}",
+                            ours.data[i],
+                            reference.data[i]
+                        );
+                        max = max.max(off);
+                    }
+                }
+            }
+            checked += 1;
+        }
+        assert_eq!(checked, 14);
+        eprintln!("{dir}/{name}: {checked} boxes, max channel {max}");
     }
 }

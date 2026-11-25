@@ -12,6 +12,7 @@ use asrs_ui::gpui::{
     Pixels, ScrollEvent, StatefulInteractiveElement, Styled, Window, div, px, rgb,
 };
 use asrs_ui::parity::probed;
+use asrs_ui::text;
 use asrs_ui::theme::Appearance;
 
 use super::frame::{FrameHost, HubFrame, SETTINGS_SECTION, wheel_of};
@@ -131,7 +132,10 @@ impl<H: FrameHost> HubFrame<H> {
                     .on_scroll(cx.listener(move |frame, event: &ScrollEvent, window, cx| {
                         frame.settings_wheel(key, event, window, cx)
                     }))
-                    .child(content.relative().w_full().h(px(content_height as f32))),
+                    .child(text::scroller(
+                        content_height > height,
+                        content.relative().w_full().h(px(content_height as f32)),
+                    )),
             )
             .child(
                 div()
