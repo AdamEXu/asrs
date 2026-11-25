@@ -594,10 +594,7 @@ fn same_sample(a: &Option<JsValue>, b: &Option<JsValue>) -> bool {
 /// A number row's text. `value` is a number unless an unchecked source wrote something else.
 fn number_text(value: &JsValue) -> Result<JsString, JsError> {
     let number = ops::value_to_number(value)?;
-    let method = |name: &str| match value {
-        JsValue::Undefined => ops::cannot_read(value, name),
-        _ => JsError::type_error(format!("value.{name} is not a function")),
-    };
+    let method = |name: &str| JsError::type_error(format!("value.{name} is not a function"));
     if abs(number) < 1e-9 {
         Ok(js("0"))
     } else if abs(number) >= 1e5 || abs(number) < 1e-3 {

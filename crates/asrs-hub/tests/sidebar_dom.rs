@@ -1433,7 +1433,9 @@ fn replay(
                             .sidebar
                             .restore_state(&mut senv!(runner), sidebar_state)
                             .map_err(|e| format!("{e:?}"))?;
-                        runner.outcome(outcome);
+                        runner
+                            .emitted
+                            .extend(exception_emit("unhandledRejection", outcome));
                     }
                 }
                 other => return Err(format!("{}: main message {other} is not modeled", where_())),

@@ -120,7 +120,6 @@ fn elements<'a>(v: &'a Sample<'a>) -> Option<Vec<Sample<'a>>> {
         Sample::BooleanArray(items) => Some(items.iter().map(|b| Sample::Boolean(*b)).collect()),
         Sample::NumberArray(items) => Some(items.iter().map(|n| Sample::Number(*n)).collect()),
         Sample::StringArray(items) => Some(items.iter().map(Sample::String).collect()),
-        Sample::Foreign(JsValue::Array(items)) => Some(items.iter().map(Sample::Foreign).collect()),
         _ => None,
     }
 }
@@ -133,11 +132,6 @@ fn bigint_bytes(v: &Sample<'_>) -> Result<[u8; 8], ExportError> {
     let bigint = match v {
         Sample::Number(n) => BigInt::from_f64(*n).map_err(|_| ExportError::Rejected)?,
         Sample::Boolean(b) => BigInt::from_u64(u64::from(*b)),
-        Sample::Foreign(JsValue::Number(n)) => {
-            BigInt::from_f64(*n).map_err(|_| ExportError::Rejected)?
-        }
-        Sample::Foreign(JsValue::Bool(b)) => BigInt::from_u64(u64::from(*b)),
-        Sample::Foreign(JsValue::Null) => return Err(ExportError::Rejected),
         other => {
             BigInt::parse(&js_string(other).to_string_lossy()).map_err(|_| ExportError::Rejected)?
         }
@@ -340,15 +334,6 @@ impl Record {
                 items
                     .iter()
                     .map(|s| to_uint8(number::to_number(s.units())))
-                    .collect(),
-            ),
-            Sample::Foreign(JsValue::String(s)) => {
-                return Record::raw(entry, timestamp, &Sample::String(s));
-            }
-            Sample::Foreign(JsValue::Array(items)) => RecordData::Bytes(
-                items
-                    .iter()
-                    .map(|item| to_uint8(js_number(&Sample::Foreign(item))))
                     .collect(),
             ),
             Sample::Boolean(_) | Sample::Number(_) | Sample::Foreign(_) => RecordData::Undefined,

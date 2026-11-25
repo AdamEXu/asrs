@@ -22,7 +22,15 @@
             "/.schema/photonstruct:P",
             0,
             {
-              "b": "666c6f617436342078203b"
+              "b": "666c6f6174363420783b203b"
+            }
+          ],
+          [
+            "putRaw",
+            "/.schema/photonstruct:O",
+            0,
+            {
+              "b": "5020705b3f5d3b"
             }
           ],
           [
@@ -48,9 +56,9 @@
             "/a",
             1,
             {
-              "b": "000000000000044007"
+              "b": "020000000000000440070000000000000c4008"
             },
-            "P"
+            "O"
           ]
         ]
       },
@@ -88,23 +96,7 @@
         "event": {
           "target": "#fieldList svg.field-item-icon",
           "type": "click",
-          "index": 1,
-          "kind": "MouseEvent"
-        }
-      },
-      {
-        "event": {
-          "target": "#fieldList svg.field-item-icon",
-          "type": "click",
-          "index": 2,
-          "kind": "MouseEvent"
-        }
-      },
-      {
-        "event": {
-          "target": "#fieldList svg.field-item-icon",
-          "type": "click",
-          "index": 3,
+          "index": 6,
           "kind": "MouseEvent"
         }
       },
