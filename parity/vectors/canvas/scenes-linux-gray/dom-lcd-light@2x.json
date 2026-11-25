@@ -1,0 +1,386 @@
+{
+  "scene": "dom-lcd-light@2x",
+  "scale": 2,
+  "rows": [
+    {
+      "id": "size-23",
+      "rect": [
+        10,
+        10,
+        86.53125,
+        27
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-23.5",
+      "rect": [
+        310,
+        10,
+        88.4140625,
+        27.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-24",
+      "rect": [
+        610,
+        10,
+        90.296875,
+        28
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-24.02",
+      "rect": [
+        10,
+        82,
+        90.3515625,
+        28
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-24.5",
+      "rect": [
+        310,
+        82,
+        92.1796875,
+        28.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-25",
+      "rect": [
+        610,
+        82,
+        94.0625,
+        29
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-47",
+      "rect": [
+        10,
+        154,
+        176.828125,
+        54.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-48",
+      "rect": [
+        310,
+        154,
+        180.5859375,
+        56
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-48.02",
+      "rect": [
+        610,
+        154,
+        180.6484375,
+        56
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-48.5",
+      "rect": [
+        10,
+        226,
+        182.46875,
+        56.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-49",
+      "rect": [
+        310,
+        226,
+        184.3515625,
+        57
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opaque-box",
+      "rect": [
+        10,
+        300,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "translucent-box",
+      "rect": [
+        310,
+        300,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "translucent-text",
+      "rect": [
+        610,
+        300,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opacity-text",
+      "rect": [
+        10,
+        340,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opacity-parent",
+      "rect": [
+        310,
+        340,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opacity-parent-opaque",
+      "rect": [
+        610,
+        340,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opacity-parent-two-boxes",
+      "rect": [
+        10,
+        380,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opacity-composited",
+      "rect": [
+        310,
+        380,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "will-change-transform",
+      "rect": [
+        610,
+        380,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "will-change-transform-opaque",
+      "rect": [
+        10,
+        420,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "translate-whole",
+      "rect": [
+        313,
+        422,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "translate-fraction",
+      "rect": [
+        613.2999877929688,
+        422.3999938964844,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "translate-3d",
+      "rect": [
+        10,
+        460,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "translate-3d-opaque",
+      "rect": [
+        310,
+        460,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "scaled",
+      "rect": [
+        610,
+        460.5,
+        162.529296875,
+        20.625
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "rotated",
+      "rect": [
+        8.709505081176758,
+        499.9951171875,
+        130.85769653320313,
+        25.52978515625
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "filter",
+      "rect": [
+        310,
+        500,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "backdrop-filter",
+      "rect": [
+        610,
+        500,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "mask",
+      "rect": [
+        10,
+        540,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "blend-mode",
+      "rect": [
+        310,
+        540,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "rounded-clip",
+      "rect": [
+        610,
+        540,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "rounded-clip-opaque",
+      "rect": [
+        10,
+        580,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "scroller",
+      "rect": [
+        310,
+        580,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "scroller-opaque",
+      "rect": [
+        610,
+        580,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "shadowed",
+      "rect": [
+        10,
+        620,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "isolated",
+      "rect": [
+        310,
+        620,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "fixed",
+      "rect": [
+        610,
+        620,
+        130.0234375,
+        16.5
+      ],
+      "mode": "grayscale"
+    }
+  ]
+}

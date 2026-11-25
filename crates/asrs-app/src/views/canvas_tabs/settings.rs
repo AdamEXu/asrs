@@ -13,7 +13,7 @@ use asrs_tabs::swerve::{SwerveController, SwerveInput};
 use asrs_ui::focus;
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Bounds, Context, Entity, FocusHandle, InteractiveElement,
-    IntoElement, ParentElement, Pixels, ScrollHandle, StatefulInteractiveElement, Styled,
+    IntoElement, ParentElement, Pixels, ScrollEvent, StatefulInteractiveElement, Styled,
     Subscription, Window, div, px, rgb,
 };
 use asrs_ui::icon::IconSource;
@@ -27,8 +27,11 @@ use asrs_ui::text::{self, LineHeight, Text, TextStyle, WhiteSpace, snap_remainde
 use asrs_ui::theme::{Appearance, FONT_FAMILY};
 use asrs_ui::tooltip::titled;
 
-use super::super::frame::{FrameHost, HubFrame, SETTINGS_SECTION};
+use asrs_ui::scroll;
+
+use super::super::frame::{FrameHost, HubFrame, SETTINGS_SECTION, wheel_of};
 use super::super::number::{FormNumber, input_chrome};
+use super::super::scrollers::{Area, HandleScroller};
 use super::super::select::FormSelect;
 use super::super::source_list::{centred_offset, place_in, scroll_to};
 use super::{local, tab_index, tab_key, with_controller};
@@ -172,23 +175,34 @@ struct NumberView {
 pub struct SettingsViews {
     numbers: HashMap<(usize, Control), NumberView>,
     selects: HashMap<(usize, Control), SelectView>,
-    /// The panel drawn last: its place in the focus order, its scroll position and its box.
-    panel: Option<(FocusHandle, ScrollHandle, [f64; 4])>,
+    scrollers: HashMap<usize, HandleScroller>,
+    /// The panel drawn last: its tab, its place in the focus order and its box.
+    panel: Option<(usize, FocusHandle, [f64; 4])>,
 }
 
 impl SettingsViews {
     /// Scrolls the panel that holds the focused element, at `bounds`, to it.
-    pub fn scroll_to(&self, focused: &FocusHandle, bounds: Bounds<Pixels>, window: &Window) {
-        if let Some((place, scroll, [_, y, _, height])) = &self.panel
-            && place.contains(focused, window)
+    pub fn scroll_to(&mut self, focused: &FocusHandle, bounds: Bounds<Pixels>, window: &Window) {
+        let Some(key) = self.holding(focused, window) else {
+            return;
+        };
+        if let (Some((_, _, [_, y, _, height])), Some(scroller)) =
+            (&self.panel, self.scrollers.get_mut(&key))
         {
-            scroll_to(scroll, [*y, *height], bounds, window);
+            scroll_to(scroller, [*y, *height], bounds, window);
         }
+    }
+
+    /// The tab whose panel holds the focused element.
+    pub fn holding(&self, focused: &FocusHandle, window: &Window) -> Option<usize> {
+        let (key, place, _) = self.panel.as_ref()?;
+        place.contains(focused, window).then_some(*key)
     }
 
     pub fn retain(&mut self, live: &HashSet<usize>) {
         self.numbers.retain(|(key, _), _| live.contains(key));
         self.selects.retain(|(key, _), _| live.contains(key));
+        self.scrollers.retain(|key, _| live.contains(key));
     }
 }
 
@@ -226,7 +240,8 @@ struct PanelLayout {
 }
 
 impl PanelLayout {
-    fn new(controls: [f64; 4], scale: f64) -> PanelLayout {
+    /// `bar` is what a scrollbar takes of the panel where it overflows, in CSS px.
+    fn new(controls: [f64; 4], bar: f64, scale: f64) -> PanelLayout {
         let [x, y, w, h] = controls.map(|v| device(v, scale));
         let length = |v: f64| zoomed(v, scale);
         let edge = border(1.0, scale);
@@ -243,13 +258,19 @@ impl PanelLayout {
         let title_height = length(TITLE_HEIGHT);
         let top = length(TOP_MARGIN);
         let titles = [0.0, 1.0, 2.0].map(|i| y + top + i * (title_height + min_height));
+        let content_height = top + 3.0 * title_height + 2.0 * min_height + tall;
+        let content_width = if content_height > h {
+            width - length(bar)
+        } else {
+            width
+        };
         PanelLayout {
             scale,
             panel: panel.map(|v| v / scale),
             border: edge / scale,
             content_x: panel[0] + edge,
-            content_width: width,
-            content_height: (top + 3.0 * title_height + 2.0 * min_height + tall) / scale,
+            content_width,
+            content_height: content_height / scale,
             titles,
             inputs: titles.map(|t| t + title_height),
             tall,
@@ -497,12 +518,12 @@ impl<H: FrameHost> HubFrame<H> {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> AnyElement {
-        let layout = PanelLayout::new(controls, f64::from(scale));
+        let bar = scroll::style(cx).reserved();
+        let layout = PanelLayout::new(controls, bar, f64::from(scale));
         let dark = appearance == Appearance::Dark;
         let theme = appearance.theme();
         let line = editor_line(scale, cx);
         let content_x = layout.panel[0] + layout.border;
-        let content_width = layout.panel[2] - layout.border;
         let origin = [content_x, layout.panel[1], 0.0, 0.0];
         let mut content = div()
             .relative()
@@ -559,12 +580,17 @@ impl<H: FrameHost> HubFrame<H> {
                 ));
             }
         }
-        let [_, _, _, height] = layout.panel;
+        let [_, _, outer, height] = layout.panel;
         let place = focus::place(("settings-panel", key), window, cx);
-        let scroll =
-            window.use_keyed_state(("settings-scroll", key), cx, |_, _| ScrollHandle::new());
-        let scroll = scroll.read(cx).clone();
-        self.canvas_tabs.settings.panel = Some((place.clone(), scroll.clone(), layout.panel));
+        let now = self.host().frame_time(cx);
+        let views = &mut self.canvas_tabs.settings;
+        views.panel = Some((key, place.clone(), layout.panel));
+        let scroller = views.scrollers.entry(key).or_default();
+        if scroller.animate(now, f64::from(scale)) {
+            window.request_animation_frame();
+        }
+        let (handle, extent) = (scroller.handle.clone(), scroller.extent());
+        let bars = self.area_bars(Area::CanvasSettings(key), extent, cx);
         let element = focus::section(local(layout.panel, controls), SETTINGS_SECTION, &place)
             .child(
                 div()
@@ -581,11 +607,26 @@ impl<H: FrameHost> HubFrame<H> {
                     .absolute()
                     .left(px(layout.border as f32))
                     .top_0()
-                    .w(px(content_width as f32))
+                    .w(px((outer - layout.border) as f32))
                     .h(px(height as f32))
-                    .overflow_y_scroll()
-                    .track_scroll(&scroll)
+                    .overflow_hidden()
+                    .track_scroll(&handle)
+                    .capture_any_mouse_down(cx.listener(move |frame, _, _, _| {
+                        frame.press_area(&Area::CanvasSettings(key))
+                    }))
+                    .on_scroll(cx.listener(move |frame, event: &ScrollEvent, window, cx| {
+                        frame.canvas_settings_wheel(key, event, window, cx)
+                    }))
                     .child(content),
+            )
+            .child(
+                div()
+                    .absolute()
+                    .left(px(layout.border as f32))
+                    .top_0()
+                    .w(px((outer - layout.border) as f32))
+                    .h(px(height as f32))
+                    .child(bars),
             );
         div()
             .absolute()
@@ -594,6 +635,44 @@ impl<H: FrameHost> HubFrame<H> {
             .size_full()
             .child(probed(panel.probe, element))
             .into_any_element()
+    }
+
+    fn canvas_settings_wheel(
+        &mut self,
+        key: usize,
+        event: &ScrollEvent,
+        window: &mut Window,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let now = self.host().frame_time(cx);
+        let scale = f64::from(window.scale_factor());
+        if let Some(scroller) = self.canvas_tabs.settings.scrollers.get_mut(&key) {
+            scroller.wheel(wheel_of(event), now, scale);
+        }
+        cx.notify();
+    }
+
+    pub(in crate::views) fn canvas_settings_smooth(
+        &mut self,
+        key: usize,
+        by: f64,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let now = self.host().frame_time(cx);
+        if let Some(scroller) = self.canvas_tabs.settings.scrollers.get_mut(&key) {
+            scroller.smooth(by, now);
+        }
+    }
+
+    pub(in crate::views) fn canvas_settings_scroll_to(&mut self, key: usize, to: f64, scale: f64) {
+        if let Some(scroller) = self.canvas_tabs.settings.scrollers.get_mut(&key) {
+            scroller.scroll_to(to, scale);
+        }
+    }
+
+    pub(in crate::views) fn canvas_settings_range(&self, key: usize) -> Option<[[f64; 2]; 2]> {
+        let scroller = self.canvas_tabs.settings.scrollers.get(&key)?;
+        Some(scroller.range())
     }
 
     fn rotate_switcher(
@@ -644,7 +723,7 @@ mod tests {
 
     #[test]
     fn panel_boxes_match_blink() {
-        let layout = PanelLayout::new([300.0, 450.0, 800.0, 200.0], 1.0);
+        let layout = PanelLayout::new([300.0, 450.0, 800.0, 200.0], 0.0, 1.0);
         assert_eq!(layout.panel, [899.0, 450.0, 201.0, 200.0]);
         assert_eq!(
             layout.number(layout.column(), 0, 15.0),
@@ -663,9 +742,9 @@ mod tests {
             [930.0, 600.0, 140.0, 25.0]
         );
 
-        let taller = PanelLayout::new([300.0, 400.0, 800.0, 250.0], 1.0);
+        let taller = PanelLayout::new([300.0, 400.0, 800.0, 250.0], 0.0, 1.0);
         assert_eq!(taller.split(2), [920.0, 553.0, 160.0, 68.25]);
-        let shorter = PanelLayout::new([300.0, 470.0, 800.0, 180.0], 1.0);
+        let shorter = PanelLayout::new([300.0, 470.0, 800.0, 180.0], 0.0, 1.0);
         assert_eq!(shorter.split(2), [920.0, 623.0, 160.0, 26.0]);
         assert_eq!(shorter.content_height, 185.0);
     }
@@ -678,7 +757,7 @@ mod tests {
                 let [_, down] = input_chrome(scale);
                 let inputs: Vec<_> = blink.all("div.setting-blocks input").to_vec();
                 let line = inputs[0].rect[3] - down / scale;
-                let layout = PanelLayout::new(blink.controls, scale);
+                let layout = PanelLayout::new(blink.controls, 0.0, scale);
                 let panel = blink.all("div.setting-blocks")[0].rect;
                 blink.check("panel", &layout.panel, &panel);
                 let blocks = [0, 2, 4].map(|i| blink.all("div.setting-blocks > div")[i].rect);

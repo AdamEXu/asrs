@@ -70,6 +70,8 @@ pub fn controller_roots(tab_type: TabType, controls: Rect, scale: f64) -> Vec<Li
 pub struct ListLayout {
     pub root: ListRoot,
     pub scroll_top: f64,
+    /// What the list's scrollbar takes of its width.
+    pub scrollbar: f64,
     /// Each item's top within the list's content, height and whether it is a child.
     items: Vec<(f64, f64, bool)>,
 }
@@ -97,6 +99,7 @@ impl ListLayout {
         ListLayout {
             root,
             scroll_top,
+            scrollbar: 0.0,
             items,
         }
     }
@@ -127,8 +130,21 @@ impl ListLayout {
         Rect {
             x: list.x,
             y: list.y + top - self.scroll_top,
-            width: list.width,
+            width: list.width - self.taken(),
             height,
+        }
+    }
+
+    /// What the list's scrollbar takes of the items' width.
+    pub fn taken(&self) -> f64 {
+        let content = self
+            .items
+            .last()
+            .map_or(0.0, |(top, height, _)| top + height);
+        if content > self.list_rect().height {
+            self.scrollbar
+        } else {
+            0.0
         }
     }
 

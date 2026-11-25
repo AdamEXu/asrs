@@ -4,8 +4,9 @@ use std::path::Path;
 use std::sync::Arc;
 
 use asrs_canvas::text::coverage::{TextOp, render_coverage};
-use asrs_canvas::text::lut::{self, MaskGammaLut};
-use asrs_canvas::text::{TextBackend, platform_backend};
+use asrs_canvas::text::dom::{self, Style};
+use asrs_canvas::text::lut::{self, LcdGammaLut, MaskGammaLut};
+use asrs_canvas::text::{LcdMask, TextBackend, platform_backend};
 use asrs_canvas::{Call, ImageDataSource, Pixmap, Raster, RasterState, TextRaster, pixels, trace};
 use asrs_js::value::JsValue;
 use asrs_parity::json::{self, Json};
@@ -16,6 +17,8 @@ const USAGE: &str = "usage: asrs-cli canvas <command>
 commands:
   lut <reference dir> <out.bin>   fit the mask-gamma table from the oracle's calibration scenes
                                   (scenes/calib-<k>.json and ref/calib-<k>.cpu.png)
+  lcd <reference dir> <out.bin>   fit the per-channel table of LCD text from the oracle's DOM
+                                  calibration scenes (scenes/lcd-*.json and lcd-*@<scale>x.*)
   render <scenes dir> <out dir> [<scene>...]
                                   rasterize scene display lists to <out dir>/<scene>.png, straight
                                   RGBA as getImageData returns it (`cargo xtask canvas run`)";
@@ -23,6 +26,7 @@ commands:
 pub fn run(args: &[String]) -> Result<(), String> {
     match args {
         [cmd, reference, out] if cmd == "lut" => fit_lut(Path::new(reference), Path::new(out)),
+        [cmd, reference, out] if cmd == "lcd" => fit_lcd(Path::new(reference), Path::new(out)),
         [cmd, scenes, out, wanted @ ..] if cmd == "render" => {
             render_scenes(Path::new(scenes), Path::new(out), wanted)
         }
@@ -337,6 +341,185 @@ fn fit_lut(reference: &Path, out: &Path) -> Result<(), String> {
         eprintln!("  {line}");
     }
     Ok(())
+}
+
+/// Raw LCD coverage of the one glyph that inks each pixel, `None` where several do.
+struct LcdPlane {
+    width: u32,
+    height: u32,
+    pixels: HashMap<(i32, i32), Option<[u8; 3]>>,
+}
+
+impl LcdPlane {
+    fn draw(&mut self, mask: &LcdMask, x: i32, y: i32) {
+        for (i, raw) in mask.data.as_chunks::<3>().0.iter().enumerate() {
+            let at = (
+                x + mask.left + (i as u32 % mask.width) as i32,
+                y + mask.top + (i as u32 / mask.width) as i32,
+            );
+            let inside =
+                (0..self.width as i32).contains(&at.0) && (0..self.height as i32).contains(&at.1);
+            if inside && *raw != [0; 3] {
+                self.pixels
+                    .entry(at)
+                    .and_modify(|owner| *owner = None)
+                    .or_insert(Some(*raw));
+            }
+        }
+    }
+
+    /// Draws a one-line text box at its DOM rectangle as Blink paints it.
+    fn draw_box(
+        &mut self,
+        backend: &mut dyn TextBackend,
+        css: &str,
+        text: &str,
+        rect: &[f64],
+        scale: f32,
+    ) -> Result<(), String> {
+        let style = Style::from_css([("font", css), ("white-space", "pre")])
+            .ok_or_else(|| format!("bad font {css:?}"))?;
+        let layout = dom::layout(backend, &style, text, None, scale);
+        let [line] = layout.lines.as_slice() else {
+            return Err(format!("{text:?} is not one line"));
+        };
+        let device = |v: f64| dom::lu_round((v * f64::from(scale)) as f32);
+        let baseline = (f64::from(device(rect[1]) + line.baseline) / 64.0).round() as i32;
+        for fragment in &line.fragments {
+            let origin = (device(rect[0]) + fragment.x) as f32 / 64.0;
+            for g in &fragment.glyphs {
+                let biased = origin + g.x * scale + 0.125;
+                let x = biased.floor();
+                let phase = ((biased - x) * 4.0) as u8;
+                if let Some(mask) = backend.raw_lcd_mask(g.glyph, f64::from(scale), 1.0, phase) {
+                    self.draw(&mask, x as i32, baseline);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The 5-bit coverage that blends `color` onto `background` into `pixel`.
+fn lcd_coverage(background: u8, color: u8, pixel: u8) -> Option<u8> {
+    (0..32).find(|&m| lut::blend_lcd_channel(background, color, m) == pixel)
+}
+
+const LCD_SCALES: [u32; 2] = [1, 2];
+
+fn fit_lcd(reference: &Path, out: &Path) -> Result<(), String> {
+    let mut backend = platform_backend().ok_or("no text backend on this machine")?;
+    let prior = MaskGammaLut::embedded().ok_or("no mask-gamma table for this platform")?;
+    let mut samples: Vec<Vec<(u8, u8)>> = vec![Vec::new(); 3 * lut::ROWS];
+    let mut scenes = Vec::new();
+    let dir = reference.join("scenes");
+    for entry in fs::read_dir(&dir).map_err(|e| format!("{}: {e}", dir.display()))? {
+        scenes.push(entry.map_err(|e| e.to_string())?.path());
+    }
+    scenes.sort();
+    if scenes.len() != 2 * lut::ROWS {
+        return Err(format!("{} LCD calibration scenes", scenes.len()));
+    }
+    let read = |path: &Path| {
+        let text = fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        json::parse(&text).map_err(|e| format!("{}: {e}", path.display()))
+    };
+    let list = |v: &Json, k: &str| {
+        let array = v.get(k).and_then(Json::as_array).map(<[Json]>::to_vec);
+        array.ok_or_else(|| format!("no {k}"))
+    };
+    let text = |v: &Json, k: &str| string(v.get(k).ok_or_else(|| format!("no {k}"))?);
+    let mut captures = Vec::new();
+    for path in &scenes {
+        let scene = read(path)?;
+        let name = text(&scene, "name")?;
+        let color = hex_colour(&text(&scene, "color")?)?;
+        let background = hex_colour(&text(&scene, "background")?)?;
+        for scale in LCD_SCALES {
+            let base = reference.join(format!("{name}@{scale}x"));
+            let image = pixel::read_png(&base.with_extension("png"))?;
+            let captured = read(&base.with_extension("json"))?;
+            let boxes = list(&captured, "rows")?;
+            let rows = list(&scene, "rows")?;
+            if rows.len() != boxes.len() {
+                return Err(format!("{name}@{scale}x: {} text boxes", boxes.len()));
+            }
+            let mut plane = LcdPlane {
+                width: image.width,
+                height: image.height,
+                pixels: HashMap::new(),
+            };
+            for (row, dom) in rows.iter().zip(&boxes) {
+                let id = text(row, "id")?;
+                if text(dom, "id")? != id || text(dom, "mode")? != "lcd" {
+                    return Err(format!("{name}@{scale}x {id}: not LCD text"));
+                }
+                let rect: Vec<f64> = list(dom, "rect")?.iter().filter_map(Json::as_f64).collect();
+                plane.draw_box(
+                    backend.as_mut(),
+                    &text(row, "font")?,
+                    &text(row, "text")?,
+                    &rect,
+                    scale as f32,
+                )?;
+            }
+            let mut inked = Vec::new();
+            let mut undecoded = 0usize;
+            for (&(x, y), raw) in &plane.pixels {
+                let Some(raw) = raw else { continue };
+                let at = (y as u32 * image.width + x as u32) as usize * 4;
+                for c in 0..3 {
+                    let pixel = image.data[at + c];
+                    match lcd_coverage(background[c], color[c], pixel) {
+                        Some(m) => inked.push((c, raw[c], m << 3 | m >> 2)),
+                        None => undecoded += 1,
+                    }
+                }
+            }
+            for &(c, raw, out) in &inked {
+                samples[c * lut::ROWS + usize::from(color[c] >> 5)].push((raw, out));
+            }
+            captures.push((format!("{name}@{scale}x"), color, inked, undecoded));
+        }
+    }
+    let mut rows = [[[0u8; 256]; lut::ROWS]; 3];
+    for (i, samples) in samples.iter().enumerate() {
+        let bucket = i % lut::ROWS;
+        let prior = prior.row(bucket).map(|v| (v >> 3) << 3 | v >> 5);
+        rows[i / lut::ROWS][bucket] = lut::fit_row(samples, Some(&prior));
+    }
+    let table = LcdGammaLut::from_rows(rows);
+    for (name, color, inked, undecoded) in &captures {
+        let off = |c: usize, raw: u8, out: u8| {
+            let row = table.row(c, usize::from(color[c] >> 5));
+            (row[usize::from(raw)] >> 3).abs_diff(out >> 3)
+        };
+        let off: Vec<u8> = inked.iter().map(|&(c, r, o)| off(c, r, o)).collect();
+        eprintln!(
+            "  {name}: {} samples, {} off, by at most {} of 31, {undecoded} not a blend",
+            off.len(),
+            off.iter().filter(|&&d| d > 0).count(),
+            off.iter().max().copied().unwrap_or(0)
+        );
+    }
+    fs::write(out, table.to_bytes()).map_err(|e| format!("{}: {e}", out.display()))
+}
+
+#[cfg(test)]
+mod lcd_tests {
+    use super::*;
+
+    #[test]
+    fn coverage_is_read_back_from_the_blend() {
+        for (background, color) in [(255, 0), (0, 255), (255, 0x6d), (0, 0x92)] {
+            for m in 0..32 {
+                let pixel = lut::blend_lcd_channel(background, color, m);
+                let found = lcd_coverage(background, color, pixel).unwrap();
+                assert_eq!(found, m, "{color:#x} on {background:#x}");
+            }
+        }
+        assert_eq!(lcd_coverage(255, 0, 254), None);
+    }
 }
 
 #[cfg(all(test, any(target_os = "linux", windows)))]

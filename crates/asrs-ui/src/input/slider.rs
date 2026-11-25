@@ -243,6 +243,7 @@ impl<M: RangeModel> Slider<M> {
             "end" => "End",
             _ => return,
         };
+        cx.stop_propagation();
         if self.control.key_down(key) {
             cx.emit(SliderEvent::Input);
             cx.emit(SliderEvent::Change);

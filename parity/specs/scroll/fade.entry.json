@@ -1,0 +1,212 @@
+{
+ "entry": "scrollers",
+ "platforms": [
+  "macos-aarch64"
+ ],
+ "fixture": {
+  "window": [
+   500,
+   500
+  ],
+  "css": [],
+  "styles": [
+   "overlay"
+  ],
+  "scales": [
+   1
+  ],
+  "steps": [
+   {
+    "name": "wheel",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:150px;overflow:auto;background:#fff'><div style='width:100px;height:1000px'></div></div>",
+    "ops": [
+     [
+      "wheel",
+      100,
+      100,
+      0,
+      60,
+      "quick"
+     ],
+     [
+      "fade",
+      [
+       233,
+       60,
+       17,
+       1
+      ]
+     ]
+    ]
+   },
+   {
+    "name": "script",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:150px;overflow:auto;background:#fff'><div style='width:100px;height:1000px'></div></div>",
+    "ops": [
+     [
+      "wait",
+      800
+     ],
+     [
+      "eval",
+      "a.scrollTop=60",
+      "quick"
+     ],
+     [
+      "fade",
+      [
+       233,
+       60,
+       17,
+       1
+      ]
+     ]
+    ]
+   },
+   {
+    "name": "left",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:150px;overflow:auto;background:#fff'><div style='width:100px;height:1000px'></div></div>",
+    "ops": [
+     [
+      "wheel",
+      100,
+      100,
+      0,
+      60,
+      "quick"
+     ],
+     [
+      "move",
+      246,
+      60,
+      "quick"
+     ],
+     [
+      "wait",
+      600
+     ],
+     [
+      "move",
+      100,
+      100,
+      "quick"
+     ],
+     [
+      "fade",
+      [
+       233,
+       60,
+       17,
+       1
+      ]
+     ]
+    ]
+   },
+   {
+    "name": "dropped",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:150px;overflow:auto;background:#fff'><div style='width:100px;height:1000px'></div></div>",
+    "ops": [
+     [
+      "wheel",
+      100,
+      100,
+      0,
+      60,
+      "quick"
+     ],
+     [
+      "move",
+      246,
+      60,
+      "quick"
+     ],
+     [
+      "wait",
+      500
+     ],
+     [
+      "press",
+      246,
+      60,
+      "quick"
+     ],
+     [
+      "move",
+      100,
+      62,
+      "quick"
+     ],
+     [
+      "wait",
+      900
+     ],
+     [
+      "pixels",
+      "held",
+      [
+       233,
+       60,
+       17,
+       1
+      ]
+     ],
+     [
+      "release",
+      100,
+      62,
+      "quick"
+     ],
+     [
+      "fade",
+      [
+       233,
+       60,
+       17,
+       1
+      ]
+     ]
+    ]
+   },
+   {
+    "name": "hidden",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:150px;overflow:auto;background:#fff'><div style='width:100px;height:1000px'></div></div>",
+    "ops": [
+     [
+      "wait",
+      1000
+     ],
+     [
+      "move",
+      246,
+      60,
+      "quick"
+     ],
+     [
+      "wait",
+      300
+     ],
+     [
+      "pixels",
+      "none",
+      [
+       233,
+       60,
+       17,
+       1
+      ]
+     ],
+     [
+      "press",
+      246,
+      150
+     ],
+     [
+      "release",
+      246,
+      150
+     ]
+    ]
+   }
+  ]
+ }
+}

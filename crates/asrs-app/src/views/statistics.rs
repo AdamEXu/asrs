@@ -15,7 +15,7 @@ use asrs_hub::hub::HubModel;
 use asrs_js::math;
 use asrs_js::string::JsString;
 use asrs_model::layout_unit::{self, border, centred, percent, zoomed};
-use asrs_model::scroll_sensor::{WheelScroll, assign_scroll_offset};
+use asrs_model::scroll_sensor::{Wheel, WheelScroll, assign_scroll_offset};
 use asrs_model::tab_type::TabType;
 use asrs_tabs::form::{self, NumberInput};
 use asrs_tabs::histogram::EventKind;
@@ -45,9 +45,11 @@ use super::number::{FormNumber, input_chrome};
 use super::page_text::{
     Owner, PageText, PlacedBlock, Selected, beside_table, device, floor_device, unselectable,
 };
+use super::scrollers::{Area, smooth};
 use super::select::FormSelect;
 use super::source_list::{centred_offset, place_in};
 use super::statistics_layout::{CellKind, Placed, StatisticsLayout, cell_style};
+use asrs_ui::scroll::{self, Extent};
 
 const SETTINGS_MAX_WIDTH: f64 = 200.0;
 const SETTINGS_TOP: f64 = 5.0;
@@ -93,8 +95,9 @@ struct SettingsLayout {
 }
 
 impl SettingsLayout {
-    /// `line` is the height of a number input's line of text.
-    fn new(controls: [f64; 4], line: f64, scale: f64) -> SettingsLayout {
+    /// `line` is the height of a number input's line of text, and `bar` what a scrollbar takes of
+    /// the panel where it overflows.
+    fn new(controls: [f64; 4], line: f64, bar: f64, scale: f64) -> SettingsLayout {
         let device = |v: f64| layout_unit::device(v, scale);
         let [x, y, w, h] = controls.map(device);
         let length = |v: f64| zoomed(v, scale);
@@ -103,10 +106,20 @@ impl SettingsLayout {
         let width = math::min2(percent(w, 40.0), length(SETTINGS_MAX_WIDTH));
         let panel = [x + w - width - edge, y, width + edge, h];
         let left = panel[0] + edge;
-        let half = percent(width, 50.0);
         let title_height = length(TITLE_HEIGHT);
         let margin = length(CONTROL_MARGIN);
         let row = title_height + length(INPUT_HEIGHT);
+        let last = math::max2(
+            math::min2(h - length(LAST_INSET), length(LAST_MAX)),
+            length(INPUT_HEIGHT),
+        );
+        let content = length(SETTINGS_TOP) + 2.0 * row + title_height + last;
+        let width = if content > h {
+            width - length(bar)
+        } else {
+            width
+        };
+        let half = percent(width, 50.0);
         let title_top = |i: f64| y + length(SETTINGS_TOP) + i * row;
         let control = |left: f64, available: f64, chrome: f64, i: f64, height: f64| {
             let width = percent(available, CONTROL_WIDTH) + chrome;
@@ -116,11 +129,6 @@ impl SettingsLayout {
         let [across, down] = input_chrome(scale);
         let height = device(line) + down;
         let field = |left: f64, available: f64, i: f64| control(left, available, across, i, height);
-        let last = math::max2(
-            math::min2(h - length(LAST_INSET), length(LAST_MAX)),
-            length(INPUT_HEIGHT),
-        );
-        let content = title_top(2.0) - y + title_height + last;
         SettingsLayout {
             panel: css(panel),
             border: edge / scale,
@@ -147,6 +155,13 @@ struct Controls {
     _subscriptions: Vec<Subscription>,
 }
 
+impl Controls {
+    fn holds(&self, focused: &FocusHandle, cx: &App) -> bool {
+        let mut fields = self.fields.iter().map(|field| field.focus_handle(cx));
+        fields.any(|field| field == *focused) || self.select.focus_handle(cx) == *focused
+    }
+}
+
 struct TabView {
     layout: StatisticsLayout,
     /// What the chart's `ResizeObserver` reported last.
@@ -157,6 +172,8 @@ struct TabView {
     bitmap: Option<Arc<Pixmap>>,
     presenter: FramePresenter,
     controls: Option<Controls>,
+    /// The values' container where Tab reaches it.
+    scroller: Option<FocusHandle>,
 }
 
 impl TabView {
@@ -169,6 +186,7 @@ impl TabView {
             bitmap: None,
             presenter: FramePresenter::default(),
             controls: None,
+            scroller: None,
         }
     }
 }
@@ -715,6 +733,7 @@ impl<H: FrameHost> HubFrame<H> {
         let picture = chart.canvas().clone();
 
         let now = self.host().frame_time(cx);
+        layout.set_scrollbar(scroll::style(cx).reserved());
         let scrolling = layout.animate(now);
         let placed = layout.place(&rows);
         let [scroll_x, scroll_y] = layout.scroll();
@@ -804,9 +823,16 @@ impl<H: FrameHost> HubFrame<H> {
                         "table.stats-values",
                         grid.place([origin[0], origin[1], width, height]),
                     )),
-            );
+            )
+            .capture_any_mouse_down(
+                cx.listener(move |frame, _, _, _| frame.press_area(&Area::Statistics(key))),
+            )
+            .child(self.area_bars(Area::Statistics(key), layout.extent(), cx));
+        if let Some(tab) = self.statistics.tabs.get_mut(&key) {
+            tab.scroller = scroller.as_ref().map(|ring| ring.handle.clone());
+        }
         let mut ring = None;
-        if let Some(scroller) = scroller {
+        if let Some(scroller) = &scroller {
             values = values.track_focus(&scroller.handle);
             ring = scroller
                 .outline(appearance)
@@ -988,6 +1014,34 @@ impl<H: FrameHost> HubFrame<H> {
         }
     }
 
+    pub(super) fn statistics_smooth(
+        &mut self,
+        key: usize,
+        by: [f64; 2],
+        cx: &mut Context<'_, Self>,
+    ) {
+        let now = self.host().frame_time(cx);
+        if let Some(tab) = self.statistics.tabs.get(&key) {
+            tab.layout.scroll_smooth(by, now);
+        }
+    }
+
+    pub(super) fn statistics_scroll_to(
+        &mut self,
+        key: usize,
+        to: [f64; 2],
+        _: &mut Context<'_, Self>,
+    ) {
+        if let Some(tab) = self.statistics.tabs.get(&key) {
+            tab.layout.drag_to(to);
+        }
+    }
+
+    pub(super) fn statistics_range(&self, key: usize) -> Option<[[f64; 2]; 2]> {
+        let shown = self.statistics.shown.filter(|s| s.key == key)?;
+        Some(self.statistics.tabs.get(&shown.key)?.layout.range())
+    }
+
     fn statistics_wheel(&mut self, event: &ScrollEvent, cx: &mut Context<'_, Self>) {
         let now = self.host().frame_time(cx);
         let tab = self.statistics.shown.map(|s| s.key);
@@ -1016,16 +1070,32 @@ impl<H: FrameHost> HubFrame<H> {
         let Some(parts) = tab.and_then(|t| t.controls.as_mut()) else {
             return;
         };
-        let mut fields = parts.fields.iter().map(|field| field.focus_handle(cx));
-        if !fields.any(|field| field == *focused) && parts.select.focus_handle(cx) != *focused {
+        if !parts.holds(focused, cx) {
             return;
         }
         let [_, y, _, height] = layout.panel;
         let top = f64::from(f32::from(bounds.origin.y)) - y;
         let item = [top, f64::from(f32::from(bounds.size.height))];
-        parts.scroll += focus::reveal(ScrollAxis::Vertical, height, item);
+        let by = focus::reveal(ScrollAxis::Vertical, height, item);
+        if by != 0.0 {
+            parts.wheel.stop();
+        }
+        parts.scroll += by;
         let scale = f64::from(window.scale_factor());
         parts.scroll = assign_scroll_offset(parts.scroll, layout.max_scroll, scale);
+    }
+
+    /// What the focused element scrolls.
+    pub(super) fn focused_statistics(&self, focused: &FocusHandle, cx: &App) -> Option<Area> {
+        let key = self.statistics.shown?.key;
+        let tab = self.statistics.tabs.get(&key)?;
+        if tab.scroller.as_ref() == Some(focused) {
+            return Some(Area::Statistics(key));
+        }
+        let parts = tab.controls.as_ref()?;
+        parts
+            .holds(focused, cx)
+            .then_some(Area::StatisticsSettings(key))
     }
 
     fn statistics_blur(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
@@ -1136,7 +1206,8 @@ impl<H: FrameHost> HubFrame<H> {
             controller.step_size().clone(),
         ];
         let (_, line) = text::measure(cx, &TextStyle::new(CONTROL_FONT), "0", scale);
-        let layout = SettingsLayout::new(controls, line, f64::from(scale));
+        let bar = scroll::style(cx).reserved();
+        let layout = SettingsLayout::new(controls, line, bar, f64::from(scale));
         if let Some(shown) = &mut self.statistics.shown {
             shown.settings = Some(layout);
         }
@@ -1201,6 +1272,9 @@ impl<H: FrameHost> HubFrame<H> {
         let mut out = focus::section(panel.place(layout.panel), SETTINGS_SECTION, &place)
             .id("stats-settings")
             .overflow_hidden()
+            .capture_any_mouse_down(
+                cx.listener(move |frame, _, _, _| frame.press_area(&Area::StatisticsSettings(key))),
+            )
             .on_scroll(cx.listener(move |frame, event: &ScrollEvent, _, cx| {
                 frame.statistics_settings_wheel(key, layout, event, cx)
             }))
@@ -1251,7 +1325,69 @@ impl<H: FrameHost> HubFrame<H> {
             let input = input.tab_index(block(row) + 1).child(field);
             out = out.child(probed(id, titled(title, input)));
         }
+        let extent = Extent {
+            content: [0.0, layout.max_scroll + height],
+            offset: [0.0, scroll],
+            axes: [false, true],
+            dark: false,
+        };
+        out = out.child(self.area_bars(Area::StatisticsSettings(key), extent, cx));
         Some(probed("div.stats-settings", out).into_any_element())
+    }
+
+    pub(super) fn statistics_settings_smooth(
+        &mut self,
+        key: usize,
+        by: f64,
+        cx: &mut Context<'_, Self>,
+    ) {
+        self.statistics_settings_scrolled(key, smooth([0.0, by]), [f64::INFINITY; 2], cx);
+    }
+
+    pub(super) fn statistics_settings_scroll_to(
+        &mut self,
+        key: usize,
+        to: f64,
+        cx: &mut Context<'_, Self>,
+    ) {
+        let Some([_, [_, max]]) = self.statistics_settings_range(key) else {
+            return;
+        };
+        let tab = self.statistics.tabs.get_mut(&key);
+        if let Some(parts) = tab.and_then(|t| t.controls.as_mut()) {
+            parts.wheel.stop();
+            parts.scroll = to.clamp(0.0, max);
+        }
+        cx.notify();
+    }
+
+    pub(super) fn statistics_settings_range(&self, key: usize) -> Option<[[f64; 2]; 2]> {
+        let shown = self.statistics.shown.filter(|s| s.key == key)?;
+        let layout = shown.settings?;
+        let client = [layout.panel[2], layout.panel[3]];
+        Some([client, [0.0, layout.max_scroll]])
+    }
+
+    fn statistics_settings_scrolled(
+        &mut self,
+        key: usize,
+        wheel: Wheel,
+        client: [f64; 2],
+        cx: &mut Context<'_, Self>,
+    ) {
+        let now = self.host().frame_time(cx);
+        let Some([_, max]) = self.statistics_settings_range(key) else {
+            return;
+        };
+        let tab = self.statistics.tabs.get_mut(&key);
+        let Some(parts) = tab.and_then(|t| t.controls.as_mut()) else {
+            return;
+        };
+        let offset = [0.0, parts.scroll];
+        if let Some([_, to]) = parts.wheel.wheel(wheel, now, offset, max, client) {
+            parts.scroll = to.clamp(0.0, max[1]);
+        }
+        cx.notify();
     }
 
     fn statistics_settings_wheel(
@@ -1261,18 +1397,8 @@ impl<H: FrameHost> HubFrame<H> {
         event: &ScrollEvent,
         cx: &mut Context<'_, Self>,
     ) {
-        let now = self.host().frame_time(cx);
-        let tab = self.statistics.tabs.get_mut(&key);
-        let Some(parts) = tab.and_then(|t| t.controls.as_mut()) else {
-            return;
-        };
-        let offset = [0.0, parts.scroll];
-        let max = [0.0, layout.max_scroll];
         let client = [layout.panel[2], layout.panel[3]];
-        if let Some([_, to]) = parts.wheel.wheel(wheel_of(event), now, offset, max, client) {
-            parts.scroll = to.clamp(0.0, layout.max_scroll);
-        }
-        cx.notify();
+        self.statistics_settings_scrolled(key, wheel_of(event), client, cx);
     }
 }
 
@@ -1283,7 +1409,7 @@ mod tests {
 
     #[test]
     fn settings_boxes_match_blink() {
-        let layout = SettingsLayout::new([300.0, 450.0, 800.0, 200.0], 15.0, 1.0);
+        let layout = SettingsLayout::new([300.0, 450.0, 800.0, 200.0], 15.0, 0.0, 1.0);
         assert_eq!(layout.panel, [899.0, 450.0, 201.0, 200.0]);
         assert_eq!(layout.select, [930.0, 480.0, 140.0, 25.0]);
         assert_eq!(
@@ -1296,7 +1422,7 @@ mod tests {
         );
         assert_eq!(layout.max_scroll, 0.0);
         assert_eq!(
-            SettingsLayout::new([300.0, 550.0, 800.0, 100.0], 15.0, 1.0).max_scroll,
+            SettingsLayout::new([300.0, 550.0, 800.0, 100.0], 15.0, 0.0, 1.0).max_scroll,
             85.0
         );
     }
@@ -1308,7 +1434,7 @@ mod tests {
             let [_, down] = input_chrome(scale);
             let inputs = [0, 1, 2].map(|i| blink.all("div.setting-blocks input")[i].rect);
             let line = inputs[0][3] - down / scale;
-            let layout = SettingsLayout::new(blink.controls, line, scale);
+            let layout = SettingsLayout::new(blink.controls, line, 0.0, scale);
             let panel = blink.all("div.setting-blocks")[0].rect;
             blink.check("panel", &layout.panel, &panel);
             let blocks = [0, 2, 4].map(|i| blink.all("div.setting-blocks > div")[i].rect);

@@ -42,8 +42,13 @@ pub struct CanvasTabViews {
 
 impl CanvasTabViews {
     /// Scrolls the settings panel that holds the focused element, at `bounds`, to it.
-    pub fn scroll_to(&self, focused: &FocusHandle, bounds: Bounds<Pixels>, window: &Window) {
+    pub fn scroll_to(&mut self, focused: &FocusHandle, bounds: Bounds<Pixels>, window: &Window) {
         self.settings.scroll_to(focused, bounds, window);
+    }
+
+    /// The tab whose settings panel holds the focused element.
+    pub fn holding(&self, focused: &FocusHandle, window: &Window) -> Option<usize> {
+        self.settings.holding(focused, window)
     }
 
     fn retain(&mut self, live: &HashSet<usize>, cx: &mut App) {
