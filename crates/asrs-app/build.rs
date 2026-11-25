@@ -1,3 +1,5 @@
+#![allow(clippy::disallowed_methods)]
+
 fn main() {
     println!("cargo:rerun-if-env-changed=ASRS_PACKAGED");
     println!("cargo:rerun-if-env-changed=ASRS_BUILD_DATE");
