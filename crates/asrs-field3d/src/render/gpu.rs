@@ -761,6 +761,17 @@ impl Renderer {
         let _ = self.device.poll(wgpu::PollType::Poll);
     }
 
+    /// The bytes of the vertex and index buffers.
+    pub fn geometry_size(&self) -> u64 {
+        self.geometries.values().map(GpuGeometry::size).sum()
+    }
+
+    /// The memory the backend's allocator has reserved, where wgpu has one (DX12 and Vulkan).
+    pub fn reserved_memory(&self) -> Option<u64> {
+        let report = self.device.generate_allocator_report()?;
+        Some(report.total_reserved_bytes)
+    }
+
     /// Whether the renderer holds render targets or shadow maps.
     pub fn holds_targets(&self) -> bool {
         self.targets.is_some() || self.shadow_maps.is_some()

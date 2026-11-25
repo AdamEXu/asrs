@@ -7,13 +7,17 @@
 #[path = "support/child.rs"]
 mod child;
 
+use std::cell::RefCell;
 use std::path::PathBuf;
 use std::process::Command;
+use std::rc::Rc;
 use std::time::Duration;
 
 use asrs_app::hub::{Hub, HubEvent};
 use asrs_app::main_process::{self, MainProcess, SatelliteConfig};
 use asrs_app::satellite::Satellite;
+use asrs_app::views::frame::HubFrame;
+use asrs_app::views::hub_host::HubEntityHost;
 use asrs_app::windows::{self, WindowId, Windows};
 use asrs_js::ops;
 use asrs_js::string::JsString;
@@ -57,6 +61,7 @@ in_the_app! {
     what_changes_is_drawn, changes;
     a_source_list_scrolls_to_its_end, source_list;
     a_hidden_hub_draws_its_satellite_only_for_changes, hidden;
+    a_3d_field_frees_its_targets_when_left_and_its_device_when_closed, field3d;
 }
 
 #[test]
@@ -103,6 +108,7 @@ struct Page {
     id: WindowId,
     hub: Entity<Hub>,
     window: AnyWindowHandle,
+    frame: Entity<HubFrame<HubEntityHost>>,
     satellite: Option<(Entity<Satellite>, AnyWindowHandle)>,
 }
 
@@ -110,7 +116,13 @@ impl Page {
     fn start() -> Page {
         let cx = TestAppContext::single();
         let (_send, events) = async_channel::unbounded();
+        let frames = Rc::new(RefCell::new(Vec::new()));
+        let opened = frames.clone();
         cx.update(|cx| {
+            cx.observe_new::<HubFrame<HubEntityHost>>(move |_, _, cx| {
+                opened.borrow_mut().push(cx.entity());
+            })
+            .detach();
             asrs_ui::init(cx);
             windows::init(cx);
             main_process::start(cx, &[], events);
@@ -128,11 +140,13 @@ impl Page {
             .detach();
             (id, hub, window)
         });
+        let frame = frames.borrow_mut().remove(0);
         Page {
             cx,
             id,
             hub,
             window,
+            frame,
             satellite: None,
         }
     }
@@ -455,6 +469,35 @@ mod body {
         let [hub, _] = page.drawn_in(40);
         assert!((11..=24).contains(&hub), "a smooth scroll: {hub}");
         page.assert_idle("after a smooth scroll");
+    }
+
+    pub fn field3d() {
+        let mut page = Page::start();
+        page.select(TabType::Field3d);
+        page.settle();
+        let frame = page.frame.clone();
+        let targets = |page: &Page| page.cx.read(|cx| frame.read(cx).field3d_holds_targets());
+        let wait = |page: &mut Page, expected: Option<bool>, what: &str| {
+            for _ in 0..200 {
+                page.frames(2);
+                if targets(page) == expected {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            panic!("{what}: {:?}", targets(page));
+        };
+        if targets(&page).is_none() {
+            eprintln!("skipping: no 3D renderer");
+            return;
+        }
+        wait(&mut page, Some(true), "shown");
+        page.message(MainToHub::MoveTab, JsValue::Number(-1.0));
+        wait(&mut page, Some(false), "left");
+        page.message(MainToHub::MoveTab, JsValue::Number(1.0));
+        page.settle();
+        page.message(MainToHub::CloseTab, JsValue::Bool(true));
+        wait(&mut page, None, "closed");
     }
 
     pub fn hidden() {

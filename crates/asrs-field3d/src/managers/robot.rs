@@ -295,15 +295,15 @@ impl RobotManager {
             let mut sources: Vec<InstanceSource> = Vec::new();
             for optimized in scene_meshes {
                 let mesh = optimized.to_render_mesh();
-                if index == 0 {
-                    if let Some(position) = mesh.geometry.geometry.attribute("position") {
-                        let bounds = Box3::from_buffer_attribute(position);
-                        let d = &mut self.dimensions;
-                        d[0] = math::max2(d[0], bounds.max.x);
-                        d[1] = math::max2(d[1], bounds.max.y);
-                        d[2] = math::max2(d[2], -bounds.min.x);
-                        d[3] = math::max2(d[3], -bounds.min.y);
-                    }
+                if index == 0
+                    && let Some(position) = mesh.geometry.geometry.attribute("position")
+                {
+                    let bounds = Box3::from_buffer_attribute(position);
+                    let d = &mut self.dimensions;
+                    d[0] = math::max2(d[0], bounds.max.x);
+                    d[1] = math::max2(d[1], bounds.max.y);
+                    d[2] = math::max2(d[2], -bounds.min.x);
+                    d[3] = math::max2(d[3], -bounds.min.y);
                 }
                 let material = if request.ghost {
                     Materials::Single(self.ghost_material.clone())

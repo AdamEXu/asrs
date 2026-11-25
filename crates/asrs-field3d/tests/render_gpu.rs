@@ -400,3 +400,94 @@ fn a_viewport_wider_than_the_buffer_clips_its_last_column() {
     assert_eq!(pixel(&wide, W / 2, H / 4), [0x22, 0x22, 0x22, 0xff]);
     assert_eq!(pixel(&wide, W - 1, H / 4), [0, 0, 0xff, 0xff]);
 }
+
+#[test]
+fn absent_attributes_take_no_buffers_and_draw_like_their_defaults() {
+    let Some(mut renderer) = renderer() else {
+        return;
+    };
+    let mut bare = primitives::box_geometry(1.0, 1.0, 1.0, 1.0, 1.0, 1.0);
+    bare.delete_attribute("uv");
+    let count = bare.attribute("position").expect("positions").count();
+    let mut full = bare.clone();
+    full.set_attribute(
+        "uv",
+        BufferAttribute::new(ArrayData::Float32(vec![0.0; count * 2]), 2, false),
+    );
+    full.set_attribute(
+        "color",
+        BufferAttribute::new(ArrayData::Uint8(vec![255; count * 3]), 3, true),
+    );
+    let mut render = |geometry: BufferGeometry, vertex_colors| {
+        let mut scene = Scene::new();
+        let root = scene.root;
+        scene.add_hemisphere_light(root, Color::hex(16777215.0), Color::hex(4473924.0), 2.0);
+        let material = PhongMaterial {
+            vertex_colors,
+            ..PhongMaterial::new()
+        };
+        scene.add_mesh(root, Mesh::new(Geometry::new(geometry), Arc::new(material)));
+        let (_, mut camera) = scene_with_box_at(0.0);
+        let options = FrameOptions::new(f64::from(W), f64::from(H), 1.0, true);
+        let frame = build_frame(&mut scene, &mut camera, options);
+        let mut bgra = Vec::new();
+        renderer.render(&frame, &mut bgra).expect("rendered");
+        (bgra, renderer.geometry_size())
+    };
+    for vertex_colors in [false, true] {
+        let (expected, full_size) = render(full.clone(), vertex_colors);
+        let (pixels, bare_size) = render(bare.clone(), vertex_colors);
+        assert!(expected.chunks(4).any(|p| p[..3] != [0, 0, 0]));
+        assert_eq!(pixels, expected);
+        assert_eq!(full_size - bare_size, count as u64 * (8 + 4));
+    }
+}
+
+#[test]
+fn released_targets_come_back_with_the_same_pixels() {
+    let Some(_gpu) = renderer() else {
+        return;
+    };
+    let (tx, rx) = mpsc::channel();
+    let thread = RenderThread::spawn(move || {
+        let _ = tx.send(());
+    })
+    .expect("render thread");
+    let options = FrameOptions::new(f64::from(W), f64::from(H), 1.0, true);
+    let (mut scene, mut camera) = scene_with_box_at(0.0);
+    let frame = build_frame(&mut scene, &mut camera, options);
+    let present = || {
+        thread.submit(frame.clone());
+        rx.recv_timeout(Duration::from_secs(20)).expect("woken");
+        thread.take().expect("a frame").bgra
+    };
+    let before = present();
+    assert!(thread.holds_targets());
+    thread.release_targets();
+    for _ in 0..1000 {
+        if !thread.holds_targets() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(!thread.holds_targets());
+    assert_eq!(before, present());
+}
+
+#[test]
+fn released_targets_give_their_memory_back_to_the_system() {
+    let Some(mut renderer) = renderer() else {
+        return;
+    };
+    let options = FrameOptions::new(1600.0, 700.0, 1.0, true);
+    let (mut scene, mut camera) = scene_with_box_at(0.0);
+    let frame = build_frame(&mut scene, &mut camera, options);
+    renderer.render(&frame, &mut Vec::new()).expect("rendered");
+    let Some(before) = renderer.reserved_memory() else {
+        return;
+    };
+    assert!(before < 80 << 20, "{before}");
+    renderer.release_targets();
+    let after = renderer.reserved_memory().expect("reported before");
+    assert!(before - after >= 2 * 1600 * 700 * 16, "{before} {after}");
+}

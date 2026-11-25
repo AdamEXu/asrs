@@ -88,6 +88,11 @@ fn open_software(wanted: &str) -> Result<Opened, RenderError> {
 fn open_device(adapter: &wgpu::Adapter) -> Result<Opened, RenderError> {
     let desc = wgpu::DeviceDescriptor {
         label: Some("field3d"),
+        // DX12 and Vulkan suballocate from blocks they keep, by default 128 MB and up. Anything
+        // larger than a block gets memory of its own, which is freed with it.
+        memory_hints: wgpu::MemoryHints::Manual {
+            suballocated_device_memory_block_size: 4 << 20..8 << 20,
+        },
         ..Default::default()
     };
     #[cfg(any(target_os = "linux", windows))]
