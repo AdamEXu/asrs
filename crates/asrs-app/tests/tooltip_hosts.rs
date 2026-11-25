@@ -19,6 +19,7 @@ use asrs_ui::gpui::{
     Bounds, Keystroke, Modifiers, MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent,
     MouseUpEvent, Pixels, PlatformInput, Point, ScrollDelta, point, px,
 };
+use asrs_ui::text::TextSystem;
 use asrs_ui::tooltip::{self, ForcedHost, Host, Shown};
 use hub_page::Page;
 
@@ -240,6 +241,36 @@ fn aura(headless: &mut HeadlessCapture) {
     page.close();
 }
 
+/// Every tooltip is a window of its own, whose glyph runs go with it.
+fn closed_tooltips(headless: &mut HeadlessCapture) {
+    let mut page = Page::open(headless, 1.0);
+    let (play, close) = (upstream("play"), upstream("close"));
+    let [play, close] = [play, close].map(|title| (page.bounds(&title).center(), title));
+    let cached = |page: &mut Page<'_>| page.headless.context().update(TextSystem::windows);
+    page.hover(play.0);
+    let hub = cached(&mut page);
+    for i in 0..500 {
+        let (at, title) = if i % 2 == 0 { &play } else { &close };
+        page.hover(*at);
+        page.pass(SHOW_DELAY);
+        assert_eq!(page.shown().map(|s| s.text).as_ref(), Some(title), "{i}");
+        if i == 0 {
+            let popup = page.headless.context().update(|cx| {
+                let windows = cx.windows();
+                windows.into_iter().find(|w| *w != page.window.into())
+            });
+            page.headless
+                .capture(popup.expect("the tooltip"))
+                .expect("draw");
+        }
+        assert_eq!(cached(&mut page), hub + 1, "tooltip {i}");
+    }
+    page.dispatch(PlatformInput::MouseExited(MouseExitEvent::default()));
+    assert_eq!(cached(&mut page), hub);
+    page.close();
+    assert_eq!(headless.context().update(TextSystem::windows), hub - 1);
+}
+
 fn main() {
     if asrs_parity::ci::skip_in_ci("tooltip hosts", "a GPU") {
         return;
@@ -255,6 +286,7 @@ fn main() {
     states(&mut headless);
     toggles(&mut headless);
     aura(&mut headless);
+    closed_tooltips(&mut headless);
     let open = headless.context().update(|cx| cx.windows().len());
     assert_eq!(open, 0, "a tooltip goes with the window it is for");
     println!("tooltip hosts: playback states, toggles and TooltipAura ok");

@@ -171,6 +171,17 @@ impl TextSystem {
         system.windows.entry(window).or_default().grayscale = true;
     }
 
+    /// How many windows have a cache.
+    pub fn windows(cx: &mut App) -> usize {
+        cx.default_global::<TextSystem>().windows.len()
+    }
+
+    pub(crate) fn forget(cx: &mut App, window: WindowId) {
+        if cx.has_global::<TextSystem>() {
+            cx.global_mut::<TextSystem>().windows.remove(&window);
+        }
+    }
+
     fn may_be_lcd(&self, window: &Window) -> bool {
         let id = window.window_handle().window_id();
         let scale = window.scale_factor();

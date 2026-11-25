@@ -56,6 +56,11 @@ pub fn init(cx: &mut App) {
         let theme = gpui_kit::component::Theme::global_mut(cx);
         theme.tokens.background = gpui_kit::transparent_black().into();
     }
+    cx.on_window_closed(|cx, closed| {
+        text::TextSystem::forget(cx, closed);
+        selection::all::forget(cx, closed);
+    })
+    .detach();
     platform::init(cx);
 }
 
