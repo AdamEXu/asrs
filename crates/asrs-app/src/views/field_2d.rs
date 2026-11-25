@@ -15,6 +15,7 @@ use asrs_hub::hub::{HubModel, HubPage};
 use asrs_hub::tabs::TabRef;
 use asrs_js::math;
 use asrs_js::string::JsString;
+use asrs_model::layout_unit::{border, centred, device, percent, zoomed};
 use asrs_model::scroll_sensor::ScrollSensor;
 use asrs_model::tab_type::TabType;
 use asrs_tabs::field_2d::{
@@ -74,10 +75,6 @@ enum Block {
 }
 const SIZE_LABELS: [[&str; 3]; 2] = [["30", "27", "24"], ["18", "16", "14"]];
 
-fn lu(v: f64) -> f64 {
-    math::floor(v * 64.0) / 64.0
-}
-
 fn title_style() -> TextStyle {
     let font = format!("bold 16px {}", FONT_FAMILY.join(", "));
     TextStyle::from_css([
@@ -98,10 +95,9 @@ fn source_style() -> TextStyle {
 /// coordinates. `select_width` is the field select's intrinsic width.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct SettingsLayout {
-    /// The border box; its first pixel column is the `border-left`.
+    /// The border box, `border` of it on the left the `border-left`.
     panel: [f64; 4],
-    content_x: f64,
-    content_width: f64,
+    border: f64,
     titles: [[f64; 4]; 3],
     select: [f64; 4],
     source: Option<[f64; 2]>,
@@ -110,44 +106,59 @@ struct SettingsLayout {
 }
 
 impl SettingsLayout {
-    fn new(controls: [f64; 4], select_width: f64, source_width: Option<f64>) -> SettingsLayout {
-        let [x, y, w, h] = controls;
-        let content_width = math::min2(lu(w * 0.4), SETTINGS_MAX_WIDTH);
-        let panel = [x + w - content_width - 1.0, y, content_width + 1.0, h];
-        let content_x = panel[0] + 1.0;
-        let half = lu(content_width * 0.5);
-        let title_top = y + SETTINGS_TOP;
-        let field_top = title_top + TITLE_HEIGHT;
-        let second_title = field_top + FIELD_ROW_HEIGHT;
-        let tall_top = second_title + TITLE_HEIGHT;
+    fn new(
+        controls: [f64; 4],
+        select_width: f64,
+        source_width: Option<f64>,
+        scale: f64,
+    ) -> SettingsLayout {
+        let [x, y, w, h] = controls.map(|v| device(v, scale));
+        let length = |v: f64| zoomed(v, scale);
+        let css = |rect: [f64; 4]| rect.map(|v| v / scale);
+        let edge = border(1.0, scale);
+        let title_height = length(TITLE_HEIGHT);
+        let row_height = length(FIELD_ROW_HEIGHT);
+        let content_width = math::min2(percent(w, 40.0), length(SETTINGS_MAX_WIDTH));
+        let panel = [x + w - content_width - edge, y, content_width + edge, h];
+        let content_x = panel[0] + edge;
+        let half = percent(content_width, 50.0);
+        let title_top = y + length(SETTINGS_TOP);
+        let field_top = title_top + title_height;
+        let second_title = field_top + row_height;
+        let tall_top = second_title + title_height;
         let tall = math::max2(
-            math::min2(math::max2(h - TALL_INSET, 0.0), TALL_MAX_HEIGHT),
-            INPUT_MIN_HEIGHT,
+            math::min2(
+                math::max2(h - length(TALL_INSET), 0.0),
+                length(TALL_MAX_HEIGHT),
+            ),
+            length(INPUT_MIN_HEIGHT),
         );
-        let line_width = select_width + source_width.map_or(0.0, |w| w + 2.0 * SOURCE_PADDING);
-        let select_x = content_x + lu((content_width - line_width) / 2.0);
-        let select_y = field_top + FIELD_ROW_HEIGHT / 2.0 - SELECT_HEIGHT / 2.0;
-        let split_width = lu(half * 0.8);
-        let split_height = lu(tall * 0.65);
+        let select_width = device(select_width, scale);
+        let source = source_width.map(|w| device(w, scale) + 2.0 * length(SOURCE_PADDING));
+        let line_width = select_width + source.unwrap_or(0.0);
+        let select_x = content_x + centred(content_width, line_width);
+        let select_height = length(SELECT_HEIGHT);
+        let select_y = field_top + percent(row_height, 50.0) - select_height / 2.0;
+        let split_width = percent(half, 80.0);
+        let split_height = percent(tall, 65.0);
         let split = |left: f64| {
-            [
-                left + lu(half * 0.5) - split_width / 2.0,
-                tall_top + SPLIT_TOP,
+            css([
+                left + percent(half, 50.0) - split_width / 2.0,
+                tall_top + length(SPLIT_TOP),
                 split_width,
                 split_height,
-            ]
+            ])
         };
         SettingsLayout {
-            panel,
-            content_x,
-            content_width,
+            panel: css(panel),
+            border: edge / scale,
             titles: [
-                [content_x, title_top, content_width, TITLE_HEIGHT],
-                [content_x, second_title, half, TITLE_HEIGHT],
-                [content_x + half, second_title, half, TITLE_HEIGHT],
+                css([content_x, title_top, content_width, title_height]),
+                css([content_x, second_title, half, title_height]),
+                css([content_x + half, second_title, half, title_height]),
             ],
-            select: [select_x, select_y, select_width, SELECT_HEIGHT],
-            source: source_width.map(|_| [select_x + select_width, select_y]),
+            select: css([select_x, select_y, select_width, select_height]),
+            source: source.map(|_| [(select_x + select_width) / scale, select_y / scale]),
             orientation: split(content_x),
             size: split(content_x + half),
         }
@@ -682,7 +693,7 @@ impl<H: FrameHost> HubFrame<H> {
         let select_width = math::ceil(options_width * zoom) / zoom + SELECT_CHROME;
         let source_width =
             source_shown.then(|| text::measure(cx, &source_style(), "Source", scale).0);
-        let layout = SettingsLayout::new(controls, select_width, source_width);
+        let layout = SettingsLayout::new(controls, select_width, source_width, f64::from(scale));
 
         let entity = cx.entity().downgrade();
         let tab = self.field_2d.tabs.entry(key).or_default();
@@ -750,7 +761,7 @@ impl<H: FrameHost> HubFrame<H> {
                         .absolute()
                         .left_0()
                         .top_0()
-                        .w(px(1.0))
+                        .w(px(layout.border as f32))
                         .h(px(ph as f32))
                         .bg(rgb(if dark { 0x000000 } else { 0xdddddd })),
                 ),
@@ -759,7 +770,7 @@ impl<H: FrameHost> HubFrame<H> {
         for (label, i) in titles {
             let r = layout.titles[i];
             let (w, _) = text::measure(cx, &title_style(), label, scale);
-            let Some(offset) = centred_offset(r[2], w) else {
+            let Some(offset) = centred_offset(r[2], w, f64::from(scale)) else {
                 continue;
             };
             let (x, dx) = place_in(r[0], offset, f64::from(scale));
@@ -1058,10 +1069,11 @@ fn select_baseline(scale: f32, cx: &mut App) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::views::control_layout_vectors;
 
     #[test]
     fn settings_boxes_match_blink() {
-        let layout = SettingsLayout::new([300.0, 450.0, 800.0, 200.0], 99.0, None);
+        let layout = SettingsLayout::new([300.0, 450.0, 800.0, 200.0], 99.0, None, 1.0);
         assert_eq!(layout.panel, [849.0, 450.0, 251.0, 200.0]);
         assert_eq!(
             layout.titles,
@@ -1086,5 +1098,38 @@ mod tests {
         assert_eq!(quarter_sin_cos(0.0), (0.0, 1.0));
         assert_eq!(quarter_sin_cos(-std::f64::consts::PI / 2.0), (-1.0, 0.0));
         assert_eq!(quarter_sin_cos(std::f64::consts::PI), (0.0, -1.0));
+    }
+
+    #[test]
+    fn controls_lie_where_blink_puts_them() {
+        control_layout_vectors::each(2.0, 1440, |blink| {
+            let scale = blink.scale;
+            let select = blink.one("div.setting-blocks select", "field-select").rect;
+            let source = blink.all("div.setting-blocks a").first().map(|a| a.rect);
+            let padding = 2.0 * zoomed(SOURCE_PADDING, scale) / scale;
+            let source_width = source.map(|a| a[2] - padding);
+            let layout = SettingsLayout::new(blink.controls, select[2], source_width, scale);
+            let panel = blink.all("div.setting-blocks")[0].rect;
+            blink.check("panel", &layout.panel, &panel);
+            let field = blink.all("div.setting-blocks > div")[0].rect;
+            let halves: Vec<_> = blink.all("div.setting-blocks div.half")[..2]
+                .iter()
+                .map(|half| (half.rect, half.lines[0]))
+                .collect();
+            blink.check("title", &layout.titles[0], &field);
+            for (title, (half, line)) in layout.titles[1..].iter().zip(halves) {
+                blink.check("title", title, &half);
+                let offset = centred_offset(title[2], line[2], scale).expect("fits");
+                blink.check("title text", &[title[0] + offset], &line[..1]);
+            }
+            blink.check("select", &layout.select, &select);
+            if let (Some([x, _]), Some(a)) = (layout.source, source) {
+                blink.check("source", &[x], &a[..1]);
+            }
+            for (ours, class) in [(layout.orientation, "orientation"), (layout.size, "size")] {
+                let split = blink.one("div.setting-blocks div.split", class).rect;
+                blink.check(class, &ours, &split);
+            }
+        });
     }
 }

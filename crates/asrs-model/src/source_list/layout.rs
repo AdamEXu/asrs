@@ -5,6 +5,7 @@
 use asrs_js::math;
 
 use super::{ItemView, ListButton, Rect};
+use crate::layout_unit::{border, device, percent, zoomed};
 use crate::tab_type::TabType;
 
 const TITLE_HEIGHT: f64 = 30.0;
@@ -26,43 +27,31 @@ pub struct ListRoot {
     pub border_x: f64,
 }
 
-/// Blink's `LayoutUnit` from a computed length: 1/64 px, rounded toward zero.
-fn layout_unit(px: f64) -> f64 {
-    math::trunc(px * 64.0) / 64.0
-}
-
 /// The roots of a controller's lists, in construction order, inside the `div.controls-content`
-/// box `controls`, for the tab types whose controls hold source lists.
-pub fn controller_roots(tab_type: TabType, controls: Rect) -> Vec<ListRoot> {
-    let Rect {
-        x,
-        y,
-        width,
-        height,
-    } = controls;
-    let column = |left: f64, border_x: f64| ListRoot {
+/// box `controls`, for the tab types whose controls hold source lists, on a display of `scale`.
+pub fn controller_roots(tab_type: TabType, controls: Rect, scale: f64) -> Vec<ListRoot> {
+    let Rect { x, y, height, .. } = controls;
+    let [left, width] = [x, controls.width].map(|v| device(v, scale));
+    let root = |at: f64, width: f64, border_x: f64| ListRoot {
         rect: Rect {
-            x: x + left,
+            x: (left + at) / scale,
             y,
-            width: layout_unit(width / 3.0),
+            width: width / scale,
             height,
         },
-        border_x,
+        border_x: border_x / scale,
     };
-    let sources = |min_inset: f64| ListRoot {
-        rect: Rect {
-            x,
-            y,
-            width: math::max2(layout_unit(width * 0.6), width - min_inset),
-            height,
-        },
-        border_x: 0.0,
+    let third = percent(width, 100.0 / 3.0);
+    let column = |at: f64, border_x: f64| root(at, third, border_x);
+    let sources = |min_inset: f64| {
+        let min = width - zoomed(min_inset, scale);
+        root(0.0, math::max2(percent(width, 60.0), min), 0.0)
     };
     match tab_type {
         TabType::LineGraph => vec![
             column(0.0, 0.0),
-            column(layout_unit(width / 3.0 * 2.0), 0.0),
-            column(layout_unit(width / 3.0), 1.0),
+            column(percent(width, 100.0 / 3.0 * 2.0), 0.0),
+            column(third, border(1.0, scale)),
         ],
         TabType::Field2d => vec![sources(250.0)],
         TabType::Field3d | TabType::Statistics | TabType::Swerve | TabType::Points => {
