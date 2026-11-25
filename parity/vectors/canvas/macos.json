@@ -72,5 +72,30 @@
       "/System/Library/Fonts/Times.ttc": "79d8f1b02824796dda7234574826455c6cc62e898b2728c834859baad3332727",
       "/System/Library/Fonts/Apple Color Emoji.ttc": "12bc8221a908c5bcf05f0fce940d3c3f6e9d09d8d806ffe31a969b4ac9be8f9e"
     }
+  },
+  "field3d": {
+    "aarch64": {
+      "native": {
+        "electronSwitches": [],
+        "glRenderer": "ANGLE (Apple, ANGLE Metal Renderer: Apple M1 Pro, Unspecified Version)",
+        "samples": 4,
+        "portEnvironment": [],
+        "portAdapter": {
+          "name": "Apple M1 Pro",
+          "backend": "Metal",
+          "deviceType": "IntegratedGpu",
+          "driver": "",
+          "driverInfo": ""
+        },
+        "captures": 68,
+        "failed": [],
+        "ssimMin": 0.9999908587763735,
+        "differingPctMax": 0.8018456166604315,
+        "interiorMaxDelta": 1,
+        "interiorDifferingPctMax": 0.03633597858275694,
+        "maxDelta": 1,
+        "outlierBlob": 0
+      }
+    }
   }
 }
