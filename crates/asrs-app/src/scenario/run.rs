@@ -273,6 +273,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     headless.context().update(|cx| {
         windows::init(cx);
         cx.set_global(ForcedActive(false));
+        cx.set_global(platform::motion::ForcedReducedMotion(true));
         cx.set_global(ForcedHost(Host::Native));
     });
     if let Some(file) = options.licenses.clone() {
