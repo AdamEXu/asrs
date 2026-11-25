@@ -59,7 +59,7 @@ fn masks_reproduce_dom_text() {
     } else {
         "scenes-linux-stock"
     };
-    dom_text::check_redraw(&mut Fontations::new().unwrap(), dir, None);
+    dom_text::check_redraw(&mut Fontations::new().unwrap(), dir, 3);
 }
 
 const FIELDS: [&str; 10] = [

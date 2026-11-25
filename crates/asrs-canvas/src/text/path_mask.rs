@@ -7,6 +7,11 @@ use crate::aaa;
 use crate::blit::Spans;
 use crate::skpath::SkPath;
 
+fn div255(product: u32) -> u8 {
+    ((product + 128) * 257 >> 16) as u8
+}
+
+/// Blits source over: two spans of one row can share a pixel, as where a counter's edges meet.
 fn coverage(path: &SkPath, width: u32, height: u32) -> Vec<u8> {
     let mut spans = Spans::new(width, height);
     aaa::fill_path(path, width, height, false, &mut spans);
@@ -14,9 +19,7 @@ fn coverage(path: &SkPath, width: u32, height: u32) -> Vec<u8> {
     for (x, y, alpha) in spans.iter() {
         let start = y as usize * width as usize + x as usize;
         for (out, &a) in data[start..start + alpha.len()].iter_mut().zip(alpha) {
-            if a != 0 {
-                *out = a;
-            }
+            *out = a + div255(u32::from(255 - a) * u32::from(*out));
         }
     }
     data
