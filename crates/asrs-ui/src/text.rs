@@ -40,8 +40,8 @@ pub use asrs_canvas::text::dom::{
 pub const CACHE_BYTES: usize = 32 << 20;
 pub const CACHE_ENTRIES: usize = 4096;
 
-/// How many backgrounds one run is kept blended onto: a background that animates makes a new image
-/// every frame.
+/// How many backgrounds a run is kept blended onto besides those of the frame being painted: one
+/// that animates makes a new image every frame.
 const LCD_IMAGES: usize = 4;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -106,6 +106,8 @@ struct WindowText {
     stats: CacheStats,
     backdrop: Backdrop,
     grayscale: bool,
+    /// The clock when the frame's first text was painted, once it has been.
+    frame: Option<u64>,
 }
 
 pub struct TextSystem {
@@ -242,8 +244,10 @@ impl TextSystem {
             cache,
             stats,
             backdrop,
+            frame,
             ..
         } = self.windows.entry(window).or_default();
+        let frame = *frame.get_or_insert(self.clock);
         let run = cache.runs.entry(key).or_insert_with(|| {
             let bytes = fragment.text.len() + 64;
             cache.bytes += bytes;
@@ -344,9 +348,14 @@ impl TextSystem {
                     let Some(image) = image.and_then(lcd_image) else {
                         break;
                     };
-                    if run.lcd.len() >= LCD_IMAGES {
-                        let oldest = (0..run.lcd.len()).min_by_key(|&i| run.lcd[i].used);
-                        let old = run.lcd.swap_remove(oldest.expect("images")).image;
+                    while run.lcd.len() >= LCD_IMAGES {
+                        let oldest = (0..run.lcd.len())
+                            .min_by_key(|&i| run.lcd[i].used)
+                            .filter(|&i| run.lcd[i].used < frame);
+                        let Some(oldest) = oldest else {
+                            break;
+                        };
+                        let old = run.lcd.swap_remove(oldest).image;
                         run.bytes -= image_bytes(&old);
                         stats.evicted += 1;
                         cache.evicted.push(old);
@@ -951,8 +960,12 @@ impl Element for Text {
         if let Some(room) = self.cut {
             dom::cut(&mut layout, dom::lu_round((room * f64::from(scale)) as f32));
         }
-        if let Some(backdrop) = cx.default_global::<TextSystem>().backdrop(window) {
-            backdrop.clear();
+        let system = cx.default_global::<TextSystem>();
+        if system.lcd_lut.is_some()
+            && let Some(text) = system.windows.get_mut(&window.window_handle().window_id())
+        {
+            text.backdrop.clear();
+            text.frame = None;
         }
         let origin = (
             dom::lu_round((f32::from(bounds.origin.x) + self.subpixel.0) * scale),

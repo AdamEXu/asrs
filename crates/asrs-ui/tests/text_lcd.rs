@@ -264,6 +264,23 @@ fn an_animated_background_keeps_few_images_of_a_run() {
 }
 
 #[test]
+fn a_run_on_many_colours_of_one_frame_keeps_them_all() {
+    let mut f = Fixture::lcd(1.0);
+    let rows = || {
+        let rows = (0..9u32).map(|i| {
+            let bg = rgb(0x101010 * (i + 1));
+            div().h(px(20.0)).bg(bg).child(text("run"))
+        });
+        page(0xffffff, div().children(rows))
+    };
+    let first = f.draw(rows);
+    assert_eq!((first.lcd, first.entries, first.evicted), (9, 1, 0));
+    assert_eq!(f.draw(rows).rasterized, 0);
+    let other = f.draw(|| page(0xffffff, text("run")));
+    assert_eq!((other.lcd, other.evicted), (1, 6));
+}
+
+#[test]
 fn the_cache_stays_within_its_budget_on_many_backgrounds() {
     let mut f = Fixture::lcd(1.0);
     let (bytes, entries) = (256 << 10, 400);
