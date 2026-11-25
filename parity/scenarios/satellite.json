@@ -106,12 +106,14 @@
     {
       "mouse": "move",
       "x": 1041,
-      "y": 19
+      "y": 19,
+      "on": "button.popup"
     },
     {
       "mouse": "click",
       "x": 1041,
-      "y": 19
+      "y": 19,
+      "on": "button.popup"
     },
     {
       "prompt": "satellite"

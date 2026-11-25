@@ -121,12 +121,14 @@
     {
       "mouse": "move",
       "x": 970,
-      "y": 22
+      "y": 22,
+      "on": "button.play"
     },
     {
       "mouse": "click",
       "x": 970,
-      "y": 22
+      "y": 22,
+      "on": "button.play"
     },
     {
       "wait": 1500

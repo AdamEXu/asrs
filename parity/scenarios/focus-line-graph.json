@@ -109,12 +109,14 @@
     {
       "mouse": "move",
       "x": 1074,
-      "y": 19
+      "y": 19,
+      "on": "button.add-tab"
     },
     {
       "mouse": "down",
       "x": 1074,
-      "y": 19
+      "y": 19,
+      "on": "button.add-tab"
     },
     {
       "mouse": "move",
