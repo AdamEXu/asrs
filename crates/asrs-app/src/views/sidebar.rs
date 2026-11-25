@@ -608,22 +608,11 @@ impl SidebarView {
         let italic = row.full_key.is_some();
         let bold = row.label_bold == Some(true);
         let title = row.title.to_string_lossy();
-        let mut title_el = div()
-            .relative()
-            .child(Text::new(title.clone(), label_style(italic, bold)).color(theme.text));
+        let mut name = Text::new(title, label_style(italic, bold)).color(theme.text);
         if row.known_label {
-            let (w, _) = asrs_ui::text::measure(cx, &label_style(italic, bold), &title, 1.0);
-            title_el = title_el.child(
-                div()
-                    .absolute()
-                    .left_0()
-                    .top(px(16.0))
-                    .w(px(w as f32))
-                    .h(px(1.0))
-                    .bg(rgb(theme.text)),
-            );
+            name = name.underline();
         }
-        label = label.child(untitled(title_el));
+        label = label.child(untitled(div().relative().child(name)));
         if row.full_key.as_ref().is_some_and(|k| !k.is_empty()) && !row.warning_hidden {
             label = label.child(titled(
                 row.warning_title.to_string_lossy(),

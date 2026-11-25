@@ -350,6 +350,18 @@ impl Faces for Fontations {
                 return Some(self.substitute_face(spec, typeface));
             }
         }
+        // Upstream's style sheets always follow Courier with monospace.
+        if !emoji && spec.family == Family::Courier {
+            let monospace = FontSpec {
+                family: Family::Monospace,
+                ..*spec
+            };
+            if let Some((_, _, typeface)) = self.resolve(&monospace)
+                && self.typefaces[typeface].has_char(c)
+            {
+                return Some(self.substitute_face(spec, typeface));
+            }
+        }
         let (c, locale) = if emoji {
             (EMOJI, EMOJI_LOCALE)
         } else {
