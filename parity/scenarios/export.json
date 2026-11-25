@@ -3,7 +3,7 @@
   "actions": [
     {
       "open": [
-        "app:drive"
+        "parity/scenarios/inputs/drive.wpilog"
       ]
     },
     {

@@ -87,13 +87,11 @@ const RANDOM_SEED: u64 = 1;
 const WINDOW_ORIGIN: f64 = 16.0;
 /// 2026-11-01T00:00:00Z, before upstream's beta expires.
 const BETA_TIME: f64 = 1_793_491_200_000.0;
-/// The id `StateTracker` keys the one hub window's renderer state by.
-const HUB_WINDOW_ID: f64 = 1.0;
-
 /// What `StateTracker` reads of the screen in a run: the hub window where the Electron driver
 /// places its own, and the satellites main placed around it.
 #[derive(Clone)]
 struct Screen {
+    hub: WindowId,
     window: Rect,
     satellites: Vec<(WindowId, Rect)>,
 }
@@ -103,6 +101,7 @@ impl Screen {
         let manager = Windows::manager(cx);
         let ids = manager.satellites().into_iter().flat_map(|(_, list)| list);
         Screen {
+            hub: self.hub,
             window: self.window,
             satellites: ids
                 .filter_map(|id| Some((*id, manager.bounds(*id)?)))
@@ -113,7 +112,7 @@ impl Screen {
 
 impl WindowSystem for Screen {
     fn window_bounds(&self, id: f64) -> Option<Rect> {
-        if id == HUB_WINDOW_ID {
+        if id == self.hub as f64 {
             return Some(self.window);
         }
         let mut satellites = self.satellites.iter();
@@ -1276,6 +1275,7 @@ impl Variant<'_> {
 
     fn screen(&self) -> Screen {
         Screen {
+            hub: 0,
             window: Rect {
                 x: self.work_area.0 + WINDOW_ORIGIN,
                 y: self.work_area.1 + WINDOW_ORIGIN,
@@ -1362,9 +1362,10 @@ impl Variant<'_> {
                     .map_err(|e| e.to_string())?;
                 let (saves, exceptions) = (self.saves.clone(), self.exceptions.clone());
                 let handle = window.into();
-                let screen = self.screen();
+                let mut screen = self.screen();
                 self.headless.context().update(|cx| {
                     let id = Windows::adopt_hub(cx, window.into(), screen.window);
+                    screen.hub = id;
                     cx.set_global(ScriptedFrame {
                         size: platform::probe::framed_window().unwrap_or((0.0, 0.0)),
                     });
@@ -1381,12 +1382,12 @@ impl Variant<'_> {
                             hub_dialogs::show(m, handle, cx);
                             let screen = screen.with_satellites(cx);
                             let main = cx.global_mut::<MainProcess>().state_mut();
-                            let saved =
-                                main.hub_message(&RealFs, HUB_WINDOW_ID, m)
-                                    .and_then(|()| match m.name {
-                                        HubToMain::SaveState => main.tracker.tick(&RealFs, &screen),
-                                        _ => Ok(()),
-                                    });
+                            let saved = main.hub_message(&RealFs, id as f64, m).and_then(|()| {
+                                match m.name {
+                                    HubToMain::SaveState => main.tracker.tick(&RealFs, &screen),
+                                    _ => Ok(()),
+                                }
+                            });
                             if let Err(e) = saved {
                                 exceptions
                                     .borrow_mut()

@@ -615,21 +615,11 @@ impl SidebarView {
         let italic = row.full_key.is_some();
         let bold = row.label_bold == Some(true);
         let title = row.title.to_string_lossy();
-        let mut title_el = div()
-            .relative()
-            .child(Text::new(title.clone(), label_style(italic, bold)).color(theme.text));
+        let mut title_text = Text::new(title, label_style(italic, bold)).color(theme.text);
         if row.known_label {
-            let (w, _) = asrs_ui::text::measure(cx, &label_style(italic, bold), &title, 1.0);
-            title_el = title_el.child(
-                div()
-                    .absolute()
-                    .left_0()
-                    .top(px(16.0))
-                    .w(px(w as f32))
-                    .h(px(1.0))
-                    .bg(rgb(theme.text)),
-            );
+            title_text = title_text.underline();
         }
+        let title_el = div().relative().child(title_text);
         label = label.child(untitled(title_el));
         if row.full_key.as_ref().is_some_and(|k| !k.is_empty()) && !row.warning_hidden {
             label = label.child(titled(
@@ -760,7 +750,7 @@ impl SidebarView {
                 let line = if *line_hidden == Some(true) {
                     ""
                 } else {
-                    r#"<clipPath id="c"><circle cx="4.5" cy="4.5" r="4.5"/></clipPath><line x2="9" y2="9" stroke-width="2" stroke="white" clip-path="url(#c)"/>"#
+                    r#"<line x1="1.32" y1="1.32" x2="7.68" y2="7.68" stroke-width="2" stroke="white"/>"#
                 };
                 let size = if *tunable { 9.0 * 1.75 } else { 9.0 };
                 let svg = format!(
