@@ -1847,23 +1847,22 @@ fn upload_geometry(
     let uvs = attribute_f32(g.attribute("uv"), 2, count);
     let color_attribute = g.attribute("color");
     let color_components = color_attribute.map_or(3, |a| a.item_size as u32);
-    let byte_color = color_attribute
-        .filter(|a| a.normalized)
-        .and_then(|a| match &*a.array {
-            ArrayData::Uint8(values) => Some((values, a.item_size)),
-            _ => None,
-        });
-    let (color, float_color) = match (byte_color, color_attribute) {
-        (Some((values, item_size)), _) => {
+    let (color, float_color) = match color_attribute {
+        Some(BufferAttribute {
+            array: ArrayData::Uint8(values),
+            item_size,
+            normalized: true,
+            ..
+        }) => {
             let mut bytes = vec![255u8; count * 4];
             for i in 0..count {
-                for c in 0..item_size.min(4) {
+                for c in 0..(*item_size).min(4) {
                     bytes[i * 4 + c] = values[i * item_size + c];
                 }
             }
             (init(&bytes, vertex), false)
         }
-        (None, Some(a)) => {
+        Some(a) => {
             let mut values = attribute_f32(Some(a), 4, count);
             if a.item_size < 4 {
                 for i in 0..count {
@@ -1872,7 +1871,7 @@ fn upload_geometry(
             }
             (init(bytemuck::cast_slice(&values), vertex), true)
         }
-        (None, None) => (init(&vec![255u8; count.max(1) * 4], vertex), false),
+        None => (init(&vec![255u8; count.max(1) * 4], vertex), false),
     };
     let index = if let Some(primitives) = provoking_last {
         let indices: Vec<u32> = match &g.index {
@@ -1890,7 +1889,7 @@ fn upload_geometry(
     } else {
         g.index.as_ref().map(|index| {
             let usage = wgpu::BufferUsages::INDEX;
-            match &*index.array {
+            match &index.array {
                 ArrayData::Uint16(v) => {
                     let mut v = v.clone();
                     if v.len() % 2 == 1 {
