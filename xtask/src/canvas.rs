@@ -653,7 +653,12 @@ pub(crate) fn set_manifest_host(paths: &Paths, platform: &str, description: Json
     set_manifest_field(paths, platform, "host", description)
 }
 
-fn set_manifest_field(paths: &Paths, platform: &str, key: &str, value: Json) -> Result {
+pub(crate) fn manifest_field(paths: &Paths, platform: &str, key: &str) -> Option<Json> {
+    let path = vectors_dir(paths).join(format!("{platform}.json"));
+    read_json(&path).ok()?.get(key).cloned()
+}
+
+pub(crate) fn set_manifest_field(paths: &Paths, platform: &str, key: &str, value: Json) -> Result {
     let path = vectors_dir(paths).join(format!("{platform}.json"));
     let mut fields: Vec<(String, Json)> = match read_json(&path) {
         Ok(Json::Object(pairs)) => pairs

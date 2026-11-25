@@ -4,6 +4,7 @@
 
 pub mod chrome;
 mod open;
+pub mod placement;
 
 pub use asrs_services::window_manager::{SatellitePlacement, WindowId, WindowKind, WindowOptions};
 pub use asrs_services::windows::Rect;
@@ -12,8 +13,11 @@ pub use asrs_ui::platform::dialog::{
     SaveDialogOptions, message_box, open_dialog, save_dialog,
 };
 
+use std::rc::Rc;
+
 use asrs_services::window_manager::{Opened, WindowManager};
-use asrs_ui::gpui::{AnyWindowHandle, App, Entity, Global, Render, Window};
+use asrs_ui::gpui::{AnyWindowHandle, App, Context, Entity, Global, Render, Subscription, Window};
+use asrs_ui::platform::FocusObserver;
 
 use crate::main_process::MainProcess;
 
@@ -38,6 +42,13 @@ pub struct ScriptedFrame {
 
 #[cfg(feature = "parity")]
 impl Global for ScriptedFrame {}
+
+/// Windows open as they do but are never shown.
+#[cfg(feature = "parity")]
+pub struct KeepHidden;
+
+#[cfg(feature = "parity")]
+impl Global for KeepHidden {}
 
 impl Default for Windows {
     fn default() -> Self {
@@ -128,6 +139,12 @@ impl Windows {
         id
     }
 
+    /// A hub's `focus` event.
+    #[cfg(feature = "parity")]
+    pub fn raise(cx: &mut App, id: WindowId) {
+        cx.global_mut::<Windows>().manager.raised(id);
+    }
+
     /// The open window of this kind a parity scenario drives, counted in opening order.
     #[cfg(feature = "parity")]
     pub fn of_kind(cx: &App, kind: WindowKind, index: usize) -> Option<AnyWindowHandle> {
@@ -183,30 +200,57 @@ fn close_modals(cx: &mut App, parent: WindowId) {
     }
 }
 
-/// `window.on("focus", ..)` (true) and `window.on("blur", ..)` (false).
+/// Keeps a window's focus listener.
+pub struct FocusEvents {
+    _native: Option<FocusObserver>,
+    _activation: Option<Subscription>,
+}
+
+/// `window.on("focus", ..)` (true) and `window.on("blur", ..)` (false), for as long as the result
+/// is kept.
+pub fn focus_events<V: 'static>(
+    window: &mut Window,
+    cx: &mut Context<'_, V>,
+    listener: impl Fn(&mut V, bool, &mut Window, &mut Context<'_, V>) + 'static,
+) -> FocusEvents {
+    let listener = Rc::new(listener);
+    let native = {
+        let listener = listener.clone();
+        let (handle, view) = (window.window_handle(), cx.weak_entity());
+        asrs_ui::platform::observe_focus(window, cx, move |focused, cx| {
+            let _ = handle.update(cx, |_, window, cx| {
+                view.update(cx, |view, cx| listener(view, focused, window, cx))
+            });
+        })
+    };
+    let activation = native.is_none().then(|| {
+        cx.observe_window_activation(window, move |view, window, cx| {
+            listener(view, window.is_window_active(), window, cx);
+        })
+    });
+    FocusEvents {
+        _native: native,
+        _activation: activation,
+    }
+}
+
+/// [`focus_events`] until the window closes.
 pub fn on_focus_change<V: Render>(
     cx: &mut App,
     id: WindowId,
     root: &Entity<V>,
-    listener: impl Fn(bool, &mut App) + Clone + 'static,
+    listener: impl Fn(bool, &mut App) + 'static,
 ) {
     let Some(handle) = Windows::handle(cx, id) else {
         return;
     };
-    let observed = handle.update(cx, |_, window, cx| {
-        let native = asrs_ui::platform::observe_focus(window, cx, listener.clone());
-        if native.is_none() {
-            root.update(cx, |_, cx| {
-                cx.observe_window_activation(window, move |_, window, cx| {
-                    listener(window.is_window_active(), cx);
-                })
-                .detach();
-            });
-        }
-        native
+    let events = handle.update(cx, |_, window, cx| {
+        root.update(cx, |_, cx| {
+            focus_events(window, cx, move |_, focused, _, cx| listener(focused, cx))
+        })
     });
-    if let Ok(Some(observer)) = observed {
-        Windows::on_closed(cx, id, move |_| observer.stop());
+    if let Ok(events) = events {
+        Windows::on_closed(cx, id, move |_| drop(events));
     }
 }
 
