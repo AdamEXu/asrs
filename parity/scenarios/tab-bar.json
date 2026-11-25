@@ -327,12 +327,14 @@
     {
       "mouse": "move",
       "x": 1007,
-      "y": 22
+      "y": 22,
+      "on": "button.close"
     },
     {
       "mouse": "click",
       "x": 1007,
-      "y": 22
+      "y": 22,
+      "on": "button.close"
     },
     {
       "idle": true
@@ -351,12 +353,14 @@
     {
       "mouse": "move",
       "x": 1074,
-      "y": 22
+      "y": 22,
+      "on": "button.add-tab"
     },
     {
       "mouse": "click",
       "x": 1074,
-      "y": 22
+      "y": 22,
+      "on": "button.add-tab"
     },
     {
       "menu": [

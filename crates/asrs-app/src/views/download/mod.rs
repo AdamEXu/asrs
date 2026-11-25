@@ -626,7 +626,7 @@ impl DownloadWindow {
             .overflow_hidden()
             .capture_any_mouse_down(cx.listener(|view, _, _, _| view.pressed = true))
             .on_scroll(cx.listener(Self::scrolled))
-            .child(content);
+            .child(text::scroller(self.max_scroll() > 0.0, content));
         if self.page.loading() {
             list = list.child(self.loading.bars(width, self.list_height, now));
         } else {
