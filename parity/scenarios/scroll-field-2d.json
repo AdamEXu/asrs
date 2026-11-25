@@ -1,9 +1,5 @@
 {
-  "about": "Interaction (#412): the classic scrollbars of the 2D and 3D field settings, hovered and pressed, and what is laid out next to one",
-  "scrollbars": "classic",
-  "platforms": [
-    "darwin"
-  ],
+  "about": "Interaction (#412): the 2D field settings in a panel lower than they are, by wheel and by key",
   "prefs": {
     "coordinateSystem": "wall-blue"
   },
@@ -28,7 +24,6 @@
       "$file": "assets/parity-pad.png"
     }
   },
-  "gl": true,
   "actions": [
     {
       "open": [
@@ -82,170 +77,46 @@
       "wait": 1500
     },
     {
-      "capture": "2d-top",
+      "capture": "top",
       "probes": [
         ".controls-content",
-        "div.field-2d-settings",
-        "select.field-select"
+        ".field-2d-settings",
+        ".field-select"
       ]
     },
     {
-      "mouse": "move",
-      "x": 1094,
-      "y": 560
-    },
-    {
-      "mouse": "move",
-      "x": 1094,
-      "y": 561
-    },
-    {
-      "wait": 600
-    },
-    {
-      "capture": "2d-hover",
-      "probes": [
-        ".controls-content",
-        "div.field-2d-settings",
-        "select.field-select"
-      ]
-    },
-    {
-      "mouse": "down",
-      "x": 1094,
-      "y": 645
-    },
-    {
-      "wait": 100
-    },
-    {
-      "mouse": "up",
-      "x": 1094,
-      "y": 645
-    },
-    {
-      "wait": 600
-    },
-    {
-      "capture": "2d-paged",
-      "probes": [
-        ".controls-content",
-        "div.field-2d-settings",
-        "select.field-select"
-      ]
-    },
-    {
-      "mouse": "move",
-      "x": 700,
-      "y": 20
-    },
-    {
-      "wait": 1500
-    },
-    {
-      "capture": "2d-rest",
-      "probes": [
-        ".controls-content",
-        "div.field-2d-settings",
-        "select.field-select"
-      ]
-    },
-    {
-      "main": "restore-state",
-      "data": {
-        "sidebar": {
-          "width": 300,
-          "expanded": [
-            "/Odometry"
-          ]
-        },
-        "tabs": {
-          "selected": 1,
-          "tabs": [
-            {
-              "type": 0,
-              "title": "",
-              "controller": null,
-              "controllerUUID": "documentation0000000000000000000",
-              "renderer": "",
-              "controlsHeight": 0
-            },
-            {
-              "type": 3,
-              "title": "3D",
-              "controller": {
-                "sources": [],
-                "game": "FRC:Evergreen"
-              },
-              "controllerUUID": "field3d0000000000000000000000000",
-              "renderer": null,
-              "controlsHeight": 100
-            }
-          ]
-        }
+      "wheel": {
+        "x": 975,
+        "y": 600,
+        "deltaX": 0,
+        "deltaY": -10,
+        "precise": true
       }
     },
     {
-      "idle": true
+      "mouse": "move",
+      "x": 700,
+      "y": 20
     },
     {
       "wait": 1500
     },
     {
-      "capture": "3d-top",
+      "capture": "wheel",
       "probes": [
         ".controls-content",
-        "div.field-3d-settings",
-        "select.field-select",
-        "div.xr-button"
+        ".field-2d-settings",
+        ".field-select"
       ]
     },
     {
-      "mouse": "move",
-      "x": 1094,
-      "y": 560
-    },
-    {
-      "mouse": "move",
-      "x": 1094,
-      "y": 561
-    },
-    {
-      "wait": 600
-    },
-    {
-      "capture": "3d-hover",
-      "probes": [
-        ".controls-content",
-        "div.field-3d-settings",
-        "select.field-select",
-        "div.xr-button"
-      ]
-    },
-    {
-      "mouse": "down",
-      "x": 1094,
-      "y": 645
-    },
-    {
-      "wait": 100
-    },
-    {
-      "mouse": "up",
-      "x": 1094,
-      "y": 645
-    },
-    {
-      "wait": 600
-    },
-    {
-      "capture": "3d-paged",
-      "probes": [
-        ".controls-content",
-        "div.field-3d-settings",
-        "select.field-select",
-        "div.xr-button"
-      ]
+      "wheel": {
+        "x": 975,
+        "y": 600,
+        "deltaX": 0,
+        "deltaY": -200,
+        "precise": true
+      }
     },
     {
       "mouse": "move",
@@ -256,12 +127,133 @@
       "wait": 1500
     },
     {
-      "capture": "3d-rest",
+      "capture": "wheel-end",
       "probes": [
         ".controls-content",
-        "div.field-3d-settings",
-        "select.field-select",
-        "div.xr-button"
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 975,
+        "y": 600,
+        "deltaX": 0,
+        "deltaY": 200,
+        "precise": true
+      }
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "mouse": "move",
+      "x": 905,
+      "y": 553
+    },
+    {
+      "mouse": "click",
+      "x": 905,
+      "y": 553
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "key": "Down"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "down",
+      "probes": [
+        ".controls-content",
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "up",
+      "probes": [
+        ".controls-content",
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "key": "End"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "end",
+      "probes": [
+        ".controls-content",
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
+      "key": "Home"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "key": "PageDown"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "page",
+      "probes": [
+        ".controls-content",
+        ".field-2d-settings",
+        ".field-select"
       ]
     }
   ]
