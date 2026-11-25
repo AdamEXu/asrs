@@ -8,6 +8,7 @@ use std::rc::Rc;
 
 use asrs_hub::hub::HubModel;
 use asrs_js::math;
+use asrs_model::layout_unit::{device, lu, zoomed};
 use asrs_model::scroll_sensor::ScrollSensor;
 use asrs_model::tab_type::TabType;
 use asrs_tabs::cx::TabCx;
@@ -563,6 +564,53 @@ impl<H: FrameHost> HubFrame<H> {
     }
 }
 
+/// The boxes of `div.line-graph-help`'s container and rows, in client coordinates.
+struct HelpLayout {
+    container: [f64; 4],
+    rows: Vec<HelpRow>,
+}
+
+struct HelpRow {
+    icon: [f64; 4],
+    text: [f64; 2],
+}
+
+impl HelpLayout {
+    /// Over `root`, with labels of these sizes.
+    fn new(root: [f64; 4], labels: &[[f64; 2]], scale: f64) -> HelpLayout {
+        let [x, y, w, h] = root.map(|v| device(v, scale));
+        let labels: Vec<[f64; 2]> = labels.iter().map(|l| l.map(|v| device(v, scale))).collect();
+        let length = |v: f64| zoomed(v, scale);
+        let css = |rect: [f64; 4]| rect.map(|v| v / scale);
+        let icon = length(HELP_ICON);
+        let text_left = icon + length(HELP_ICON_GAP);
+        let step = icon + length(HELP_ROW_GAP);
+        let width = labels
+            .iter()
+            .map(|l| text_left + l[0])
+            .fold(0.0, math::max2);
+        let height = step * labels.len() as f64 - length(HELP_ROW_GAP);
+        let inset = length(DEFAULT_SCROLL_TOP);
+        let space = math::max2(h - inset - length(SCROLL_BOTTOM), 0.0);
+        let left = x + lu((w - width) / 2.0);
+        let top = y + inset + lu((space - height) / 2.0);
+        let rows = labels.iter().enumerate().map(|(i, [_, text_height])| {
+            let row = top + i as f64 * step;
+            HelpRow {
+                icon: css([left, row, icon, icon]),
+                text: [
+                    (left + text_left) / scale,
+                    (row + lu((icon - text_height) / 2.0)) / scale,
+                ],
+            }
+        });
+        HelpLayout {
+            container: css([left, top, width, height]),
+            rows: rows.collect(),
+        }
+    }
+}
+
 /// `div.line-graph-help` over `root`: a column of the two rows, centred in the box between
 /// `top: 8px` and `bottom: 35px`, its container at `opacity`.
 fn help_overlay(
@@ -574,7 +622,6 @@ fn help_overlay(
 ) -> AnyElement {
     let dark = appearance == Appearance::Dark;
     let style = help_style();
-    let lu = |v: f64| math::floor(v * 64.0) / 64.0;
     let rows: Vec<(&str, &str, f64, f64)> = HELP_ROWS
         .iter()
         .map(|&(icon, label)| {
@@ -582,46 +629,39 @@ fn help_overlay(
             (icon, label, w, h)
         })
         .collect();
-    let container_w = rows
-        .iter()
-        .map(|r| HELP_ICON + HELP_ICON_GAP + r.2)
-        .fold(0.0, math::max2);
-    let container_h = HELP_ICON * rows.len() as f64 + HELP_ROW_GAP * (rows.len() - 1) as f64;
-    let box_w = root[2];
+    let sizes: Vec<[f64; 2]> = rows.iter().map(|r| [r.2, r.3]).collect();
+    let layout = HelpLayout::new(root, &sizes, f64::from(scale));
+    let [left, top, width, height] = layout.container;
+    let box_y = root[1] + DEFAULT_SCROLL_TOP;
     let box_h = math::max2(root[3] - DEFAULT_SCROLL_TOP - SCROLL_BOTTOM, 0.0);
-    let left = lu((box_w - container_w) / 2.0);
-    let top = lu((box_h - container_h) / 2.0);
     let color = if dark { 0xffffff } else { 0x000000 };
     let chain = if dark { chains::INVERT_ONE } else { "" };
     let mut container = div()
         .absolute()
-        .left(px(left as f32))
-        .top(px(top as f32))
-        .w(px(container_w as f32))
-        .h(px(container_h as f32))
+        .left(px((left - root[0]) as f32))
+        .top(px((top - box_y) as f32))
+        .w(px(width as f32))
+        .h(px(height as f32))
         .opacity(opacity as f32);
-    for (i, (icon, label, w, h)) in rows.into_iter().enumerate() {
-        let row_top = i as f64 * (HELP_ICON + HELP_ROW_GAP);
+    for ((icon, label, w, h), row) in rows.into_iter().zip(layout.rows) {
         if let Some(source) = help_icon(icon) {
             container = container.child(
                 div()
                     .absolute()
                     .left_0()
-                    .top(px(row_top as f32))
+                    .top(px((row.icon[1] - top) as f32))
                     .w(px(HELP_ICON as f32))
                     .h(px(HELP_ICON as f32))
                     .child(Icon::new(source, chain).fit(IconFit::Natural)),
             );
         }
-        let text_left = HELP_ICON + HELP_ICON_GAP;
-        let text_top = row_top + lu((HELP_ICON - h) / 2.0);
-        let abs_x = (root[0] + left + text_left) as f32;
-        let abs_y = (root[1] + DEFAULT_SCROLL_TOP + top + text_top) as f32;
+        let [text_x, text_y] = row.text;
+        let (abs_x, abs_y) = (text_x as f32, text_y as f32);
         container = container.child(
             div()
                 .absolute()
-                .left(px(text_left as f32))
-                .top(px(text_top as f32))
+                .left(px((text_x - left) as f32))
+                .top(px((text_y - top) as f32))
                 .w(px(w as f32))
                 .h(px(h as f32))
                 .child(
@@ -647,6 +687,7 @@ fn help_overlay(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::views::control_layout_vectors;
 
     #[test]
     fn ease_out_matches_its_control_points() {
@@ -664,5 +705,21 @@ mod tests {
         assert_eq!(fade.opacity(true, true, 900.0), (0.0, false));
         assert_eq!(fade.opacity(false, false, 1000.0), (0.0, false));
         assert_eq!(fade.opacity(true, false, 1100.0), (0.0, true));
+    }
+
+    #[test]
+    fn controls_lie_where_blink_puts_them() {
+        control_layout_vectors::each(1.0, 800, |blink| {
+            let spans = blink.all("div.line-graph-help-row > span").to_vec();
+            let sizes: Vec<_> = spans.iter().map(|s| [s.rect[2], s.rect[3]]).collect();
+            let layout = HelpLayout::new(blink.renderer, &sizes, blink.scale);
+            let container = blink.all("div.line-graph-help-container")[0].rect;
+            blink.check("container", &layout.container, &container);
+            let icons = blink.all("img.line-graph-help-icon").to_vec();
+            for ((row, icon), span) in layout.rows.iter().zip(icons).zip(spans) {
+                blink.check("icon", &row.icon, &icon.rect);
+                blink.check("label", &row.text, &span.rect[..2]);
+            }
+        });
     }
 }
