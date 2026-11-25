@@ -1,0 +1,386 @@
+{
+  "scene": "dom-lcd-light@2x",
+  "scale": 2,
+  "rows": [
+    {
+      "id": "size-23",
+      "rect": [
+        10,
+        10,
+        77.9296875,
+        31
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "size-23.5",
+      "rect": [
+        310,
+        10,
+        79.625,
+        31.5
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "size-24",
+      "rect": [
+        610,
+        10,
+        81.3203125,
+        32
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "size-24.02",
+      "rect": [
+        10,
+        82,
+        81.390625,
+        32
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-24.5",
+      "rect": [
+        310,
+        82,
+        83.015625,
+        32.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-25",
+      "rect": [
+        610,
+        82,
+        84.7109375,
+        33.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-47",
+      "rect": [
+        10,
+        154,
+        159.25,
+        62.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-48",
+      "rect": [
+        310,
+        154,
+        162.6328125,
+        64
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-48.02",
+      "rect": [
+        610,
+        154,
+        162.703125,
+        64
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-48.5",
+      "rect": [
+        10,
+        226,
+        164.328125,
+        64.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "size-49",
+      "rect": [
+        310,
+        226,
+        166.0234375,
+        65.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opaque-box",
+      "rect": [
+        10,
+        300.5,
+        114.375,
+        18.5
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "translucent-box",
+      "rect": [
+        310,
+        300.5,
+        114.375,
+        18.5
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "translucent-text",
+      "rect": [
+        610,
+        300.5,
+        114.375,
+        18.5
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "opacity-text",
+      "rect": [
+        10,
+        340.5,
+        114.375,
+        18.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opacity-parent",
+      "rect": [
+        310,
+        340.5,
+        114.375,
+        18.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opacity-parent-opaque",
+      "rect": [
+        610,
+        340.5,
+        114.375,
+        18.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opacity-parent-two-boxes",
+      "rect": [
+        10,
+        380.5,
+        114.375,
+        18.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "opacity-composited",
+      "rect": [
+        310,
+        380.5,
+        114.375,
+        18.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "will-change-transform",
+      "rect": [
+        610,
+        380.5,
+        114.375,
+        18.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "will-change-transform-opaque",
+      "rect": [
+        10,
+        420.5,
+        114.375,
+        18.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "translate-whole",
+      "rect": [
+        313,
+        422.5,
+        114.375,
+        18.5
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "translate-fraction",
+      "rect": [
+        613.2999877929688,
+        422.8999938964844,
+        114.375,
+        18.5
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "translate-3d",
+      "rect": [
+        10,
+        460.5,
+        114.375,
+        18.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "translate-3d-opaque",
+      "rect": [
+        310,
+        460.5,
+        114.375,
+        18.5
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "scaled",
+      "rect": [
+        610,
+        461.125,
+        142.96875,
+        23.125
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "rotated",
+      "rect": [
+        8.535114288330078,
+        500.493896484375,
+        115.38688659667969,
+        26.433349609375
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "filter",
+      "rect": [
+        310,
+        500.5,
+        114.375,
+        18.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "backdrop-filter",
+      "rect": [
+        610,
+        500.5,
+        114.375,
+        18.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "mask",
+      "rect": [
+        10,
+        540.5,
+        114.375,
+        18.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "blend-mode",
+      "rect": [
+        310,
+        540.5,
+        114.375,
+        18.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "rounded-clip",
+      "rect": [
+        610,
+        540.5,
+        114.375,
+        18.5
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "rounded-clip-opaque",
+      "rect": [
+        10,
+        580.5,
+        114.375,
+        18.5
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "scroller",
+      "rect": [
+        310,
+        580.5,
+        114.375,
+        18.5
+      ],
+      "mode": "grayscale"
+    },
+    {
+      "id": "scroller-opaque",
+      "rect": [
+        610,
+        580.5,
+        114.375,
+        18.5
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "shadowed",
+      "rect": [
+        10,
+        620.5,
+        114.375,
+        18.5
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "isolated",
+      "rect": [
+        310,
+        620.5,
+        114.375,
+        18.5
+      ],
+      "mode": "lcd"
+    },
+    {
+      "id": "fixed",
+      "rect": [
+        610,
+        620.5,
+        114.375,
+        18.5
+      ],
+      "mode": "grayscale"
+    }
+  ]
+}
