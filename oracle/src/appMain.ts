@@ -331,9 +331,9 @@ app.on("browser-window-created", (_event, win) => {
   // and ignore the real pointer, which would otherwise move the hover state when it passes over
   // them; sendInputEvent goes straight to the renderer and is unaffected.
   win.webContents.openDevTools = () => {};
-  // On macOS a modal prompt's show() begins a sheet on its parent, which activates nothing;
-  // showInactive() never shows it. On Windows its show() takes the focus.
-  if (!win.isModal() || process.platform === "win32") win.show = () => win.showInactive();
+  // A modal prompt's show() begins a sheet on its parent, which activates nothing;
+  // showInactive() never shows it.
+  if (!win.isModal()) win.show = () => win.showInactive();
   // macOS can activate the app all the same, as it launches, and a focused page
   // draws focus rings, which the port, captured inactive, does not.
   if (process.platform === "darwin") {
