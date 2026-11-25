@@ -1,6 +1,8 @@
 //! Focused inputs against the `focus/text` vector: Chromium's pixels of the value, its selection
 //! and the placeholder in an active and an inactive window, and where presses put the caret.
 
+#![allow(clippy::disallowed_methods)]
+
 use std::sync::Arc;
 
 use asrs_parity::json::Json;
