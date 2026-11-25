@@ -149,7 +149,9 @@ export function placePoint(x: number, y: number, titleBar: boolean, on: string |
     });
     if (shown === undefined) throw new Error(`no ${on} is shown`);
     const box = shown.getBoundingClientRect();
-    [x, y] = [Math.round(right === null ? box.x + box.width / 2 : box.right - right), Math.round(box.y + box.height / 2)];
+    const middle = (from: number, to: number, size: number) => Math.round((Math.max(from, 0) + Math.min(to, size)) / 2);
+    x = right === null ? middle(box.left, box.right, innerWidth) : Math.round(box.right - right);
+    y = middle(box.top, box.bottom, innerHeight);
     if (at(x, y)?.closest(on) !== shown) throw new Error(`${on} is covered at [${x}, ${y}]`);
   }
   const hit = at(x, y);
