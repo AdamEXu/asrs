@@ -23,6 +23,7 @@ use asrs_ui::gpui::{
     AnyElement, AnyWindowHandle, App, AppContext, ClipboardItem, Entity, IntoElement, WeakEntity,
     Window,
 };
+use asrs_ui::text::TextSystem;
 
 use super::canvas_tabs::JoysticksTab;
 use super::console_layout::ConsoleLayout;
@@ -269,6 +270,9 @@ impl HubEntityHost {
         scenario_seed: Option<u64>,
         cx: &mut App,
     ) -> Entity<HubFrame<HubEntityHost>> {
+        if asrs_ui::platform::has_acrylic() {
+            TextSystem::set_grayscale(cx, window.window_handle().window_id());
+        }
         let geometry = FrameGeometry::default();
         geometry.set_dark(dark);
         let sidebar_geometry = ViewGeometry::new();

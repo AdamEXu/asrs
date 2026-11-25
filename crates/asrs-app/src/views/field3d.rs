@@ -42,13 +42,15 @@ use asrs_ui::input::style::CONTROL_FONT;
 use asrs_ui::input::{Select, SelectEvent};
 use asrs_ui::parity::probed;
 use asrs_ui::platform;
+use asrs_ui::scroll;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FOCUS_RING_WIDTH, FONT_FAMILY, chains};
 use asrs_ui::tooltip::{titled, untitled};
 
-use super::frame::{FrameHost, HubFrame, SETTINGS_SECTION};
+use super::frame::{FrameHost, HubFrame};
 use super::select::FormSelect;
+use super::settings_panel::{self, SettingsPanel};
 use super::source_list::centred_offset;
 use crate::main_process::app_root;
 
@@ -469,12 +471,13 @@ fn alert_layout(container_width: f64, lines: &[[f64; 2]], scale: f64) -> ([f64; 
 }
 
 /// Where `div.field-3d-settings` puts its parts inside `div.controls-content`, in client
-/// coordinates.
+/// coordinates of its unscrolled content.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct SettingsLayout {
     /// The border box, `border` of it on the left the `border-left`.
     panel: [f64; 4],
     border: f64,
+    content_height: f64,
     titles: [[f64; 4]; 2],
     select: [f64; 4],
     button: [f64; 4],
@@ -482,19 +485,26 @@ struct SettingsLayout {
 }
 
 impl SettingsLayout {
-    fn new(controls: [f64; 4], select_width: f64, scale: f64) -> SettingsLayout {
+    /// `bar` is what a scrollbar takes of the panel where it overflows, in CSS px.
+    fn new(controls: [f64; 4], bar: f64, select_width: f64, scale: f64) -> SettingsLayout {
         let [x, y, w, h] = controls.map(|v| device(v, scale));
         let length = |v: f64| zoomed(v, scale);
         let css = |rect: [f64; 4]| rect.map(|v| v / scale);
         let edge = border(1.0, scale);
-        let width = math::min2(percent(w, 40.0), length(SETTINGS_MAX_WIDTH));
-        let panel = [x + w - width - edge, y, width + edge, h];
+        let outer = math::min2(percent(w, 40.0), length(SETTINGS_MAX_WIDTH));
+        let panel = [x + w - outer - edge, y, outer + edge, h];
         let left = panel[0] + edge;
         let title = length(TITLE_HEIGHT);
         let row = length(FIELD_INPUT_HEIGHT);
+        let tall = math::min2(math::max2(h - length(85.0), row), length(100.0));
+        let content_height = length(5.0) + 2.0 * title + row + tall;
+        let width = if content_height > h {
+            outer - length(bar)
+        } else {
+            outer
+        };
         let top = y + length(5.0);
         let select = [device(select_width, scale), length(SELECT_HEIGHT)];
-        let tall = math::min2(math::max2(h - length(85.0), row), length(100.0));
         let split = percent(width, 80.0);
         let [button_width, button_height] = [percent(split, 60.0), percent(tall, 65.0)];
         let button = [
@@ -508,6 +518,7 @@ impl SettingsLayout {
         SettingsLayout {
             panel: css(panel),
             border: edge / scale,
+            content_height: content_height / scale,
             titles: [0.0, 1.0].map(|i| css([left, top + i * (title + row), width, title])),
             select: css([
                 left + centred(width, select[0]),
@@ -1317,6 +1328,7 @@ impl<H: FrameHost> HubFrame<H> {
         let (index, tab) = tab?;
         let renderer = tab.renderer().downcast_ref::<Field3dTab>()?;
         let key = tab_key(renderer);
+        let panel_key = settings_panel::tab_key(&tab);
         let controller = tab.controller().downcast_ref::<Field3dController>()?;
         let page = hub.page();
         let names: Vec<(JsString, JsString, bool)> = page
@@ -1360,7 +1372,12 @@ impl<H: FrameHost> HubFrame<H> {
             let device = f64::from(scale);
             math::ceil(widest * device) / device + 4.0 + 1.0 + 15.0 + 2.0
         };
-        let layout = SettingsLayout::new(controls, select_w, f64::from(scale));
+        let layout = SettingsLayout::new(
+            controls,
+            scroll::style(cx).reserved(),
+            select_w,
+            f64::from(scale),
+        );
         let settings = layout.panel;
         let content = [settings[0] + layout.border, settings[1]];
         let [select_x, select_y, ..] = layout.select;
@@ -1501,11 +1518,7 @@ impl<H: FrameHost> HubFrame<H> {
             .w(px(select_w as f32))
             .h(px(SELECT_HEIGHT as f32))
             .child(select);
-        let place = focus::place(("field-3d-settings", key), window, cx);
-        let block = focus::section(local(settings, controls), SETTINGS_SECTION, &place)
-            .border_l(px(layout.border as f32))
-            .border_color(rgb(if dark { 0x000000 } else { 0xdddddd }))
-            .overflow_hidden()
+        let content = div()
             .child(field_title)
             .child(probed(
                 "select.field-select",
@@ -1513,7 +1526,16 @@ impl<H: FrameHost> HubFrame<H> {
             ))
             .child(xr_title)
             .child(probed("div.xr-button", titled("Start XR streaming", xr)));
-        Some(probed("div.field-3d-settings", block).into_any_element())
+        let panel = SettingsPanel {
+            key: panel_key,
+            probe: "div.field-3d-settings",
+            controls,
+            rect: settings,
+            border: layout.border,
+            content,
+            content_height: layout.content_height,
+        };
+        Some(self.settings_scroller(panel, appearance, scale, window, cx))
     }
 }
 
@@ -1559,7 +1581,7 @@ mod tests {
         control_layout_vectors::each(3.0, 1549, |blink| {
             let scale = blink.scale;
             let select = blink.one("div.setting-blocks select", "field-select").rect;
-            let layout = SettingsLayout::new(blink.controls, select[2], scale);
+            let layout = SettingsLayout::new(blink.controls, 0.0, select[2], scale);
             let panel = blink.all("div.setting-blocks")[0].rect;
             blink.check("panel", &layout.panel, &panel);
             let blocks = [0, 2].map(|i| blink.all("div.setting-blocks > div")[i].rect);

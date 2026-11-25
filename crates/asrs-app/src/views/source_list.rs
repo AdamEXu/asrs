@@ -1022,15 +1022,17 @@ impl<H: FrameHost> HubFrame<H> {
             items = items.child(div().flex_none().h(px(1.0)));
         }
         let bars = self.area_bars(area, scroll.extent(), cx);
-        element = element.child(items).child(
-            div()
-                .absolute()
-                .left_0()
-                .top(px(TITLE_HEIGHT as f32))
-                .w(px(inner as f32))
-                .h(px((r.height - TITLE_HEIGHT).max(0.0) as f32))
-                .child(bars),
-        );
+        element = element
+            .child(text::scroller(scroll.range()[1][1] > 0.0, items))
+            .child(
+                div()
+                    .absolute()
+                    .left_0()
+                    .top(px(TITLE_HEIGHT as f32))
+                    .w(px(inner as f32))
+                    .h(px((r.height - TITLE_HEIGHT).max(0.0) as f32))
+                    .child(bars),
+            );
 
         if list.hand_icon {
             element = element.child(

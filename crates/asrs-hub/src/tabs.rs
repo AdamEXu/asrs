@@ -322,6 +322,7 @@ impl TitleElement {
 }
 
 struct Tab<Cx: ?Sized> {
+    id: u64,
     type_value: JsValue,
     kind: Option<TabType>,
     title: JsValue,
@@ -347,6 +348,11 @@ pub struct TabMut<'a, Cx: ?Sized> {
 pub struct TabRef<'a, Cx: ?Sized>(&'a Tab<Cx>);
 
 impl<'a, Cx: ?Sized> TabRef<'a, Cx> {
+    /// Which tab of the page this is; no later tab has it again.
+    pub fn id(&self) -> u64 {
+        self.0.id
+    }
+
     /// The `TabType` member, or `None` for a restored `type` that is none.
     pub fn tab_type(&self) -> Option<TabType> {
         self.0.kind
@@ -471,6 +477,7 @@ pub(crate) type FrameState = ([Option<&'static str>; 2], Option<bool>, ControlsV
 pub struct Tabs<Cx: ?Sized> {
     factory: Box<dyn TabFactory<Cx>>,
     tabs: Vec<Tab<Cx>>,
+    next_id: u64,
     selected: JsValue,
     bar: Vec<Rc<RefCell<TitleElement>>>,
     bar_builds: u64,
@@ -489,11 +496,17 @@ pub struct Tabs<Cx: ?Sized> {
 }
 
 impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
+    fn take_id(&mut self) -> u64 {
+        self.next_id += 1;
+        self.next_id
+    }
+
     /// No tabs at all, which only a satellite's page starts with.
     pub(crate) fn empty(factory: Box<dyn TabFactory<Cx>>) -> Self {
         Tabs {
             factory,
             tabs: Vec::new(),
+            next_id: 0,
             selected: num(0.0),
             bar: Vec::new(),
             bar_builds: 0,
@@ -523,7 +536,9 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         kind: TabType,
     ) -> Result {
         let parts = self.factory.create(cx, Some(kind))?;
+        let id = self.take_id();
         self.tabs = vec![Tab {
+            id,
             type_value: type_value.clone(),
             kind: Some(kind),
             title: JsValue::string(""),
@@ -933,9 +948,11 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
         }
         let controls_height = fixed_for_value(type_value).unwrap_or(DEFAULT_CONTROLS_HEIGHT);
         let at = ops::splice_start(&add(&self.selected, &num(1.0)), self.tabs.len());
+        let id = self.take_id();
         self.tabs.insert(
             at,
             Tab {
+                id,
                 type_value: type_value.clone(),
                 kind,
                 title: JsValue::string(""),
