@@ -432,7 +432,7 @@ fn lcd_masks_reproduce_dom_text() {
     let Some(mut backend) = pinned_backend(&dom_text::FONTS) else {
         return;
     };
-    dom_text::check_redraw(&mut backend, "scenes-windows");
+    dom_text::check_redraw(&mut backend, "scenes-windows", Some(2));
 }
 
 #[test]

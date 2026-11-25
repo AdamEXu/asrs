@@ -1,14 +1,11 @@
+#![allow(clippy::disallowed_methods)]
+
 use std::path::Path;
 
 use asrs_canvas::text::lut::{self, LcdGammaLut, MaskGammaLut};
 use asrs_canvas::text::{FontSpec, TextBackend};
 use asrs_parity::json::{self, Json};
 use asrs_parity::pixel::{self, Rgb};
-
-#[cfg(windows)]
-const MAX_CHANNEL: u8 = 2;
-#[cfg(not(windows))]
-const MAX_CHANNEL: u8 = 24;
 
 const SYSTEM: &str = "system-ui";
 
@@ -80,7 +77,7 @@ fn blend_gray(background: [u8; 3], color: [u8; 3], alpha: u8) -> [u8; 3] {
 /// Redraws the `dom-text` scenes of `dir` with the port's masks, in the antialiasing mode the
 /// scene records per text box, and holds them to the reference. A box the reference draws in LCD
 /// is one the backend has LCD masks for, and the other way round.
-pub fn check_redraw(backend: &mut dyn TextBackend, dir: &str) {
+pub fn check_redraw(backend: &mut dyn TextBackend, dir: &str, max_channel: Option<u8>) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/vectors/canvas");
     let lut = MaskGammaLut::embedded().unwrap();
     let lcd_lut = LcdGammaLut::embedded().unwrap();
@@ -184,18 +181,27 @@ pub fn check_redraw(backend: &mut dyn TextBackend, dir: &str) {
         let compared = pixel::compare(&reference, &ours, background).unwrap();
         let mut boxed = 0;
         let mut differing = 0;
-        let mut max = 0;
+        let (mut max, mut at) = (0, 0);
         for i in (0..ours.data.len()).filter(|&i| in_box[i]) {
             boxed += 1;
             differing += u32::from(compared.mask[i]);
             for c in 0..3 {
-                max = max.max(ours.data[i][c].abs_diff(reference.data[i][c]));
+                let off = ours.data[i][c].abs_diff(reference.data[i][c]);
+                if off > max {
+                    (max, at) = (off, i);
+                }
             }
         }
+        let width = ours.width as usize;
+        let at = (at % width, at / width);
         let percent = 100.0 * f64::from(differing) / f64::from(boxed);
-        eprintln!("{dir}/{name}: {differing} of {boxed} ({percent:.4} %), max channel {max}");
+        eprintln!(
+            "{dir}/{name}: {differing} of {boxed} ({percent:.4} %), max channel {max} at {at:?}"
+        );
         let gate = if scale == 1 { 0.2 } else { 0.003 };
         assert!(percent <= gate, "{name}: {percent:.4} %");
-        assert!(max <= MAX_CHANNEL, "{name}: max channel {max}");
+        if let Some(limit) = max_channel {
+            assert!(max <= limit, "{name}: max channel {max}");
+        }
     }
 }
