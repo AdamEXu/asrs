@@ -274,11 +274,12 @@ mod tests {
             let i = stroke / 2.0;
             let rect = [i, i, 24.0 - stroke, 24.0 - stroke];
             stroke_aliased_rrect(&mut pixmap, rect, radius, stroke, 0x767676ff);
-            let row = |y: u32| {
-                let alpha = |x| pixmap.pixel(x, y).unwrap().alpha();
-                (0..6).map(|x| if alpha(x) == 255 { '#' } else { '.' })
+            let cell = |x, y| match pixmap.pixel(x, y).unwrap().alpha() {
+                255 => '#',
+                _ => '.',
             };
-            (0..5).map(|y| row(y).collect()).collect::<Vec<String>>()
+            let row = |y| (0..6).map(|x| cell(x, y)).collect();
+            (0..5).map(row).collect::<Vec<String>>()
         };
         assert_eq!(
             corner(1.0, 2.0),
