@@ -43,6 +43,13 @@ pub struct ScriptedFrame {
 #[cfg(feature = "parity")]
 impl Global for ScriptedFrame {}
 
+/// Windows open as they do but are never shown.
+#[cfg(feature = "parity")]
+pub struct KeepHidden;
+
+#[cfg(feature = "parity")]
+impl Global for KeepHidden {}
+
 impl Default for Windows {
     fn default() -> Self {
         Self {
@@ -130,6 +137,12 @@ impl Windows {
         windows.manager.set_bounds(id, bounds);
         windows.manager.focus(id);
         id
+    }
+
+    /// A hub's `focus` event.
+    #[cfg(feature = "parity")]
+    pub fn raise(cx: &mut App, id: WindowId) {
+        cx.global_mut::<Windows>().manager.raised(id);
     }
 
     /// The open window of this kind a parity scenario drives, counted in opening order.

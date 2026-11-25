@@ -11,7 +11,10 @@ pub struct Display {
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Displays(pub Vec<Display>);
+pub struct Displays {
+    pub displays: Vec<Display>,
+    primary: usize,
+}
 
 fn contains(outer: Area, inner: Area) -> bool {
     (0..2).all(|i| inner[i] >= outer[i] && inner[i] + inner[i + 2] <= outer[i] + outer[i + 2])
@@ -35,15 +38,13 @@ fn enclosed([x, y, width, height]: [i32; 4], scale: f64) -> Area {
     [left, top, right.floor() - left, bottom.floor() - top]
 }
 
-/// `RectDistance`: negative along an axis the rects share.
-fn distance(a: Area, b: Area) -> [f64; 2] {
-    let axis = |i: usize| {
-        let (l1, r1) = (a[i], a[i] + a[i + 2]);
-        let (l2, r2) = (b[i], b[i] + b[i + 2]);
-        (l2 - r1).min(r2 - l1).max((l1 - r2).min(r1 - l2))
-    };
-    let (x, y) = (axis(0), axis(1));
-    [x.max(y), x.min(y)]
+fn intersection(a: Area, b: Area) -> Option<Area> {
+    let mut out = [0.0; 4];
+    for i in 0..2 {
+        out[i] = a[i].max(b[i]);
+        out[i + 2] = (a[i] + a[i + 2]).min(b[i] + b[i + 2]) - out[i];
+    }
+    (out[2] > 0.0 && out[3] > 0.0).then_some(out)
 }
 
 impl Displays {
@@ -65,16 +66,19 @@ impl Displays {
         if let Some(net) = net_work_area.filter(|net| net[2] > 0 && net[3] > 0) {
             clip_work_area(&mut displays, primary, enclosing(net, scale));
         }
-        Displays(displays)
+        Displays { displays, primary }
     }
 
-    /// The display a window at `bounds` is on.
+    /// The display most of a window at `bounds` is on, the primary for one on none.
     pub fn of_window(&self, bounds: Area) -> Option<&Display> {
-        let key = |display: &&Display| distance(display.bounds, bounds);
-        self.0.iter().min_by(|a, b| {
-            let (a, b) = (key(a), key(b));
-            a[0].total_cmp(&b[0]).then(a[1].total_cmp(&b[1]))
-        })
+        let mut found = (0.0, self.displays.get(self.primary)?);
+        for display in &self.displays {
+            let shared = intersection(display.bounds, bounds).map_or(0.0, |[_, _, w, h]| w * h);
+            if shared > found.0 {
+                found = (shared, display);
+            }
+        }
+        Some(found.1)
     }
 
     /// Where `MenuController` keeps the menus of `anchor`.
@@ -86,7 +90,7 @@ impl Displays {
             let inside = x >= left && x < left + width && y >= top && y < top + height;
             (!inside, outside(x, left, width) + outside(y, top, height))
         };
-        let display = self.0.iter().min_by(|a, b| {
+        let display = self.displays.iter().min_by(|a, b| {
             let (a, b) = (key(a), key(b));
             a.0.cmp(&b.0).then(a.1.total_cmp(&b.1))
         })?;
@@ -110,14 +114,7 @@ fn clip_work_area(displays: &mut [Display], primary: usize, net: Area) {
     let Some(display) = displays.get_mut(around.unwrap_or(primary)) else {
         return;
     };
-    let mut area = [0.0; 4];
-    for i in 0..2 {
-        let start = net[i].max(display.work_area[i]);
-        let end = (net[i] + net[i + 2]).min(display.work_area[i] + display.work_area[i + 2]);
-        area[i] = start;
-        area[i + 2] = end - start;
-    }
-    if area[2] > 0.0 && area[3] > 0.0 {
+    if let Some(area) = intersection(net, display.work_area) {
         display.work_area = area;
     }
 }

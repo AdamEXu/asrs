@@ -57,6 +57,11 @@ name = "window_sizes"
 harness = false
 
 [[test]]
+name = "hidden_windows"
+harness = false
+required-features = ["parity"]
+
+[[test]]
 name = "documentation_window"
 harness = false
 

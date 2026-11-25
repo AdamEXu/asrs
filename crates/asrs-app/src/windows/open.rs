@@ -215,6 +215,7 @@ fn finish(
     options: &WindowOptions,
     origin: Option<(f64, f64)>,
     parent: Option<&NativeWindow>,
+    show: bool,
 ) {
     if options.kind == WindowKind::Hub {
         native.hidden_inset_titlebar();
@@ -233,6 +234,9 @@ fn finish(
     }
     if options.fullscreenable == Some(false) {
         native.set_fullscreenable(false);
+    }
+    if !show {
+        return;
     }
     if let (true, Some(parent)) = (options.modal, parent) {
         parent.begin_sheet(native);
@@ -277,10 +281,14 @@ pub(super) fn open<V: Render>(
             entity
         },
     )?;
+    #[cfg(feature = "parity")]
+    let show = !cx.has_global::<super::KeepHidden>();
+    #[cfg(not(feature = "parity"))]
+    let show = true;
     if let Some(native) = native {
         cx.global_mut::<Windows>().hidden.push(id);
         cx.spawn(async move |cx| {
-            finish(&native, &options, origin, parent.as_ref());
+            finish(&native, &options, origin, parent.as_ref(), show);
             handle
                 .update(cx, |_, window, cx| {
                     let bounds = bounds(window);
