@@ -332,6 +332,7 @@ fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path)
         .args(robot.iter().map(|r| format!("--robot={}", r.port)))
         .args(scrollbar_defaults(scenario.classic_scrollbars))
         .current_dir(&paths.root)
+        .env("ASRS_CACHE", &paths.cache)
         .env_remove("ELECTRON_RUN_AS_NODE");
     oracle::pin_environment(&mut command, oracle::DEFAULT_ZONE);
     if scenario.copies {

@@ -743,7 +743,8 @@ fn same_option(upstream: &Json, port: &Json) -> bool {
 }
 
 /// The dialogs main showed, in order: the same kinds and options. `icon` is not compared: on
-/// macOS upstream passes none, and the port's dialogs take none.
+/// macOS upstream passes none, and the port's dialogs take none. The port has no blocking
+/// dialogs; `menus/clicks` compares which of upstream's are.
 fn compare_dialogs(reference: &Path, port: &Path, outcome: &mut Outcome) -> Result {
     let theirs = read_json(&reference.join("run.json"))?;
     let ours = read_json(&port.join("run.json"))?;
@@ -760,7 +761,8 @@ fn compare_dialogs(reference: &Path, port: &Path, outcome: &mut Outcome) -> Resu
         ));
     }
     for (i, (t, o)) in theirs.iter().zip(ours).enumerate() {
-        if string(t, "kind") != string(o, "kind") {
+        let kind = string(t, "kind").map(|kind| kind.trim_end_matches("Sync").to_owned());
+        if kind != string(o, "kind") {
             problems.push(format!("dialog {i}: {t:?} vs {o:?}"));
             continue;
         }
@@ -1125,6 +1127,7 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
                     .flat_map(|r| ["--robot".to_owned(), r.port.to_string()]),
             )
             .args(&options.flags)
+            .env("ASRS_CACHE", &paths.cache)
             .current_dir(workspace_root())
             .status()
             .map_err(|e| format!("running {}: {e}", exe.display()))?;

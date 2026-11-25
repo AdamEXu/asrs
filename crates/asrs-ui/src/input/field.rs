@@ -476,6 +476,27 @@ impl<M: FieldModel> TextField<M> {
         }
     }
 
+    /// The selection extended by a line, to an end of a single one. On macOS it does not cross
+    /// its anchor (`ShouldExtendSelectionByWordOrLineAcrossCaret`).
+    fn extend(&mut self, up: bool, window: &mut Window, cx: &mut Context<'_, Self>) {
+        let editor = self.editor.read(cx);
+        let selected = editor.selected_range();
+        let back = editor.is_selection_reversed() != up;
+        if cfg!(target_os = "macos") && !selected.is_empty() && back {
+            let anchor = if up { selected.start } else { selected.end };
+            self.editor.update(cx, |editor, cx| {
+                editor.set_selected_range(anchor..anchor, cx);
+            });
+            return;
+        }
+        let action = if up {
+            "input::SelectToStart"
+        } else {
+            "input::SelectToEnd"
+        };
+        select_to(action, window, cx);
+    }
+
     /// `HandleKeydownEventForSpinButton`, or the caret moving to an end of a single line.
     fn arrow_key(&mut self, up: bool, window: &mut Window, cx: &mut Context<'_, Self>) {
         if self.kind != FieldKind::Number {
@@ -781,12 +802,12 @@ impl<M: FieldModel> Render for TextField<M> {
                 this.arrow_key(false, window, cx);
             }))
             .on_action(|_: &super::StepNone, _, _| {})
-            .on_action(|_: &super::ExtendUp, window, cx| {
-                select_to("input::SelectToStart", window, cx);
-            })
-            .on_action(|_: &super::ExtendDown, window, cx| {
-                select_to("input::SelectToEnd", window, cx);
-            })
+            .on_action(cx.listener(|this, _: &super::ExtendUp, window, cx| {
+                this.extend(true, window, cx);
+            }))
+            .on_action(cx.listener(|this, _: &super::ExtendDown, window, cx| {
+                this.extend(false, window, cx);
+            }))
             .capture_action(cx.listener(Self::paste))
             .capture_action(cx.listener(Self::cut))
             .on_action(cx.listener(Self::delete_selection))

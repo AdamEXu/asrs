@@ -95,6 +95,13 @@ fn value_text(text: String, color: u32, window: &Window, cx: &mut App) -> AnyEle
         .into_any_element()
 }
 
+/// The boolean's bottom is on the baseline of `div.field-value`'s line.
+fn boolean_top(scale: f32, cx: &mut App) -> f32 {
+    let (ascent, descent) = asrs_ui::text::font_metrics(cx, &value_style(), scale);
+    let leading = ((ROW_HEIGHT as f32 * scale - ascent - descent) / 2.0).floor();
+    (leading + ascent) / scale - BOOLEAN_WIDTH as f32
+}
+
 fn results_style() -> TextStyle {
     style(&[
         ("font", &font("12px")),
@@ -608,23 +615,13 @@ impl SidebarView {
         let italic = row.full_key.is_some();
         let bold = row.label_bold == Some(true);
         let title = row.title.to_string_lossy();
-        let mut title_el = div().relative().child(
-            Text::new(title.clone(), label_style(italic, bold))
-                .color(theme.text)
-                .grayscale(),
-        );
+        let mut title_text = Text::new(title, label_style(italic, bold))
+            .color(theme.text)
+            .grayscale();
         if row.known_label {
-            let (w, _) = asrs_ui::text::measure(cx, &label_style(italic, bold), &title, 1.0);
-            title_el = title_el.child(
-                div()
-                    .absolute()
-                    .left_0()
-                    .top(px(16.0))
-                    .w(px(w as f32))
-                    .h(px(1.0))
-                    .bg(rgb(theme.text)),
-            );
+            title_text = title_text.underline();
         }
+        let title_el = div().relative().child(title_text);
         label = label.child(untitled(title_el));
         if row.full_key.as_ref().is_some_and(|k| !k.is_empty()) && !row.warning_hidden {
             label = label.child(titled(
@@ -705,16 +702,16 @@ impl SidebarView {
         if !row.value_hidden
             && let Some(value) = self.value(row, appearance, window, cx)
         {
-            container = container.child(
-                div()
-                    .absolute()
-                    .right(px(12.0))
-                    .top_0()
-                    .h(px(ROW_HEIGHT as f32))
-                    .flex()
-                    .items_center()
-                    .child(value),
-            );
+            let line = div()
+                .absolute()
+                .right(px(12.0))
+                .top_0()
+                .h(px(ROW_HEIGHT as f32))
+                .flex();
+            container = container.child(match row.value {
+                RowValue::Bool { .. } => line.child(value),
+                _ => line.items_center().child(value),
+            });
         }
         container.into_any_element()
     }
@@ -758,19 +755,19 @@ impl SidebarView {
             } => {
                 let fill = fill.as_ref()?.to_string_lossy();
                 let line = if *line_hidden == Some(true) {
-                    String::new()
+                    ""
                 } else {
                     r#"<line x1="1.32" y1="1.32" x2="7.68" y2="7.68" stroke-width="2" stroke="white"/>"#
-                        .to_owned()
                 };
-                let svg = format!(
-                    r#"<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9"><circle cx="4.5" cy="4.5" r="4.5" fill="{fill}"/>{line}</svg>"#
-                );
                 let size = if *tunable { 9.0 * 1.75 } else { 9.0 };
+                let svg = format!(
+                    r#"<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 9 9"><circle cx="4.5" cy="4.5" r="4.5" fill="{fill}"/>{line}</svg>"#
+                );
                 let offset = (size - 9.0) / 2.0;
                 let mut el = div()
                     .id(("field-value-svg", flat))
                     .relative()
+                    .mt(px(boolean_top(window.scale_factor(), cx)))
                     .w(px(9.0))
                     .h(px(9.0))
                     .child(
@@ -780,7 +777,9 @@ impl SidebarView {
                             .top(px(-offset))
                             .w(px(size))
                             .h(px(size))
-                            .child(Icon::new(IconSource::Svg(svg.into()), "")),
+                            .child(
+                                Icon::new(IconSource::Svg(svg.into()), "").fit(IconFit::Natural),
+                            ),
                     );
                 if *tunable {
                     el = el.on_click(cx.listener(move |view, _, _, cx| {

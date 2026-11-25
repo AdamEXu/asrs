@@ -1,0 +1,165 @@
+{
+  "about": "A Driver Station log with its events, public under the MIT license (`cargo xtask corpus fetch`): the DS layout's console, communication, power, CPU and joystick tabs over it",
+  "actions": [
+    {
+      "open": [
+        "public:dslog-reader/2022_02_27 15_17_59 Sun.dslog"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "dialog": 0
+    },
+    {
+      "appMenu": [
+        "Reset to DS Layout"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        120
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "console",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content"
+      ]
+    },
+    {
+      "appMenu": [
+        "Next Tab"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "communication",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "appMenu": [
+        "Next Tab"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "power",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "appMenu": [
+        "Next Tab"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "cpu",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "appMenu": [
+        "Next Tab"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 400
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "joysticks",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    }
+  ]
+}
