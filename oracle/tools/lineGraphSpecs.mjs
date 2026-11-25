@@ -323,6 +323,23 @@ logs.live = [["putNumber", "/Live/Value", 0, 1], ["putBoolean", "/Live/Flag", 0,
 
 // Steps
 
+logs.foreign = (() => {
+  const ops = [];
+  const values = [1, "5", true, "2.5", null, [4], "0x10", 3, ["7"], [], "", 8, "9", false, 2e16, "1e17"];
+  values.forEach((value, i) => {
+    ops.push(["putNumber", "/Pos", i, tree(value)]);
+    ops.push(["putNumber", "/AngleRadians", i, tree(i % 2 === 0 ? String(i) : i)]);
+    ops.push(["putBoolean", "/Flag", i, tree(value)]);
+    ops.push(["putString", "/Text", i, tree(value)]);
+  });
+  ops.push(["putNumber", "/Numeric", 0, "7"], ["putNumber", "/Numeric", 3, "11"], ["putNumber", "/Numeric", 9, 2]);
+  return ops;
+})();
+logs.inherited = [
+  ["putNumber", "/A", 0, 1],
+  ["putNumber", "/A", 5, 2]
+];
+
 const sel = (...call) => ({ selection: call });
 const frames = (n = 2) => ({ frames: n });
 const lg = (expr) => `window.tabs.tabList[window.tabs.selectedTab].controller.${expr}`;
@@ -1341,6 +1358,79 @@ fixtures.tiny = {
     capture("tiny")
   ]
 };
+
+const foreignSources = (kind) =>
+  controller({
+    leftSources: [num0(kind, "/Pos", 0), num0(kind, "/Numeric", 1)],
+    rightSources: [num0(kind, "/AngleRadians", 2)],
+    discreteSources: [
+      item("stripes", "/Flag", "Boolean", { color: "#ff0000" }),
+      item("graph", "/Text", "String", { color: "#00ff00" }),
+      item("stripes", "/Pos", "Number", { color: "#0000ff" })
+    ]
+  });
+
+fixtures.foreign = {
+  seed: 41,
+  logs: ["foreign"],
+  steps: [
+    { log: "foreign" },
+    ...["smooth", "stepped", "points"].flatMap((kind) => [
+      restore(foreignSources(kind)),
+      frames(),
+      ...hoverSweep([0.5, 1, 2.5, 5, 6, 11, 14.5]),
+      capture(kind)
+    ]),
+    edit("left", null, units(null, presetOf(null, 2.5)), 0),
+    edit("right", null, units(null, presetOf("Angle", 1, "radians", "degrees")), 0),
+    frames(),
+    ...hoverSweep([1, 3]),
+    capture("preset"),
+    edit("left", null, units(null, null), 1),
+    edit("right", null, units("degrees", null), 1),
+    frames(),
+    ...hoverSweep([1.5, 4]),
+    capture("differentiated"),
+    // "/Pos" would integrate to NaN, whose sign differs between hosts.
+    restore(
+      controller({
+        leftSources: [num0("stepped", "/Numeric", 1)],
+        rightSources: [num0("smooth", "/AngleRadians", 2)]
+      })
+    ),
+    edit("left", null, units(null, null), 2),
+    edit("right", null, units("degrees", null), 2),
+    frames(),
+    ...hoverSweep([1.5, 4]),
+    capture("integrated"),
+    sel("setTimelineRange", [3, 9], false),
+    frames(1),
+    capture("integrated-zoomed"),
+    { log: [["putNumber", "/Timestamp", 0, 0], ["putNumber", "/Timestamp", 2.2, 1], ["putNumber", "/Timestamp", 4.4, 2], ["putNumber", "/Timestamp", 8.8, 3]] },
+    frames(),
+    capture("integrated-akit")
+  ]
+};
+
+for (const [name, filter] of [["inherited-unit", 0], ["inherited-unit-filter", 1]]) {
+  fixtures[name] = {
+    seed: 42 + filter,
+    logs: ["inherited"],
+    steps: [
+      { log: "inherited" },
+      restore(controller({ leftSources: [num0("stepped", "/A", 0)] })),
+      frames(),
+      edit("left", null, units(null, { type: null, factor: 2, to: "__proto__" }), filter),
+      frames(),
+      ...hoverSweep([3, 5]),
+      capture("threw"),
+      edit("left", null, units(null, null), 0),
+      frames(),
+      ...hoverSweep([4]),
+      capture("stays-stopped")
+    ]
+  };
+}
 
 // Output
 

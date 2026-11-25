@@ -236,7 +236,7 @@ pub fn default_window() -> (f64, f64) {
     (options.width, options.height)
 }
 
-const TOP_KEYS: [&str; 12] = [
+const TOP_KEYS: [&str; 13] = [
     "page",
     "window",
     "scales",

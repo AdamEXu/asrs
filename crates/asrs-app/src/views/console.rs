@@ -638,7 +638,18 @@ impl<H: FrameHost> HubFrame<H> {
             ))
             .children(recorded)
             .child(self.area_bars(Area::Console(shown.key), layout.extent(), cx))
-            .child(self.console_header(shown, &view, appearance, blurred, grid, window, cx));
+            .child(self.console_header(
+                Shown {
+                    container: [rect[0], rect[1], layout.client()[0], rect[3]],
+                    ..shown
+                },
+                &view,
+                appearance,
+                blurred,
+                grid,
+                window,
+                cx,
+            ));
         let drag_hidden = displayed(self.host().hub(cx))
             .is_none_or(|(_, r)| r.dom().borrow().drag_highlight_hidden);
         if !drag_hidden {

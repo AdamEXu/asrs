@@ -11,6 +11,7 @@ use std::rc::Rc;
 
 use asrs_js::math;
 use asrs_js::number::{self, IntlOptions};
+use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time::{Rng, create_uuid};
 use asrs_js::value::{JsObject, JsValue, ToJs};
@@ -263,6 +264,10 @@ fn texts<T: asrs_log::log::log_util::LogValueText>(set: LogValueSet<T>) -> (Vec<
     (set.timestamps, values)
 }
 
+fn thrown(error: JsError) -> SourceListError {
+    SourceListError::Thrown(format!("{}: {}", error.name, error.message))
+}
+
 fn preview_options() -> IntlOptions {
     IntlOptions {
         max_fraction: 6,
@@ -298,9 +303,17 @@ fn number_preview(
         match cache.units {
             AxisUnits::None => {}
             AxisUnits::Unknown => {
-                return Err(SourceListError::Thrown(
-                    "TypeError: Cannot read properties of undefined (reading 'suffix')".to_owned(),
-                ));
+                return Err(thrown(ops::cannot_read(&JsValue::Undefined, "suffix")));
+            }
+            // `getSuffixForFilter(undefined, filter)`.
+            AxisUnits::Inherited => {
+                return Err(thrown(ops::cannot_read(
+                    &JsValue::Undefined,
+                    match filter.kind() {
+                        LineGraphFilter::None => "length",
+                        _ => "endsWith",
+                    },
+                )));
             }
             AxisUnits::Unit(unit) => {
                 let suffix = units::get_suffix_for_filter(&js(unit.suffix), filter.kind());
@@ -718,6 +731,14 @@ impl LineGraphController {
     }
 }
 
+/// `values[i] + values[Math.max(i - 1, 0)]`, where `+` concatenates strings.
+#[cold]
+fn neighbor_sums(values: &[JsValue]) -> Result<Vec<f64>, JsError> {
+    (0..values.len())
+        .map(|i| ops::value_to_number(&ops::add(&values[i], &values[i.saturating_sub(1)])?))
+        .collect()
+}
+
 /// `addNumeric` for one axis: the visible fields' commands and the data range.
 fn add_numeric(
     log: &Log,
@@ -738,8 +759,11 @@ fn add_numeric(
             if let PresetValue::Preset(Preset { to: Some(to), .. }) = &options.preset
                 && !to.is_empty()
             {
-                cache.units =
-                    static_unit(to).map_or(AxisUnits::Unknown, |(_, c)| AxisUnits::Unit(c));
+                cache.units = match static_unit(to) {
+                    Some((_, config)) => AxisUnits::Unit(config),
+                    None if units::is_object_proto_name(to) => AxisUnits::Inherited,
+                    None => AxisUnits::Unknown,
+                };
             }
         }
     }
@@ -766,9 +790,18 @@ fn add_numeric(
             continue;
         };
 
+        // `+` in the integral concatenates strings; every other operator converts first.
+        let mut foreign = match filter {
+            LineGraphFilter::Integrate => log
+                .get_foreign_range(&item.log_key, f64::NEG_INFINITY, time_range[1])
+                .map(|set| set.values),
+            _ => None,
+        };
+
         if let Some(akit) = akit_timestamps
             && (!str_is(&item.item_type, "stepped") || !settings.filter.is_none())
         {
+            let mut resampled_foreign = Vec::new();
             let first = data.timestamps.first().copied().unwrap_or(f64::NAN);
             let last = data.timestamps.last().copied().unwrap_or(f64::NAN);
             let mut resampled = LogValueSet::<f64>::default();
@@ -782,9 +815,13 @@ fn add_numeric(
                 }
                 resampled.timestamps.push(akit[akit_index]);
                 resampled.values.push(data.values[source_index]);
+                if let Some(foreign) = &foreign {
+                    resampled_foreign.push(foreign[source_index].clone());
+                }
                 akit_index += 1;
             }
             data = resampled;
+            foreign = foreign.map(|_| resampled_foreign);
         }
 
         let LogValueSet {
@@ -808,13 +845,17 @@ fn add_numeric(
                 let mut start_index = None;
                 let mut integral = 0.0;
                 let mut integrated = Vec::with_capacity(values.len());
+                let foreign_sums = foreign.as_deref().map(neighbor_sums).transpose()?;
                 for i in 0..values.len() {
                     let prev = i.saturating_sub(1);
                     if timestamps[i] > time_range[0] && start_index.is_none() {
                         start_index = Some(i.saturating_sub(1));
                     }
-                    integral +=
-                        (timestamps[i] - timestamps[prev]) * (values[i] + values[prev]) * 0.5;
+                    let sum = match &foreign_sums {
+                        Some(sums) => sums[i],
+                        None => values[i] + values[prev],
+                    };
+                    integral += (timestamps[i] - timestamps[prev]) * sum * 0.5;
                     integrated.push(integral);
                 }
                 let start = start_index.unwrap_or(0);
@@ -1018,6 +1059,11 @@ fn add_discrete(
             LogValueSetAny::Empty(s) => {
                 let (t, v) = texts(s);
                 (t, v, None)
+            }
+            LogValueSetAny::Foreign(_, s) => {
+                let first = s.values.first().and_then(JsValue::as_bool);
+                let (t, v) = texts(s);
+                (t, v, first)
             }
         };
 

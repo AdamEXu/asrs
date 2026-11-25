@@ -244,6 +244,123 @@ fn a_scaled_display_turns_hinting_off() {
     assert_eq!(*backend.raw_mask(glyph, 1.0, 1.0, 0).unwrap(), *mask);
 }
 
+/// `measureText` with centred text of fonts first used once the page knows its display's scale,
+/// in Electron 39.2.7 at device scale 2 under the pinned fonts.
+#[test]
+fn canvas_text_on_a_scaled_display_is_measured_unhinted() {
+    let measured = [
+        (
+            "12px system-ui",
+            "+3.3s",
+            [35.390625, 16.6953125, 17.443359375, 9.0, 1.0, 11.0, 3.0],
+        ),
+        (
+            "12px system-ui",
+            "0",
+            [7.634765625, 3.8173828125, 3.1826171875, 9.0, 1.0, 11.0, 3.0],
+        ),
+        (
+            "12px system-ui",
+            "Robot gy",
+            [
+                53.337890625,
+                25.6689453125,
+                26.5673828125,
+                10.0,
+                3.0,
+                11.0,
+                3.0,
+            ],
+        ),
+        (
+            "12px Arial",
+            "+3.3s",
+            [
+                29.689453125,
+                14.8447265625,
+                14.8447265625,
+                9.0,
+                1.0,
+                11.0,
+                3.0,
+            ],
+        ),
+        (
+            "12px Arial",
+            "0",
+            [6.673828125, 3.3369140625, 3.6630859375, 9.0, 1.0, 11.0, 3.0],
+        ),
+        (
+            "12px Arial",
+            "Robot gy",
+            [
+                48.029296875,
+                24.0146484375,
+                24.0146484375,
+                9.0,
+                3.0,
+                11.0,
+                3.0,
+            ],
+        ),
+        (
+            "13px system-ui",
+            "+3.3s",
+            [
+                38.33984375,
+                18.169921875,
+                19.39697265625,
+                10.0,
+                1.0,
+                11.0,
+                4.0,
+            ],
+        ),
+        (
+            "13px system-ui",
+            "Robot gy",
+            [
+                57.78271484375,
+                27.891357421875,
+                29.197998046875,
+                10.0,
+                3.0,
+                11.0,
+                4.0,
+            ],
+        ),
+        (
+            "16px Arial",
+            "+3.3s",
+            [39.5859375, 19.79296875, 19.79296875, 12.0, 1.0, 13.0, 4.0],
+        ),
+        (
+            "16px Arial",
+            "Robot gy",
+            [64.0390625, 31.01953125, 32.01953125, 12.0, 4.0, 13.0, 4.0],
+        ),
+    ];
+    if !fonts_are_pinned(&measured.map(|(css, ..)| css)) {
+        return;
+    }
+    let mut backend = platform_backend().unwrap();
+    backend.set_device_scale(2.0);
+    for (css, text, expected) in measured {
+        let font = FontSpec::parse(css).unwrap();
+        let m = measure_text(backend.as_mut(), &font, "center", "alphabetic", text);
+        let got = [
+            m.width,
+            m.actual_bounding_box_left,
+            m.actual_bounding_box_right,
+            m.actual_bounding_box_ascent,
+            m.actual_bounding_box_descent,
+            m.font_bounding_box_ascent,
+            m.font_bounding_box_descent,
+        ];
+        assert_eq!(got, expected, "{css} {text}");
+    }
+}
+
 /// `measureText("Robot 0").width` of the joysticks and swerve painters' sizes in Electron 39.2.7,
 /// each font's first use in its page: Blink's font cache keys sizes to 1/100 px.
 #[test]

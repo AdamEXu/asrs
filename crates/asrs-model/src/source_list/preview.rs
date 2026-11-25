@@ -5,7 +5,7 @@ use asrs_js::string::JsString;
 use asrs_log::geometry::{
     self, GeometryError, ModuleVelocitySample, RotationUnits, rotation_3d_to_2d, rotation_3d_to_rpy,
 };
-use asrs_log::log::log_util::{LogValueText, get_log_value_text, get_value_at};
+use asrs_log::log::log_util::{LogValueText, get_foreign_at, get_log_value_text, get_value_at};
 use asrs_log::log::mechanism_state::get_mechanism_state;
 use asrs_log::log::{Log, LogValue, LoggableType, RawValue};
 use asrs_log::units;
@@ -48,6 +48,12 @@ fn sample<T: LogValue + LogValueText>(
 
 /// `getOrDefault(log, key, type, time, null)` for a field of type `log_type`.
 fn value_at(log: &Log, key: &JsString, log_type: LoggableType, time: f64) -> Option<Value> {
+    if let Some(value) = get_foreign_at(log, key, time) {
+        return Some(Value {
+            text: get_log_value_text(&value),
+            length: None,
+        });
+    }
     match log_type {
         LoggableType::Raw => sample::<RawValue>(log, key, time, |_| None),
         LoggableType::Boolean => sample::<bool>(log, key, time, |_| None),

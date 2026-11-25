@@ -393,13 +393,8 @@ impl TextBackend for Fontations {
     fn glyph_bounds(&mut self, glyph: Glyph) -> Option<Bounds> {
         let face = self.faces.get(glyph.face as usize)?;
         let size = face.size;
-        let bounds = if self.linear(face) {
-            let scale = size / CANONICAL_SIZE;
-            self.strike_bounds(glyph, CANONICAL_SIZE, false)
-                .map(|b| b.map(|v| v * scale))
-        } else {
-            self.strike_bounds(glyph, size, true)
-        };
+        let hinted = !self.linear(face);
+        let bounds = self.strike_bounds(glyph, size, hinted);
         let [left, top, right, bottom] = bounds.unwrap_or_default();
         Some(Bounds {
             left,

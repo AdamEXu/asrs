@@ -28,7 +28,8 @@ impl Page<'_> {
         self.model(|model| {
             let mut log = model.page().shared_log().borrow_mut();
             for i in 0..ROWS {
-                log.put_number(&JsString::from(KEY), i as f64 / 10.0, i as f64);
+                log.put_number(&JsString::from(KEY), i as f64 / 10.0, i as f64)
+                    .unwrap();
             }
         });
     }
@@ -82,7 +83,8 @@ fn locked_autoscrolls_and_wheel_unlocks(headless: &mut HeadlessCapture, scale: f
     page.model(|model| {
         let mut log = model.page().shared_log().borrow_mut();
         for i in ROWS..ROWS + 20 {
-            log.put_number(&JsString::from(KEY), i as f64 / 10.0, i as f64);
+            log.put_number(&JsString::from(KEY), i as f64 / 10.0, i as f64)
+                .unwrap();
         }
     });
     page.selection(|selection| {

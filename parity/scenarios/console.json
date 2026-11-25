@@ -505,12 +505,16 @@
     {
       "mouse": "move",
       "x": 521,
-      "y": 103
+      "y": 103,
+      "on": "button.console-table-key-delete",
+      "right": 12
     },
     {
       "mouse": "click",
       "x": 521,
-      "y": 103
+      "y": 103,
+      "on": "button.console-table-key-delete",
+      "right": 12
     },
     {
       "mouse": "move",
