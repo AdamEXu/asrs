@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 
+use asrs_canvas::text::Family;
 use gpui_kit::base::input::{
     Cut, Delete, Input, InputEvent, InputState, MoveDown, MoveUp, Paste, Position,
 };
@@ -9,7 +10,7 @@ use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, ClipboardItem, Context, DispatchPhase, Entity,
     EntityInputHandler, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement,
     IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
-    Point, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task,
+    Point, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task, TextAlign,
     WeakEntity, Window, canvas, div, px, rgba,
 };
 
@@ -23,7 +24,7 @@ use crate::input::style::{DISABLED_TEXT, FieldStyle, Frame, device_border};
 use crate::platform;
 use crate::selection;
 use crate::symbols::Symbol;
-use crate::text::{self, LineHeight, Overflow, Text, TextStyle, WhiteSpace};
+use crate::text::{self, Align, LineHeight, Overflow, Text, TextStyle, WhiteSpace};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FieldKind {
@@ -256,9 +257,13 @@ impl<M: FieldModel> TextField<M> {
                 cx.weak_entity(),
                 window.window_handle(),
             );
-            InputState::new(window, cx)
+            let mut editor = InputState::new(window, cx)
                 .default_value(shown.clone())
-                .validate(filter)
+                .validate(filter);
+            if style.align == Align::Center {
+                editor.set_text_align(TextAlign::Center, cx);
+            }
+            editor
         });
         let subscription = cx.subscribe_in(&editor, window, Self::on_editor);
         TextField {
@@ -756,8 +761,12 @@ impl<M: FieldModel> Render for TextField<M> {
             .w(px(right - left))
             .h(px(bottom - top))
             .text_size(px(style.font.size))
+            .line_height(px(bottom - top))
             .text_color(editor_text_color)
             .child(Input::new(&self.editor));
+        if style.font.family == Family::Arial && cfg!(not(target_os = "linux")) {
+            editor_box = editor_box.font_family("Arial");
+        }
         let subpixel = (self.subpixel.0 + dx, self.subpixel.1 + dy);
         let page_selected = selection::all::colors(window, cx);
         let paint = |s: &str, rgba_hex: u32| {
