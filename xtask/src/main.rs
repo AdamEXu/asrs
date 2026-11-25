@@ -23,6 +23,7 @@ mod mutate;
 mod oracle;
 mod pack;
 mod parity;
+mod perf;
 mod pixel;
 mod public;
 mod sessions;
@@ -56,6 +57,7 @@ commands:
   gpui      vendored gpui patches and parity feature checks (see `cargo xtask gpui`)
   mutate    mutation testing of port files or recorded vectors (see `cargo xtask mutate`)
   parity    compare the oracle with the port: cve1, fn, diff (see `cargo xtask parity`)
+  perf      decode time against upstream, frame time per view (see `cargo xtask perf`)
   pixel     section 2.5 pixel gates between upstream and port runs, port scenarios, selftest
             (see `cargo xtask pixel`)
   canvas    canvas suite: Chromium references, mask-gamma LUT, text metrics, gates (see `cargo xtask canvas`)
@@ -82,6 +84,7 @@ fn main() -> ExitCode {
         Some("gpui") => gpui::run(&args[1..]),
         Some("mutate") => mutate::run(&args[1..]),
         Some("parity") => parity::run(&args[1..]),
+        Some("perf") => perf::run(&args[1..]),
         Some("pixel") => pixel::run(&args[1..]),
         Some("canvas") => canvas::run(&args[1..]),
         Some("ui") => ui::run(&args[1..]),

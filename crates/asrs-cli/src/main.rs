@@ -3,6 +3,7 @@
 mod assets;
 mod canvas_cmd;
 mod decode;
+mod decode_bench;
 mod decode_worker;
 mod export_cmd;
 mod fn_cmd;
@@ -41,6 +42,8 @@ commands:
   fn [--list]   JSONL fn requests on stdin, CVE-1 responses on stdout (same protocol as the oracle)
   decode [--initial] <file>
                 decode a historical log and print the canonical CVE-1 dump (same as oracle decode)
+  decode-bench --startup | [--initial] <file>
+                time what decode does, without the dump (same as oracle decodeBench)
   decode-worker <file>
                 run the file's decode worker alone and print its messages (same as oracle decodeWorker)
   export <file> --options <json> [--out <file>] [--fixed-limit <n>]
@@ -62,6 +65,7 @@ fn main() -> ExitCode {
     let result = match args.first().map(String::as_str) {
         Some("fn") => fn_cmd::run(&args[1..]),
         Some("decode") => return decode::run(&args[1..]),
+        Some("decode-bench") => return decode_bench::run(&args[1..]),
         Some("decode-worker") => return decode_worker::run(&args[1..]),
         Some("export") | Some("export-run") => return export_cmd::run(&args[1..]),
         Some("historical-session") => return historical_session::run(&args[1..]),
