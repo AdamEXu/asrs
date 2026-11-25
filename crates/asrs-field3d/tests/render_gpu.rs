@@ -139,11 +139,10 @@ fn a_lost_device_is_an_error_and_another_renderer_takes_over() {
     lost.render(&frame, &mut before).expect("rendered");
     lost.lose_device();
     let error = lost.render(&frame, &mut Vec::new()).expect_err("lost");
+    let message = format!("{error}");
     assert!(
-        error
-            .to_string()
-            .starts_with("the graphics device was lost: Destroyed"),
-        "{error}"
+        message.starts_with("the graphics device was lost: Destroyed"),
+        "{message}"
     );
     let mut after = Vec::new();
     Renderer::new()
