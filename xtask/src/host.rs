@@ -37,7 +37,8 @@ records which rasterizers are in use).
 Another Linux machine can run the `local` commands and the suites with the same fonts and a
 display of the same size, without touching its own desktop: unpack the fonts with
 xtask/hosts/linux/fonts.sh and run `FONTCONFIG_FILE=<dir>/gray.conf
-xtask/hosts/linux/display.sh <command>`. It is a check on another architecture, not a reference.
+xtask/hosts/linux/display.sh <command>`. It is a check on another architecture, not a reference,
+except that the DOM text scenes and the LCD table were recorded on x86_64 (linux.json says so).
 
 Checkouts are C:\work\asrs and ~/asrs, oracle packs C:\work\asrs-pack.tar.zst and
 ~/asrs-pack.tar.zst. ASRS_HOST_DIR=<name> replaces `asrs` in those paths (and suffixes the Windows
@@ -1465,29 +1466,21 @@ fn dom_text(paths: &Paths, out: &Path) -> Result {
     oracle::build_harness(paths)?;
     let out = out.join(if lcd { "dom-lcd" } else { "dom-gray" });
     let mut failures = Vec::new();
-    for scale in ["1", "2"] {
-        canvas::electron_with(
-            paths,
-            &[format!("--force-device-scale-factor={scale}")],
-            &[
-                "dom".to_owned(),
-                out.display().to_string(),
-                scale.to_owned(),
-            ],
-        )?;
+    canvas::dom_scenes(paths, &["dom"], &out)?;
+    for scale in canvas::DOM_SCALES {
         for theme in ["light", "dark"] {
             let base = out.join("dom").join(format!("dom-text-{theme}@{scale}x"));
             let boxes = read_json_file(&base.with_extension("json"))?;
             let image = pixel::read_png(&base.with_extension("png"))?;
-            let rows = chromatic_rows(&boxes, &image)?;
-            let chromatic = rows.iter().filter(|(_, n)| *n > 0).count();
+            let rows = text_modes(&boxes, &image)?;
+            let lcd_rows = rows.iter().filter(|(_, lcd)| *lcd).count();
             let wrong: Vec<&str> = rows
                 .iter()
-                .filter(|(row, n)| (*n > 0) != (lcd && lcd_sized(row, scale)))
+                .filter(|(row, mode)| *mode != (lcd && lcd_sized(row, scale)))
                 .map(|(row, _)| row.as_str())
                 .collect();
             eprintln!(
-                "dom-text-{theme}@{scale}x: {chromatic} of {} grey text boxes have coloured pixels",
+                "dom-text-{theme}@{scale}x: {lcd_rows} of {} text boxes are LCD",
                 rows.len()
             );
             if rows.is_empty() || !wrong.is_empty() {
@@ -1506,11 +1499,41 @@ fn dom_text(paths: &Paths, out: &Path) -> Result {
     }
 }
 
-/// Skia draws no LCD text above 48 device pixels. A row is named by its font size (`25px/0`).
-fn lcd_sized(row: &str, scale: &str) -> bool {
-    let size = row.split("px").next().and_then(|n| n.parse::<f64>().ok());
+/// Skia draws no LCD text above 48 device pixels. A row is named by its font size (`25px/0`), or
+/// `color/<n>` for 13 px.
+pub(crate) fn lcd_sized(row: &str, scale: &str) -> bool {
+    let size = match row.split("px").next() {
+        Some(row) if row.starts_with("color/") => Some(13.0),
+        size => size.and_then(|n| n.parse::<f64>().ok()),
+    };
     let scale: f64 = scale.parse().unwrap_or(f64::NAN);
     size.is_some_and(|size| size * scale <= 48.0)
+}
+
+/// Whether each text box of a DOM capture is LCD, as the oracle flagged it, checked against the
+/// pixels of the grey ones.
+pub(crate) fn text_modes(boxes: &Json, image: &Rgba) -> Result<Vec<(String, bool)>> {
+    let mut modes = Vec::new();
+    for row in boxes.get("rows").and_then(Json::as_array).unwrap_or(&[]) {
+        let text = |key| row.get(key).and_then(Json::as_str);
+        let id = text("id").ok_or("DOM row without an id")?.to_string_lossy();
+        let mode = text("mode").map(|m| m.to_string_lossy());
+        let lcd = match mode.as_deref() {
+            Some("lcd") => true,
+            Some("grayscale") => false,
+            _ => return Err(format!("{id}: no antialiasing mode")),
+        };
+        modes.push((id, lcd));
+    }
+    for (id, chromatic) in chromatic_rows(boxes, image)? {
+        let lcd = modes.iter().find(|(row, _)| *row == id).map(|(_, l)| *l);
+        if lcd != Some(chromatic > 0) {
+            return Err(format!(
+                "{id}: {chromatic} coloured pixels, flagged {lcd:?}"
+            ));
+        }
+    }
+    Ok(modes)
 }
 
 /// The boxes of grey text, with how many of their pixels are not grey.
@@ -1783,7 +1806,7 @@ fn display_profile() -> Json {
     }
 }
 
-fn font_profile() -> Option<String> {
+pub(crate) fn font_profile() -> Option<String> {
     let file = PathBuf::from(std::env::var_os("FONTCONFIG_FILE")?);
     Some(file.file_stem()?.to_str()?.to_owned())
 }
