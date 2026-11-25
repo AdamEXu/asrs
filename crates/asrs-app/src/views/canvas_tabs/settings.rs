@@ -557,7 +557,7 @@ impl<H: FrameHost> HubFrame<H> {
                     .h(px(height as f32))
                     .overflow_y_scroll()
                     .track_scroll(&scroll)
-                    .child(content),
+                    .child(text::scroller(layout.content_height > height, content)),
             );
         div()
             .absolute()

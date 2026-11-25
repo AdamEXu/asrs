@@ -793,7 +793,7 @@ impl<H: FrameHost> HubFrame<H> {
                     .absolute()
                     .inset_0()
                     .track_focus(&place)
-                    .child(table)
+                    .child(text::scroller(placed.scrolls(), table))
                     .child(probed(
                         "table.stats-values",
                         grid.place([origin[0], origin[1], width, height]),

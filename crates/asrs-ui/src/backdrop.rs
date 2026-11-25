@@ -62,11 +62,17 @@ impl Item {
     }
 }
 
+/// Paint operations that are not read: all they leave, if anything, is `color` in `rect`.
+struct Known {
+    range: Range<usize>,
+    fill: Option<(Rect, Rgba)>,
+}
+
 /// The primitives of one window's frame, indexed by the rows they touch.
 #[derive(Default)]
 pub struct Backdrop {
     seen: usize,
-    skipped: Vec<Range<usize>>,
+    known: Vec<Known>,
     items: Vec<Item>,
     bands: Vec<Vec<u32>>,
 }
@@ -74,16 +80,19 @@ pub struct Backdrop {
 impl Backdrop {
     pub fn clear(&mut self) {
         self.seen = 0;
-        self.skipped.clear();
+        self.known.clear();
         self.items.clear();
         self.bands.iter_mut().for_each(Vec::clear);
     }
 
     /// Takes in what `scene` painted since the last call.
     pub fn read(&mut self, scene: &Scene) {
-        for range in std::mem::take(&mut self.skipped) {
+        for Known { range, fill } in std::mem::take(&mut self.known) {
             self.take(scene, self.seen..range.start);
             self.seen = range.end;
+            if let Some((rect, color)) = fill {
+                self.add(rect, Fill::Color(color));
+            }
         }
         self.take(scene, self.seen..scene.len());
         self.seen = scene.len();
@@ -91,13 +100,20 @@ impl Backdrop {
 
     /// Leaves out what the scene painted in `range`.
     pub fn skip(&mut self, range: Range<usize>) {
-        self.skipped.push(range);
+        self.known.push(Known { range, fill: None });
+    }
+
+    /// Takes what the scene painted in `range` as `color` over `rect`.
+    pub fn fill(&mut self, range: Range<usize>, rect: Rect, color: Rgba) {
+        let fill = Some((rect, color));
+        self.known.push(Known { range, fill });
     }
 
     fn take(&mut self, scene: &Scene, range: Range<usize>) {
         for primitive in scene.primitives(range) {
             match primitive {
                 Primitive::Quad(quad) => self.quad(quad),
+                Primitive::PolychromeSprite(sprite) if sprite.opacity <= 0.0 => {}
                 Primitive::Shadow(shadow) => {
                     let reach = ScaledPixels(shadow.blur_radius.0 * 3.0);
                     let bounds = shadow.bounds.dilate(reach);
@@ -163,9 +179,12 @@ impl Backdrop {
     }
 
     fn push(&mut self, rect: Rect, clip: &Bounds<ScaledPixels>, fill: Fill) {
-        let Some(rect) = intersect(rect, outer(clip)) else {
-            return;
-        };
+        if let Some(rect) = intersect(rect, outer(clip)) {
+            self.add(rect, fill);
+        }
+    }
+
+    fn add(&mut self, rect: Rect, fill: Fill) {
         if matches!(fill, Fill::Color(c) if c.a <= 0.0) || rect[3] <= 0 {
             return;
         }
@@ -496,5 +515,22 @@ mod tests {
         backdrop.clear();
         backdrop.read(&Scene::default());
         assert_eq!(backdrop.regions(RUN), None);
+    }
+
+    #[test]
+    fn an_image_known_to_be_flat_is_its_colour() {
+        let mut scene = Scene::default();
+        let mut backdrop = Backdrop::default();
+        scene.insert_primitive(quad([0, 0, 1000, 800], rgb(0)));
+        backdrop.fill(0..scene.len(), [90, 100, 400, 130], rgb(0xffffff));
+        scene.insert_primitive(quad([100, 110, 110, 124], rgb(0xff0000)));
+        backdrop.read(&scene);
+        assert_eq!(
+            backdrop.regions(RUN),
+            Some(vec![
+                ([100, 110, 110, 124], [0xff, 0, 0]),
+                ([110, 110, 160, 124], WHITE),
+            ])
+        );
     }
 }

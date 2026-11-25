@@ -167,6 +167,22 @@ impl TextSystem {
         system.windows.entry(window).or_default().grayscale = true;
     }
 
+    fn may_be_lcd(&self, window: &Window) -> bool {
+        let id = window.window_handle().window_id();
+        let scale = window.scale_factor();
+        self.lcd_lut.is_some()
+            && !self.windows.get(&id).is_some_and(|text| text.grayscale)
+            && !self.layers.iter().any(|layer| layer.grayscale(scale))
+            && window.element_opacity() >= 1.0
+    }
+
+    /// The window's backdrop, where there is LCD text to read it.
+    fn backdrop(&mut self, window: &Window) -> Option<&mut Backdrop> {
+        self.lcd_lut.as_ref()?;
+        let id = window.window_handle().window_id();
+        Some(&mut self.windows.entry(id).or_default().backdrop)
+    }
+
     fn evict(&mut self, window: WindowId) {
         let (bytes, entries) = self.budget;
         let Some(WindowText { cache, stats, .. }) = self.windows.get_mut(&window) else {
@@ -385,10 +401,11 @@ pub struct TextLayer {
     child: AnyElement,
 }
 
-/// What CSS puts on a layer of its own or behind a mask or filter: its text is grayscale.
-pub fn grayscale_layer(child: impl IntoElement) -> TextLayer {
+/// What CSS puts behind a mask or filter or on a layer of its own: its text is grayscale if
+/// `separate`.
+pub fn grayscale_layer(separate: bool, child: impl IntoElement) -> TextLayer {
     TextLayer {
-        layer: Layer::Always,
+        layer: if separate { Layer::Always } else { Layer::Page },
         child: child.into_any_element(),
     }
 }
@@ -569,6 +586,54 @@ pub fn space_width(cx: &mut App, style: &TextStyle, scale: f32) -> f32 {
     caret::space_width(system.backend.as_mut(), &style.font, scale)
 }
 
+/// Whether `Text` painted now may be LCD.
+pub fn may_be_lcd(window: &Window, cx: &mut App) -> bool {
+    let system = cx.default_global::<TextSystem>();
+    system.may_be_lcd(window)
+}
+
+/// Tells the text painted later that what `window` painted since its scene held `start` operations
+/// left `bounds` in `color` (`0xRRGGBB`).
+pub fn painted_flat(
+    window: &Window,
+    cx: &mut App,
+    start: usize,
+    bounds: Bounds<Pixels>,
+    color: u32,
+) {
+    let system = cx.default_global::<TextSystem>();
+    let Some(backdrop) = system.backdrop(window) else {
+        return;
+    };
+    let clip = device_rect(window.content_mask().bounds, window.scale_factor());
+    let rect = device_rect(bounds, window.scale_factor());
+    let range = start..window.painted_scene().len();
+    match backdrop::intersect(rect, clip) {
+        Some(rect) => backdrop.fill(range, rect, gpui_kit::rgb(color)),
+        None => backdrop.skip(range),
+    }
+}
+
+/// Tells the text painted later that what `window` painted since its scene held `start` operations
+/// is behind no text, though its bounds may reach there.
+pub fn painted_beside(window: &Window, cx: &mut App, start: usize) {
+    let system = cx.default_global::<TextSystem>();
+    if let Some(backdrop) = system.backdrop(window) {
+        backdrop.skip(start..window.painted_scene().len());
+    }
+}
+
+/// `bounds` in device px, covering every pixel it touches.
+fn device_rect(bounds: Bounds<Pixels>, scale: f32) -> Rect {
+    let edge = |v: Pixels| f32::from(v) * scale;
+    [
+        edge(bounds.left()).floor() as i32,
+        edge(bounds.top()).floor() as i32,
+        edge(bounds.right()).ceil() as i32,
+        edge(bounds.bottom()).ceil() as i32,
+    ]
+}
+
 /// One glyph run's coverage, after mask gamma, at a whole device pixel position.
 pub struct GlyphMask {
     pub x: i32,
@@ -576,10 +641,15 @@ pub struct GlyphMask {
     pub width: u32,
     pub height: u32,
     pub alpha: Vec<u8>,
+    /// LCD text blended onto the background it was asked for on, as RGBA, with alpha 255 where
+    /// it has coverage and 0 elsewhere.
+    pub lcd: Option<Vec<u8>>,
 }
 
 /// The coverage [`Text`] would paint for `text` in a box `width` CSS px wide whose content
-/// box starts at `origin` device px, for callers that composite text into their own pixmap.
+/// box starts at `origin` device px, for callers that composite text into their own pixmap, on
+/// `background` if the text may be LCD.
+#[expect(clippy::too_many_arguments)]
 pub fn glyph_masks(
     cx: &mut App,
     style: &TextStyle,
@@ -588,6 +658,7 @@ pub fn glyph_masks(
     width: f32,
     origin: (f32, f32),
     color: u32,
+    background: Option<[u8; 3]>,
 ) -> Vec<GlyphMask> {
     let color = [(color >> 16) as u8, (color >> 8) as u8, color as u8];
     let layout = layout(cx, style, text, scale, Some(width));
@@ -598,6 +669,30 @@ pub fn glyph_masks(
         let baseline = (origin.1 + line.baseline + 32).div_euclid(64);
         for fragment in &line.fragments {
             let x = origin.0 + fragment.x;
+            if let (Some(background), Some(lcd_lut)) = (background, &system.lcd_lut)
+                && let Some(run) = dom::rasterize_lcd(
+                    system.backend.as_mut(),
+                    (&system.lut, lcd_lut),
+                    &fragment.glyphs,
+                    x.rem_euclid(64),
+                    scale,
+                    dom::LcdInk {
+                        color,
+                        alpha: 255,
+                        background,
+                    },
+                )
+            {
+                out.push(GlyphMask {
+                    x: x.div_euclid(64) + run.left,
+                    y: baseline + run.top,
+                    width: run.width,
+                    height: run.height,
+                    alpha: Vec::new(),
+                    lcd: Some(run.rgba),
+                });
+                continue;
+            }
             if let Some(run) = dom::rasterize(
                 system.backend.as_mut(),
                 &system.lut,
@@ -612,6 +707,7 @@ pub fn glyph_masks(
                     width: run.width,
                     height: run.height,
                     alpha: run.alpha,
+                    lcd: None,
                 });
             }
         }
@@ -855,12 +951,8 @@ impl Element for Text {
         if let Some(room) = self.cut {
             dom::cut(&mut layout, dom::lu_round((room * f64::from(scale)) as f32));
         }
-        let window_id = window.window_handle().window_id();
-        let system = cx.default_global::<TextSystem>();
-        if system.lcd_lut.is_some()
-            && let Some(text) = system.windows.get_mut(&window_id)
-        {
-            text.backdrop.clear();
+        if let Some(backdrop) = cx.default_global::<TextSystem>().backdrop(window) {
+            backdrop.clear();
         }
         let origin = (
             dom::lu_round((f32::from(bounds.origin.x) + self.subpixel.0) * scale),
@@ -886,11 +978,7 @@ impl Element for Text {
         for image in text.cache.evicted.drain(..) {
             let _ = window.drop_image(image);
         }
-        let may_be_lcd = system.lcd_lut.is_some()
-            && !self.grayscale
-            && !text.grayscale
-            && !system.layers.iter().any(|layer| layer.grayscale(scale))
-            && window.element_opacity() >= 1.0;
+        let may_be_lcd = !self.grayscale && system.may_be_lcd(window);
         let Prepaint { layout, origin } = prepaint;
         let mut selection = Vec::new();
         if self.selected.is_some() {
@@ -924,20 +1012,13 @@ impl Element for Text {
                 });
             }
             let painted = window.painted_scene().len();
-            let mask = window.content_mask().bounds;
-            let edge = |v: Pixels| f32::from(v) * scale;
             let ink = Ink {
                 font: &self.style.font,
                 scale,
                 color: self.color,
                 alpha: (self.alpha * 255.0).round() as u8,
                 lcd: may_be_lcd.then(|| window.painted_scene()),
-                clip: [
-                    edge(mask.left()).floor() as i32,
-                    edge(mask.top()).floor() as i32,
-                    edge(mask.right()).ceil() as i32,
-                    edge(mask.bottom()).ceil() as i32,
-                ],
+                clip: device_rect(window.content_mask().bounds, scale),
             };
             let mut images = Vec::new();
             let mut underlines = Vec::new();
@@ -986,11 +1067,8 @@ impl Element for Text {
                     });
                 });
             }
-            if system.lcd_lut.is_some()
-                && let Some(text) = system.windows.get_mut(&window_id)
-            {
-                let now = window.painted_scene().len();
-                text.backdrop.skip(painted..now);
+            if let Some(backdrop) = system.backdrop(window) {
+                backdrop.skip(painted..window.painted_scene().len());
             }
         });
         #[cfg(feature = "parity")]

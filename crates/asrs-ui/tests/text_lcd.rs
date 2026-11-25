@@ -186,12 +186,15 @@ fn text_over_two_colours_is_lcd_on_both() {
 #[test]
 fn text_is_grayscale_where_chromium_has_no_opaque_layer() {
     let mut f = Fixture::lcd(1.0);
-    let gray: [(&str, fn() -> AnyElement); 6] = [
+    type Case = (&'static str, fn() -> AnyElement);
+    let gray: [Case; 6] = [
         ("no background", || text("run").into_any_element()),
         ("opacity", || {
             page(0xffffff, div().opacity(0.5).child(text("run")))
         }),
-        ("a layer", || page(0xffffff, grayscale_layer(text("run")))),
+        ("a layer", || {
+            page(0xffffff, grayscale_layer(true, text("run")))
+        }),
         ("one text", || page(0xffffff, text("run").grayscale())),
         ("a gradient", || {
             let (from, to) = (

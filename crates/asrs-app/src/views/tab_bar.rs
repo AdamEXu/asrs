@@ -12,7 +12,7 @@ use asrs_ui::gpui::{
     AnyElement, App, InteractiveElement, IntoElement, KeyDownEvent, ParentElement, Styled, Window,
     div, linear_color_stop, linear_gradient, px, rgb, rgba,
 };
-use asrs_ui::text::{self, Text, TextStyle};
+use asrs_ui::text::{self, Text, TextStyle, scroller};
 use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, FONT_FAMILY};
 
 use super::source_list::place_in;
@@ -224,7 +224,8 @@ pub fn titles(
         }
         row = row.child(title);
     }
-    row.children(ring).into_any_element()
+    let overflows = geometry.scroll_width() > geometry.client_width();
+    scroller(overflows, row.children(ring)).into_any_element()
 }
 
 /// `div.tab-bar-shadow-left` or `-right` at `rect` (viewer coordinates relative to `origin`)

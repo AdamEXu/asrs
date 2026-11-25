@@ -8,6 +8,8 @@ use asrs_parity::vectors as parity_vectors;
 
 use crate::canvas::{platform, read_json, write};
 use crate::oracle::{self, Paths};
+use crate::pixel::antialias;
+use crate::pixel::gates::TextInk;
 use crate::{Result, cargo};
 
 const USAGE: &str = "usage: cargo xtask text <command>
@@ -24,8 +26,9 @@ commands:
   run                render the scenes with asrs-ui (example text_scenes, parity feature) into
                      port/ and gate every capture: shrink-to-fit box sizes within 0.05 px
                      (1 px for the user agent control font), box
-                     and glyph-run edges within 1 px, and at most 6 % pixelmatch (YIQ 0.1)
-                     inside the text regions (DOM text rects dilated 2 px)
+                     and glyph-run edges within 1 px, at most 6 % pixelmatch (YIQ 0.1) inside
+                     the text regions (DOM text rects dilated 2 px), and each text rect LCD or
+                     grayscale as the reference has it
   scroll             the 10k-row virtual list test in release: cache bounded while every row
                      scrolls past, draw p95 within one 60 Hz frame";
 
@@ -70,10 +73,16 @@ fn generator_hash(paths: &Paths) -> Result<String> {
     oracle::hash_tree(&paths.root, &["oracle/text", "oracle/src/canvas/png.ts"])
 }
 
+/// The references' generator and, on Linux, the font profile they were drawn under.
+fn stamp(paths: &Paths) -> Result<String> {
+    let fonts = std::env::var("FONTCONFIG_FILE").unwrap_or_default();
+    Ok(format!("{} {fonts}", generator_hash(paths)?))
+}
+
 fn ensure_reference(paths: &Paths) -> Result<PathBuf> {
     let dir = reference_dir(paths);
-    let stamp = fs::read_to_string(dir.join(STAMP)).unwrap_or_default();
-    if stamp.trim() != generator_hash(paths)? {
+    let written = fs::read_to_string(dir.join(STAMP)).unwrap_or_default();
+    if written.trim() != stamp(paths)?.trim() {
         reference(paths)?;
     }
     Ok(dir)
@@ -119,10 +128,7 @@ fn reference(paths: &Paths) -> Result {
         oracle::pin_environment(&mut command, oracle::DEFAULT_ZONE);
         exec(&mut command, "the text oracle")?;
     }
-    write(
-        &out.join(STAMP),
-        format!("{}\n", generator_hash(paths)?).as_bytes(),
-    )?;
+    write(&out.join(STAMP), format!("{}\n", stamp(paths)?).as_bytes())?;
     eprintln!("text references in {}", out.display());
     Ok(())
 }
@@ -362,6 +368,11 @@ fn rgb3(v: &Json) -> Option<[u8; 3]> {
     Some([c(0)?, c(1)?, c(2)?])
 }
 
+fn hex_color(css: &str) -> Option<[u8; 3]> {
+    let rgb = u32::from_str_radix(css.strip_prefix('#')?, 16).ok()?;
+    (css.len() == 7).then_some([(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8])
+}
+
 fn run_port(paths: &Paths) -> Result {
     let dir = ensure_reference(paths)?;
     let port = dir.join("port");
@@ -390,8 +401,8 @@ fn run_port(paths: &Paths) -> Result {
     )?;
     let mut failed = Vec::new();
     eprintln!(
-        "{:<24} {:>8} {:>8} {:>9} {:>9} {:>6} | result",
-        "capture", "size err", "UA err", "text %", "whole %", "blob"
+        "{:<24} {:>8} {:>8} {:>9} {:>9} {:>6} {:>5} {:>5} {:>5} | result",
+        "capture", "size err", "UA err", "text %", "whole %", "blob", "lcd", "gray", "none"
     );
     for name in scene_names(&dir)? {
         let scene = read_json(&dir.join(format!("scenes/{name}.json")))?;
@@ -422,9 +433,31 @@ fn run_port(paths: &Paths) -> Result {
                 &pixel::read_png(&port.join(format!("{capture}.png")))?,
                 background,
             );
+            let inks: Vec<TextInk> = list(&scene, "boxes")
+                .iter()
+                .flat_map(|spec| {
+                    let color = hex_color(&string(spec, "color"));
+                    let dom = by_id(list(&dom, "boxes"), &string(spec, "id"));
+                    let lines = dom.map_or(&[][..], |dom| list(dom, "lines"));
+                    let rects = lines.iter().filter_map(rect);
+                    rects.filter_map(move |rect| {
+                        Some(TextInk {
+                            rect,
+                            color: color?,
+                        })
+                    })
+                })
+                .collect();
+            let device = scale.parse().expect("scale");
+            let modes = antialias::compare(inks.iter(), &reference, &mine, device);
+            for (rect, expected, actual) in &modes.differing {
+                gates.failures.push(format!(
+                    "{rect:?} is {expected:?} upstream and {actual:?} here"
+                ));
+            }
             let cmp = pixel::compare(&reference, &mine, background)?;
             let (w, h) = (reference.width as usize, reference.height as usize);
-            let mask = text_mask(&scene, &dom, scale.parse().expect("scale"), w, h);
+            let mask = text_mask(&scene, &dom, device, w, h);
             let region = mask.iter().filter(|&&m| m).count().max(1);
             let differing = mask
                 .iter()
@@ -445,12 +478,15 @@ fn run_port(paths: &Paths) -> Result {
                 )?;
             }
             eprintln!(
-                "{capture:<24} {:>8.4} {:>8.4} {:>9.3} {:>9.3} {:>6} | {}",
+                "{capture:<24} {:>8.4} {:>8.4} {:>9.3} {:>9.3} {:>6} {:>5} {:>5} {:>5} | {}",
                 gates.max_size_error,
                 gates.max_loose_error,
                 text_pct,
                 cmp.stats.mismatch_pct,
                 cmp.stats.max_blob,
+                modes.lcd,
+                modes.grayscale,
+                modes.unclear,
                 if gates.failures.is_empty() {
                     "ok".to_owned()
                 } else {

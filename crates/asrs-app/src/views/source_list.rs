@@ -910,7 +910,8 @@ impl<H: FrameHost> HubFrame<H> {
         if last.is_some() && layout.item_border_top(count - 1) > 0.0 {
             items = items.child(div().flex_none().h(px(1.0)));
         }
-        element = element.child(items);
+        let overflows = scroll.max_offset().y > px(0.0);
+        element = element.child(text::scroller(overflows, items));
 
         if list.hand_icon {
             element = element.child(

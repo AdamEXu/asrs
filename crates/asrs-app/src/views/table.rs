@@ -674,6 +674,7 @@ impl<H: FrameHost> HubFrame<H> {
         let [x, y, width, height] = rect;
         let mut dom = dom.borrow_mut();
         let layout = &mut dom.layout;
+        let overflows = layout.scroll_range().iter().any(|range| *range > 0.0);
         let count = layout.columns.len();
         let columns: Vec<[f64; 2]> = (0..count)
             .map(|i| [layout.column_left(i), layout.columns[i]])
@@ -970,7 +971,7 @@ impl<H: FrameHost> HubFrame<H> {
                     .track_focus(&focus::last(&rows_place)),
             )
             .child(probes)
-            .child(cells)
+            .child(text::scroller(overflows, cells))
             .child(first_cells)
             .child(header)
             .into_any_element()

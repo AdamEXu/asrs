@@ -67,6 +67,8 @@ pub struct Capture {
     pub texts: Vec<Rect>,
     /// The text boxes of an upstream capture that have an opaque colour.
     pub text_inks: Vec<TextInk>,
+    /// Its form controls that hold text.
+    pub controls: Vec<Rect>,
     pub masks: Vec<(String, Rect)>,
     pub canvases: Vec<Dump>,
     pub gl: Vec<GlDump>,
@@ -565,12 +567,17 @@ fn antialiasing(reference: &Capture, port: &Capture, masked: &[bool], out: &mut 
         .iter()
         .filter(|ink| !centre_masked(ink.rect, reference, masked))
         .filter(|ink| ours.has(ink.rect, TEXT_BOX_TOLERANCE));
-    let compared = antialias::compare(
-        inks,
-        &opaque(&reference.image),
-        &opaque(&port.image),
-        reference.scale,
-    );
+    let (theirs, mine) = (opaque(&reference.image), opaque(&port.image));
+    let controls: Vec<TextInk> = reference
+        .controls
+        .iter()
+        .filter(|rect| !centre_masked(**rect, reference, masked))
+        .map(|rect| TextInk {
+            rect: *rect,
+            color: antialias::contrast(&theirs, *rect, reference.scale),
+        })
+        .collect();
+    let compared = antialias::compare(inks.chain(&controls), &theirs, &mine, reference.scale);
     let mut detail = format!(
         "{} boxes LCD, {} grayscale, {} unclear",
         compared.lcd, compared.grayscale, compared.unclear
@@ -827,6 +834,7 @@ mod tests {
             probes: Vec::new(),
             texts: Vec::new(),
             text_inks: Vec::new(),
+            controls: Vec::new(),
             masks: Vec::new(),
             canvases: Vec::new(),
             gl: Vec::new(),

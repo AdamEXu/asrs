@@ -23,7 +23,7 @@ use asrs_ui::gpui::{
 use asrs_ui::icon::{Icon, IconFit, IconSource};
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, PlainText, TextField};
 use asrs_ui::symbols::Symbol;
-use asrs_ui::text::{Measurer, Text, TextStyle};
+use asrs_ui::text::{Measurer, Text, TextStyle, scroller};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 use asrs_ui::tooltip::{covering, titled, untitled};
 
@@ -1043,7 +1043,7 @@ impl Render for SidebarView {
             .size_full()
             .overflow_y_scroll()
             .track_scroll(&self.scroll)
-            .child(content);
+            .child(scroller(content_height > side_bar[3], content));
         if let Some(results) = self.search_results(appearance, window, cx) {
             root = root.child(results);
         }

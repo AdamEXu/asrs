@@ -11,7 +11,7 @@ use std::time::Instant;
 use asrs_canvas::Pixmap;
 use gpui_kit::{
     App, Bounds, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, ParentElement, Pixels, Render,
+    KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, ParentElement, Pixels, Render, Rgba,
     StatefulInteractiveElement, Styled, Window, canvas, div, px,
 };
 
@@ -299,7 +299,7 @@ fn draw(
     origin: (f32, f32),
     css: (f32, f32),
     state: SelectState,
-    (label, selected): (&str, Option<SelectionColors>),
+    (label, selected, lcd): (&str, Option<SelectionColors>, bool),
     scale: f32,
 ) -> Option<Pixmap> {
     let (ascent, descent) = text::font_metrics(cx, &TextStyle::new(CONTROL_FONT), scale);
@@ -364,6 +364,10 @@ fn draw(
     if !label.is_empty() {
         let color = selected.and_then(|s| s.text).unwrap_or(color);
         let [tx, ty, tw, _] = g.text;
+        let behind = selected.map_or([0xff; 3], |s| {
+            let Rgba { r, g, b, a } = s.rgba();
+            [r, g, b].map(|c| ((c * a + 1.0 - a) * 255.0).round() as u8)
+        });
         let masks = text::glyph_masks(
             cx,
             &text_style(line, scale),
@@ -372,6 +376,7 @@ fn draw(
             tw / scale,
             (origin.0 + tx, origin.1 + ty),
             color,
+            (lcd && state != SelectState::Disabled).then_some(behind),
         );
         let [cx0, cy0, cw, ch] = g.clip;
         let clip_x = ((origin.0 + cx0).round() as i32).max(0)
@@ -425,11 +430,18 @@ fn composite_masks(
             }
             for col in 0..mask.width as i32 {
                 let x = mask.x + col;
-                let a = u32::from(mask.alpha[(row * mask.width as i32 + col) as usize]);
+                let i = (row * mask.width as i32 + col) as usize;
+                let p = ((y * width + x) * 4) as usize;
+                if let Some(lcd) = &mask.lcd {
+                    if lcd[i * 4 + 3] != 0 && clip_x.contains(&x) {
+                        data[p..p + 4].copy_from_slice(&lcd[i * 4..i * 4 + 4]);
+                    }
+                    continue;
+                }
+                let a = u32::from(mask.alpha[i]);
                 if a == 0 || !clip_x.contains(&x) {
                     continue;
                 }
-                let p = ((y * width + x) * 4) as usize;
                 let inverse = 255 - a;
                 for (c, &v) in rgb.iter().enumerate() {
                     let src = (u32::from(v) * a + 127) / 255;
@@ -466,8 +478,9 @@ pub fn paint_select(
         size: bounds.size,
     };
     let selected = selection::all::colors(window, cx);
+    let lcd = text::may_be_lcd(window, cx);
     let key = (
-        ("select", selected),
+        ("select", selected, lcd),
         w,
         h,
         state,
@@ -481,7 +494,10 @@ pub fn paint_select(
     skia::paint_with_app(
         key,
         snapped,
-        |cx| draw(cx, (w, h), origin, css, state, (&label, selected), scale),
+        |cx| {
+            let label = (&*label, selected, lcd);
+            draw(cx, (w, h), origin, css, state, label, scale)
+        },
         window,
         cx,
     );

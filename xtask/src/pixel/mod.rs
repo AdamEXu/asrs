@@ -1,5 +1,5 @@
-mod antialias;
-mod gates;
+pub(crate) mod antialias;
+pub(crate) mod gates;
 mod plant;
 mod report;
 
@@ -79,6 +79,9 @@ fn modes(run: &Path) -> Result {
                 let capture = load_capture(&variant, &name, false)?;
                 let record = read_json(&variant.join(format!("captures/{name}.json")))?;
                 let image = pixel::composite(&capture.image, [0; 3]);
+                let described = |mode: Option<antialias::Mode>| {
+                    mode.map_or("unclear".to_owned(), |m| format!("{m:?}"))
+                };
                 let label = format!(
                     "{}/{}/{name}",
                     scenario.file_name().unwrap_or_default().display(),
@@ -91,7 +94,7 @@ fn modes(run: &Path) -> Result {
                     };
                     for rect in list(text, "rects").iter().filter_map(rect) {
                         let mode = antialias::mode(&image, rect, capture.scale, color);
-                        let mode = mode.map_or("unclear".to_owned(), |m| format!("{m:?}"));
+                        let mode = described(mode);
                         let shown: String = field("text").trim().chars().take(30).collect();
                         println!(
                             "{mode}\t{label}\t{}\t{}\t{shown:?}\t{:.0},{:.0}",
@@ -101,6 +104,14 @@ fn modes(run: &Path) -> Result {
                             rect[1]
                         );
                     }
+                }
+                for &rect in &capture.controls {
+                    let color = antialias::contrast(&image, rect, capture.scale);
+                    let mode = described(antialias::mode(&image, rect, capture.scale, color));
+                    println!(
+                        "{mode}\t{label}\tcontrol\t\t\t{:.0},{:.0}",
+                        rect[0], rect[1]
+                    );
                 }
             }
         }
@@ -400,6 +411,12 @@ pub(crate) fn load_capture(variant: &Path, name: &str, port: bool) -> Result<Cap
             rects.map(move |rect| TextInk { rect, color })
         })
         .collect();
+    const WITH_TEXT: [&str; 5] = ["text", "search", "number", "password", "select-one"];
+    let controls = list(&record, "controls")
+        .iter()
+        .filter(|c| string(c, "type").is_some_and(|t| WITH_TEXT.contains(&t.as_str())))
+        .filter_map(|c| rect(c.get("rect")?))
+        .collect();
     let masks = list(&record, "masks")
         .iter()
         .map(|m| {
@@ -486,6 +503,7 @@ pub(crate) fn load_capture(variant: &Path, name: &str, port: bool) -> Result<Cap
         probes,
         texts,
         text_inks,
+        controls,
         masks,
         canvases,
         gl,

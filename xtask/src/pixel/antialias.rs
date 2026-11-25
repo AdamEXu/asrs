@@ -39,8 +39,7 @@ fn one_coverage(pixel: [u8; 3], color: [u8; 3], background: [u8; 3]) -> bool {
     low <= high
 }
 
-/// `None` for a box with too little ink, or one that is neither.
-pub fn mode(image: &Rgb, rect: Rect, scale: f64, color: [u8; 3]) -> Option<Mode> {
+fn pixels(image: &Rgb, rect: Rect, scale: f64) -> Vec<[u8; 3]> {
     let clamp = |v: f64, max: u32| v.clamp(0.0, f64::from(max)) as usize;
     let (left, right) = (
         clamp((rect[0] * scale).floor(), image.width),
@@ -50,13 +49,29 @@ pub fn mode(image: &Rgb, rect: Rect, scale: f64, color: [u8; 3]) -> Option<Mode>
         clamp((rect[1] * scale).floor(), image.height),
         clamp(((rect[1] + rect[3]) * scale).ceil(), image.height),
     );
-    let pixels: Vec<[u8; 3]> = (top..bottom)
+    (top..bottom)
         .flat_map(|y| (left..right).map(move |x| (x, y)))
         .map(|(x, y)| image.data[y * image.width as usize + x])
-        .collect();
-    let mut sorted = pixels.clone();
+        .collect()
+}
+
+fn most_common(pixels: &[[u8; 3]]) -> Option<[u8; 3]> {
+    let mut sorted = pixels.to_vec();
     sorted.sort_unstable();
-    let background = sorted.chunk_by(|a, b| a == b).max_by_key(|c| c.len())?[0];
+    let runs = sorted.chunk_by(|a, b| a == b);
+    runs.max_by_key(|run| run.len()).map(|run| run[0])
+}
+
+/// The grey end a control's text is nearest to.
+pub fn contrast(image: &Rgb, rect: Rect, scale: f64) -> [u8; 3] {
+    let background = most_common(&pixels(image, rect, scale)).unwrap_or_default();
+    [if background[1] < 0x80 { 0xff } else { 0 }; 3]
+}
+
+/// `None` for a box with too little ink, or one that is neither.
+pub fn mode(image: &Rgb, rect: Rect, scale: f64, color: [u8; 3]) -> Option<Mode> {
+    let pixels = pixels(image, rect, scale);
+    let background = most_common(&pixels)?;
     let inked: Vec<[u8; 3]> = pixels
         .into_iter()
         .filter(|p| (0..3).any(|c| p[c].abs_diff(background[c]) > INK))

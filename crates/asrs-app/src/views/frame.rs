@@ -20,6 +20,7 @@ use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::scroll_sensor::{ScrollSensor, Wheel};
 use asrs_model::selection_impl::{ControlButton, KeyTarget};
 use asrs_model::source_list::Rect;
+use asrs_model::tab_type::TabType;
 use asrs_ui::button::IconButton;
 use asrs_ui::canvas_view::geometry::mouse_client;
 use asrs_ui::canvas_view::{
@@ -1074,6 +1075,24 @@ impl<H: FrameHost> HubFrame<H> {
         .into_any_element()
     }
 
+    /// Whether the displayed tab's canvas reaches under `div.controls-content`, which Chromium
+    /// then draws on a layer of its own.
+    fn controls_over_canvas(&self, cx: &App) -> bool {
+        let mut tabs = self.host().hub(cx).tabs().tabs();
+        let shown = tabs.find(|tab| !tab.content_hidden());
+        matches!(
+            shown.and_then(|tab| tab.tab_type()),
+            Some(
+                TabType::LineGraph
+                    | TabType::Field2d
+                    | TabType::Field3d
+                    | TabType::Statistics
+                    | TabType::Joysticks
+                    | TabType::Swerve
+            )
+        )
+    }
+
     fn timeline_element(&mut self, dark: bool, cx: &mut Context<'_, Self>) -> AnyElement {
         let state = self
             .timeline_canvas
@@ -1506,7 +1525,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(video) = self.video_controls(rect, appearance, scale, window, cx) {
                     controls = controls.child(video);
                 }
-                viewer = viewer.child(probe(FrameElement::ControlsContent, controls));
+                let separate = self.controls_over_canvas(cx);
+                let controls = probe(FrameElement::ControlsContent, controls);
+                viewer = viewer.child(text::grayscale_layer(separate, controls));
             }
             if let Some(rect) = layout.rect(FrameElement::ControlsHandle) {
                 let handle = focus::section(
