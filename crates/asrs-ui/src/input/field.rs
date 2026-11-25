@@ -21,8 +21,8 @@ use crate::input::native::{PointerState, paint_text_field};
 use crate::input::spin::{self, paint_spin_button};
 use crate::input::style::{DISABLED_TEXT, FieldStyle, Frame, device_border};
 use crate::platform;
-use crate::selection;
 use crate::selection::colors::{SelectionColors, page_active};
+use crate::selection::{self, Behavior};
 use crate::symbols::Symbol;
 use crate::text::{self, Align, LineHeight, Overflow, Text, TextStyle, WhiteSpace};
 
@@ -567,28 +567,32 @@ impl<M: FieldModel> TextField<M> {
         }
     }
 
-    /// A press on the input beside its editor, which puts the caret at the nearest place.
+    /// A press on the input beside its line of text.
     fn press_beside(
         &mut self,
         event: &MouseDownEvent,
-        editor: Bounds<Pixels>,
+        line: Bounds<Pixels>,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) {
-        if self.disabled || window.default_prevented() || editor.contains(&event.position) {
+        if self.disabled || window.default_prevented() || line.contains(&event.position) {
             return;
         }
         window.prevent_default();
-        let x = event.position.x;
-        let at = point(
-            x.clamp(editor.left(), editor.right() - px(1.0)),
-            editor.center().y,
-        );
+        let Point { x, y } = event.position;
+        let to_edge = Behavior::current().moves_to_line_edge();
+        let x = x.clamp(line.left(), line.right() - px(1.0));
         self.editor.update(cx, |state, cx| {
             let text = state.value();
-            let index = state.character_index_for_point(at, window, cx);
-            let end = text.encode_utf16().count();
-            let byte = utf8_range(&text, 0..index.unwrap_or(end)).end;
+            let byte = if to_edge && y < line.top() {
+                0
+            } else if to_edge && y >= line.bottom() {
+                text.len()
+            } else {
+                state
+                    .character_index_for_point(point(x, line.center().y), window, cx)
+                    .map_or(text.len(), |utf16| utf8_range(&text, 0..utf16).end)
+            };
             state.focus(window, cx);
             state.set_selected_range(byte..byte, cx);
         });
@@ -840,12 +844,15 @@ impl<M: FieldModel> Render for TextField<M> {
                 div()
                     .absolute()
                     .left_0()
-                    .top(px((box_height - line_height) / 2.0))
+                    .top_0()
                     .w(px(box_width))
-                    .h(px(line_height))
+                    .h(px(box_height))
                     .overflow_hidden()
                     .child(
                         div()
+                            .absolute()
+                            .left_0()
+                            .top(px((box_height - line_height) / 2.0))
                             .w(px(editor_width))
                             .h(px(line_height))
                             .font_family(text::gpui_family(&style.font))
@@ -893,8 +900,8 @@ impl<M: FieldModel> Render for TextField<M> {
         }
 
         let editor_bounds = Bounds {
-            origin: point(px(left), px(top + (box_height - line_height) / 2.0)),
-            size: size(px(box_width), px(line_height)),
+            origin: point(px(left), px(top)),
+            size: size(px(box_width), px(box_height)),
         };
         let placed = Rc::new(std::cell::Cell::new(None::<Bounds<Pixels>>));
         let pressed_at = placed.clone();

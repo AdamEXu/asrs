@@ -1,5 +1,5 @@
 //! Focused inputs against the `focus/text` vector: Chromium's pixels of the value, its selection
-//! and the placeholder in an active and an inactive window.
+//! and the placeholder in an active and an inactive window, and where presses put the caret.
 
 use std::sync::Arc;
 
@@ -8,13 +8,14 @@ use asrs_parity::pixel::{self, Rgb};
 use asrs_parity::vectors::{self, Record};
 use asrs_ui::capture::HeadlessCapture;
 use asrs_ui::input::{FieldKind, FieldStyle, PlainText, TextField};
-use asrs_ui::parity::Recorder;
+use asrs_ui::parity::{FocusedInput, Recorder};
 use asrs_ui::selection::colors::ForcedActive;
 use asrs_ui::text::snap_remainder;
 use asrs_ui::theme::Appearance;
 use gpui_kit::{
     App, AppContext, Context, Entity, Focusable, InteractiveElement, IntoElement, Keystroke,
-    ParentElement, Render, Styled, Window, div, px, rgb, size,
+    MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, PlatformInput, Render, Styled,
+    Window, div, point, px, rgb, size,
 };
 
 /// The native frame's corners and a glyph a selection ends in differ by this much.
@@ -95,7 +96,7 @@ fn placeholder(control: &str, kind: FieldKind) -> &'static str {
     }
 }
 
-fn press(key: &'static str, times: usize, window: &mut Window, cx: &mut App) {
+fn type_key(key: &'static str, times: usize, window: &mut Window, cx: &mut App) {
     for _ in 0..times {
         window.dispatch_keystroke(Keystroke::parse(key).expect("a key"), cx);
     }
@@ -116,7 +117,7 @@ fn main() {
     });
     let records =
         vectors::load("focus/text/macos-aarch64").unwrap_or_else(|e| panic!("focus/text: {e}"));
-    let (mut compared, mut failures) = (0, Vec::new());
+    let (mut compared, mut presses, mut failures) = (0, 0, Vec::new());
     let mut worst = pixel::Stats::default();
     for record in &records {
         let control = text(record, "control");
@@ -132,7 +133,8 @@ fn main() {
         };
         let scale = record.field("scale").and_then(Json::as_f64).expect("scale") as f32;
         let value = text(record, "value");
-        let selection = record.field("selection").expect("selection");
+        let press = record.field("press").map(numbers);
+        let selection = record.field("selection").unwrap_or(&Json::Null);
         let active = record.field("active") == Some(&Json::Bool(true));
         let rect = numbers(record.field("rect").expect("rect"));
         let [x, y, w, h] = [0, 1, 2, 3].map(|i| rect[i] as f32);
@@ -161,6 +163,56 @@ fn main() {
                 })
             })
             .expect("a window");
+        let close = |capture: &mut HeadlessCapture| {
+            let closed = window.update(capture.context(), |_, window, _| window.remove_window());
+            closed.expect("open");
+            capture.context().update(|cx| {
+                if cx.has_global::<FocusedInput>() {
+                    cx.remove_global::<FocusedInput>();
+                }
+            });
+        };
+        if let Some(press) = press {
+            let position = point(px(x + press[0] as f32), px(y + press[1] as f32));
+            capture.capture(window.into()).expect("capture");
+            let cx = capture.context();
+            cx.update_window(window.into(), |_, window, cx| {
+                window.dispatch_event(
+                    PlatformInput::MouseDown(MouseDownEvent {
+                        button: MouseButton::Left,
+                        position,
+                        click_count: 1,
+                        ..MouseDownEvent::default()
+                    }),
+                    cx,
+                );
+                window.dispatch_event(
+                    PlatformInput::MouseUp(MouseUpEvent {
+                        button: MouseButton::Left,
+                        position,
+                        click_count: 1,
+                        ..MouseUpEvent::default()
+                    }),
+                    cx,
+                );
+            })
+            .expect("open");
+            capture.capture(window.into()).expect("capture");
+            let got = capture
+                .context()
+                .update(|cx| cx.try_global::<FocusedInput>().cloned())
+                .and_then(|input| input.selection.map(|s| s.map(|n| n as f64).to_vec()));
+            let focused = record.field("focused") == Some(&Json::Bool(true));
+            let want = focused.then(|| numbers(record.field("caret").expect("a caret")));
+            if got != want {
+                failures.push(format!(
+                    "{control} {scale}x pressed at {press:?}: {got:?}, not {want:?}"
+                ));
+            }
+            presses += 1;
+            close(&mut capture);
+            continue;
+        }
         window
             .update(capture.context(), |page, window, cx| {
                 page.field.update(cx, |field, cx| {
@@ -177,14 +229,14 @@ fn main() {
             .update_window(window.into(), |_, window, cx| {
                 if let Some(range) = selection.as_array() {
                     let [start, end] = [0, 1].map(|i| range[i].as_f64().expect("an end") as usize);
-                    press("home", 1, window, cx);
-                    press("right", start, window, cx);
-                    press("shift-right", end - start, window, cx);
+                    type_key("home", 1, window, cx);
+                    type_key("right", start, window, cx);
+                    type_key("shift-right", end - start, window, cx);
                 } else if selection
                     .as_str()
                     .is_some_and(|s| s.to_string_lossy() == "typed")
                 {
-                    press("end", 1, window, cx);
+                    type_key("end", 1, window, cx);
                 }
             })
             .expect("open");
@@ -228,11 +280,10 @@ fn main() {
         worst.max_channel = worst.max_channel.max(stats.max_channel);
         worst.exact_mismatch = worst.exact_mismatch.max(stats.exact_mismatch);
         compared += 1;
-        window
-            .update(capture.context(), |_, window, _| window.remove_window())
-            .expect("open");
+        close(&mut capture);
     }
     assert!(compared >= 120, "{compared} records");
+    assert!(presses >= 40, "{presses} presses");
     assert!(
         failures.is_empty(),
         "{} differ:\n{}",
@@ -240,7 +291,7 @@ fn main() {
         failures.join("\n")
     );
     println!(
-        "field text: {compared} fields, at most {} px and {} levels off",
+        "field text: {presses} presses, {compared} fields, at most {} px and {} levels off",
         worst.exact_mismatch, worst.max_channel
     );
 }

@@ -1320,7 +1320,8 @@ has no records (#379): the port applies the rule that the two recorded platforms
 `focus/text` (`src/fieldText.ts`, with `src/fieldTextMain.ts` as its Electron main process, run
 once per device scale) records the pixels of focused inputs under upstream's stylesheets: the
 fixture's controls with each case's value and selection, in an active and an inactive page, the
-caret transparent. Rows are runs of `[count, colour]`. The window is never shown.
+caret transparent. Rows are runs of `[count, colour]`. Presses on an input, its border and padding
+included, are recorded with where they put the caret. The window is never shown.
 `crates/asrs-ui/tests/field_text.rs` draws the same inputs. It is recorded on macOS only.
 
 ### Text selection vectors

@@ -7,7 +7,8 @@ import fs from "node:fs";
 // "typed" (an editing command that leaves the
 // caret at the value's end, scrolled into view) or [start, end]. It then records the pixels of the
 // input's box in a page that is active, through Emulation.setFocusEmulationEnabled, and in one that
-// is not, as rows of runs of colours. The caret is transparent, since it blinks.
+// is not, as rows of runs of colours. The caret is transparent, since it blinks. Then it records where
+// each of the control's `presses`, from the corner of its box, puts the caret in `pressed`.
 
 const request = JSON.parse(fs.readFileSync(process.argv[process.argv.length - 1], "utf8"));
 const TIMEOUT_MS = 600_000;
@@ -96,6 +97,20 @@ app
             if ((await evaluate("document.hasFocus()")) !== active) fail(`${control.name}: document.hasFocus() is not ${active}`);
             lines.push(JSON.stringify({ control: control.name, type: control.type, theme, scale, value, selection, active, rect, rows: await pixels(box) }));
           }
+        }
+        for (const [x, y] of (control.presses ?? []) as [number, number][]) {
+          await win.loadFile(request.page);
+          await send("Emulation.setFocusEmulationEnabled", { enabled: true });
+          const text = JSON.stringify(control.pressed);
+          const rect = await evaluate(`(() => { const i = document.getElementById("i"); i.value = ${text}; const r = i.getBoundingClientRect(); return [r.x, r.y, r.width, r.height]; })()`);
+          await painted();
+          for (const type of ["mouseDown", "mouseUp"] as const) {
+            win.webContents.sendInputEvent({ type, x: Math.floor(rect[0] + x), y: Math.floor(rect[1] + y), button: "left", clickCount: 1 });
+          }
+          await painted();
+          const after = await evaluate(`(() => { const i = document.getElementById("i"); return { focused: document.activeElement === i, caret: [i.selectionStart, i.selectionEnd] }; })()`);
+          lines.push(JSON.stringify({ control: control.name, type: control.type, theme, scale, value: control.pressed, press: [x, y], rect, ...after }));
+          win.webContents.sendInputEvent({ type: "mouseMove", x: 499, y: 99 });
         }
       }
     }
