@@ -175,7 +175,12 @@ impl TextSystem {
         self.lcd_lut.is_some()
             && !self.windows.get(&id).is_some_and(|text| text.grayscale)
             && !self.layers.iter().any(|layer| layer.grayscale(scale))
-            && window.element_opacity() >= 1.0
+            && window.element_opacity() >= self.faded()
+    }
+
+    /// The opacity around the text that does not make it grayscale.
+    fn faded(&self) -> f32 {
+        self.layers.iter().map(|layer| layer.opacity()).product()
     }
 
     /// The window's backdrop, where there is LCD text to read it.
@@ -392,12 +397,21 @@ enum Layer {
     /// A scroller is its own layer where Chromium prefers compositing to LCD text
     /// (`PreferCompositingToLCDText`).
     Scroller,
+    /// CSS opacity that leaves LCD text alone (`save_layer_alpha_should_preserve_lcd_text`).
+    Faded(f32),
 }
 
 impl Layer {
+    fn opacity(self) -> f32 {
+        match self {
+            Layer::Faded(opacity) => opacity,
+            Layer::Page | Layer::Always | Layer::Scroller => 1.0,
+        }
+    }
+
     fn grayscale(self, scale: f32) -> bool {
         match self {
-            Layer::Page => false,
+            Layer::Page | Layer::Faded(_) => false,
             Layer::Always => true,
             Layer::Scroller => scale >= 1.5,
         }
@@ -427,6 +441,14 @@ pub fn scroller(overflows: bool, child: impl IntoElement) -> TextLayer {
         } else {
             Layer::Page
         },
+        child: child.into_any_element(),
+    }
+}
+
+/// CSS opacity on a page without masks, filters or blending, which preserves LCD text.
+pub fn faded(opacity: f32, child: impl IntoElement) -> TextLayer {
+    TextLayer {
+        layer: Layer::Faded(opacity),
         child: child.into_any_element(),
     }
 }
@@ -484,7 +506,8 @@ impl Element for TextLayer {
         cx: &mut App,
     ) {
         cx.default_global::<TextSystem>().layers.push(self.layer);
-        self.child.paint(window, cx);
+        let opacity = matches!(self.layer, Layer::Faded(_)).then(|| self.layer.opacity());
+        window.with_element_opacity(opacity, |window| self.child.paint(window, cx));
         cx.default_global::<TextSystem>().layers.pop();
     }
 }
@@ -992,6 +1015,7 @@ impl Element for Text {
             let _ = window.drop_image(image);
         }
         let may_be_lcd = !self.grayscale && system.may_be_lcd(window);
+        let faded = system.faded();
         let Prepaint { layout, origin } = prepaint;
         let mut selection = Vec::new();
         if self.selected.is_some() {
@@ -1029,7 +1053,7 @@ impl Element for Text {
                 font: &self.style.font,
                 scale,
                 color: self.color,
-                alpha: (self.alpha * 255.0).round() as u8,
+                alpha: (self.alpha * faded * 255.0).round() as u8,
                 lcd: may_be_lcd.then(|| window.painted_scene()),
                 clip: device_rect(window.content_mask().bounds, scale),
             };
@@ -1070,7 +1094,8 @@ impl Element for Text {
                 let (mask, opacity) = match clip {
                     Some([l, t, r, b]) => {
                         let bounds = bounds_of([l, t, r - l, b - t]);
-                        (Some(ContentMask { bounds }), None)
+                        let opacity = (faded != 1.0).then_some(1.0 / faded);
+                        (Some(ContentMask { bounds }), opacity)
                     }
                     None => (None, alpha),
                 };

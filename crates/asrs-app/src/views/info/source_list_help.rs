@@ -247,7 +247,8 @@ impl Painter<'_> {
         if self.selection[self.next].is_empty() {
             self.block(&layout.sources_text, |_| theme.text);
             for line in self.boxes.split_off(first) {
-                self.boxes.push(line.opacity(SOURCES_OPACITY));
+                let line = asrs_ui::text::faded(SOURCES_OPACITY, line);
+                self.boxes.push(div().child(line));
             }
             return;
         }

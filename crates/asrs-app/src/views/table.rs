@@ -765,6 +765,9 @@ impl<H: FrameHost> HubFrame<H> {
                     (s.range.start.block..=s.range.end.block).contains(&index) && visible
                 };
                 let mut over = Vec::new();
+                let in_selection = selected.as_ref().filter(covered).is_some();
+                // A sticky cell is a layer, which the selection leaves without its opaque background.
+                let sticky = |element| text::scroller(overflows && in_selection, element);
                 if let Some(selected) = selected.as_ref().filter(covered) {
                     let backend = &mut **self.text.backend();
                     let text = doc.text(index);
@@ -801,13 +804,13 @@ impl<H: FrameHost> HubFrame<H> {
                     let at = [from, top + CELL_PADDING];
                     let element = grid.text(plain(piece, cell_style(bold), text_color), at);
                     if bold {
-                        first_cells = first_cells.child(element);
+                        first_cells = first_cells.child(sticky(element));
                     } else {
                         cells = cells.child(element);
                     }
                 }
                 if bold {
-                    first_cells = first_cells.children(over);
+                    first_cells = first_cells.children(over.into_iter().map(sticky));
                 } else {
                     cells = cells.children(over);
                 }

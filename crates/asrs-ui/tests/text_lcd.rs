@@ -10,7 +10,9 @@ use asrs_canvas::text::{
     Bounds, FixedAdvance, FontMetrics, Glyph, LcdMask, Mask, Shaped, TextBackend,
 };
 use asrs_ui::gpui::{HeadlessAppContext, NoopTextSystem};
-use asrs_ui::text::{CacheStats, FontSpec, Text, TextStyle, TextSystem, grayscale_layer, scroller};
+use asrs_ui::text::{
+    CacheStats, FontSpec, Text, TextStyle, TextSystem, faded, grayscale_layer, scroller,
+};
 use gpui_kit::{
     AnyElement, AnyWindowHandle, AppContext, Context, IntoElement, ParentElement, Render, Styled,
     Window, div, linear_color_stop, linear_gradient, px, rgb, size,
@@ -223,6 +225,10 @@ fn text_is_grayscale_where_chromium_has_no_opaque_layer() {
     }
     let lcd = f.draw(|| page(0xffffff, text("run").alpha(0.5)));
     assert_eq!(lcd.lcd, 1, "a translucent colour");
+    let lcd = f.draw(|| page(0xffffff, faded(0.25, text("run"))));
+    assert_eq!(lcd.lcd, 1, "opacity that preserves LCD text");
+    let gray = f.draw(|| page(0xffffff, faded(0.75, div().opacity(0.5).child(text("run")))));
+    assert_eq!(gray.lcd, 0, "opacity within it");
 }
 
 #[test]
