@@ -321,6 +321,21 @@ pub struct Field2dViews {
 }
 
 impl Field2dViews {
+    /// Forgets the views of the tabs not in `live` and takes the shown frame of every view but
+    /// `shown`'s: the bitmap stays, to show again the moment its tab is.
+    fn hide(&mut self, live: &HashSet<usize>, shown: Option<usize>) -> Vec<FramePresenter> {
+        let mut hidden = Vec::new();
+        self.tabs.retain(|key, tab| {
+            let keep = live.contains(key);
+            if !keep || Some(*key) != shown && tab.presented.is_some() {
+                hidden.push(std::mem::take(&mut tab.presenter));
+                tab.presented = None;
+            }
+            keep
+        });
+        hidden
+    }
+
     fn over_overlay(&self, x: f64, y: f64) -> bool {
         let covered = self
             .covered
@@ -469,16 +484,9 @@ impl<H: FrameHost> HubFrame<H> {
         let now = self.host().frame_time(cx);
         let views = &mut self.field_2d;
         views.covered = covered;
-        let mut dropped = Vec::new();
-        views.tabs.retain(|key, tab| {
-            let keep = live.contains(key);
-            if !keep {
-                dropped.push(std::mem::take(&mut tab.presenter));
-            }
-            keep
-        });
-        for mut presenter in dropped {
-            presenter.release(cx);
+        let hidden = views.hide(&live, shown.as_ref().map(|&(_, key, _)| key));
+        for mut presenter in hidden {
+            presenter.clear(window, cx);
         }
         views.images.retain(|path, _| paths.contains(path));
         let Some((index, key, path)) = shown else {
@@ -1087,6 +1095,34 @@ fn select_baseline(scale: f32, cx: &mut App) -> f32 {
 mod tests {
     use super::*;
     use crate::views::control_layout_vectors;
+
+    #[test]
+    fn a_hidden_tab_lets_go_of_its_shown_frame_and_keeps_its_bitmap() {
+        let mut views = Field2dViews::default();
+        let style = CanvasStyle {
+            width: 10.0,
+            height: 5.0,
+            rotation: 0.0,
+        };
+        for key in [1, 2, 3] {
+            let tab = views.tabs.entry(key).or_default();
+            tab.bitmap = Pixmap::new(4, 2).map(Arc::new);
+            tab.presented = Some((style, [0; 4], 0));
+        }
+        let live = HashSet::from([1, 2]);
+        assert_eq!(views.hide(&live, Some(2)).len(), 2);
+        assert_eq!(views.tabs.len(), 2);
+        assert!(views.tabs[&1].presented.is_none() && views.tabs[&1].bitmap.is_some());
+        assert!(views.tabs[&2].presented.is_some());
+        assert_eq!(views.hide(&live, Some(2)).len(), 0);
+        assert_eq!(views.hide(&live, None).len(), 1);
+        assert!(
+            views
+                .tabs
+                .values()
+                .all(|t| t.presented.is_none() && t.bitmap.is_some())
+        );
+    }
 
     #[test]
     fn settings_boxes_match_blink() {
