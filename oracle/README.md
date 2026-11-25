@@ -1424,6 +1424,7 @@ Scenario file:
 | `gl` | `false` | 3D scenario: GL switches and drawing-buffer dumps |
 | `prefs`, `userData` | `{}` | prefs merged by upstream over its defaults; extra files seeded into userData: JSON values, or `{"$file": path}` for a file under `parity/scenarios` |
 | `robot` | | `{account, files, stall}`: the robot `robotServer.ts` plays for the run on 127.0.0.1, where the scenario's `prefs.robotAddress` points |
+| `titleBar` | `false` | the points of mouse and wheel actions in the hub were measured under the 38 px title bar that macOS and Windows have above the viewer. Linux has none: there the driver moves points in the viewer above the tab controls up by it |
 | `actions` | | in order, below |
 
 Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-files` message;
@@ -1432,7 +1433,9 @@ Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-fi
 the folder of a clip `src/app/clips.ts` draws into `inputs/`, as `video-data`'s `imgFolder`, dispatched on the hub's
 `messagePort`, e.g. `new-tab`, `restore-state`), `{"eval": js}`,
 `{"selection": [method, ...args]}`,
-`{"mouse": "move"|"down"|"up"|"click"|"leave", "x", "y", "modifiers": [...]}`,
+`{"mouse": "move"|"down"|"up"|"click"|"leave", "x", "y", "modifiers": [...], "on": selector}` (`on`
+is what the point has to hit; off macOS, where text is another size, it moves to that element's
+centre when it does not),
 `{"wheel": {"x", "y", "deltaX", "deltaY", "wheelTicksX", "wheelTicksY", "precise"}}`,
 `{"key": keyCode, "modifiers": [...]}` (`commandOrControl` is Cmd on macOS and Ctrl elsewhere), `{"dialog": button index | file name | null}` (queued
 answer for the next dialog; a name ending in `/` is a folder that exists), `{"menu": [label, ...]}` (clicks the item at that label path of the

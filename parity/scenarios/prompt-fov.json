@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U19): the camera field of view set through the 3D camera menu's prompt, a second edit cancelled, and a third one given Enter on the focused exit button, which confirms and then cancels; the saved HubState holds the first edit's value at the later captures. Only the prompt is captured, since the hub's 3D view is field-3d's",
+  "titleBar": true,
   "actions": [
     {
       "main": "restore-state",

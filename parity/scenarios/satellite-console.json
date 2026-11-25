@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U23): a console popped out, without its export and close buttons; a row hovered and clicked through the hub's selection, and a filter typed in the satellite, which the hub's own console does not share",
+  "titleBar": true,
   "actions": [
     {
       "open": [

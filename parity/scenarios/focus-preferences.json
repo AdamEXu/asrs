@@ -1,5 +1,6 @@
 {
   "about": "Focus rings (#355) in the active preferences window: selects reached with Tab, the same window inactive, and a pressed button before and after a key",
+  "titleBar": true,
   "actions": [
     {
       "open": [

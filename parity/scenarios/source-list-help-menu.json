@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U22): the same help window, opened from the Help item of an item's type menu",
+  "titleBar": true,
   "scales": [
     1
   ],

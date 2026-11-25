@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U19): the prompt windows, each opened through upstream's own route on both sides (the tab and axis context menus' items, and main's start-export) and driven with real input: a tab renamed, a locked range edited, a conversion prompt cancelled and another confirmed with typed picks and a typed factor, and the export prompt filled in and cancelled. Enter on the focused exit button, which confirms and then cancels, undoes a rename and a range and keeps a conversion. Saved HubState (title, locked range, conversion) and recent-units.json are compared; nothing is masked but focused text inputs",
+  "titleBar": true,
   "actions": [
     {
       "open": [

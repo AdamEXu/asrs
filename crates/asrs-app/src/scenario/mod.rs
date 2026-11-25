@@ -13,6 +13,8 @@ pub use patches::{COLUMNS, PATCH, patch_colours};
 #[cfg(feature = "parity")]
 pub use run::{run, run_from_args};
 
+use std::path::Path;
+
 use asrs_js::ops;
 use asrs_js::value::JsValue;
 use asrs_model::messages::MainToHub;
@@ -232,7 +234,7 @@ pub fn default_window() -> (f64, f64) {
     (options.width, options.height)
 }
 
-const TOP_KEYS: [&str; 11] = [
+const TOP_KEYS: [&str; 12] = [
     "page",
     "window",
     "scales",
@@ -242,6 +244,7 @@ const TOP_KEYS: [&str; 11] = [
     "userData",
     "robot",
     "platforms",
+    "titleBar",
     "actions",
     "about",
 ];
@@ -471,6 +474,26 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
 }
 
 impl Scenario {
+    /// Moves each mouse and wheel action to where the Electron driver's `run.json` says it went.
+    pub fn place(&mut self, run: &Path) -> Result<(), String> {
+        let text = std::fs::read_to_string(run).map_err(|e| e.to_string())?;
+        let run = asrs_js::json::parse_str(&text).map_err(|e| format!("{e:?}"))?;
+        let points = run.get("points").ok_or("no points")?;
+        for (i, action) in self.actions.iter_mut().enumerate() {
+            let (x, y) = match action {
+                Action::Mouse { x, y, .. } => (x, y),
+                Action::Wheel(wheel) => (&mut wheel.x, &mut wheel.y),
+                _ => continue,
+            };
+            let point = points
+                .get(&i.to_string())
+                .ok_or_else(|| format!("action {i} has no point"))?;
+            *x = number(point, "x", None)?;
+            *y = number(point, "y", None)?;
+        }
+        Ok(())
+    }
+
     pub fn parse(name: &str, text: &str) -> Result<Self, String> {
         let root = asrs_js::json::parse_str(text).map_err(|e| format!("{name}: {e:?}"))?;
         if root.as_object().is_none() {

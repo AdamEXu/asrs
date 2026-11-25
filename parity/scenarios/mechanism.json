@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U16): an empty restored Mechanism tab on the generated panels log at a selected time, its SVG hidden; /Mech/Arm and then /Mech/Claw dragged from the sidebar into the source list with the pointer (one mechanism, then both merged), an earlier time, and the controls resized so the SVG sits on half pixels and at another size. Saved HubState is compared at each capture; nothing is masked",
+  "titleBar": true,
   "actions": [
     {
       "open": [

@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U23): a mechanism tab popped out, whose window takes the mechanism's aspect ratio, at two times",
+  "titleBar": true,
   "actions": [
     {
       "open": [

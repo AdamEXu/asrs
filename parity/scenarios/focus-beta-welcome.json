@@ -1,5 +1,6 @@
 {
   "about": "Focus rings (#355) in the active beta welcome window: the Continue button reached with Tab and pressed, the checkboxes, which take none, and the window inactive",
+  "titleBar": true,
   "userData": {
     "beta-2027.json": {
       "surveyStatus": false,

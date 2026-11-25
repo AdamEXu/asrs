@@ -1,5 +1,6 @@
 {
   "about": "Focus rings (#355) in the active hub: the console tab's buttons, pressed and after keys",
+  "titleBar": true,
   "actions": [
     {
       "open": [

@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U14): the generated drive log on a restored empty Statistics tab; /Drive/LeftVelocity and /Drive/RightVelocity dragged from the sidebar into the source list with the pointer, the data range and step size typed into their fields (committed by a click elsewhere), the minimum stepped with the arrow keys, a negative step size that upstream replaces, a bar hovered (tooltip and hover colours), the tab left for Documentation and shown again, trackpad scrolling of the values table to its end, then a restored tab with reference, relative and absolute error sources over the visible range, whose table is wider than half the tab, scrolled sideways. Saved HubState is compared at each capture. Nothing is masked but the focused field (gate 5)",
+  "titleBar": true,
   "actions": [
     {
       "open": [

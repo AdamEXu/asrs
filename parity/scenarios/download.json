@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U21): the download window, opened through the application menu's own item on both sides against a scripted robot that only lets the roboRIO account in. Captures the list (every icon, sizes, randomized names last), hover, selection and range selection, refreshes while selected, the list scrolling after a resize, a multiple and a folder download, the same download again (nothing new), a single download with its open question declined, and a transfer the robot stalls halfway. The downloaded files are compared byte for byte",
+  "titleBar": true,
   "prefs": {
     "robotAddress": "127.000.00.1",
     "remotePath": "/home/lvuser/logs",

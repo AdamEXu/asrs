@@ -38,7 +38,8 @@ with run.json and captures/<name>.{png,json} plus canvas and 3D dumps.
                   build asrs with the parity feature and run each scenario headless into
                   target/parity/port/<label> (default `run`); logs a scenario opens as
                   `app:<name>` come from the inputs/ the Electron driver wrote for that
-                  scenario under target/parity/app/<upstream label> (default: the port label)
+                  scenario under target/parity/app/<upstream label> (default: the port label),
+                  and the points of its mouse and wheel actions from where that driver sent them
   check           the port's exit criteria: colour-patch and hub-empty at 1x and 2x, every
                   capture the scenario's window size times the scale, every patch exact
   selftest [<upstream variant dir>...]
@@ -1007,6 +1008,10 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
             .collect();
         work_areas.sort();
         work_areas.dedup();
+        let points = !variants.is_empty()
+            && variants.iter().all(|v| {
+                read_json(&v.join("run.json")).is_ok_and(|run| run.get("points").is_some())
+            });
         let file = scenarios.join(format!("{name}.json"));
         let paths = Paths::new()?;
         let robot = Robot::start(&paths, &file)?;
@@ -1032,6 +1037,12 @@ fn run_port(options: &PortOptions) -> Result<PathBuf> {
                 work_areas
                     .into_iter()
                     .flat_map(|area| ["--work-area".to_owned(), area]),
+            )
+            .args(
+                points
+                    .then_some([std::ffi::OsStr::new("--points"), upstream.as_os_str()])
+                    .into_iter()
+                    .flatten(),
             )
             .args(
                 robot
