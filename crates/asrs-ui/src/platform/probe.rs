@@ -208,6 +208,16 @@ pub fn post_window_notification(window: &Window, name: &str) {
     imp::probe::post_window_notification(window, name);
 }
 
+pub fn can_become_main(window: &Window) -> Option<bool> {
+    imp::probe::can_become_main(window)
+}
+
+/// Has AppKit make `window` the main window from the run loop as in an active app, which this one
+/// need not be, and which takes no focus.
+pub fn make_main(window: &Window) {
+    imp::probe::make_main(window);
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowChrome {
     pub toolbar: bool,

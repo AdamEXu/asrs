@@ -2,8 +2,8 @@
 
 //! The app's own windows on macOS, never shown and in an app that stays in the background, against
 //! what Electron's did in `parity/windows/macos.json`: where a first launch's hub and a satellite
-//! without saved bounds open, and which of a window's notifications dim a prompt and the Download
-//! window and order the hubs.
+//! without saved bounds open, which of a window's notifications dim a prompt and the Download window
+//! and order the hubs, and that AppKit makes each of them main, panels too.
 
 use std::time::Duration;
 
@@ -114,6 +114,10 @@ async fn focus(recording: &Json, hub: WindowId, cx: &mut AsyncApp) {
         .update(|cx| download::open(cx, hub, "darwin"))
         .expect("download")
         .expect("new");
+    let (preferences, preferences_view) = cx
+        .update(|cx| prompts::open_preferences(cx, hub, |_, _| {}))
+        .expect("preferences")
+        .expect("new");
     let other = cx
         .update(|cx| windows::open_hub(cx, None, blank))
         .expect("a hub")
@@ -157,8 +161,37 @@ async fn focus(recording: &Json, hub: WindowId, cx: &mut AsyncApp) {
             }
             steps += 1;
         }
+        let main = with_window(cx, id, |window, _| probe::can_become_main(window));
+        let theirs = record.get("canBecomeMain").map(Json::to_compact);
+        assert_eq!(main.map(|main| main.to_string()), theirs, "{window:?}");
     }
     assert_eq!(steps, 42);
+
+    with_window(cx, preferences, |window, _| {
+        probe::post_window_notification(window, "NSWindowDidResignMainNotification");
+    });
+    settle(cx).await;
+    let dimmed = |cx: &mut AsyncApp| {
+        cx.update(|cx| {
+            [
+                prompt_view.read(cx).page().blurred(),
+                preferences_view.read(cx).page().blurred(),
+                download_view.read(cx).page().blurred(),
+            ]
+        })
+    };
+    let mut expected = [true; 3];
+    assert_eq!(dimmed(cx), expected);
+    for (i, id) in [prompt, preferences, download].into_iter().enumerate() {
+        with_window(cx, id, |window, _| probe::make_main(window));
+        settle(cx).await;
+        expected[i] = false;
+        assert_eq!(dimmed(cx), expected);
+    }
+    cx.update(|cx| Windows::raise(cx, other));
+    with_window(cx, hub, |window, _| probe::make_main(window));
+    settle(cx).await;
+    assert_eq!(cx.update(|cx| Windows::manager(cx).hubs()[0]), hub);
 }
 
 fn main() {
