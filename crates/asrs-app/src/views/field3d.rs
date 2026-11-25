@@ -71,12 +71,6 @@ pub struct WwwRoot(pub PathBuf);
 
 impl Global for WwwRoot {}
 
-/// `(prefers-reduced-motion: reduce)`, which parity scenarios set as the Electron driver does.
-#[derive(Clone, Copy, Debug, Default)]
-pub struct ReducedMotion(pub bool);
-
-impl Global for ReducedMotion {}
-
 /// What `Field3dRendererImpl.render` reads from its canvas, the canvas's parent and `window`.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct CanvasInputs {
@@ -897,7 +891,7 @@ impl<H: FrameHost> HubFrame<H> {
             parent: Some(parent),
             device_pixel_ratio: f64::from(dpr),
             dark,
-            reduced_motion: cx.try_global::<ReducedMotion>().is_some_and(|r| r.0),
+            reduced_motion: platform::motion::prefers_reduced_motion(cx),
         });
         let image = view.presenter.image().cloned();
 

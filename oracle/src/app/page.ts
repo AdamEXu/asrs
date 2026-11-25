@@ -69,6 +69,7 @@ export function domDump(probes: string[], maskSelectors: string[]) {
     return [r.x, r.y, r.width, r.height];
   };
   const visible = (el: Element) => el.getClientRects().length > 0 && getComputedStyle(el).visibility !== "hidden";
+  const clippedAway = (el: Element) => el.clientWidth === 0 && getComputedStyle(el).overflowX === "hidden";
 
   const probed: Record<string, number[][]> = {};
   for (const selector of probes) {
@@ -83,7 +84,7 @@ export function domDump(probes: string[], maskSelectors: string[]) {
   for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
     const text = node.textContent ?? "";
     const parent = node.parentElement;
-    if (text.trim() === "" || parent === null || !visible(parent)) continue;
+    if (text.trim() === "" || parent === null || !visible(parent) || clippedAway(parent)) continue;
     range.selectNodeContents(node);
     const rects = Array.from(range.getClientRects())
       .filter((r) => r.width > 0 && r.height > 0)
