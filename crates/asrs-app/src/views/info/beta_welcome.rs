@@ -64,6 +64,8 @@ pub struct BetaWelcomePage {
     /// The control a held Space is pressing.
     space: Option<Control>,
     fade: Option<Fade>,
+    /// Where the checkboxes and the button were drawn.
+    controls: Option<([LuRect; CHECKBOXES], LuRect)>,
     _keys: Subscription,
 }
 
@@ -86,6 +88,7 @@ impl BetaWelcomePage {
             pressed: None,
             space: None,
             fade: None,
+            controls: None,
             _keys: Self::keys(window, cx),
         }
     }
@@ -182,7 +185,15 @@ impl BetaWelcomePage {
             (Some(i), false) => (i + 1 < stops.len()).then_some(i + 1),
             (Some(i), true) => i.checked_sub(1),
         };
-        self.focus_on(next.map(|i| stops[i]), window, cx);
+        let next = next.map(|i| stops[i]);
+        self.focus_on(next, window, cx);
+        if let (Some(control), Some((checkboxes, button))) = (next, &self.controls) {
+            let [_, y, _, h] = match control {
+                Control::Checkbox(index) => checkboxes[index],
+                Control::Button => *button,
+            };
+            self.scroll.reveal(y, h);
+        }
         cx.notify();
     }
 
@@ -404,6 +415,8 @@ impl Render for BetaWelcomePage {
             layout = BetaLayout::new(t, &self.page, self.app_name, width, scale);
         }
         self.scroll.lay_out(layout.height, window, cx);
+        let checkboxes = std::array::from_fn(|i| layout.rows[i].checkbox);
+        self.controls = Some((checkboxes, layout.button));
         if let Some(fade) = self.fade {
             if cx.background_executor().now() - fade.start < OPACITY_TRANSITION {
                 window.request_animation_frame();
