@@ -25,11 +25,12 @@ use asrs_ui::gpui::{
 };
 use asrs_ui::icon::{Icon, IconFit, IconSource};
 use asrs_ui::symbols::Symbol;
-use asrs_ui::text::{self, Measurer, Text, TextStyle, snap_remainder};
+use asrs_ui::text::{self, ELLIPSIS, Measurer, Text, TextStyle, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 use asrs_ui::tooltip::{titled_rtl, untitled};
 
 use super::frame::{FrameHost, HubFrame};
+use super::large_table::HandFade;
 
 const TITLE_HEIGHT: f64 = 30.0;
 const BUTTON: f32 = 25.0;
@@ -116,6 +117,7 @@ pub struct ListsLayout {
     scroll: HashMap<String, ScrollHandle>,
     /// `div.list`'s place in the focus order.
     places: HashMap<String, FocusHandle>,
+    hands: HashMap<String, HandFade>,
     measurer: Measurer,
     body_width: f64,
     scale: f32,
@@ -127,6 +129,7 @@ impl Default for ListsLayout {
             lists: HashMap::new(),
             scroll: HashMap::new(),
             places: HashMap::new(),
+            hands: HashMap::new(),
             measurer: Measurer::default(),
             body_width: 0.0,
             scale: 1.0,
@@ -387,6 +390,7 @@ fn item_body(
     appearance: Appearance,
     dispatch: &Option<Dispatch>,
     places: Option<&ItemPlaces>,
+    cx: &mut App,
 ) -> Stateful<Div> {
     let ItemPlace {
         width,
@@ -490,6 +494,16 @@ fn item_body(
         let key = r.log_key.to_string_lossy();
         let child_inset = if item.child { CHILD_INDENT } else { 0.0 };
         let max = (width - 31.0 - child_inset - type_width - 55.0).max(0.0);
+        let key_text = r.key_text.to_string_lossy();
+        let (key_width, _) = text::measure(cx, &key_style(), &key_text, scale);
+        let cut = key_width > max;
+        let layout = text::layout(cx, &key_style(), &key_text, scale, Some(max as f32));
+        let mut key_line = Text::new(key_text, key_style())
+            .color(theme.text)
+            .subpixel(text_dx(NAME_LEFT + indent + type_width), 0.0);
+        if cut {
+            key_line = key_line.content_width(max);
+        }
         let mut key_box = div()
             .id(("sl-key", index))
             .at_place(places, |places| places.text.clone())
@@ -500,19 +514,21 @@ fn item_body(
             .h(px(30.0))
             .max_w(px(max as f32))
             .overflow_hidden()
-            .child(
-                Text::new(r.key_text.to_string_lossy(), key_style())
-                    .color(theme.text)
-                    .subpixel(text_dx(NAME_LEFT + indent + type_width), 0.0),
-            )
+            .child(key_line)
             .child(untitled(
                 div().absolute().left_0().right_0().top(px(6.0)).h(px(18.0)),
             ));
         if !r.available {
+            // The ellipsis is not decorated.
+            let from = layout.lines.first().map_or(0, |line| {
+                let decorated = line.fragments.iter();
+                let decorated = decorated.filter(|f| line.cut_at.is_none() || f.text != ELLIPSIS);
+                decorated.map(|f| f.x).min().unwrap_or(0)
+            });
             key_box = key_box.child(
                 div()
                     .absolute()
-                    .left_0()
+                    .left(px(from as f32 / 64.0 / scale))
                     .right_0()
                     .top(px(16.0))
                     .h(px(1.0))
@@ -600,7 +616,13 @@ fn item_body(
 }
 
 /// `#dragItem`'s copy of a dragged item: `clientWidth` wide, 30 px tall, without borders.
-pub fn drag_item(item: &ItemView, width: f64, blurred: bool, appearance: Appearance) -> AnyElement {
+pub fn drag_item(
+    item: &ItemView,
+    width: f64,
+    blurred: bool,
+    appearance: Appearance,
+    cx: &mut App,
+) -> AnyElement {
     div()
         .w(px(width as f32))
         .h(px(30.0))
@@ -618,6 +640,7 @@ pub fn drag_item(item: &ItemView, width: f64, blurred: bool, appearance: Appeara
             appearance,
             &None,
             None,
+            cx,
         ))
         .into_any_element()
 }
@@ -708,9 +731,23 @@ impl<H: FrameHost> HubFrame<H> {
             .into_iter()
             .map(|(list, root)| (Shown::of(list, self.host().hub(cx)), root))
             .collect();
+        let now = self.host().frame_time(cx);
+        geometry
+            .0
+            .borrow_mut()
+            .hands
+            .retain(|uuid, _| shown.iter().any(|(list, _)| list.uuid == *uuid));
         let mut out = Vec::new();
         for (at, (list, root)) in shown.into_iter().enumerate() {
             let uuid = list.uuid.clone();
+            let (hand, fading) = {
+                let mut g = geometry.0.borrow_mut();
+                let hand = g.hands.entry(uuid.clone()).or_default();
+                hand.opacity(list.hand_icon, now)
+            };
+            if fading {
+                window.request_animation_frame();
+            }
             let (layout, scroll) = {
                 let g = geometry.0.borrow();
                 (
@@ -740,7 +777,7 @@ impl<H: FrameHost> HubFrame<H> {
             }
             let scale = f64::from(geometry.0.borrow().scale);
             out.push(self.list_element(
-                at, &list, &layout, scroll, root, controls, scale, appearance, window, cx,
+                at, &list, &layout, scroll, root, controls, hand, scale, appearance, window, cx,
             ));
         }
         out
@@ -755,6 +792,7 @@ impl<H: FrameHost> HubFrame<H> {
         scroll: ScrollHandle,
         root: ListRoot,
         controls: [f64; 4],
+        hand: f64,
         scale: f64,
         appearance: Appearance,
         window: &mut Window,
@@ -895,7 +933,7 @@ impl<H: FrameHost> HubFrame<H> {
                 blurred: list.blurred[1],
             };
             let places = ItemPlaces::new(&uuid, index, window, cx);
-            let row = item_body(item, index, place, appearance, &dispatch, Some(&places))
+            let row = item_body(item, index, place, appearance, &dispatch, Some(&places), cx)
                 .on_mouse_down(MouseButton::Right, {
                     let uuid = uuid.clone();
                     cx.listener(move |frame, e: &MouseDownEvent, _, cx| {
@@ -920,7 +958,7 @@ impl<H: FrameHost> HubFrame<H> {
                     .top(px((snap(r.y + r.height / 2.0 + 15.0 - 30.0) - r.y) as f32))
                     .w(px(60.0))
                     .h(px(60.0))
-                    .opacity(0.15)
+                    .opacity(hand as f32)
                     .child(
                         Icon::new(hand_icon(), if dark { chains::INVERT } else { "" })
                             .fit(IconFit::Natural),

@@ -1,0 +1,87 @@
+{
+  "about": "Interaction (#280): the export prompt confirmed twice, the second time after the save dialog was cancelled; the dialogs and the CSV files are compared. Nothing is masked",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "dialog": "first.csv"
+    },
+    {
+      "main": "start-export"
+    },
+    {
+      "prompt": "export"
+    },
+    {
+      "mouse": "move",
+      "x": 277,
+      "y": 166
+    },
+    {
+      "mouse": "click",
+      "x": 277,
+      "y": 166
+    },
+    {
+      "prompt": null
+    },
+    {
+      "idle": true
+    },
+    {
+      "dialog": null
+    },
+    {
+      "dialog": "second.csv"
+    },
+    {
+      "main": "start-export"
+    },
+    {
+      "prompt": "export"
+    },
+    {
+      "mouse": "move",
+      "x": 277,
+      "y": 166
+    },
+    {
+      "mouse": "click",
+      "x": 277,
+      "y": 166
+    },
+    {
+      "wait": 200
+    },
+    {
+      "mouse": "move",
+      "x": 277,
+      "y": 166
+    },
+    {
+      "mouse": "click",
+      "x": 277,
+      "y": 166
+    },
+    {
+      "prompt": null
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "exported",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content"
+      ]
+    }
+  ]
+}

@@ -40,6 +40,8 @@ const ROW_HEIGHT: f64 = 30.0;
 const INLINE_HEIGHT: f32 = 18.0;
 const TUNING_INPUT_WIDTH: f64 = 56.0;
 const BOOLEAN_WIDTH: f64 = 9.0;
+/// Its bottom is on the baseline of `div.field-value`'s line.
+const BOOLEAN_TOP: f32 = 11.0;
 const RESULTS_ITEM_HEIGHT: f64 = 25.0;
 const RESULTS_MAX_HEIGHT: f64 = 290.0;
 
@@ -689,16 +691,16 @@ impl SidebarView {
         if !row.value_hidden
             && let Some(value) = self.value(row, appearance, window, cx)
         {
-            container = container.child(
-                div()
-                    .absolute()
-                    .right(px(12.0))
-                    .top_0()
-                    .h(px(ROW_HEIGHT as f32))
-                    .flex()
-                    .items_center()
-                    .child(value),
-            );
+            let line = div()
+                .absolute()
+                .right(px(12.0))
+                .top_0()
+                .h(px(ROW_HEIGHT as f32))
+                .flex();
+            container = container.child(match row.value {
+                RowValue::Bool { .. } => line.child(value),
+                _ => line.items_center().child(value),
+            });
         }
         container.into_any_element()
     }
@@ -742,19 +744,19 @@ impl SidebarView {
             } => {
                 let fill = fill.as_ref()?.to_string_lossy();
                 let line = if *line_hidden == Some(true) {
-                    String::new()
+                    ""
                 } else {
-                    r#"<line x1="1.32" y1="1.32" x2="7.68" y2="7.68" stroke-width="2" stroke="white"/>"#
-                        .to_owned()
+                    r#"<clipPath id="c"><circle cx="4.5" cy="4.5" r="4.5"/></clipPath><line x2="9" y2="9" stroke-width="2" stroke="white" clip-path="url(#c)"/>"#
                 };
-                let svg = format!(
-                    r#"<svg xmlns="http://www.w3.org/2000/svg" width="9" height="9"><circle cx="4.5" cy="4.5" r="4.5" fill="{fill}"/>{line}</svg>"#
-                );
                 let size = if *tunable { 9.0 * 1.75 } else { 9.0 };
+                let svg = format!(
+                    r#"<svg xmlns="http://www.w3.org/2000/svg" width="{size}" height="{size}" viewBox="0 0 9 9"><circle cx="4.5" cy="4.5" r="4.5" fill="{fill}"/>{line}</svg>"#
+                );
                 let offset = (size - 9.0) / 2.0;
                 let mut el = div()
                     .id(("field-value-svg", flat))
                     .relative()
+                    .mt(px(BOOLEAN_TOP))
                     .w(px(9.0))
                     .h(px(9.0))
                     .child(
@@ -764,7 +766,9 @@ impl SidebarView {
                             .top(px(-offset))
                             .w(px(size))
                             .h(px(size))
-                            .child(Icon::new(IconSource::Svg(svg.into()), "")),
+                            .child(
+                                Icon::new(IconSource::Svg(svg.into()), "").fit(IconFit::Natural),
+                            ),
                     );
                 if *tunable {
                     el = el.on_click(cx.listener(move |view, _, _, cx| {

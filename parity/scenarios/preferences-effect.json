@@ -1,0 +1,233 @@
+{
+  "about": "Interaction: the preferences window's effect on the hub: original timestamps and wall-blue coordinates picked in the window and confirmed, shown by the line graph and by a 2D field, and the window opened again with what was written. prefs.json is compared",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Graph",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            },
+            {
+              "type": 2,
+              "title": "Field",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "robot",
+                    "logKey": "/Odometry/Robot",
+                    "logType": "Pose2d",
+                    "visible": true,
+                    "options": {
+                      "model": "KitBot",
+                      "bumpers": "alliance"
+                    }
+                  }
+                ],
+                "field": "FRC:Evergreen",
+                "orientation": 0,
+                "size": "medium"
+              },
+              "controllerUUID": "field2d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        3.25
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "before",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "appMenu": [
+        "Settings...",
+        "Show Preferences..."
+      ]
+    },
+    {
+      "prompt": "preferences"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "b"
+    },
+    {
+      "key": "Tab"
+    },
+    {
+      "key": "o"
+    },
+    {
+      "capture": "edited",
+      "probes": [
+        "td.input > select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 377,
+      "y": 450
+    },
+    {
+      "mouse": "click",
+      "x": 377,
+      "y": 450
+    },
+    {
+      "prompt": null
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "graph",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "appMenu": [
+        "Next Tab"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "field",
+      "probes": [
+        ".renderer-content",
+        ".controls-content",
+        ".field-2d-canvas"
+      ]
+    }
+  ]
+}

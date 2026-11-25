@@ -859,6 +859,17 @@ impl Variant<'_> {
     }
 
     fn resolve_log(&self, spec: &str) -> Result<String, String> {
+        if let Some(public) = spec.strip_prefix("public:") {
+            let cache = std::env::var_os("ASRS_CACHE")
+                .ok_or_else(|| format!("{spec} needs ASRS_CACHE, which xtask sets"))?;
+            let file = Path::new(&cache).join("public-logs").join(public);
+            return match file.is_file() {
+                true => Ok(file.to_string_lossy().into_owned()),
+                false => Err(format!(
+                    "{spec} is not fetched; run `cargo xtask corpus fetch`"
+                )),
+            };
+        }
         let Some(generated) = spec.strip_prefix("app:") else {
             return std::path::absolute(spec)
                 .map(|p| p.to_string_lossy().into_owned())
@@ -1377,6 +1388,9 @@ impl Variant<'_> {
                                 exceptions
                                     .borrow_mut()
                                     .push(format!("main {}: {e:?}", m.name.name()));
+                            }
+                            if m.name == HubToMain::UpdatePreferences {
+                                MainProcess::send_all_preferences(cx);
                             }
                             export_flow::hub_message(id, m, cx);
                             if m.name == HubToMain::SaveState {
