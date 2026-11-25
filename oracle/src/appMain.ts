@@ -925,9 +925,9 @@ function finish(elapsedMs: number | null, error: unknown) {
   };
   fs.writeFileSync(path.join(out, "run.json"), JSON.stringify(record, null, 1) + "\n");
   if (errors.length > 0) console.error(`${scenario.name} ${scale}x ${theme}:\n  ${errors.join("\n  ")}`);
-  // On Linux exiting past an open modal prompt spins for minutes.
-  for (const win of windows) if (!win.isDestroyed()) win.destroy();
-  app.exit(errors.length > 0 ? 1 : 0);
+  // On Linux exiting past an open modal prompt crashes.
+  for (const win of [...windows].reverse()) if (!win.isDestroyed()) win.destroy();
+  setTimeout(() => app.exit(errors.length > 0 ? 1 : 0), 200);
 }
 
 process.on("uncaughtException", (e) => {
