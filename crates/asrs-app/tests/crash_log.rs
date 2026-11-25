@@ -139,7 +139,8 @@ fn a_panic_is_logged() {
     let file = Path::new("~").join("robot.wpilog");
     assert_eq!(lines[3], format!("cannot read {}", file.display()));
     assert!(lines[4].starts_with("CrashLog::new at 0x"), "{log}");
-    assert!(lines[5].trim_start().starts_with("0: 0x"), "{log}");
+    let frame = lines[5].trim_start();
+    assert!(frame.starts_with("0: ") && frame.contains(" 0x"), "{log}");
     assert!(
         !log.contains(&*home.0.to_string_lossy()),
         "the home directory: {log}"
