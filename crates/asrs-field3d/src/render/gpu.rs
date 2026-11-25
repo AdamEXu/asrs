@@ -262,6 +262,10 @@ impl Renderer {
         .map_err(|e| RenderError::Device(e.to_string()))?;
         let source = [
             include_str!("phong.wgsl"),
+            match adapter_info.backend {
+                wgpu::Backend::Vulkan => include_str!("vulkan.wgsl"),
+                _ => include_str!("metal.wgsl"),
+            },
             include_str!("shadow.wgsl"),
             include_str!("lines.wgsl"),
         ]
