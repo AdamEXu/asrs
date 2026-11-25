@@ -374,69 +374,34 @@ pub fn run_worker(files: &[Option<&[u8]>], post: &mut impl FnMut(Response)) -> R
                 post(Response::Failed);
                 return Ok(());
             }
+            let trip_time_ms = JsString::from("/DSLog/TripTimeMS");
+            let packet_loss = JsString::from("/DSLog/PacketLoss");
+            let battery_voltage = JsString::from("/DSLog/BatteryVoltage");
+            let cpu_utilization = JsString::from("/DSLog/CPUUtilization");
+            let brownout = JsString::from("/DSLog/Status/Brownout");
+            let watchdog = JsString::from("/DSLog/Status/Watchdog");
+            let ds_teleop = JsString::from("/DSLog/Status/DSTeleop");
+            let ds_disabled = JsString::from("/DSLog/Status/DSDisabled");
+            let robot_teleop = JsString::from("/DSLog/Status/RobotTeleop");
+            let robot_auto = JsString::from("/DSLog/Status/RobotAuto");
+            let robot_disabled = JsString::from("/DSLog/Status/RobotDisabled");
+            let can_utilization = JsString::from("/DSLog/CANUtilization");
+            let power_distribution_currents = JsString::from("/DSLog/PowerDistributionCurrents");
             ds_log.for_each(&mut |entry| {
-                log.put_number(
-                    &JsString::from("/DSLog/TripTimeMS"),
-                    entry.timestamp,
-                    entry.trip_time_ms,
-                );
-                log.put_number(
-                    &JsString::from("/DSLog/PacketLoss"),
-                    entry.timestamp,
-                    entry.packet_loss,
-                );
-                log.put_number(
-                    &JsString::from("/DSLog/BatteryVoltage"),
-                    entry.timestamp,
-                    entry.battery_volts,
-                );
-                log.put_number(
-                    &JsString::from("/DSLog/CPUUtilization"),
-                    entry.timestamp,
-                    entry.cpu_utilization,
-                );
-                log.put_boolean(
-                    &JsString::from("/DSLog/Status/Brownout"),
-                    entry.timestamp,
-                    entry.brownout,
-                );
-                log.put_boolean(
-                    &JsString::from("/DSLog/Status/Watchdog"),
-                    entry.timestamp,
-                    entry.watchdog,
-                );
-                log.put_boolean(
-                    &JsString::from("/DSLog/Status/DSTeleop"),
-                    entry.timestamp,
-                    entry.ds_teleop,
-                );
-                log.put_boolean(
-                    &JsString::from("/DSLog/Status/DSDisabled"),
-                    entry.timestamp,
-                    entry.ds_disabled,
-                );
-                log.put_boolean(
-                    &JsString::from("/DSLog/Status/RobotTeleop"),
-                    entry.timestamp,
-                    entry.robot_teleop,
-                );
-                log.put_boolean(
-                    &JsString::from("/DSLog/Status/RobotAuto"),
-                    entry.timestamp,
-                    entry.robot_auto,
-                );
-                log.put_boolean(
-                    &JsString::from("/DSLog/Status/RobotDisabled"),
-                    entry.timestamp,
-                    entry.robot_disabled,
-                );
-                log.put_number(
-                    &JsString::from("/DSLog/CANUtilization"),
-                    entry.timestamp,
-                    entry.can_utilization,
-                );
+                log.put_number(&trip_time_ms, entry.timestamp, entry.trip_time_ms);
+                log.put_number(&packet_loss, entry.timestamp, entry.packet_loss);
+                log.put_number(&battery_voltage, entry.timestamp, entry.battery_volts);
+                log.put_number(&cpu_utilization, entry.timestamp, entry.cpu_utilization);
+                log.put_boolean(&brownout, entry.timestamp, entry.brownout);
+                log.put_boolean(&watchdog, entry.timestamp, entry.watchdog);
+                log.put_boolean(&ds_teleop, entry.timestamp, entry.ds_teleop);
+                log.put_boolean(&ds_disabled, entry.timestamp, entry.ds_disabled);
+                log.put_boolean(&robot_teleop, entry.timestamp, entry.robot_teleop);
+                log.put_boolean(&robot_auto, entry.timestamp, entry.robot_auto);
+                log.put_boolean(&robot_disabled, entry.timestamp, entry.robot_disabled);
+                log.put_number(&can_utilization, entry.timestamp, entry.can_utilization);
                 log.put_number_array(
-                    &JsString::from("/DSLog/PowerDistributionCurrents"),
+                    &power_distribution_currents,
                     entry.timestamp,
                     entry.power_distribution_currents,
                 );
@@ -452,8 +417,9 @@ pub fn run_worker(files: &[Option<&[u8]>], post: &mut impl FnMut(Response)) -> R
                 post(Response::Failed);
                 return Ok(());
             }
+            let ds_events_key = JsString::from("/DSEvents");
             ds_events.for_each(&mut |entry| {
-                log.put_string(&JsString::from("/DSEvents"), entry.timestamp, entry.text);
+                log.put_string(&ds_events_key, entry.timestamp, entry.text);
             })?;
         }
         None => return Err(Abort::Threw),

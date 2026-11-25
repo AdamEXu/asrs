@@ -7,7 +7,7 @@ use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use asrs_js::json;
 use asrs_js::sort::array_sort;
 use asrs_js::string::JsString;
-use asrs_js::value::{JsObject, JsValue};
+use asrs_js::value::{JsObject, JsValue, KeyState};
 use indexmap::IndexSet;
 
 use super::LoggableType;
@@ -67,12 +67,12 @@ impl Clone for TimestampSetCaches {
 #[derive(Clone, Debug)]
 pub struct Log {
     pub(super) fields: JsObject<LogField>,
-    pub(super) generated_parents: IndexSet<JsString>,
+    pub(super) generated_parents: IndexSet<JsString, KeyState>,
     pub(super) timestamp_range: Option<[f64; 2]>,
     pub(super) timestamp_zero: Option<f64>,
     enable_timestamp_set_cache: bool,
     timestamp_set_cache: TimestampSetCaches,
-    pub(super) changed_fields: IndexSet<JsString>,
+    pub(super) changed_fields: IndexSet<JsString, KeyState>,
     pub(super) field_unit_cache: FieldUnitCache,
     pub(super) struct_decoder: StructDecoder,
     pub(super) proto_decoder: ProtoDecoder,
@@ -140,9 +140,11 @@ enum Children<'a, V> {
 impl<'a, V> Children<'a, V> {
     fn next(&mut self, parent: &JsString) -> Option<(JsString, &'a V)> {
         match self {
-            Children::Items(items) => items
-                .next()
-                .map(|(i, item)| (child_key(parent, &format!("{i}")), item)),
+            Children::Items(items) => items.next().map(|(i, item)| {
+                let mut key = child_key(parent, "");
+                push_decimal(&mut key, i);
+                (key, item)
+            }),
             Children::Entries(entries) => entries
                 .next()
                 .map(|(name, item)| (child_key_js(parent, name), item)),
@@ -238,14 +240,35 @@ impl Default for Log {
 }
 
 fn child_key(key: &JsString, child: &str) -> JsString {
-    child_key_js(key, &JsString::from(child))
+    let mut units = Vec::with_capacity(key.len() + 1 + child.len());
+    units.extend_from_slice(key.units());
+    units.push(u16::from(b'/'));
+    units.extend(child.encode_utf16());
+    JsString::from_units(units)
 }
 
 pub(super) fn child_key_js(key: &JsString, child: &JsString) -> JsString {
-    let mut out = key.clone();
-    out.push_unit(u16::from(b'/'));
-    out.push_str(child);
-    out
+    let mut units = Vec::with_capacity(key.len() + 1 + child.len());
+    units.extend_from_slice(key.units());
+    units.push(u16::from(b'/'));
+    units.extend_from_slice(child.units());
+    JsString::from_units(units)
+}
+
+fn push_decimal(out: &mut JsString, mut value: usize) {
+    let mut digits = [0u16; 20];
+    let mut start = digits.len();
+    loop {
+        start -= 1;
+        digits[start] = u16::from(b'0') + (value % 10) as u16;
+        value /= 10;
+        if value == 0 {
+            break;
+        }
+    }
+    for &digit in &digits[start..] {
+        out.push_unit(digit);
+    }
 }
 
 fn ends_with_ascii(units: &[u16], suffix: &str) -> bool {
@@ -283,12 +306,12 @@ impl Log {
     pub fn new(enable_timestamp_set_cache: bool) -> Self {
         Log {
             fields: JsObject::new(),
-            generated_parents: IndexSet::new(),
+            generated_parents: IndexSet::default(),
             timestamp_range: None,
             timestamp_zero: None,
             enable_timestamp_set_cache,
             timestamp_set_cache: TimestampSetCaches::default(),
-            changed_fields: IndexSet::new(),
+            changed_fields: IndexSet::default(),
             field_unit_cache: FieldUnitCache::default(),
             struct_decoder: StructDecoder::new(),
             proto_decoder: ProtoDecoder::new(),
@@ -442,7 +465,7 @@ impl Log {
     }
 
     /// Returns the keys changed since the last call, in the order they first changed.
-    pub fn get_changed_fields(&mut self) -> IndexSet<JsString> {
+    pub fn get_changed_fields(&mut self) -> IndexSet<JsString, KeyState> {
         std::mem::take(&mut self.changed_fields)
     }
 
@@ -563,7 +586,9 @@ impl Log {
     }
 
     pub fn set_generated_parent(&mut self, key: &JsString) {
-        self.generated_parents.insert(key.clone());
+        if !self.generated_parents.contains(key) {
+            self.generated_parents.insert(key.clone());
+        }
     }
 
     /// The generated parents in registration order.
@@ -799,11 +824,30 @@ impl Log {
     /// The shared shape of the scalar writers: register, write, and count the timestamp only
     /// when the field really holds `T`.
     fn put_value<T: LogValue>(&mut self, key: &JsString, timestamp: f64, value: T) {
-        self.create_blank_field(key, T::TYPE);
-        self.field_mut_existing(key).put(timestamp, value);
-        self.changed_fields.insert(key.clone());
-        if self.get_type(key) == Some(T::TYPE) {
+        if self.register_and_put(key, timestamp, value) == T::TYPE {
             self.process_timestamp(key, timestamp);
+        }
+    }
+
+    /// Creates the field if needed, writes the value and marks the field changed; the result is
+    /// the type the field holds.
+    fn register_and_put<T: LogValue>(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        value: T,
+    ) -> LoggableType {
+        self.create_blank_field(key, T::TYPE);
+        let field = self.field_mut_existing(key);
+        field.put(timestamp, value);
+        let ty = field.get_type();
+        self.mark_changed(key);
+        ty
+    }
+
+    fn mark_changed(&mut self, key: &JsString) {
+        if !self.changed_fields.contains(key) {
+            self.changed_fields.insert(key.clone());
         }
     }
 
@@ -878,10 +922,7 @@ impl Log {
         Vec<T>: LogValue,
     {
         let ty = <Vec<T> as LogValue>::TYPE;
-        self.create_blank_field(key, ty);
-        self.field_mut_existing(key).put(timestamp, value.clone());
-        self.changed_fields.insert(key.clone());
-        if self.get_type(key) != Some(ty) {
+        if self.register_and_put(key, timestamp, value.clone()) != ty {
             return;
         }
         self.process_timestamp(key, timestamp);
@@ -894,14 +935,15 @@ impl Log {
             .put_number(timestamp, value.len() as f64);
         self.changed_fields.insert(length_key);
 
+        let mut item_key = child_key(key, "");
+        let prefix_length = item_key.len();
         for (i, item) in value.into_iter().enumerate() {
-            let item_key = child_key(key, &format!("{i}"));
+            item_key.truncate(prefix_length);
+            push_decimal(&mut item_key, i);
             if self.enable_timestamp_set_cache {
                 self.process_timestamp(&item_key, timestamp);
             }
-            self.create_blank_field(&item_key, T::TYPE);
-            self.field_mut_existing(&item_key).put(timestamp, item);
-            self.changed_fields.insert(item_key);
+            self.register_and_put(&item_key, timestamp, item);
         }
     }
 

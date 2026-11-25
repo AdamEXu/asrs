@@ -85,6 +85,11 @@ impl JsString {
         self.0.extend_from_slice(&s.0);
     }
 
+    /// Keeps the first `len` code units.
+    pub fn truncate(&mut self, len: usize) {
+        self.0.truncate(len);
+    }
+
     pub fn as_string(&self) -> Option<String> {
         String::from_utf16(&self.0).ok()
     }

@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use asrs_js::string::JsString;
+use asrs_js::value::KeyState;
 use asrs_log::log::log_key_utils::{
     PHOTON_PREFIX, PROTO_PREFIX, STRUCT_PREFIX, get_structured_type_from_raw, is_schema,
 };
@@ -45,10 +46,10 @@ pub struct WpilogWorker {
     realm: JsRealm,
     data: Arc<[u8]>,
     log: Log,
-    entry_ids: HashMap<u32, JsString>,
-    entry_types: HashMap<JsString, JsString>,
-    entry_start_times: HashMap<u32, f64>,
-    data_record_positions: HashMap<JsString, Vec<u32>>,
+    entry_ids: HashMap<u32, JsString, KeyState>,
+    entry_types: HashMap<JsString, JsString, KeyState>,
+    entry_start_times: HashMap<u32, f64, KeyState>,
+    data_record_positions: HashMap<JsString, Vec<u32>, KeyState>,
     clear_time: Option<f64>,
 }
 
@@ -58,10 +59,10 @@ impl WpilogWorker {
             realm,
             data: Arc::from(Vec::new()),
             log: Log::new(false),
-            entry_ids: HashMap::new(),
-            entry_types: HashMap::new(),
-            entry_start_times: HashMap::new(),
-            data_record_positions: HashMap::new(),
+            entry_ids: HashMap::default(),
+            entry_types: HashMap::default(),
+            entry_start_times: HashMap::default(),
+            data_record_positions: HashMap::default(),
             clear_time: None,
         }
     }
