@@ -547,7 +547,9 @@ fn gl_dump(frame: &Frame, rect: [f64; 4], mode: Field3dMode) -> asrs_ui::parity:
             ))
         });
         let mut rgba = Vec::new();
-        renderer.render(frame, &mut rgba);
+        renderer
+            .render(frame, &mut rgba)
+            .expect("a rendered 3D dump");
         swap_red_blue(&mut rgba);
         let edges = edge_mask(&renderer.render_aux(frame));
         asrs_ui::parity::GlDump {
@@ -889,6 +891,12 @@ impl<H: FrameHost> HubFrame<H> {
                     e.to_string()
                 }),
             );
+        }
+        if let Some(Ok(thread)) = &views.thread
+            && let Some(failure) = thread.failure()
+        {
+            views.thread = Some(Err(failure));
+            views.in_flight = None;
         }
         let Some(Ok(thread)) = &views.thread else {
             views.queued = None;

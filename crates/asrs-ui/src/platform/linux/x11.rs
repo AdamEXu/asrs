@@ -1,6 +1,8 @@
 //! The X11 side of a GPUI window, over GPUI's own connection: pointer grabs only bring events to
 //! the client that takes them.
 
+use std::sync::OnceLock;
+
 use gpui_kit::{Bounds, Pixels, Point, Window, point, px, size};
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle, RawDisplayHandle, RawWindowHandle};
 use x11rb::CURRENT_TIME;
@@ -16,6 +18,8 @@ use x11rb::protocol::xproto::{
 use x11rb::protocol::xtest::ConnectionExt as _;
 use x11rb::wrapper::ConnectionExt as _;
 use x11rb::xcb_ffi::XCBConnection;
+
+use crate::platform::displays::Displays;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error>>;
 
@@ -93,32 +97,19 @@ impl X11Window {
         ))
     }
 
-    /// The monitor at a position on screen, or the nearest to it. GPUI's X11 display is the
-    /// screen, which spans every monitor.
-    pub fn monitor_at(&self, at: Point<Pixels>) -> Result<Option<Bounds<Pixels>>> {
-        let reply = self
-            .connection
-            .randr_get_monitors(self.root, true)?
-            .reply()?;
-        let monitors = reply.monitors.into_iter().map(|m| {
-            Bounds::new(
-                point(self.logical(m.x.into()), self.logical(m.y.into())),
-                size(self.logical(m.width.into()), self.logical(m.height.into())),
-            )
-        });
-        let outside =
-            |v: Pixels, low: Pixels, high: Pixels| f32::from((low - v).max(v - high).max(px(0.0)));
-        let distance = |m: &Bounds<Pixels>| {
-            let dx = outside(at.x, m.left(), m.right());
-            let dy = outside(at.y, m.top(), m.bottom());
-            dx * dx + dy * dy
-        };
-        Ok(monitors.min_by(|a, b| {
-            let inside = |m: &Bounds<Pixels>| !m.contains(&at);
-            (distance(a), inside(a))
-                .partial_cmp(&(distance(b), inside(b)))
-                .unwrap_or(std::cmp::Ordering::Equal)
-        }))
+    /// Where the menus of `anchor`, on screen, are kept. GPUI's X11 display is the screen, which
+    /// spans every monitor.
+    pub fn menu_area(&self, anchor: Bounds<Pixels>) -> Result<Option<Bounds<Pixels>>> {
+        let displays = displays_of(&self.connection, self.root, f64::from(self.scale))?;
+        let f = |p: Pixels| f64::from(f32::from(p));
+        let area = displays.menu_area([
+            f(anchor.origin.x),
+            f(anchor.origin.y),
+            f(anchor.size.width),
+            f(anchor.size.height),
+        ]);
+        let px = |v: f64| px(v as f32);
+        Ok(area.map(|[x, y, w, h]| Bounds::new(point(px(x), px(y)), size(px(w), px(h)))))
     }
 
     /// The content's size in logical px.
@@ -304,6 +295,74 @@ impl X11Window {
     }
 }
 
+/// The displays of the screen `DISPLAY` names, which GPUI says is `width` logical px wide.
+pub fn displays(width: f64) -> Result<Displays> {
+    // GPUI keeps the width the screen had when it connected.
+    static SCALE: OnceLock<f64> = OnceLock::new();
+    let (connection, number) = x11rb::connect(None)?;
+    let screen = &connection.setup().roots[number];
+    let scale = SCALE.get_or_init(|| f64::from(screen.width_in_pixels) / width);
+    displays_of(&connection, screen.root, *scale)
+}
+
+/// `BuildDisplaysFromXRandRInfo`.
+fn displays_of<C: x11rb::connection::RequestConnection>(
+    connection: &C,
+    root: u32,
+    scale: f64,
+) -> Result<Displays> {
+    let resources = connection
+        .randr_get_screen_resources_current(root)?
+        .reply()?;
+    let primary = connection.randr_get_output_primary(root)?.reply()?.output;
+    let monitors = connection.randr_get_monitors(root, true)?.reply()?.monitors;
+    let (mut boxes, mut primary_index, mut first_monitor) = (Vec::new(), None, None);
+    for output in resources.outputs {
+        let info = connection
+            .randr_get_output_info(output, resources.config_timestamp)?
+            .reply()?;
+        if info.connection != randr::Connection::CONNECTED || info.crtc == 0 {
+            continue;
+        }
+        let crtc = connection
+            .randr_get_crtc_info(info.crtc, resources.config_timestamp)?
+            .reply()?;
+        if output == primary {
+            primary_index = Some(boxes.len());
+        }
+        if monitors
+            .first()
+            .is_some_and(|m| m.outputs.contains(&output))
+        {
+            first_monitor = Some(boxes.len());
+        }
+        boxes.push([
+            crtc.x.into(),
+            crtc.y.into(),
+            crtc.width.into(),
+            crtc.height.into(),
+        ]);
+    }
+    if boxes.is_empty() {
+        let screen = connection.get_geometry(root)?.reply()?;
+        boxes.push([0, 0, screen.width.into(), screen.height.into()]);
+    }
+    let primary = primary_index.or(first_monitor).unwrap_or(0);
+    let atom = connection
+        .intern_atom(false, b"_NET_WORKAREA")?
+        .reply()?
+        .atom;
+    let property = connection
+        .get_property(false, root, atom, AtomEnum::ANY, 0, 4)?
+        .reply()?;
+    let values: Vec<i32> = property
+        .value32()
+        .map(|values| values.map(|v| v as i32).collect())
+        .unwrap_or_default();
+    let work_area = <[i32; 4]>::try_from(values).ok();
+    Ok(Displays::new(&boxes, primary, work_area, scale))
+}
+
 /// Moves the pointer and presses or releases a button as a device would, for live checks.
 pub fn fake_pointer(position: Option<(f64, f64)>, button: Option<(u8, bool)>) -> Result<()> {
     let (connection, screen) = x11rb::connect(None)?;
@@ -351,45 +410,6 @@ pub fn fake_keys(keysyms: &[u32]) -> Result<()> {
         connection
             .xtest_fake_input(event, code, CURRENT_TIME, root, 0, 0, 0)?
             .check()?;
-    }
-    Ok(())
-}
-
-/// Divides the screen into two monitors at `x`, or undoes that.
-pub fn split_monitors(x: Option<u16>) -> Result<()> {
-    const NAMES: [&[u8]; 2] = [b"ASRS-LEFT", b"ASRS-RIGHT"];
-    let (connection, number) = x11rb::connect(None)?;
-    let screen = &connection.setup().roots[number];
-    let (root, width, height) = (screen.root, screen.width_in_pixels, screen.height_in_pixels);
-    let outputs = connection
-        .randr_get_screen_resources_current(root)?
-        .reply()?
-        .outputs;
-    let mut names = Vec::new();
-    for name in NAMES {
-        names.push(connection.intern_atom(false, name)?.reply()?.atom);
-    }
-    let Some(x) = x else {
-        for name in names {
-            connection.randr_delete_monitor(root, name)?.check()?;
-        }
-        return Ok(());
-    };
-    let boxes = [(0, x, outputs), (x, width - x, Vec::new())];
-    for (name, (x, width, outputs)) in names.into_iter().zip(boxes) {
-        let monitor = randr::MonitorInfo {
-            name,
-            primary: false,
-            automatic: false,
-            x: x as i16,
-            y: 0,
-            width,
-            height,
-            width_in_millimeters: 300,
-            height_in_millimeters: 300,
-            outputs,
-        };
-        connection.randr_set_monitor(root, monitor)?.check()?;
     }
     Ok(())
 }

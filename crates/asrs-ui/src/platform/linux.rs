@@ -21,7 +21,7 @@ use crate::menu::{CloseHandler, ListStyle, MenuView, Placement};
 
 pub(super) mod probe;
 pub(super) mod window;
-mod x11;
+pub(super) mod x11;
 
 use x11::X11Window;
 
@@ -98,7 +98,7 @@ fn placement(window: &Window, bounds: Bounds<Pixels>) -> Placement {
         origin.unwrap_or(window.bounds().origin) + bounds.origin,
         bounds.size,
     );
-    let monitor = x11.and_then(|x11| x11.monitor_at(anchor.origin).ok().flatten());
+    let monitor = x11.and_then(|x11| x11.menu_area(anchor).ok().flatten());
     Placement::Screen(anchor, monitor)
 }
 
