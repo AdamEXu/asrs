@@ -108,9 +108,33 @@ enum Fd {
     File { path: String, position: u64 },
 }
 
+enum FileData {
+    Shared(Arc<[u8]>),
+    Owned(Vec<u8>),
+}
+
+impl FileData {
+    fn as_slice(&self) -> &[u8] {
+        match self {
+            Self::Shared(shared) => shared,
+            Self::Owned(owned) => owned,
+        }
+    }
+
+    fn as_mut_vec(&mut self) -> &mut Vec<u8> {
+        if let Self::Shared(shared) = self {
+            *self = Self::Owned(shared.to_vec());
+        }
+        match self {
+            Self::Owned(owned) => owned,
+            Self::Shared(_) => unreachable!("replaced above"),
+        }
+    }
+}
+
 #[derive(Default)]
 struct Host {
-    files: BTreeMap<String, Vec<u8>>,
+    files: BTreeMap<String, FileData>,
     fds: Vec<Option<Fd>>,
     memory: Option<Memory>,
     table: Option<Table>,
@@ -190,7 +214,7 @@ fn load_embedded_files(caller: &mut HostCaller<'_>, mut at: u32) -> HostResult<(
         let path = absolute(&read_string(caller, name));
         let data = memory(caller).data(&mut *caller);
         let bytes = data[range(data.len(), content, len)?].to_vec();
-        caller.data_mut().files.insert(path, bytes);
+        caller.data_mut().files.insert(path, FileData::Owned(bytes));
         if read_u32(caller, at)? == 0 {
             return Ok(());
         }
@@ -205,13 +229,15 @@ fn open(caller: &mut HostCaller<'_>, path: u32, flags: i32) -> i32 {
     let path = absolute(&path);
     let host = caller.data_mut();
     if flags & O_CREAT != 0 {
-        host.files.entry(path.clone()).or_default();
+        host.files
+            .entry(path.clone())
+            .or_insert_with(|| FileData::Owned(Vec::new()));
     }
     if !host.files.contains_key(&path) {
         return -ENOENT;
     }
     if flags & O_TRUNC != 0 {
-        host.files.insert(path.clone(), Vec::new());
+        host.files.insert(path.clone(), FileData::Owned(Vec::new()));
     }
     let fd = Some(Fd::File { path, position: 0 });
     let slot = host.fds.iter().position(Option::is_none);
@@ -275,7 +301,7 @@ fn fd_read(
     };
     let vectors = io_vectors(caller, iov, count)?;
     let (data, host) = memory(caller).data_and_store_mut(&mut *caller);
-    let contents = &host.files[&path];
+    let contents = host.files[&path].as_slice();
     let mut at = (position as usize).min(contents.len());
     let mut total = 0;
     for (pointer, len) in vectors {
@@ -315,7 +341,11 @@ fn fd_write(
         if end > MAX_FILE {
             return Err(Thrown::Error("RangeError: Invalid typed array length".to_owned()).into());
         }
-        let file = host.files.entry(path).or_default();
+        let file = host
+            .files
+            .entry(path)
+            .or_insert_with(|| FileData::Owned(Vec::new()))
+            .as_mut_vec();
         if file.len() < end {
             file.resize(end, 0);
         }
@@ -352,7 +382,7 @@ fn fd_seek(
     let base = match whence {
         0 => 0,
         1 => position as i64,
-        2 => caller.data().files[&path].len() as i64,
+        2 => caller.data().files[&path].as_slice().len() as i64,
         _ => return Ok(EINVAL),
     };
     let Some(target) = base.checked_add(offset) else {
@@ -558,7 +588,7 @@ fn call_import(
 struct Core {
     engine: Engine,
     module: Module,
-    traineddata: Vec<u8>,
+    traineddata: Arc<[u8]>,
 }
 
 impl Core {
@@ -571,7 +601,7 @@ impl Core {
         Ok(Self {
             engine,
             module,
-            traineddata: gunzip(ENG_TRAINEDDATA_GZ)?,
+            traineddata: gunzip(ENG_TRAINEDDATA_GZ)?.into(),
         })
     }
 
@@ -681,10 +711,10 @@ impl Worker {
 
         let ctors: TypedFunc<(), ()> = instance.get_typed_func(&mut store, export::CALL_CTORS)?;
         ctors.call(&mut store, ())?;
-        store
-            .data_mut()
-            .files
-            .insert("/eng.traineddata".to_owned(), core.traineddata.clone());
+        store.data_mut().files.insert(
+            "/eng.traineddata".to_owned(),
+            FileData::Shared(Arc::clone(&core.traineddata)),
+        );
 
         let new_api: TypedFunc<(), i32> =
             instance.get_typed_func(&mut store, export::NEW_TESS_BASE_API)?;
@@ -735,7 +765,7 @@ impl Worker {
         store
             .data_mut()
             .files
-            .insert("/input".to_owned(), image.to_vec());
+            .insert("/input".to_owned(), FileData::Owned(image.to_vec()));
         let status = self
             .set_image_file
             .call(&mut *store, (api, exif_orientation(image), 0.0))?;
@@ -754,5 +784,31 @@ impl Worker {
         self.oem.call(&mut *store, api)?;
         self.version.call(&mut *store, api)?;
         Ok(text)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn workers_share_one_traineddata() {
+        let core = Core::shared().expect("the core loads");
+        let workers = [
+            Worker::new().expect("a worker"),
+            Worker::new().expect("a worker"),
+        ];
+        let shared = core.traineddata.as_ptr() as usize;
+        assert_eq!(Arc::strong_count(&core.traineddata), 1 + workers.len());
+        for worker in &workers {
+            let FileData::Shared(entry) = &worker.store.data().files["/eng.traineddata"] else {
+                panic!("the traineddata stays shared");
+            };
+            assert_eq!(
+                entry.as_ptr() as usize,
+                shared,
+                "each worker holds the one shared copy"
+            );
+        }
     }
 }
