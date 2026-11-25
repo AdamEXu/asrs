@@ -170,8 +170,15 @@ function place(object: THREE.Object3D, spec: { position?: Vec3; rotation?: Vec3;
 
 let upstreamDir = "";
 
+function urlPath(file: string): string {
+  return file
+    .split("/")
+    .map((part) => encodeURIComponent(part).replace("%3A", ":"))
+    .join("/");
+}
+
 function fileUrl(file: string): string {
-  return "file://" + file.split("/").map(encodeURIComponent).join("/");
+  return "file://" + urlPath(file);
 }
 
 function useUpstreamBase() {
@@ -269,7 +276,7 @@ async function build(spec: SceneSpec, scene: THREE.Scene) {
         };
         if (node.manager === "robot") {
           useUpstreamBase();
-          const robot = { ...node.robot, path: upstreamDir.split("/").map(encodeURIComponent).join("/") + "/" + node.model };
+          const robot = { ...node.robot, path: urlPath(upstreamDir) + "/" + node.model };
           (window as any).assets = { field2ds: [], field3ds: [], robots: [robot], joysticks: [], loadFailures: [] };
           let loaded: () => void = () => {};
           const done = new Promise<void>((resolve) => (loaded = resolve));

@@ -4,7 +4,11 @@
 # package versions, so they come from Launchpad's permanent archive and are checked by hash.
 #
 #   xtask/hosts/linux/fonts.sh <download cache> <dir>
-#   export FONTCONFIG_FILE=<dir>/fonts.conf
+#   export FONTCONFIG_FILE=<dir>/gray.conf
+#
+# gray.conf is Ubuntu's rules with rgba=none (grayscale DOM text); stock.conf (also fonts.conf) is
+# Ubuntu's rules alone, whose 10-sub-pixel-rgb.conf gives LCD text. fonts-dejavu-extra is left out
+# on purpose: its real ExtraLight face would be weight 200 in the Timeline's reference.
 set -euo pipefail
 
 cache=$(realpath -m "$1")
@@ -56,3 +60,14 @@ done
   printf '<include>%s</include>\n' "$dir/conf.d"
   printf '<cachedir>%s</cachedir>\n</fontconfig>\n' "$dir/cache"
 } >"$dir/fonts.conf"
+
+test -f "$dir/conf.d/10-sub-pixel-rgb.conf"
+cp "$dir/fonts.conf" "$dir/stock.conf"
+{
+  grep -v '</fontconfig>' "$dir/fonts.conf"
+  for target in pattern font; do
+    printf '<match target="%s"><edit name="rgba" mode="assign"><const>none</const></edit></match>\n' $target
+  done
+  echo '</fontconfig>'
+} >"$dir/gray.conf"
+printf '%s\n' "${packages[@]}" >"$dir/packages.txt"

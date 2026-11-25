@@ -720,7 +720,7 @@ pub(crate) fn import_platform_vectors(
     paths: &Paths,
     remote: &Json,
     wanted: &[String],
-    os: &str,
+    platform: &str,
     mut fetch: impl FnMut(&str, &Path) -> Result,
 ) -> Result {
     let vectors_dir = paths.root.join("parity/vectors");
@@ -741,14 +741,13 @@ pub(crate) fn import_platform_vectors(
     let Some(Json::Object(entries)) = remote.get("vectors") else {
         return Err("the host's MANIFEST.json has no vectors".to_owned());
     };
-    let prefix = format!("{os}-");
     let mut imported = 0;
     for (key, entry) in entries {
         let id = key.to_string_lossy();
         let requested = wanted
             .iter()
             .any(|w| id == *w || id.starts_with(&format!("{w}/")));
-        let on_host = string_field(entry, "generatedOn").is_some_and(|g| g.starts_with(&prefix));
+        let on_host = string_field(entry, "generatedOn").as_deref() == Some(platform);
         if !requested || !on_host {
             continue;
         }
@@ -771,7 +770,7 @@ pub(crate) fn import_platform_vectors(
     }
     if imported == 0 {
         return Err(format!(
-            "no vector generated on {os} matches {}",
+            "no vector generated on {platform} matches {}",
             wanted.join(" ")
         ));
     }

@@ -10,6 +10,7 @@ use lcms2::{Intent, PixelFormat, Profile, Transform};
 
 use crate::Result;
 use crate::canvas::write;
+use crate::gl;
 use crate::oracle::{self, Paths};
 
 const USAGE: &str = r"usage: cargo xtask app <command>
@@ -30,8 +31,8 @@ display.icc beside the captures; `normalize` converts those to sRGB.
       [--label <label>]
                   every variant (scales x themes) of each scenario (default: all), into
                   target/parity/app/<label>/<scenario>/<scale>x-<theme>/ (label default `run`).
-                  --gl native|swiftshader|d3d11-warp picks the 3D switches (default native on
-                  macOS, swiftshader elsewhere)
+                  --gl native|swiftshader|d3d11-warp picks the 3D switches (default ASRS_GL, or
+                  native on macOS and swiftshader elsewhere)
   tooltips [<scenario>...]
                   (macOS) the tooltips upstream gives AppKit at each capture of the scenarios
                   that have a reference in parity/tooltips, or of the named ones, where they
@@ -49,7 +50,6 @@ display.icc beside the captures; `normalize` converts those to sRGB.
 
 const SCALES: [u32; 2] = [1, 2];
 const THEMES: [&str; 2] = ["light", "dark"];
-const GL_MODES: [&str; 3] = ["native", "swiftshader", "d3d11-warp"];
 const COLOURS: [&str; 2] = ["srgb", "display"];
 const RANDOM_SEED: u32 = 1;
 
@@ -125,10 +125,7 @@ impl RunOptions {
                 }
                 "--gl" => {
                     let gl = value("--gl")?;
-                    if !GL_MODES.contains(&gl.as_str()) {
-                        return Err(format!("--gl is one of {}", GL_MODES.join(", ")));
-                    }
-                    options.gl = Some(gl);
+                    options.gl = Some(gl::parse(&gl)?.to_owned());
                 }
                 "--colour" => {
                     options.colour = value("--colour")?;
@@ -288,14 +285,6 @@ fn load_scenarios(paths: &Paths, only: &[String]) -> Result<Vec<Scenario>> {
         .collect()
 }
 
-fn default_gl() -> &'static str {
-    if cfg!(target_os = "macos") {
-        "native"
-    } else {
-        "swiftshader"
-    }
-}
-
 /// Chromium reads these before the main script runs, so they go on the command line; the
 /// driver refuses to start when one is missing or an unexpected GL or colour switch is present.
 fn electron_switches(scale: u32, gl: Option<&str>, colour: &str) -> Vec<String> {
@@ -310,14 +299,8 @@ fn electron_switches(scale: u32, gl: Option<&str>, colour: &str) -> Vec<String> 
     if colour == "srgb" {
         switches.push("--force-color-profile=srgb".to_owned());
     }
-    match gl {
-        Some("swiftshader") => switches.push("--enable-unsafe-swiftshader".to_owned()),
-        Some("d3d11-warp") => {
-            switches.push("--enable-unsafe-swiftshader".to_owned());
-            switches.push("--use-angle=d3d11-warp".to_owned());
-        }
-        _ => {}
-    }
+    let gl = gl.map_or(&[][..], gl::electron_switches);
+    switches.extend(gl.iter().map(|s| (*s).to_owned()));
     switches
 }
 
@@ -454,7 +437,7 @@ fn tooltips(paths: &Paths, names: &[String]) -> Result {
         let variant = Variant {
             scale: 1,
             theme: "light",
-            gl: default_gl(),
+            gl: gl::default_mode()?,
             colour: "srgb",
             tooltips: true,
         };
@@ -513,7 +496,10 @@ struct Variant<'a> {
 
 fn run_scenarios(paths: &Paths, options: &RunOptions) -> Result<PathBuf> {
     let root = paths.root.join("target/parity/app").join(&options.label);
-    let gl = options.gl.as_deref().unwrap_or(default_gl());
+    let gl = match &options.gl {
+        Some(gl) => gl,
+        None => gl::default_mode()?,
+    };
     let mut failures = Vec::new();
     for scenario in load_scenarios(paths, &options.scenarios)? {
         for &scale in &scenario.scales {
