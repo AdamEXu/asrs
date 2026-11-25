@@ -1334,13 +1334,18 @@ mod tests {
                     assert!(lcd || !mode, "{dir}/{name} {id}");
                 }
                 let count = |of: bool| modes.iter().filter(|(_, m)| *m == of).count();
-                let boxes = match name.split('-').nth(1).unwrap() {
+                let kind = name.split('-').nth(1).unwrap();
+                let acrylic = dir == "scenes-windows" && kind == "hub";
+                let boxes = match kind {
                     "text" => 65,
                     "lcd" => 38,
+                    _ if acrylic => 27,
                     _ => 26,
                 };
                 assert_eq!(modes.len(), boxes, "{dir}/{name}");
-                if lcd && !name.starts_with("dom-text-") {
+                if acrylic {
+                    assert_eq!(count(true), 0, "{dir}/{name}");
+                } else if lcd && kind != "text" {
                     assert!(count(true) > 0 && count(false) > 0, "{dir}/{name}");
                 }
             }
