@@ -180,10 +180,6 @@ pub(super) mod window {
     }
 
     impl NativeWindow {
-        pub fn hidden_inset_titlebar(&self) {
-            match *self {}
-        }
-
         pub fn content_size_for_frame(&self, _width: f64, _height: f64) -> (f64, f64) {
             match *self {}
         }
@@ -409,6 +405,8 @@ pub(super) mod probe {
     pub fn window_chrome(_window: &Window) -> Option<WindowChrome> {
         None
     }
+
+    pub fn set_represented_filename(_window: &Window, _name: &str) {}
 
     pub fn will_resize(_window: &Window, _size: (f64, f64)) -> Option<(f64, f64)> {
         None

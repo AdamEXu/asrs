@@ -12,6 +12,9 @@ type Size = (f64, f64);
 /// `INT_MAX`, which Electron puts in for a maximum size dimension that is not given.
 const UNBOUNDED: f64 = i32::MAX as f64;
 
+/// The margin `NativeWindowMac` gives the traffic lights of `titleBarStyle: "hiddenInset"`.
+const HIDDEN_INSET: (f32, f32) = (12.0, 11.0);
+
 /// How much larger a framed window's bounds are than its content, where that is not the platform's
 /// own to say.
 fn scripted_frame(options: &WindowOptions, cx: &App) -> Size {
@@ -47,7 +50,7 @@ fn gpui_options(
         titlebar: Some(TitlebarOptions {
             title: None,
             appears_transparent: hub && !cfg!(target_os = "linux"),
-            traffic_light_position: None,
+            traffic_light_position: vibrant.then(|| point(px(HIDDEN_INSET.0), px(HIDDEN_INSET.1))),
         }),
         app_owns_titlebar_drag: vibrant,
         window_background: if vibrant {
@@ -63,7 +66,7 @@ fn gpui_options(
             asrs_ui::gpui::WindowKind::Dialog
         } else if options.modal {
             asrs_ui::gpui::WindowKind::Normal
-        } else if options.always_on_top {
+        } else if options.always_on_top && !cfg!(target_os = "macos") {
             asrs_ui::gpui::WindowKind::Floating
         } else {
             asrs_ui::gpui::WindowKind::Normal
@@ -229,11 +232,10 @@ fn content_limits(native: &NativeWindow, options: &WindowOptions) -> (Option<Siz
     (min, max)
 }
 
-/// What Electron's `BrowserWindow` constructor does that GPUI's options cannot: the
-/// `hiddenInset` toolbar, the exact content size (GPUI opens macOS windows 1 px taller than
-/// asked), frame-based sizes for windows without `useContentSize`, size limits, the place an X11
-/// window manager would choose itself, `fullscreenable`, then showing the window, or attaching it
-/// as a sheet to its parent. GPUI's `Dialog` kind would attach it to whichever window is main, and
+/// What Electron's `BrowserWindow` constructor does that GPUI's options cannot: the exact content
+/// size (GPUI opens macOS windows 1 px taller than asked), frame-based sizes for windows without
+/// `useContentSize`, size limits, the place an X11 window manager would choose itself,
+/// `fullscreenable`, then showing the window, or attaching it as a sheet to its parent. GPUI's `Dialog` kind would attach it to whichever window is main, and
 /// to none while the app is inactive.
 fn finish(
     native: &NativeWindow,
@@ -242,9 +244,6 @@ fn finish(
     parent: Option<&NativeWindow>,
     show: bool,
 ) {
-    if options.kind == WindowKind::Hub {
-        native.hidden_inset_titlebar();
-    }
     let (width, height) = if options.use_content_size {
         (options.width, options.height)
     } else {
@@ -257,9 +256,7 @@ fn finish(
         Some((x, y)) => native.set_content_origin(x, y),
         None => native.center(parent),
     }
-    if options.fullscreenable == Some(false) {
-        native.set_fullscreenable(false);
-    }
+    native.set_fullscreenable(options.fullscreenable.unwrap_or(true));
     if !show {
         return;
     }
@@ -298,6 +295,7 @@ pub(super) fn open<V: Render>(
             if options.kind == WindowKind::Hub {
                 platform::install_sidebar_vibrancy(window);
             }
+            platform::install_electron_frame(window);
             if options.always_on_top {
                 platform::keep_visible_when_inactive(window);
             }

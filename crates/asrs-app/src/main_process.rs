@@ -704,7 +704,7 @@ impl MainProcess {
             }
         };
         let prefs = Preferences::from_js(&data);
-        cx.set_global(theme_source(prefs.theme));
+        windows::set_theme(cx, theme_source(prefs.theme));
         for (_, hub) in Self::hub_windows(cx) {
             Self::send(cx, &hub, MainToHub::SetPreferences, data.clone());
         }
@@ -1395,7 +1395,7 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
             return;
         }
     };
-    cx.set_global(theme_source(prefs.theme));
+    windows::set_theme(cx, theme_source(prefs.theme));
     video::init(&state.paths, cx);
     let saved = state
         .tracker

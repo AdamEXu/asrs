@@ -205,8 +205,6 @@ impl NativeWindow {
         }
     }
 
-    pub fn hidden_inset_titlebar(&self) {}
-
     pub fn content_size_for_frame(&self, width: f64, height: f64) -> (f64, f64) {
         match frame(self.0) {
             Some(frame) if !frameless(self.0) => (
