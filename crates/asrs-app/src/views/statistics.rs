@@ -14,6 +14,7 @@ use asrs_canvas::{Pixmap, RasterState, ShadeCache};
 use asrs_hub::hub::HubModel;
 use asrs_js::math;
 use asrs_js::string::JsString;
+use asrs_model::layout_unit::{self, border, centred, percent, zoomed};
 use asrs_model::scroll_sensor::{WheelScroll, assign_scroll_offset};
 use asrs_model::tab_type::TabType;
 use asrs_tabs::form::{self, NumberInput};
@@ -40,7 +41,7 @@ use asrs_ui::tooltip::titled;
 use super::cell_text::{CellLine, CellText, css};
 use super::frame::{FrameHost, HubFrame, SETTINGS_SECTION, wheel_of};
 use super::large_table::{Grid, mean};
-use super::number::FormNumber;
+use super::number::{FormNumber, input_chrome};
 use super::page_text::{
     Owner, PageText, PlacedBlock, Selected, beside_table, device, floor_device, unselectable,
 };
@@ -57,10 +58,8 @@ const INPUT_HEIGHT: f64 = 40.0;
 const LAST_INSET: f64 = 145.0;
 const LAST_MAX: f64 = 120.0;
 const CONTROL_MARGIN: f64 = 5.0;
-const CONTROL_WIDTH: f64 = 0.7;
+const CONTROL_WIDTH: f64 = 70.0;
 const SELECT_HEIGHT: f64 = 25.0;
-/// A number input's padding and borders, across and down.
-const FIELD_CHROME: [f64; 2] = [8.0, 6.0];
 const TITLES: [&str; 3] = ["Time Range", "Data Range", "Step Size"];
 const FIELD_TITLES: [&str; 3] = [
     "Minimum histogram value",
@@ -68,10 +67,6 @@ const FIELD_TITLES: [&str; 3] = [
     "Histogram step size",
 ];
 const FIELD_PROBES: [&str; 3] = ["input.range-min", "input.range-max", "input.step-size"];
-
-fn lu(v: f64) -> f64 {
-    math::floor(v * 64.0) / 64.0
-}
 
 fn title_style() -> TextStyle {
     let font = format!("bold 16px {}", FONT_FAMILY.join(", "));
@@ -87,8 +82,9 @@ fn title_style() -> TextStyle {
 /// coordinates before its own scrolling.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct SettingsLayout {
-    /// The border box; its first pixel column is the `border-left`.
+    /// The border box, `border` of it on the left the `border-left`.
     panel: [f64; 4],
+    border: f64,
     titles: [[f64; 4]; 3],
     select: [f64; 4],
     /// `range-min`, `range-max` and `step-size`.
@@ -98,34 +94,44 @@ struct SettingsLayout {
 
 impl SettingsLayout {
     /// `line` is the height of a number input's line of text.
-    fn new([x, y, w, h]: [f64; 4], line: f64) -> SettingsLayout {
-        let width = math::min2(lu(w * 0.4), SETTINGS_MAX_WIDTH);
-        let panel = [x + w - width - 1.0, y, width + 1.0, h];
-        let left = panel[0] + 1.0;
-        let half = lu(width * 0.5);
-        let title_top = |i: f64| y + SETTINGS_TOP + i * (TITLE_HEIGHT + INPUT_HEIGHT);
-        let control_top = |i: f64| title_top(i) + TITLE_HEIGHT + CONTROL_MARGIN;
+    fn new(controls: [f64; 4], line: f64, scale: f64) -> SettingsLayout {
+        let device = |v: f64| layout_unit::device(v, scale);
+        let [x, y, w, h] = controls.map(device);
+        let length = |v: f64| zoomed(v, scale);
+        let css = |rect: [f64; 4]| rect.map(|v| v / scale);
+        let edge = border(1.0, scale);
+        let width = math::min2(percent(w, 40.0), length(SETTINGS_MAX_WIDTH));
+        let panel = [x + w - width - edge, y, width + edge, h];
+        let left = panel[0] + edge;
+        let half = percent(width, 50.0);
+        let title_height = length(TITLE_HEIGHT);
+        let margin = length(CONTROL_MARGIN);
+        let row = title_height + length(INPUT_HEIGHT);
+        let title_top = |i: f64| y + length(SETTINGS_TOP) + i * row;
         let control = |left: f64, available: f64, chrome: f64, i: f64, height: f64| {
-            let width = lu(available * CONTROL_WIDTH) + chrome;
-            let free = available - width - 2.0 * CONTROL_MARGIN;
-            let left = left + math::max2(lu(free / 2.0), 0.0) + CONTROL_MARGIN;
-            [left, control_top(i), width, height]
+            let width = percent(available, CONTROL_WIDTH) + chrome;
+            let left = left + centred(available, width + 2.0 * margin) + margin;
+            css([left, title_top(i) + title_height + margin, width, height])
         };
-        let field = |left: f64, available: f64, i: f64| {
-            control(left, available, FIELD_CHROME[0], i, line + FIELD_CHROME[1])
-        };
-        let last = math::max2(math::min2(h - LAST_INSET, LAST_MAX), INPUT_HEIGHT);
-        let content = title_top(2.0) - y + TITLE_HEIGHT + last;
+        let [across, down] = input_chrome(scale);
+        let height = device(line) + down;
+        let field = |left: f64, available: f64, i: f64| control(left, available, across, i, height);
+        let last = math::max2(
+            math::min2(h - length(LAST_INSET), length(LAST_MAX)),
+            length(INPUT_HEIGHT),
+        );
+        let content = title_top(2.0) - y + title_height + last;
         SettingsLayout {
-            panel,
-            titles: [0.0, 1.0, 2.0].map(|i| [left, title_top(i), width, TITLE_HEIGHT]),
-            select: control(left, width, 0.0, 0.0, SELECT_HEIGHT),
+            panel: css(panel),
+            border: edge / scale,
+            titles: [0.0, 1.0, 2.0].map(|i| css([left, title_top(i), width, title_height])),
+            select: control(left, width, 0.0, 0.0, length(SELECT_HEIGHT)),
             fields: [
                 field(left, half, 1.0),
                 field(left + half, half, 1.0),
                 field(left, width, 2.0),
             ],
-            max_scroll: math::max2(content - h, 0.0),
+            max_scroll: math::max2(content - h, 0.0) / scale,
         }
     }
 }
@@ -1130,7 +1136,7 @@ impl<H: FrameHost> HubFrame<H> {
             controller.step_size().clone(),
         ];
         let (_, line) = text::measure(cx, &TextStyle::new(CONTROL_FONT), "0", scale);
-        let layout = SettingsLayout::new(controls, line);
+        let layout = SettingsLayout::new(controls, line, f64::from(scale));
         if let Some(shown) = &mut self.statistics.shown {
             shown.settings = Some(layout);
         }
@@ -1203,7 +1209,7 @@ impl<H: FrameHost> HubFrame<H> {
                     .absolute()
                     .left_0()
                     .top_0()
-                    .w(px(1.0))
+                    .w(px(layout.border as f32))
                     .h(px(height as f32))
                     .bg(rgb(if dark { 0x000000 } else { 0xdddddd })),
             );
@@ -1211,7 +1217,7 @@ impl<H: FrameHost> HubFrame<H> {
         for (i, (label, rect)) in TITLES.into_iter().zip(layout.titles).enumerate() {
             let r = scrolled(rect);
             let (w, _) = text::measure(cx, &title_style(), label, scale);
-            let Some(offset) = centred_offset(r[2], w) else {
+            let Some(offset) = centred_offset(r[2], w, f64::from(scale)) else {
                 continue;
             };
             let (x, dx) = place_in(r[0], offset, f64::from(scale));
@@ -1276,7 +1282,7 @@ mod tests {
 
     #[test]
     fn settings_boxes_match_blink() {
-        let layout = SettingsLayout::new([300.0, 450.0, 800.0, 200.0], 15.0);
+        let layout = SettingsLayout::new([300.0, 450.0, 800.0, 200.0], 15.0, 1.0);
         assert_eq!(layout.panel, [899.0, 450.0, 201.0, 200.0]);
         assert_eq!(layout.select, [930.0, 480.0, 140.0, 25.0]);
         assert_eq!(
@@ -1289,7 +1295,7 @@ mod tests {
         );
         assert_eq!(layout.max_scroll, 0.0);
         assert_eq!(
-            SettingsLayout::new([300.0, 550.0, 800.0, 100.0], 15.0).max_scroll,
+            SettingsLayout::new([300.0, 550.0, 800.0, 100.0], 15.0, 1.0).max_scroll,
             85.0
         );
     }

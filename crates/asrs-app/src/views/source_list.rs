@@ -10,12 +10,14 @@ use std::rc::Rc;
 use asrs_hub::frame::client_coordinate;
 use asrs_hub::hub::HubModel;
 use asrs_js::math;
+use asrs_model::layout_unit::{centred, device, percent, snap, zoomed};
 use asrs_model::scroll_sensor::assign_scroll_offset;
 use asrs_model::source_list::layout::{ListLayout, ListRoot, controller_roots};
 use asrs_model::source_list::{
     ItemView, Length, ListButton, ListInput, ListPointer, Rect, SourceList, SourceListDom,
 };
 use asrs_ui::button::IconButton;
+use asrs_ui::canvas_view::geometry::client_size;
 use asrs_ui::focus::{self, ScrollAxis};
 use asrs_ui::gpui::{
     AnyElement, App, Bounds, BoxShadow, ClickEvent, Context, Div, FocusHandle, Hsla,
@@ -56,10 +58,10 @@ fn title_style(align: &str) -> TextStyle {
 }
 
 /// Where `div.title`'s centred line starts in a box `available` wide: Blink halves the free
-/// space in `LayoutUnit`s, so the offset is truncated to 1/64 px rather than snapped with the box.
-pub(super) fn centred_offset(available: f64, text_width: f64) -> Option<f64> {
-    let free = math::floor(available * 64.0) - math::ceil(text_width * 64.0);
-    (free >= 0.0).then(|| math::floor(free / 2.0) / 64.0)
+/// space in `LayoutUnit`s, so the offset is truncated to one rather than snapped with the box.
+pub(super) fn centred_offset(available: f64, text_width: f64, scale: f64) -> Option<f64> {
+    let [available, width] = [available, text_width].map(|v| device(v, scale));
+    (available >= width).then(|| centred(available, width) / scale)
 }
 
 pub fn type_name_style() -> TextStyle {
@@ -105,8 +107,10 @@ pub fn type_name_client_width(
         return 0.0;
     }
     let (width, _) = measurer.measure(&type_name_style(), text, scale);
-    let max = math::trunc(body_width * 0.5 * 64.0) / 64.0 - 85.0;
-    math::floor(math::min2(width, math::max2(max, 0.0)) + 0.5)
+    let zoom = f64::from(scale);
+    let max = percent(device(body_width, zoom), 50.0) - zoomed(85.0, zoom);
+    let width = math::min2(device(width, zoom), math::max2(max, 0.0));
+    f64::from(client_size((width / zoom) as f32, scale))
 }
 
 /// What the frame last laid out: each displayed list's layout by UUID, and each list's scroll
@@ -174,7 +178,7 @@ impl SourceListDom for ListsGeometry {
     }
 }
 
-fn displayed_lists(hub: &HubModel, controls: Rect) -> Vec<(&SourceList, ListRoot)> {
+fn displayed_lists(hub: &HubModel, controls: Rect, scale: f64) -> Vec<(&SourceList, ListRoot)> {
     let Some(tab) = hub.tabs().tabs().find(|t| !t.content_hidden()) else {
         return Vec::new();
     };
@@ -184,7 +188,7 @@ fn displayed_lists(hub: &HubModel, controls: Rect) -> Vec<(&SourceList, ListRoot
     tab.controller()
         .source_lists()
         .into_iter()
-        .zip(controller_roots(tab_type, controls))
+        .zip(controller_roots(tab_type, controls, scale))
         .collect()
 }
 
@@ -638,7 +642,8 @@ impl<H: FrameHost> HubFrame<H> {
         layout.body_width = body_width;
         layout.scale = scale;
         let mut lists = HashMap::new();
-        for (list, root) in displayed_lists(self.host().hub(cx), rect(controls)) {
+        let zoom = f64::from(scale);
+        for (list, root) in displayed_lists(self.host().hub(cx), rect(controls), zoom) {
             let scroll = layout
                 .scroll
                 .entry(list.uuid().to_owned())
@@ -704,9 +709,11 @@ impl<H: FrameHost> HubFrame<H> {
         cx: &mut Context<'_, Self>,
     ) -> Vec<AnyElement> {
         let geometry = self.host().source_list_geometry();
-        let shown: Vec<(Shown, ListRoot)> = displayed_lists(self.host().hub(cx), rect(controls))
+        let scale = f64::from(geometry.0.borrow().scale);
+        let hub = self.host().hub(cx);
+        let shown: Vec<(Shown, ListRoot)> = displayed_lists(hub, rect(controls), scale)
             .into_iter()
-            .map(|(list, root)| (Shown::of(list, self.host().hub(cx)), root))
+            .map(|(list, root)| (Shown::of(list, hub), root))
             .collect();
         let mut out = Vec::new();
         for (at, (list, root)) in shown.into_iter().enumerate() {
@@ -719,26 +726,24 @@ impl<H: FrameHost> HubFrame<H> {
                 )
             };
             if root.border_x > 0.0 {
-                let scale = f64::from(geometry.0.borrow().scale);
                 let color = rgb(if appearance == Appearance::Dark {
                     0x000000
                 } else {
                     0xdddddd
                 });
-                for edge in border_edges(root.rect, scale) {
+                for edge in border_edges(root, scale) {
                     out.push(
                         div()
                             .absolute()
                             .left(px((edge - controls[0]) as f32))
                             .top(px((root.rect.y - controls[1]) as f32))
-                            .w(px(1.0))
+                            .w(px(root.border_x as f32))
                             .h(px(root.rect.height as f32))
                             .bg(color)
                             .into_any_element(),
                     );
                 }
             }
-            let scale = f64::from(geometry.0.borrow().scale);
             out.push(self.list_element(
                 at, &list, &layout, scroll, root, controls, scale, appearance, window, cx,
             ));
@@ -778,10 +783,11 @@ impl<H: FrameHost> HubFrame<H> {
         let inset = if list.edit_button { 30.0 } else { 55.0 };
         let available = (inner - 2.0 * inset).max(0.0);
         let (title_width, _) = text::measure(cx, &title_style("left"), &list.title, scale as f32);
-        let (title_left, title_box, title_style) = match centred_offset(available, title_width) {
-            Some(offset) => (inset + offset, title_width, title_style("left")),
-            None => (inset, available, title_style("center")),
-        };
+        let (title_left, title_box, title_style) =
+            match centred_offset(available, title_width, scale) {
+                Some(offset) => (inset + offset, title_width, title_style("left")),
+                None => (inset, available, title_style("center")),
+            };
         let (title_x, title_dx) = place_in(left, title_left, scale);
         element = element.child(
             div()
@@ -965,11 +971,11 @@ pub(super) fn scroll_to(
     }
 }
 
-/// Where Blink paints a 1 px left and right border of the box `r`: it snaps the box's edges to
+/// Where Blink paints the left and right border of a root: it snaps the box's edges to
 /// device pixels, where GPUI would snap its origin and width apart.
-fn border_edges(r: Rect, scale: f64) -> [f64; 2] {
-    let snap = |v: f64| math::floor(v * scale + 0.5) / scale;
-    [snap(r.x), snap(r.x + r.width) - 1.0]
+fn border_edges(root: ListRoot, scale: f64) -> [f64; 2] {
+    let r = root.rect;
+    [snap(r.x, scale), snap(r.x + r.width, scale) - root.border_x]
 }
 
 fn client_point(position: Point<Pixels>) -> (f64, f64) {

@@ -1,0 +1,3365 @@
+{
+ "entry": "dom",
+ "inputs": [
+  "../assets/minimal.json"
+ ],
+ "fixture": {
+  "geometry": "real",
+  "window": {
+   "width": 1300,
+   "height": 900,
+   "devicePixelRatio": 3
+  },
+  "seed": 419,
+  "assets": "../assets/minimal.json",
+  "steps": [
+   {
+    "eval": "/*control-layout:measure*/ window.__controlLayout = () => window.__oracleQuiet(() => {\n  const range = document.createRange();\n  const box = (r) => [r.x, r.y, r.width, r.height];\n  const lines = (el) => {\n    const out = [];\n    for (const node of el.childNodes) {\n      if (node.nodeType !== 3 || node.data.trim() === \"\") continue;\n      range.selectNodeContents(node);\n      for (const rect of range.getClientRects()) if (rect.width > 0) out.push(box(rect));\n    }\n    return out;\n  };\n  const tab = window.tabs.tabList[window.tabs.selectedTab];\n  const shown = (el) => el.getClientRects().length > 0;\n  const parts = (root, selectors) => selectors.map((selector) => [selector, Array.from(root.querySelectorAll(selector)).filter(shown).map((el) => [el.className, box(el.getBoundingClientRect()), lines(el)])]).filter(([, found]) => found.length > 0);\n  const content = document.querySelector(\"div.controls-content\");\n  const renderer = document.querySelector(\"div.renderer-content\");\n  const list = document.createElement(\"div\");\n  list.className = \"source-list\";\n  const name = document.createElement(\"div\");\n  name.className = \"type-name\";\n  name.innerText = \"W\".repeat(200);\n  list.appendChild(name);\n  document.body.appendChild(list);\n  const nameWidth = name.clientWidth;\n  list.remove();\n  return { type: tab.type, window: window.innerWidth, nameWidth, controls: box(content.getBoundingClientRect()), renderer: box(renderer.getBoundingClientRect()), parts: [...parts(content, [\"div.source-list\",\"div.source-list > div.title\",\"div.setting-blocks\",\"div.setting-blocks > div\",\"div.setting-blocks div.half\",\"div.setting-blocks div.split\",\"div.setting-blocks div.xr-button\",\"div.setting-blocks div.xr-button img\",\"div.setting-blocks input\",\"div.setting-blocks select\",\"div.setting-blocks a\",\"table.joystick-selector td\",\"table.joystick-selector select\"]), ...parts(renderer, [\"canvas.field-3d-canvas\",\"div.field-3d-alert\",\"div.line-graph-help-container\",\"div.line-graph-help-row\",\"div.line-graph-help-row > span\",\"img.line-graph-help-icon\"])] };\n})"
+   },
+   {
+    "main": "new-tab",
+    "data": 1
+   },
+   {
+    "main": "new-tab",
+    "data": 2
+   },
+   {
+    "main": "new-tab",
+    "data": 3
+   },
+   {
+    "main": "new-tab",
+    "data": 6
+   },
+   {
+    "main": "new-tab",
+    "data": 8
+   },
+   {
+    "main": "new-tab",
+    "data": 9
+   },
+   {
+    "main": "new-tab",
+    "data": 10
+   },
+   {
+    "main": "new-tab",
+    "data": 11
+   },
+   {
+    "eval": "window.tabs.setSelected(window.tabs.tabList.findIndex((tab) => tab.type === 1))"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"442px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"215px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"496px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"116px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"486px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"280px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"552px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"326px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"501px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"314px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"264px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"312px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"796px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"136px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"707px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"110px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"469px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"201px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"585px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"301px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"611px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"328px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"372px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"134px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"454px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"158px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"295px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"111px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"749px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"268px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"640px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"181px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"379px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"192px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"299px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"322px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"269px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"294px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"860px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"329px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"418px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"114px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"421px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"193px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"660px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"330px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"427.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"122.66666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"559px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"223px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"302.3333333333333px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"199px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"681px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"261px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"558px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"273.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"664px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"160.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"395.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"321.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"680.6666666666666px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"163.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "lineGraph"
+   },
+   {
+    "eval": "window.tabs.setSelected(window.tabs.tabList.findIndex((tab) => tab.type === 2))"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"442px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"215px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"496px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"116px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"486px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"280px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"552px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"326px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"501px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"314px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = true"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"264px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"312px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"796px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"136px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"707px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"110px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"469px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"201px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"585px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"301px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"611px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"328px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"372px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"134px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = true"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"454px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"158px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"295px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"111px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"749px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"268px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"640px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"181px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = true"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"379px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"192px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"299px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"322px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = true"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"269px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"294px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"860px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"329px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"418px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"114px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"421px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"193px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"660px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"330px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"427.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"122.66666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = true"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"559px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"223px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = true"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"302.3333333333333px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"199px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"681px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"261px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = true"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"558px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"273.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"664px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"160.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = false"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"395.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"321.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "document.querySelector(\"div.controls-content a.field-source\").hidden = true"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"680.6666666666666px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"163.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field2d"
+   },
+   {
+    "eval": "window.tabs.setSelected(window.tabs.tabList.findIndex((tab) => tab.type === 3))"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"8.2809%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"442px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"215px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"1.2847%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"496px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"116px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"70.036%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"486px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"280px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"66.5788%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"552px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"326px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"13.4925%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"501px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"314px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"26.5209%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"264px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"312px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"52.4359%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"796px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"136px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"32.159%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"707px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"110px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"85.9345%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"469px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"201px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"40.4337%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"585px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"301px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"98.4894%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"611px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"30.509%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"328px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"36.5916%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"372px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"134px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"8.7401%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"454px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"158px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"33.7004%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"295px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"111px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"70.1999%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"749px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"268px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"61.7807%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"640px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"181px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"7.8695%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"379px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"192px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"77.3908%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"299px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"322px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"5.9634%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"269px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"294px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"87.7287%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"860px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"329px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"86.3575%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"418px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"114px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"13.9822%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"421px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"193px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"80.1003%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"660px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"330px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"38.6688%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"427.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"122.66666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"55.4759%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"559px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"223px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"31.2363%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"302.3333333333333px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"199px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"62.0989%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"681px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"261px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"15.7968%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"558px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"273.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"13.5179%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"664px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"160.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"100%\"; canvas.style.height = \"79.8851%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"395.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"321.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { const root = document.querySelector(\"div.renderer-content > :not([hidden])\"); const canvas = root.querySelector(\"canvas.field-3d-canvas\"); canvas.classList.add(\"fixed\"); canvas.parentElement.classList.add(\"fixed\"); canvas.style.width = \"87.5323%\"; canvas.style.height = \"100%\"; const alert = root.querySelector(\"div.field-3d-alert\"); alert.hidden = false; alert.innerHTML = \"3D field not found.</br>Please check that it is installed.\"; })"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"680.6666666666666px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"163.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "field3d"
+   },
+   {
+    "eval": "window.tabs.setSelected(window.tabs.tabList.findIndex((tab) => tab.type === 6))"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"442px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"215px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"496px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"116px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"486px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"280px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"552px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"326px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"501px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"314px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"264px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"312px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"796px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"136px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"707px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"110px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"469px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"201px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"585px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"301px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"611px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"328px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"372px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"134px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"454px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"158px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"295px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"111px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"749px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"268px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"640px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"181px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"379px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"192px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"299px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"322px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"269px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"294px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"860px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"329px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"418px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"114px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"421px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"193px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"660px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"330px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"427.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"122.66666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"559px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"223px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"302.3333333333333px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"199px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"681px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"261px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"558px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"273.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"664px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"160.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"395.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"321.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"680.6666666666666px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"163.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "statistics"
+   },
+   {
+    "eval": "window.tabs.setSelected(window.tabs.tabList.findIndex((tab) => tab.type === 8))"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"442px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"215px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"496px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"116px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"486px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"280px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"552px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"326px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"501px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"314px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"264px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"312px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"796px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"136px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"707px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"110px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"469px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"201px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"585px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"301px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"611px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"328px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"372px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"134px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"454px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"158px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"295px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"111px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"749px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"268px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"640px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"181px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"379px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"192px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"299px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"322px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"269px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"294px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"860px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"329px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"418px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"114px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"421px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"193px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"660px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"330px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"427.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"122.66666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"559px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"223px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"302.3333333333333px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"199px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"681px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"261px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"558px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"273.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"664px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"160.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"395.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"321.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"680.6666666666666px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"163.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "joysticks"
+   },
+   {
+    "eval": "window.tabs.setSelected(window.tabs.tabList.findIndex((tab) => tab.type === 9))"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"442px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"215px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"496px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"116px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"486px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"280px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"552px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"326px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"501px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"314px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"264px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"312px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"796px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"136px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"707px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"110px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"469px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"201px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"585px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"301px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"611px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"328px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"372px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"134px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"454px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"158px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"295px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"111px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"749px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"268px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"640px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"181px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"379px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"192px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"299px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"322px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"269px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"294px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"860px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"329px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"418px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"114px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"421px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"193px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"660px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"330px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"427.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"122.66666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"559px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"223px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"302.3333333333333px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"199px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"681px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"261px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"558px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"273.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"664px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"160.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"395.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"321.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"680.6666666666666px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"163.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "swerve"
+   },
+   {
+    "eval": "window.tabs.setSelected(window.tabs.tabList.findIndex((tab) => tab.type === 10))"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"442px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"215px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"496px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"116px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"486px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"280px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"552px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"326px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"501px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"314px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"264px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"312px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"796px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"136px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"707px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"110px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"469px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"201px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"585px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"301px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"611px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"328px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"372px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"134px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"454px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"158px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"295px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"111px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"749px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"268px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"640px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"181px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"379px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"192px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"299px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"322px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"269px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"294px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"860px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"329px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"418px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"114px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"421px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"193px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"660px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"330px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"427.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"122.66666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"559px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"223px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"302.3333333333333px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"199px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"681px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"261px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"558px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"273.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"664px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"160.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"395.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"321.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"680.6666666666666px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"163.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "mechanism"
+   },
+   {
+    "eval": "window.tabs.setSelected(window.tabs.tabList.findIndex((tab) => tab.type === 11))"
+   },
+   {
+    "advance": 50
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"442px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"215px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"496px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"116px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"486px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"280px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"552px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"326px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"501px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"314px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"264px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"312px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"796px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"136px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"707px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"110px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"469px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"201px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"585px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"301px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"611px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"328px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"257px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"372px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"134px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"454px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"158px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"295px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"111px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"749px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"268px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"640px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"181px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"379px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"192px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"299px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"322px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"269px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"294px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"860px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"329px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"418px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"114px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"421px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"193px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"660px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"330px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"427.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"122.66666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"559px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"223px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"302.3333333333333px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"199px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"681px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"261px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"558px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"273.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"664px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"160.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"395.6666666666667px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"321.6666666666667px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   },
+   {
+    "eval": "window.__oracleQuiet(() => { document.documentElement.style.setProperty(\"--side-bar-width\", \"680.6666666666666px\"); document.documentElement.style.setProperty(\"--tab-controls-height\", \"163.66666666666666px\"); })"
+   },
+   {
+    "capture": [
+     {
+      "kind": "eval",
+      "expr": "/*control-layout*/ window.__controlLayout()"
+     }
+    ],
+    "label": "points"
+   }
+  ]
+ }
+}

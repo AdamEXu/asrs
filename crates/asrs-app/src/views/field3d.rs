@@ -21,6 +21,7 @@ use asrs_js::math;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::value::JsValue;
 use asrs_model::assets::built_in_3d_fields;
+use asrs_model::layout_unit::{border, centred, device, percent, zoomed};
 use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_model::preferences::{Field3dMode, Preferences};
 use asrs_model::tab_controller::{TabCommand, TabRenderer};
@@ -48,6 +49,7 @@ use asrs_ui::tooltip::{titled, untitled};
 
 use super::frame::{FrameHost, HubFrame, SETTINGS_SECTION};
 use super::select::FormSelect;
+use super::source_list::centred_offset;
 use crate::main_process::app_root;
 
 /// `div.field-3d-canvas-container`'s `height: calc(100% + 26px)`, or `+ 10px` when `.fixed`.
@@ -280,12 +282,13 @@ struct Shown {
     container: [f64; 4],
     /// The canvas's border box, which is its content box unless it is `.fixed`.
     canvas: [f64; 4],
-    fixed: bool,
+    /// The canvas's border, which only a `.fixed` one has.
+    border: f64,
 }
 
 impl Shown {
     fn content(&self) -> [f64; 4] {
-        let b = if self.fixed { 1.0 } else { 0.0 };
+        let b = self.border;
         let [x, y, w, h] = self.canvas;
         [x + b, y + b, w - 2.0 * b, h - 2.0 * b]
     }
@@ -409,14 +412,106 @@ fn mode_name(mode: Field3dMode) -> &'static str {
     }
 }
 
-/// A `"N%"` inline size of `of`, in LayoutUnits; `None` for an unset or unparsable value.
-fn percent_of(value: &str, of: f64) -> Option<f64> {
-    let p: f64 = value.strip_suffix('%')?.parse().ok()?;
-    Some(math::floor(of * p / 100.0 * 64.0) / 64.0)
+/// The share of a `"N%"` inline size; `None` for an unset or unparsable value.
+fn share(value: &str) -> Option<f64> {
+    value.strip_suffix('%')?.parse().ok()
 }
 
-fn layout_unit(v: f64) -> f64 {
-    math::floor(v * 64.0) / 64.0
+/// `canvas.field-3d-canvas.fixed`'s border box in `container`, at `left: 50%; top: 50%;
+/// transform: translate(-50%, -50%)`.
+fn fixed_canvas(container: [f64; 4], size: [&str; 2], scale: f64) -> [f64; 4] {
+    let container = container.map(|v| device(v, scale));
+    let edge = border(1.0, scale);
+    let mut out = [0.0; 4];
+    for i in 0..2 {
+        let space = container[i + 2];
+        let length = share(size[i]).map_or(0.0, |share| percent(space, share)) + 2.0 * edge;
+        out[i] = (container[i] + percent(space, 50.0) - length / 2.0) / scale;
+        out[i + 2] = length / scale;
+    }
+    out
+}
+
+/// `div.field-3d-alert`'s border box, from its container's corner, and its lines' lefts and tops
+/// from its own, around lines of these sizes.
+fn alert_layout(container_width: f64, lines: &[[f64; 2]], scale: f64) -> ([f64; 4], Vec<[f64; 2]>) {
+    let lines: Vec<[f64; 2]> = lines.iter().map(|l| l.map(|v| device(v, scale))).collect();
+    let edge = border(1.0, scale);
+    let padding = zoomed(ALERT_PADDING, scale);
+    let inner = lines.iter().map(|l| l[0]).fold(0.0, math::max2);
+    let height: f64 = lines.iter().map(|l| l[1]).sum();
+    let width = inner + 2.0 * (padding + edge);
+    let left = percent(device(container_width, scale), 50.0) - width / 2.0;
+    let mut top = edge + padding;
+    let placed = lines
+        .iter()
+        .map(|[w, h]| {
+            let at = [edge + padding + centred(inner, *w), top].map(|v| v / scale);
+            top += h;
+            at
+        })
+        .collect();
+    let height = height + 2.0 * (padding + edge);
+    let rect = [left, zoomed(ALERT_TOP, scale), width, height].map(|v| v / scale);
+    (rect, placed)
+}
+
+/// Where `div.field-3d-settings` puts its parts inside `div.controls-content`, in client
+/// coordinates.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct SettingsLayout {
+    /// The border box, `border` of it on the left the `border-left`.
+    panel: [f64; 4],
+    border: f64,
+    titles: [[f64; 4]; 2],
+    select: [f64; 4],
+    button: [f64; 4],
+    image: [f64; 4],
+}
+
+impl SettingsLayout {
+    fn new(controls: [f64; 4], select_width: f64, scale: f64) -> SettingsLayout {
+        let [x, y, w, h] = controls.map(|v| device(v, scale));
+        let length = |v: f64| zoomed(v, scale);
+        let css = |rect: [f64; 4]| rect.map(|v| v / scale);
+        let edge = border(1.0, scale);
+        let width = math::min2(percent(w, 40.0), length(SETTINGS_MAX_WIDTH));
+        let panel = [x + w - width - edge, y, width + edge, h];
+        let left = panel[0] + edge;
+        let title = length(TITLE_HEIGHT);
+        let row = length(FIELD_INPUT_HEIGHT);
+        let top = y + length(5.0);
+        let select = [device(select_width, scale), length(SELECT_HEIGHT)];
+        let tall = math::min2(math::max2(h - length(85.0), row), length(100.0));
+        let split = percent(width, 80.0);
+        let [button_width, button_height] = [percent(split, 60.0), percent(tall, 65.0)];
+        let button = [
+            left + percent(width, 50.0) - split / 2.0 + centred(split, button_width),
+            top + 2.0 * title + row + length(8.0),
+            button_width,
+            button_height,
+        ];
+        let inner = [button_width, button_height].map(|v| math::max2(v - 2.0 * edge, 0.0));
+        let image = inner.map(|v| percent(v, 60.0));
+        SettingsLayout {
+            panel: css(panel),
+            border: edge / scale,
+            titles: [0.0, 1.0].map(|i| css([left, top + i * (title + row), width, title])),
+            select: css([
+                left + centred(width, select[0]),
+                top + title + percent(row, 50.0) - select[1] / 2.0,
+                select[0],
+                select[1],
+            ]),
+            button: css(button),
+            image: css([
+                button[0] + edge + centred(inner[0], image[0]),
+                button[1] + edge + percent(inner[1], 50.0) - image[1] / 2.0,
+                image[0],
+                image[1],
+            ]),
+        }
+    }
 }
 
 /// Paints `image` one device pixel per bitmap pixel at the canvas content box's snapped origin.
@@ -846,15 +941,8 @@ impl<H: FrameHost> HubFrame<H> {
         };
         let container = [rect[0], rect[1] - extra, rect[2], rect[3] + extra];
         let canvas_box = if dom.canvas_fixed {
-            let width = percent_of(&dom.canvas_width, container[2]).unwrap_or(0.0);
-            let height = percent_of(&dom.canvas_height, container[3]).unwrap_or(0.0);
-            let (bw, bh) = (width + 2.0, height + 2.0);
-            [
-                container[0] + layout_unit(container[2] / 2.0 - bw / 2.0),
-                container[1] + layout_unit(container[3] / 2.0 - bh / 2.0),
-                bw,
-                bh,
-            ]
+            let size = [&*dom.canvas_width, &*dom.canvas_height];
+            fixed_canvas(container, size, f64::from(scale))
         } else {
             container
         };
@@ -862,7 +950,11 @@ impl<H: FrameHost> HubFrame<H> {
             index,
             container,
             canvas: canvas_box,
-            fixed: dom.canvas_fixed,
+            border: if dom.canvas_fixed {
+                border(1.0, f64::from(scale)) / f64::from(scale)
+            } else {
+                0.0
+            },
         };
         self.field3d.shown = Some(shown);
         let content = shown.content();
@@ -930,10 +1022,9 @@ impl<H: FrameHost> HubFrame<H> {
             );
         }
         if dom.canvas_fixed {
-            canvas_el =
-                canvas_el
-                    .border_1()
-                    .border_color(rgb(if dark { 0x999999 } else { 0x555555 }));
+            canvas_el = canvas_el
+                .border(px(shown.border as f32))
+                .border_color(rgb(if dark { 0x999999 } else { 0x555555 }));
         }
         let mut container_el = local(container, rect)
             .overflow_hidden()
@@ -997,32 +1088,27 @@ impl<H: FrameHost> HubFrame<H> {
                 (line.to_owned(), w, h)
             })
             .collect();
-        let inner_w = lines.iter().map(|l| l.1).fold(0.0, math::max2);
-        let inner_h: f64 = lines.iter().map(|l| l.2).sum();
-        let (w, h) = (
-            inner_w + 2.0 * (ALERT_PADDING + 1.0),
-            inner_h + 2.0 * (ALERT_PADDING + 1.0),
-        );
-        let left = layout_unit(container[2] / 2.0 - w / 2.0);
+        let sizes: Vec<[f64; 2]> = lines.iter().map(|l| [l.1, l.2]).collect();
+        let zoom = f64::from(scale);
+        let ([left, top, w, h], places) = alert_layout(container[2], &sizes, zoom);
+        let edge = border(1.0, zoom) / zoom;
         let mut alert = div()
             .absolute()
             .left(px(left as f32))
-            .top(px(ALERT_TOP as f32))
+            .top(px(top as f32))
             .w(px(w as f32))
             .h(px(h as f32))
             .bg(rgb(if dark { 0x222222 } else { 0xffffff }))
-            .border_1()
+            .border(px(edge as f32))
             .border_color(rgb(if dark { 0x999999 } else { 0x555555 }));
-        let mut y = ALERT_PADDING;
-        for (line, lw, lh) in lines {
-            let x = ALERT_PADDING + layout_unit((inner_w - lw) / 2.0);
+        for ((line, _, _), place) in lines.into_iter().zip(places) {
+            let [x, y] = place.map(|v| v - edge);
             alert =
                 alert.child(
                     div().absolute().left(px(x as f32)).top(px(y as f32)).child(
                         Text::new(line, style).color(if dark { 0xffffff } else { 0x000000 }),
                     ),
                 );
-            y += lh;
         }
         probed("div.field-3d-alert", alert).into_any_element()
     }
@@ -1240,16 +1326,6 @@ impl<H: FrameHost> HubFrame<H> {
         let dark = appearance == Appearance::Dark;
         let theme = appearance.theme();
 
-        let width = math::min2(layout_unit(controls[2] * 0.4), SETTINGS_MAX_WIDTH);
-        let settings = [
-            controls[0] + controls[2] - width - 1.0,
-            controls[1],
-            width + 1.0,
-            controls[3],
-        ];
-        let content_x = settings[0] + 1.0;
-        let tall = math::min2(math::max2(controls[3] - 85.0, 40.0), 100.0);
-
         let select_w = {
             let mut style = TextStyle::new(CONTROL_FONT);
             style.white_space = WhiteSpace::Pre;
@@ -1263,8 +1339,10 @@ impl<H: FrameHost> HubFrame<H> {
             let device = f64::from(scale);
             math::ceil(widest * device) / device + 4.0 + 1.0 + 15.0 + 2.0
         };
-        let select_x = content_x + layout_unit((width - select_w) / 2.0);
-        let select_y = controls[1] + 5.0 + TITLE_HEIGHT + 8.0;
+        let layout = SettingsLayout::new(controls, select_w, f64::from(scale));
+        let settings = layout.panel;
+        let content = [settings[0] + layout.border, settings[1]];
+        let [select_x, select_y, ..] = layout.select;
 
         let view = self.field3d.tabs.entry(key).or_default();
         if view.select.is_none() {
@@ -1313,15 +1391,16 @@ impl<H: FrameHost> HubFrame<H> {
             );
         });
 
-        let mut title = |text: &'static str, top: f64, window: &mut Window| {
+        let mut title = |text: &'static str, i: usize, window: &mut Window| {
             let place = focus::place((text, key), window, cx);
             let (w, _) = text::measure(cx, &title_style(), text, scale);
-            let x = layout_unit((width - w) / 2.0);
-            let (abs_x, abs_y) = ((settings[0] + 1.0 + x) as f32, (controls[1] + top) as f32);
+            let [left, top, width, _] = layout.titles[i];
+            let x = centred_offset(width, w, f64::from(scale)).unwrap_or(0.0);
+            let (abs_x, abs_y) = ((left + x) as f32, top as f32);
             div()
                 .absolute()
                 .left(px(x as f32))
-                .top(px(top as f32))
+                .top(px((top - content[1]) as f32))
                 .track_focus(&place)
                 .child(
                     Text::new(text.to_owned(), title_style())
@@ -1329,23 +1408,16 @@ impl<H: FrameHost> HubFrame<H> {
                         .subpixel(snap_remainder(abs_x, scale), snap_remainder(abs_y, scale)),
                 )
         };
-        let field_title = title("Field", 5.0, window);
-        let xr_title = title("XR", 5.0 + TITLE_HEIGHT + FIELD_INPUT_HEIGHT, window);
+        let field_title = title("Field", 0, window);
+        let xr_title = title("XR", 1, window);
 
-        let split_w = width * 0.8;
-        let button_w = split_w * 0.6;
-        let button_h = tall * 0.65;
-        let button = [
-            width / 2.0 - split_w / 2.0 + (split_w - button_w) / 2.0,
-            5.0 + 2.0 * TITLE_HEIGHT + FIELD_INPUT_HEIGHT + 8.0,
-            button_w,
-            button_h,
-        ];
-        let (img_w, img_h) = ((button_w - 2.0) * 0.6, (button_h - 2.0) * 0.6);
-        let side = math::min2(img_w, img_h);
-        let img_x = 1.0 + (button_w - 2.0 - img_w) / 2.0 + (img_w - side) / 2.0;
-        let img_y = 1.0 + (button_h - 2.0) / 2.0 - img_h / 2.0 + (img_h - side) / 2.0;
-        let (bg, border) = if dark {
+        let button = layout.button;
+        let side = math::min2(layout.image[2], layout.image[3]);
+        let [img_x, img_y] = [0, 1].map(|i| {
+            let [at, size] = [layout.image[i], layout.image[i + 2]];
+            at - button[i] - layout.border + (size - side) / 2.0
+        });
+        let (bg, edge) = if dark {
             (0x444444, 0x666666)
         } else {
             (0xeeeeee, 0xaaaaaa)
@@ -1364,13 +1436,13 @@ impl<H: FrameHost> HubFrame<H> {
             .id("xr-button")
             .track_focus(&focus.handle)
             .absolute()
-            .left(px(button[0] as f32))
-            .top(px(button[1] as f32))
+            .left(px((button[0] - content[0]) as f32))
+            .top(px((button[1] - content[1]) as f32))
             .w(px(button[2] as f32))
             .h(px(button[3] as f32))
             .bg(rgb(bg))
-            .border_1()
-            .border_color(rgb(border))
+            .border(px(layout.border as f32))
+            .border_color(rgb(edge))
             .rounded(radius)
             .on_click(cx.listener(move |frame, event: &ClickEvent, _, cx| {
                 // GPUI clicks a focused element on key up, `setupKeyboardControls` on `keydown`.
@@ -1387,8 +1459,8 @@ impl<H: FrameHost> HubFrame<H> {
             xr = xr.child(untitled(
                 div()
                     .absolute()
-                    .left(px((img_x - 1.0) as f32))
-                    .top(px((img_y - 1.0) as f32))
+                    .left(px(img_x as f32))
+                    .top(px(img_y as f32))
                     .w(px(side as f32))
                     .h(px(side as f32))
                     .child(Icon::new(icon, chains::XR_BUTTON).fit(IconFit::Natural)),
@@ -1403,14 +1475,14 @@ impl<H: FrameHost> HubFrame<H> {
 
         let select_el = div()
             .absolute()
-            .left(px((select_x - content_x) as f32))
-            .top(px((select_y - settings[1]) as f32))
+            .left(px((select_x - content[0]) as f32))
+            .top(px((select_y - content[1]) as f32))
             .w(px(select_w as f32))
             .h(px(SELECT_HEIGHT as f32))
             .child(select);
         let place = focus::place(("field-3d-settings", key), window, cx);
         let block = focus::section(local(settings, controls), SETTINGS_SECTION, &place)
-            .border_l_1()
+            .border_l(px(layout.border as f32))
             .border_color(rgb(if dark { 0x000000 } else { 0xdddddd }))
             .overflow_hidden()
             .child(field_title)
@@ -1454,12 +1526,8 @@ mod tests {
     }
 
     #[test]
-    fn percent_sizes_floor_to_layout_units() {
-        assert_eq!(percent_of("75%", 100.0), Some(75.0));
-        assert_eq!(percent_of("", 100.0), None);
-        assert_eq!(
-            percent_of("33.3333%", 10.0),
-            Some(math::floor(3.33333 * 64.0) / 64.0)
-        );
+    fn canvas_sizes_are_percentages() {
+        assert_eq!(share("75%"), Some(75.0));
+        assert_eq!(share(""), None);
     }
 }
