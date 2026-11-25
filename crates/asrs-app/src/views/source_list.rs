@@ -498,7 +498,8 @@ fn item_body(
         let key_text = r.key_text.to_string_lossy();
         let (key_width, _) = text::measure(cx, &key_style(), &key_text, scale);
         let cut = key_width > max;
-        let layout = text::layout(cx, &key_style(), &key_text, scale, Some(max as f32));
+        let room = cut.then_some(max as f32);
+        let layout = text::layout(cx, &key_style(), &key_text, scale, room);
         let mut key_line = Text::new(key_text, key_style())
             .color(theme.text)
             .subpixel(text_dx(NAME_LEFT + indent + type_width), 0.0);

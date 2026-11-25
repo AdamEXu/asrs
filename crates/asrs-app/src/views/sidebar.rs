@@ -43,8 +43,6 @@ const ROW_HEIGHT: f64 = 30.0;
 const INLINE_HEIGHT: f32 = 18.0;
 const TUNING_INPUT_WIDTH: f64 = 56.0;
 const BOOLEAN_WIDTH: f64 = 9.0;
-/// Its bottom is on the baseline of `div.field-value`'s line.
-const BOOLEAN_TOP: f32 = 11.0;
 const RESULTS_ITEM_HEIGHT: f64 = 25.0;
 const RESULTS_MAX_HEIGHT: f64 = 290.0;
 
@@ -95,6 +93,13 @@ fn value_text(text: String, color: u32, window: &Window, cx: &mut App) -> AnyEle
         .color(color)
         .subpixel(dx as f32, 0.0)
         .into_any_element()
+}
+
+/// The boolean's bottom is on the baseline of `div.field-value`'s line.
+fn boolean_top(scale: f32, cx: &mut App) -> f32 {
+    let (ascent, descent) = asrs_ui::text::font_metrics(cx, &value_style(), scale);
+    let leading = ((ROW_HEIGHT as f32 * scale - ascent - descent) / 2.0).floor();
+    (leading + ascent) / scale - BOOLEAN_WIDTH as f32
 }
 
 fn results_style() -> TextStyle {
@@ -759,7 +764,7 @@ impl SidebarView {
                 let mut el = div()
                     .id(("field-value-svg", flat))
                     .relative()
-                    .mt(px(BOOLEAN_TOP))
+                    .mt(px(boolean_top(window.scale_factor(), cx)))
                     .w(px(9.0))
                     .h(px(9.0))
                     .child(

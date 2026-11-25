@@ -208,6 +208,16 @@ pub fn post_window_notification(window: &Window, name: &str) {
     imp::probe::post_window_notification(window, name);
 }
 
+pub fn can_become_main(window: &Window) -> Option<bool> {
+    imp::probe::can_become_main(window)
+}
+
+/// Has AppKit make `window` the main window from the run loop as in an active app, which this one
+/// need not be, and which takes no focus.
+pub fn make_main(window: &Window) {
+    imp::probe::make_main(window);
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowChrome {
     pub toolbar: bool,
@@ -417,11 +427,6 @@ pub fn size_hints(window: &Window, number: u32) -> Option<SizeHints> {
 /// Presses the keys of X11 keysyms or Windows virtual key codes in turn, then releases them.
 pub fn post_keys(keysyms: &[u32]) -> bool {
     imp::probe::post_keys(keysyms)
-}
-
-/// Divides an X11 screen into two RandR monitors at `x`, in device px, or undoes that.
-pub fn split_monitors(x: Option<u16>) -> bool {
-    imp::probe::split_monitors(x)
 }
 
 /// What [`power`](super::power) reads from the system.

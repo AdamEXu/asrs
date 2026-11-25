@@ -17,11 +17,17 @@ pub struct RenderedFrame {
 
 #[derive(Default)]
 struct State {
+    #[cfg(feature = "parity")]
+    lose_device: bool,
     pending: Option<Frame>,
     latest: Option<RenderedFrame>,
     pool: Vec<Vec<u8>>,
     shutdown: bool,
+    failure: Option<String>,
 }
+
+/// Devices opened for one frame before the thread gives up on it.
+const DEVICE_ATTEMPTS: u32 = 3;
 
 struct Shared {
     state: Mutex<State>,
@@ -31,6 +37,7 @@ struct Shared {
 /// The dedicated thread that owns the wgpu device. The foreground submits immutable frames into
 /// a queue of depth one where a newer frame replaces one not yet started, and is woken through
 /// `waker` (in the app, a channel whose receiver calls `cx.notify`) when a frame is ready.
+/// A lost device is reported on stderr and replaced, as a lost WebGL context is restored.
 /// Pixel buffers circulate through a pool: give each presented buffer back with `recycle`.
 pub struct RenderThread {
     shared: Arc<Shared>,
@@ -95,6 +102,22 @@ impl RenderThread {
             .take()
     }
 
+    /// Loses the device before the next frame, as a driver reset would.
+    #[cfg(feature = "parity")]
+    pub fn lose_device(&self) {
+        self.shared.state.lock().expect("render state").lose_device = true;
+    }
+
+    /// Why the thread ended, if it did: the device was lost and no other could be opened.
+    pub fn failure(&self) -> Option<String> {
+        self.shared
+            .state
+            .lock()
+            .expect("render state")
+            .failure
+            .clone()
+    }
+
     pub fn recycle(&self, buffer: Vec<u8>) {
         let mut state = self.shared.state.lock().expect("render state");
         if state.pool.len() < 4 {
@@ -125,6 +148,10 @@ fn run(shared: &Shared, renderer: &mut Renderer, waker: &dyn Fn()) {
                     return;
                 }
                 if let Some(frame) = state.pending.take() {
+                    #[cfg(feature = "parity")]
+                    if std::mem::take(&mut state.lose_device) {
+                        renderer.lose_device();
+                    }
                     let buffer = state.pool.pop().unwrap_or_default();
                     break (frame, buffer);
                 }
@@ -132,7 +159,28 @@ fn run(shared: &Shared, renderer: &mut Renderer, waker: &dyn Fn()) {
             }
         };
         let start = Instant::now();
-        let timings = renderer.render(&frame, &mut buffer);
+        let mut attempts = 1;
+        let timings = loop {
+            let error = match renderer.render(&frame, &mut buffer) {
+                Ok(timings) => break timings,
+                Err(e) if attempts == DEVICE_ATTEMPTS => e,
+                Err(e) => {
+                    eprintln!("asrs: 3D renderer: {e}; opening another device");
+                    attempts += 1;
+                    match Renderer::new() {
+                        Ok(r) => {
+                            *renderer = r;
+                            continue;
+                        }
+                        Err(e) => e,
+                    }
+                }
+            };
+            eprintln!("asrs: 3D renderer stopped: {error}");
+            shared.state.lock().expect("render state").failure = Some(error.to_string());
+            waker();
+            return;
+        };
         let render_ms = start.elapsed().as_secs_f64() * 1e3;
         seq += 1;
         {
