@@ -26,18 +26,18 @@ fn next_material_id() -> u64 {
 #[derive(Debug)]
 pub struct Geometry {
     key: u64,
-    pub geometry: BufferGeometry,
+    pub geometry: Arc<BufferGeometry>,
     bounding_sphere: Sphere,
 }
 
 impl Geometry {
     /// Keeps a bounding sphere the geometry already carries (three never recomputes one that is
     /// set), otherwise computes it as the first render would.
-    pub fn new(mut geometry: BufferGeometry) -> Arc<Self> {
-        if geometry.bounding_sphere.is_none() {
-            geometry.compute_bounding_sphere();
-        }
-        let bounding_sphere = geometry.bounding_sphere.unwrap_or_default();
+    pub fn new(geometry: impl Into<Arc<BufferGeometry>>) -> Arc<Self> {
+        let geometry = geometry.into();
+        let bounding_sphere = geometry
+            .bounding_sphere
+            .unwrap_or_else(|| geometry.new_bounding_sphere());
         Arc::new(Geometry {
             key: next_resource_id(),
             geometry,

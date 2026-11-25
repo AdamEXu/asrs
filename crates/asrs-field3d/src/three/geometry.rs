@@ -81,6 +81,31 @@ impl BufferGeometry {
         self.attributes.retain(|(n, _)| n != name);
     }
 
+    pub fn retain_attributes(&mut self, names: &[&str]) {
+        self.attributes.retain(|(n, _)| names.contains(&n.as_str()));
+    }
+
+    /// A clone holding only the attributes named.
+    pub fn clone_attributes(&self, names: &[&str]) -> BufferGeometry {
+        BufferGeometry {
+            index: self.index.clone(),
+            attributes: self
+                .attributes
+                .iter()
+                .filter(|(n, _)| names.contains(&n.as_str()))
+                .cloned()
+                .collect(),
+            groups: self.groups.clone(),
+            bounding_box: self.bounding_box,
+            bounding_sphere: self.bounding_sphere,
+        }
+    }
+
+    pub(super) fn take_attribute(&mut self, name: &str) -> Option<BufferAttribute> {
+        let i = self.attributes.iter().position(|(n, _)| n == name)?;
+        Some(self.attributes.remove(i).1)
+    }
+
     pub fn add_group(&mut self, start: usize, count: usize, material_index: usize) {
         self.groups.push(Group {
             start,
@@ -184,9 +209,14 @@ impl BufferGeometry {
     }
 
     pub fn compute_bounding_sphere(&mut self) {
+        self.bounding_sphere = Some(self.new_bounding_sphere());
+    }
+
+    /// The sphere `computeBoundingSphere` sets: without positions, the one already there or an
+    /// empty one.
+    pub fn new_bounding_sphere(&self) -> Sphere {
         let Some(position) = self.attribute("position") else {
-            self.bounding_sphere.get_or_insert_with(Sphere::default);
-            return;
+            return self.bounding_sphere.unwrap_or_default();
         };
         let center = Box3::from_buffer_attribute(position).center();
         let mut max_radius_sq = 0.0;
@@ -196,9 +226,9 @@ impl BufferGeometry {
                 center.distance_to_squared(position.get_xyz(i)),
             );
         }
-        self.bounding_sphere = Some(Sphere {
+        Sphere {
             center,
             radius: math::sqrt(max_radius_sq),
-        });
+        }
     }
 }

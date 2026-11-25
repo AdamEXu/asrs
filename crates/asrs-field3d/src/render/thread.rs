@@ -22,6 +22,8 @@ struct State {
     pending: Option<Frame>,
     latest: Option<RenderedFrame>,
     pool: Vec<Vec<u8>>,
+    release: bool,
+    holds_targets: bool,
     shutdown: bool,
     failure: Option<String>,
 }
@@ -118,6 +120,23 @@ impl RenderThread {
             .clone()
     }
 
+    /// Frees the render targets, the shadow maps and the pooled pixel buffers once no frame is
+    /// waiting. The next frame makes them again.
+    pub fn release_targets(&self) {
+        let mut state = self.shared.state.lock().expect("render state");
+        state.release = true;
+        self.shared.wake_thread.notify_one();
+    }
+
+    /// Whether the last frame's targets are still there.
+    pub fn holds_targets(&self) -> bool {
+        self.shared
+            .state
+            .lock()
+            .expect("render state")
+            .holds_targets
+    }
+
     pub fn recycle(&self, buffer: Vec<u8>) {
         let mut state = self.shared.state.lock().expect("render state");
         if state.pool.len() < 4 {
@@ -153,7 +172,16 @@ fn run(shared: &Shared, renderer: &mut Renderer, waker: &dyn Fn()) {
                         renderer.lose_device();
                     }
                     let buffer = state.pool.pop().unwrap_or_default();
+                    state.holds_targets = true;
                     break (frame, buffer);
+                }
+                if std::mem::take(&mut state.release) {
+                    state.pool = Vec::new();
+                    drop(state);
+                    renderer.release_targets();
+                    state = shared.state.lock().expect("render state");
+                    state.holds_targets = renderer.holds_targets();
+                    continue;
                 }
                 state = shared.wake_thread.wait(state).expect("render state");
             }

@@ -19,7 +19,7 @@ use crate::render::{
     Scene, Side,
 };
 use crate::three::primitives::{box_geometry, plane_geometry};
-use crate::three::{BufferGeometry, Color, Euler, Graph, ObjectId, Vector3};
+use crate::three::{Box3, BufferGeometry, Color, Euler, Graph, ObjectId, Vector3};
 
 const SWERVE_CANVAS_PX: f64 = 1000.0;
 const SWERVE_CANVAS_METERS: f64 = 3.0;
@@ -296,9 +296,8 @@ impl RobotManager {
             for optimized in scene_meshes {
                 let mesh = optimized.to_render_mesh();
                 if index == 0 {
-                    let mut geometry = mesh.geometry.geometry.clone();
-                    geometry.compute_bounding_box();
-                    if let Some(bounds) = geometry.bounding_box {
+                    if let Some(position) = mesh.geometry.geometry.attribute("position") {
+                        let bounds = Box3::from_buffer_attribute(position);
                         let d = &mut self.dimensions;
                         d[0] = math::max2(d[0], bounds.max.x);
                         d[1] = math::max2(d[1], bounds.max.y);
