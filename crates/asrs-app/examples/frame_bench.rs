@@ -1,18 +1,15 @@
 //! Frame time of the busiest scene of each view in the headless hub window, 2200x1300 device
 //! pixels, playing back a real log, every sidebar field expanded. One JSON line per scene:
 //! - `p50`, `p95`, `max`: a frame on the foreground thread, from the animation frame through
-//!   model, layout, paint and scene building. Background tasks run inside it, because the headless
-//!   executor has one thread, so it is an upper bound.
+//!   model, layout, paint and scene building.
 //! - `imageP95`: the same frame, then the 3D render thread's answer, then Metal drawing the scene
 //!   and reading the image back.
-//! - `pixels`: a hash of the images, which an optimization must not change.
-//! - `cpu`: CPU time per frame over the whole process and the first pass.
+//! - `cpu`: CPU time per frame over the whole process and the first pass, timers included.
 //!
 //! `frame_bench --cache <dir> [--assets <userData dir>] [--log <file>] [--scene <name>]...`
 
 #![allow(clippy::disallowed_methods)]
 
-use std::hash::{DefaultHasher, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -341,13 +338,32 @@ impl Page<'_> {
     }
 
     fn frame(&mut self) {
+        self.frame_showing(None);
+    }
+
+    /// One animation frame and the draw after it, in milliseconds. The timers that come due and
+    /// the tasks the frame wakes run outside the time: GPUI's test mode draws after each of them,
+    /// where a display draws once a frame.
+    fn frame_showing(&mut self, range: Option<[f64; 2]>) -> f64 {
+        let hub = self.hub.clone();
         let cx = self.headless.context();
         cx.advance_clock(FRAME);
+        let start = Instant::now();
         cx.update_window(self.window.into(), |_, window, cx| {
+            if let Some(range) = range {
+                hub.update(cx, |hub, cx| {
+                    hub.update(cx, |model, _| {
+                        let selection = model.page_mut().selection_mut();
+                        selection.set_timeline_range(range, false);
+                    })
+                });
+            }
             window.simulate_next_frame(cx);
         })
         .expect("window");
+        let time = ms(start);
         cx.run_until_parked();
+        time
     }
 
     fn rendering(&mut self) -> bool {
@@ -392,12 +408,11 @@ impl Page<'_> {
         }
     }
 
-    fn image(&mut self) -> Vec<u8> {
+    fn image(&mut self) {
         self.headless
             .context()
             .capture_screenshot(self.window.into())
-            .expect("image")
-            .into_raw()
+            .expect("image");
     }
 }
 
@@ -459,54 +474,38 @@ fn run(page: &mut Page<'_>, spec: &SceneSpec, expanded: &str) -> String {
         selection.play();
     });
     let mut step = 0.0;
-    let mut advance = |page: &mut Page<'_>| {
-        if zooming {
-            step += 0.1;
-            page.model(|model| {
-                let range = [step, END - step];
-                model
-                    .page_mut()
-                    .selection_mut()
-                    .set_timeline_range(range, false);
-            });
-        }
+    let mut range = || {
+        step += 0.1;
+        zooming.then_some([step, END - step])
     };
     for _ in 0..WARM_FRAMES {
-        advance(page);
-        page.frame();
+        page.frame_showing(range());
         page.wait_rendered();
         page.image();
     }
     let mut times = Vec::with_capacity(FRAMES);
     let cpu = cpu_seconds();
     for _ in 0..FRAMES {
-        let start = Instant::now();
-        advance(page);
-        page.frame();
-        times.push(ms(start));
+        times.push(page.frame_showing(range()));
         page.wait_rendered();
     }
     let cpu = (cpu_seconds() - cpu) * 1e3 / FRAMES as f64;
     let mut images = Vec::with_capacity(IMAGE_FRAMES);
-    let mut pixels = DefaultHasher::new();
     for _ in 0..IMAGE_FRAMES {
+        let time = page.frame_showing(range());
         let start = Instant::now();
-        advance(page);
-        page.frame();
         page.wait_rendered();
-        let image = page.image();
-        images.push(ms(start));
-        pixels.write(&image);
+        page.image();
+        images.push(time + ms(start));
     }
     format!(
-        r#"{{"scene":"{}","p50":{:.3},"p95":{:.3},"max":{:.3},"cpu":{cpu:.3},"imageP95":{:.3},"memoryMb":{:.1},"pixels":"{:016x}"}}"#,
+        r#"{{"scene":"{}","p50":{:.3},"p95":{:.3},"max":{:.3},"cpu":{cpu:.3},"imageP95":{:.3},"memoryMb":{:.1}}}"#,
         spec.name,
         percentile(&times, 0.5),
         percentile(&times, 0.95),
         percentile(&times, 1.0),
         percentile(&images, 0.95),
         memory_mb(),
-        pixels.finish(),
     )
 }
 
