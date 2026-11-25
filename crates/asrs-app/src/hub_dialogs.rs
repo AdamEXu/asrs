@@ -7,7 +7,7 @@ use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_services::fs::RealFs;
 use asrs_services::hub_dialogs::{self, CoordinateWarning, DONT_SHOW_AGAIN};
 use asrs_services::update::feedback_url;
-use asrs_ui::gpui::{AnyWindowHandle, App, Window};
+use asrs_ui::gpui::{AnyWindowHandle, App, AppContext as _, Window};
 use asrs_ui::platform;
 
 use crate::main_process::{MainProcess, RELEASE_PROFILE};

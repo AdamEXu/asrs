@@ -46,7 +46,7 @@ impl Children {
         let cwd = cwd.map(str::to_owned);
         thread::spawn(move || {
             let started = start(&command, &args, cwd.as_deref());
-            run(process, &command, &child, started, emit);
+            report(process, &command, &child, started, emit);
         });
     }
 
@@ -68,10 +68,13 @@ impl Children {
         }
         let killed = Instant::now();
         while killed.elapsed() < KILL_WAIT {
-            match &mut *lock(child) {
-                State::Starting { .. } => {}
-                State::Running(child) if matches!(child.try_wait(), Ok(None)) => {}
-                _ => break,
+            let gone = match &mut *lock(child) {
+                State::Starting { .. } => false,
+                State::Running(child) => !matches!(child.try_wait(), Ok(None)),
+                State::Failed => true,
+            };
+            if gone {
+                break;
             }
             thread::sleep(Duration::from_millis(1));
         }
@@ -89,7 +92,7 @@ fn lock(child: &Shared) -> std::sync::MutexGuard<'_, State> {
 }
 
 /// Reports a started child's events until it closes.
-fn run(
+fn report(
     process: Handle,
     command: &str,
     shared: &Shared,
@@ -371,7 +374,7 @@ mod tests {
         children.0.insert(1, shared.clone());
         assert!(children.kill(1));
         let started = start("/bin/sleep", &["60".to_owned()], None);
-        run(1, "/bin/sleep", &shared, started, emit);
+        report(1, "/bin/sleep", &shared, started, emit);
         let signals: Vec<bool> = receive
             .into_iter()
             .map(|event| match event {
