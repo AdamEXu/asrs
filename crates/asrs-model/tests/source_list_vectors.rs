@@ -208,7 +208,7 @@ impl ScriptedDom {
 
     fn controller_root(&self, slot: usize) -> ListRoot {
         let (tab_type, index) = controller_of(self.roots[slot].1);
-        controller_roots(tab_type, CONTROLS)[index]
+        controller_roots(tab_type, CONTROLS, 1.0)[index]
     }
 
     fn layout(&self, slot: usize, blink: Rect) -> ListLayout {

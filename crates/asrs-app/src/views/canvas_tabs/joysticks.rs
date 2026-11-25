@@ -9,6 +9,7 @@ use asrs_hub::hub::HubPage;
 use asrs_js::math;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::value::JsValue;
+use asrs_model::layout_unit::{centred, device, lu, zoomed};
 use asrs_model::tab_controller::{TabCommand, TabRenderer};
 use asrs_model::tab_type::TabType;
 use asrs_tabs::cx::TabCx;
@@ -29,7 +30,7 @@ use asrs_ui::tooltip::titled;
 use super::super::field_image::{self, FieldImage};
 use super::super::frame::{FrameHost, HubFrame, SETTINGS_SECTION};
 use super::settings::Control;
-use super::{displayed, local, lu, with_renderer};
+use super::{displayed, local, with_renderer};
 
 /// The hub's `JoysticksRenderer` with its `IMAGES`: a layout's image is decoded before the first
 /// render that draws it, and every `load` the renderer queued is delivered before the next one.
@@ -164,38 +165,44 @@ struct SelectorMetrics {
 
 /// `table.joystick-selector` over `rect`: automatic table layout, whose columns share the width
 /// in proportion to their max-content widths, and equal rows.
-fn selector_layout(rect: [f64; 4], m: &SelectorMetrics) -> [Cell; ROWS * COLUMNS] {
-    let [x, y, width, height] = rect;
-    let cells_width = width - SPACING * (COLUMNS as f64 + 1.0);
-    let row_height = lu((height - SPACING * (ROWS as f64 + 1.0)) / ROWS as f64);
+fn selector_layout(rect: [f64; 4], m: &SelectorMetrics, scale: f64) -> [Cell; ROWS * COLUMNS] {
+    let [x, y, width, height] = rect.map(|v| device(v, scale));
+    let css = |rect: [f64; 4]| rect.map(|v| v / scale);
+    let labels = m.labels.map(|v| device(v, scale));
+    let [select_width, select_height] = [m.select_width, m.select_height].map(|v| device(v, scale));
+    let [label_extent, select_extent] =
+        [m.label_extent, m.select_extent].map(|extent| extent.map(|v| device(v, scale)));
+    let spacing = math::floor(SPACING * scale);
+    let padding = zoomed(PADDING, scale);
+    let cells_width = width - spacing * (COLUMNS as f64 + 1.0);
+    let row_height = lu((height - spacing * (ROWS as f64 + 1.0)) / ROWS as f64);
     let max: [f64; COLUMNS] = std::array::from_fn(|column| {
-        let label = math::max2(m.labels[column], m.labels[COLUMNS + column]);
-        label + m.select_width + 2.0 * PADDING
+        let label = math::max2(labels[column], labels[COLUMNS + column]);
+        label + select_width + 2.0 * padding
     });
     let total: f64 = max.iter().sum();
     let mut widths = max.map(|w| lu(cells_width * w / total));
     widths[COLUMNS - 1] = cells_width - widths[..COLUMNS - 1].iter().sum::<f64>();
-    let above = math::max2(m.label_extent[0], m.select_extent[0]);
-    let below = math::max2(m.label_extent[1], m.select_extent[1]);
+    let above = math::max2(label_extent[0], select_extent[0]);
+    let below = math::max2(label_extent[1], select_extent[1]);
     std::array::from_fn(|i| {
         let (row, column) = (i / COLUMNS, i % COLUMNS);
         let before: f64 = widths[..column].iter().sum();
-        let cell_x = x + SPACING * (column as f64 + 1.0) + before;
-        let cell_y = y + SPACING * (row as f64 + 1.0) + row_height * row as f64;
-        let content = widths[column] - 2.0 * PADDING;
-        let select_width = math::max2(content - SELECT_INSET, 0.0);
-        let label_x =
-            cell_x + PADDING + lu(math::max2(content - m.labels[i] - select_width, 0.0) / 2.0);
+        let cell_x = x + spacing * (column as f64 + 1.0) + before;
+        let cell_y = y + spacing * (row as f64 + 1.0) + row_height * row as f64;
+        let content = widths[column] - 2.0 * padding;
+        let select_width = math::max2(content - zoomed(SELECT_INSET, scale), 0.0);
+        let label_x = cell_x + padding + centred(content, labels[i] + select_width);
         let top = cell_y + row_height / 2.0 - (above + below) / 2.0;
         Cell {
-            rect: [cell_x, cell_y, widths[column], row_height],
-            label: [label_x, top + above - m.label_extent[0]],
-            select: [
-                label_x + m.labels[i],
-                top + above - m.select_extent[0],
+            rect: css([cell_x, cell_y, widths[column], row_height]),
+            label: [label_x / scale, (top + above - label_extent[0]) / scale],
+            select: css([
+                label_x + labels[i],
+                top + above - select_extent[0],
                 select_width,
-                m.select_height,
-            ],
+                select_height,
+            ]),
         }
     })
 }
@@ -313,7 +320,7 @@ impl<H: FrameHost> HubFrame<H> {
             label_extent: [device(label_ascent), device(label_descent)],
             select_extent: [device(ascent + chrome), device(descent + chrome)],
         };
-        let cells = selector_layout(controls, &metrics);
+        let cells = selector_layout(controls, &metrics, zoom);
         let place = focus::place(("joystick-selector", key), window, cx);
         let mut table = focus::section(div(), SETTINGS_SECTION, &place)
             .absolute()
@@ -371,6 +378,7 @@ const JOYSTICK_PLACES: [&str; ROWS * COLUMNS] = [
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::views::control_layout_vectors;
 
     #[test]
     fn selector_boxes_match_blink() {
@@ -381,7 +389,7 @@ mod tests {
             label_extent: [15.0, 4.0],
             select_extent: [14.0, 5.0],
         };
-        let cells = selector_layout([300.0, 565.0, 800.0, 85.0], &metrics);
+        let cells = selector_layout([300.0, 565.0, 800.0, 85.0], &metrics, 1.0);
         let want = [
             (
                 [302.0, 567.0, 264.171875, 39.5],
@@ -420,5 +428,28 @@ mod tests {
             assert!(close(&cell.label, &label), "{i}: {cell:?}");
             assert!(close(&cell.select, &select), "{i}: {cell:?}");
         }
+    }
+
+    #[test]
+    fn controls_lie_where_blink_puts_them() {
+        control_layout_vectors::each(8.0, 2880, |blink| {
+            let scale = blink.scale;
+            let cells = blink.all("table.joystick-selector td").to_vec();
+            let selects = blink.all("table.joystick-selector select").to_vec();
+            let metrics = SelectorMetrics {
+                labels: std::array::from_fn(|i| selects[i].rect[0] - cells[i].lines[0][0]),
+                select_width: blink.select_width.expect("a select"),
+                select_height: selects[0].rect[3],
+                label_extent: [0.0; 2],
+                select_extent: [0.0; 2],
+            };
+            let ours = selector_layout(blink.controls, &metrics, scale);
+            for ((cell, td), select) in ours.iter().zip(cells).zip(selects) {
+                blink.check("td", &cell.rect, &td.rect);
+                blink.check("label", &cell.label[..1], &td.lines[0][..1]);
+                let across = |r: [f64; 4]| [r[0], r[2]];
+                blink.check("select", &across(cell.select), &across(select.rect));
+            }
+        });
     }
 }
