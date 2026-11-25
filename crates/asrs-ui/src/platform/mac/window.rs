@@ -40,9 +40,7 @@ pub fn install_electron_frame(window: &Window) {
     let Some(window) = ns_window(window) else {
         return;
     };
-    window.setBackgroundColor(Some(&NSColor::colorWithSRGBRed_green_blue_alpha(
-        1.0, 1.0, 1.0, 1.0,
-    )));
+    window.setBackgroundColor(Some(&NSColor::windowBackgroundColor()));
     window.setTabbingMode(NSWindowTabbingMode::Disallowed);
 }
 

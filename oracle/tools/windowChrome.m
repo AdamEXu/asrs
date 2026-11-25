@@ -6,6 +6,7 @@
 static void (*set_file)(id, SEL, NSString *);
 
 static id color(NSColor *value) {
+  if (value.type == NSColorTypeCatalog) return value.colorNameComponent;
   NSColor *c = [value colorUsingColorSpace:[NSColorSpace sRGBColorSpace]];
   if (c == nil) return [NSNull null];
   return @[ @(c.redComponent), @(c.greenComponent), @(c.blueComponent), @(c.alphaComponent) ];

@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::Duration;
 
+use asrs_app::views::hub_host::HubEntityHost;
 use asrs_app::views::{download, info, prompts};
 use asrs_app::windows::{self, KeepHidden, SatellitePlacement, WindowId, WindowKind, Windows};
 use asrs_js::value::JsValue;
@@ -18,7 +19,7 @@ use asrs_ui::gpui::{
     App, AppContext, AsyncApp, Context, Entity, IntoElement, Render, Styled, Window, div,
 };
 use asrs_ui::platform::probe;
-use asrs_ui::theme::ThemeSource;
+use asrs_ui::theme::{Appearance, ThemeSource};
 
 const TIMEOUT: Duration = Duration::from_secs(60);
 const THEMES: [(&str, ThemeSource); 3] = [
@@ -59,7 +60,15 @@ fn open(name: &str, parent: WindowId, cx: &mut App) -> WindowId {
             .0
     };
     match name {
-        "Hub" => windows::open_hub(cx, None, blank).expect("a hub").0,
+        "Hub" => {
+            windows::open_hub(cx, None, |window, cx| {
+                window.set_window_title("AdvantageScope");
+                let dark = Appearance::of(window, cx) == Appearance::Dark;
+                HubEntityHost::open(window, dark, false, Vec::new(), cx)
+            })
+            .expect("a hub")
+            .0
+        }
         "Satellite" => {
             windows::open_satellite(cx, "s", SatellitePlacement::Unplaced, blank)
                 .expect("a satellite")
@@ -290,7 +299,9 @@ fn main() {
         cx.set_global(KeepHidden);
         cx.spawn(async move |cx| {
             compare(&scratch, cx).await;
-            assert_eq!(probe::app_is_active(), Some(false));
+            if std::env::var_os("ASRS_CHROME_CAPTURES").is_none() {
+                assert_eq!(probe::app_is_active(), Some(false));
+            }
             println!("window chrome: passed");
             std::process::exit(0);
         })
