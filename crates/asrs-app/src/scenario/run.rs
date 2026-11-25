@@ -517,8 +517,8 @@ fn modifiers(names: &[String]) -> Result<Modifiers, String> {
 }
 
 /// What GPUI reports for the native event Chromium turned into `wheel`: notches arrive as lines,
-/// continuous (trackpad) scrolling as pixels. Chromium's notched delta is 40 px a line on macOS
-/// and X11, so a scenario whose `deltaY` and `wheelTicksY` disagree describes no real event.
+/// continuous (trackpad) scrolling as pixels. Windows' lines are what gives Chromium's delta back.
+/// Chromium's notched delta is 40 px a line on macOS and X11, so a scenario whose `deltaY` and `wheelTicksY` disagree describes no real event.
 fn scroll_delta(wheel: &Wheel) -> Result<ScrollDelta, String> {
     if wheel.precise {
         return Ok(ScrollDelta::Pixels(point(
@@ -535,6 +535,13 @@ fn scroll_delta(wheel: &Wheel) -> Result<ScrollDelta, String> {
             (wheel.delta_x, wheel.delta_y),
             (wheel.wheel_ticks_x, wheel.wheel_ticks_y)
         ));
+    }
+    if cfg!(windows) {
+        let lines = |delta: f64| delta as f32 / (100.0 / 3.0);
+        return Ok(ScrollDelta::Lines(point(
+            lines(wheel.delta_x),
+            lines(wheel.delta_y),
+        )));
     }
     Ok(ScrollDelta::Lines(point(
         wheel.wheel_ticks_x as f32,
