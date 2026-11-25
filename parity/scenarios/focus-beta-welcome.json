@@ -23,27 +23,32 @@
     {
       "mouse": "move",
       "x": 46,
-      "y": 220
+      "y": 220,
+      "on": "input"
     },
     {
       "mouse": "down",
       "x": 46,
-      "y": 220
+      "y": 220,
+      "on": "input"
     },
     {
       "mouse": "up",
       "x": 46,
-      "y": 220
+      "y": 220,
+      "on": "input"
     },
     {
       "mouse": "move",
       "x": 225,
-      "y": 445
+      "y": 445,
+      "on": "button"
     },
     {
       "mouse": "click",
       "x": 225,
-      "y": 445
+      "y": 445,
+      "on": "button"
     },
     {
       "key": "Tab"
@@ -109,12 +114,14 @@
     {
       "mouse": "move",
       "x": 225,
-      "y": 445
+      "y": 445,
+      "on": "button"
     },
     {
       "mouse": "down",
       "x": 225,
-      "y": 445
+      "y": 445,
+      "on": "button"
     },
     {
       "wait": 400
