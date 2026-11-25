@@ -2157,9 +2157,7 @@ mod tests {
 
     #[test]
     fn test_path_textures_follow_the_scenes_and_the_window() {
-        let Some(devices) = create_devices() else {
-            return;
-        };
+        let devices = create_devices().expect("devices");
         let mut renderer = create_renderer(&devices);
         let empty = Scene::default();
         let paths = path_scene();
