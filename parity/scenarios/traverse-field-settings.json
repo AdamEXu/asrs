@@ -112,6 +112,43 @@
       "back": true
     },
     {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "2d-switcher",
+      "count": 11
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "2d",
+      "probes": [
+        ".field-2d-settings",
+        ".field-select"
+      ]
+    },
+    {
       "main": "restore-state",
       "data": {
         "sidebar": {
