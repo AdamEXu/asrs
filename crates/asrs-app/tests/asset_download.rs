@@ -84,6 +84,7 @@ macro_rules! in_a_fresh_home {
 in_a_fresh_home! {
     a_parity_build_downloads_nothing => parity_in_a_fresh_home;
     new_assets_reach_open_tabs => tabs_in_a_fresh_home;
+    a_half_written_asset_is_not_loaded => extracting_in_a_fresh_home;
     failures_are_tried_again => failures_in_a_fresh_home;
     a_slow_server_holds_nothing_up => slow_in_a_fresh_home;
     a_connection_cut_inside_a_body_is_waited_for => cut_in_a_fresh_home;
@@ -338,6 +339,34 @@ fn parity_in_a_fresh_home() {
     assert_eq!(app.shown_status(), INITIAL_STATUS);
     assert!(app.cx.update(asset_download::stop).is_none());
     assert_eq!(app.listing(), [""; 0]);
+}
+
+#[test]
+#[ignore = "run by a_half_written_asset_is_not_loaded with its own home directory"]
+fn extracting_in_a_fresh_home() {
+    let Some(mut app) = AppUnderTest::start() else {
+        return;
+    };
+    let loads = |app: &mut AppUnderTest| {
+        let mut loads = false;
+        app.cx
+            .update(|cx| asset_download::between_extractions(cx, |_| loads = true));
+        loads
+    };
+    assert!(loads(&mut app));
+    app.server.releases(DEFAULT, &["Field2d_2099Test.zip"]);
+    let asset = Reply::body(field_zip("2099 Test"));
+    app.server.reply("/Field2d_2099Test.zip", asset);
+    app.download();
+    // The last asset's extraction ends with `updateCallback`, which waits for this thread.
+    let start = Instant::now();
+    while app.listing() != ["Field2d_2099Test"] {
+        assert!(start.elapsed() < PATIENCE, "{:?}", app.listing());
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    assert!(!loads(&mut app));
+    app.until_status(DONE);
+    app.until("the extraction's end", loads);
 }
 
 #[test]

@@ -7,7 +7,7 @@ use asrs_model::messages::{HubToMain, NamedMessage};
 use asrs_services::fs::RealFs;
 use asrs_services::hub_dialogs::{self, CoordinateWarning, DONT_SHOW_AGAIN};
 use asrs_services::update::feedback_url;
-use asrs_ui::gpui::{AnyWindowHandle, App, Window};
+use asrs_ui::gpui::{AnyWindowHandle, App, AppContext as _, Window};
 use asrs_ui::platform;
 
 use crate::main_process::{MainProcess, RELEASE_PROFILE};
@@ -55,12 +55,15 @@ pub fn show(message: &NamedMessage<HubToMain>, window: AnyWindowHandle, cx: &mut
                     Some(window),
                     cx,
                     save_dialog_options(&options),
-                    move |path, _| {
+                    move |path, cx| {
                         let Some(path) = path else { return };
-                        let path = path.to_string_lossy();
-                        if let Err(e) = hub_dialogs::write_console(&RealFs, &path, &text) {
-                            eprintln!("asrs: {path}: {}", e.message);
-                        }
+                        cx.background_spawn(async move {
+                            let path = path.to_string_lossy();
+                            if let Err(e) = hub_dialogs::write_console(&RealFs, &path, &text) {
+                                eprintln!("asrs: {path}: {}", e.message);
+                            }
+                        })
+                        .detach();
                     },
                 );
             });

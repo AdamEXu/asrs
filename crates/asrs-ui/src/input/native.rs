@@ -4,8 +4,8 @@
 
 use asrs_canvas::Pixmap;
 use gpui_kit::{
-    App, Bounds, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce,
-    StatefulInteractiveElement, Styled, Window, canvas, div,
+    App, Bounds, Edges, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels,
+    RenderOnce, StatefulInteractiveElement, Styled, Window, canvas, div, px,
 };
 
 use crate::input::skia;
@@ -14,6 +14,7 @@ use crate::input::style::{
     NATIVE_RADIUS, NATIVE_TRACK_BORDER, native_stroke,
 };
 use crate::svg::Backend;
+use crate::text;
 
 /// `PaintTextField`: a white rounded rect, radius 2 zoomed px, in a `#767676` stroke one
 /// zoomed pixel wide, both inset by half the stroke. Disabled, the fill is a translucent white
@@ -88,7 +89,19 @@ pub fn paint_text_field(
         skia::svg(w, h, 1.0, &body)
     };
     let key = ("text-field", w, h, disabled, pointer);
+    let start = window.painted_scene().len();
     skia::paint(key, bounds, draw, window, cx);
+    if !disabled {
+        let border = px(native_stroke(scale).ceil() / scale);
+        let corner = px((NATIVE_RADIUS * scale).ceil() / scale).max(border);
+        let white = bounds.extend(Edges {
+            top: -border,
+            right: -corner,
+            bottom: -border,
+            left: -corner,
+        });
+        text::painted_flat(window, cx, start, white, 0xffffff);
+    }
 }
 
 /// What the pointer does to a control, which the theme's colours follow.

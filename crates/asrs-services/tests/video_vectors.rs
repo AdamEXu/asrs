@@ -19,8 +19,8 @@ use asrs_parity::json::Json;
 use asrs_parity::utf16::Utf16String;
 use asrs_parity::vectors::{self, Record};
 use asrs_services::video::{
-    self, FetchResponse, Handle, LogArg, LogLevel, MessageBox, OpenDialog, VideoConfig, VideoEvent,
-    VideoHost, VideoProcessor,
+    self, FetchResponse, FfmpegInstall, Handle, InstallFiles, LogArg, LogLevel, MessageBox,
+    OpenDialog, VideoConfig, VideoEvent, VideoHost, VideoProcessor, install_ffmpeg,
 };
 
 /// A recorded JSON object whose every field must be read before [`Fields::finish`].
@@ -267,8 +267,11 @@ impl Tally {
 struct ReplayHost<'t> {
     ctx: String,
     expected: VecDeque<Json>,
+    installs: VecDeque<bool>,
     tally: &'t mut Tally,
 }
+
+const INSTALL: Handle = Handle::MAX;
 
 impl ReplayHost<'_> {
     fn next(&mut self, kind: &str, actual: impl FnOnce() -> String) -> Fields {
@@ -309,51 +312,10 @@ impl ReplayHost<'_> {
     }
 }
 
-impl VideoHost for ReplayHost<'_> {
-    fn exists(&mut self, path: &str) -> bool {
-        let mut f = self.next("exists", || path.to_owned());
-        f.expect_str("path", path);
-        let r = f.bool("r");
-        f.finish();
-        r
-    }
-
-    fn rm_recursive(&mut self, path: &str) -> Result<(), JsError> {
-        let mut f = self.next("rmSync", || path.to_owned());
-        f.expect_str("path", path);
-        f.expect_tree(
-            "options",
-            &Value::object([("recursive", Value::Bool(true))]),
-        );
-        let r = Self::unit_result(&mut f);
-        f.finish();
-        r
-    }
-
-    fn mkdir_recursive(&mut self, path: &str) -> Result<(), JsError> {
-        let mut f = self.next("mkdirSync", || path.to_owned());
-        f.expect_str("path", path);
-        f.expect_tree(
-            "options",
-            &Value::object([("recursive", Value::Bool(true))]),
-        );
-        let r = Self::unit_result(&mut f);
-        f.finish();
-        r
-    }
-
+impl InstallFiles for ReplayHost<'_> {
     fn read_file(&mut self, path: &str) -> Result<Vec<u8>, JsError> {
         let mut f = self.next("readFile", || path.to_owned());
         f.expect_str("path", path);
-        let r = Self::unit_result(&mut f).map(|()| f.hex("r"));
-        f.finish();
-        r
-    }
-
-    fn read_file_sync(&mut self, path: &str) -> Result<Vec<u8>, JsError> {
-        let mut f = self.next("readFileSync", || path.to_owned());
-        f.expect_str("path", path);
-        f.expect_tree("options", &Value::Object(Vec::new()));
         let r = Self::unit_result(&mut f).map(|()| f.hex("r"));
         f.finish();
         r
@@ -391,6 +353,57 @@ impl VideoHost for ReplayHost<'_> {
         f.expect_str("encoding", "hex");
         assert_eq!(f.hex("data"), data, "{}: hashed bytes", f.ctx);
         let r = f.string("r");
+        f.finish();
+        r
+    }
+
+    fn warn(&mut self, text: JsString) {
+        self.log(LogLevel::Warn, &[LogArg::Text(text)]);
+    }
+
+    fn cancelled(&mut self) -> bool {
+        false
+    }
+}
+
+impl VideoHost for ReplayHost<'_> {
+    fn exists(&mut self, path: &str) -> bool {
+        let mut f = self.next("exists", || path.to_owned());
+        f.expect_str("path", path);
+        let r = f.bool("r");
+        f.finish();
+        r
+    }
+
+    fn rm_recursive(&mut self, path: &str) -> Result<(), JsError> {
+        let mut f = self.next("rmSync", || path.to_owned());
+        f.expect_str("path", path);
+        f.expect_tree(
+            "options",
+            &Value::object([("recursive", Value::Bool(true))]),
+        );
+        let r = Self::unit_result(&mut f);
+        f.finish();
+        r
+    }
+
+    fn mkdir_recursive(&mut self, path: &str) -> Result<(), JsError> {
+        let mut f = self.next("mkdirSync", || path.to_owned());
+        f.expect_str("path", path);
+        f.expect_tree(
+            "options",
+            &Value::object([("recursive", Value::Bool(true))]),
+        );
+        let r = Self::unit_result(&mut f);
+        f.finish();
+        r
+    }
+
+    fn read_file_sync(&mut self, path: &str) -> Result<Vec<u8>, JsError> {
+        let mut f = self.next("readFileSync", || path.to_owned());
+        f.expect_str("path", path);
+        f.expect_tree("options", &Value::Object(Vec::new()));
+        let r = Self::unit_result(&mut f).map(|()| f.hex("r"));
         f.finish();
         r
     }
@@ -472,6 +485,13 @@ impl VideoHost for ReplayHost<'_> {
         let id = f.handle("id");
         f.finish();
         id
+    }
+
+    fn install(&mut self, install: FfmpegInstall) -> Handle {
+        assert!(self.installs.is_empty(), "{}: a second install", self.ctx);
+        let ok = install_ffmpeg(&install, self);
+        self.installs.push_back(ok);
+        INSTALL
     }
 
     fn fetch(
@@ -736,6 +756,7 @@ fn replay_flows(id: &str) -> usize {
                 .iter()
                 .cloned()
                 .collect(),
+            installs: VecDeque::new(),
             tally: &mut tally,
         };
         if f.has("op") {
@@ -756,6 +777,10 @@ fn replay_flows(id: &str) -> usize {
         } else {
             let (_, event) = event(&f.take("event"), &ctx);
             processor.handle(&mut host, event);
+        }
+        while let Some(ok) = host.installs.pop_front() {
+            let install = INSTALL;
+            processor.handle(&mut host, VideoEvent::Installed { install, ok });
         }
         host.finish_step();
         drop(host);

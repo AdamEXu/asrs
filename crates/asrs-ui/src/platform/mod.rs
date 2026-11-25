@@ -235,6 +235,15 @@ pub fn has_acrylic() -> bool {
     false
 }
 
+/// The `DWMWA_USE_IMMERSIVE_DARK_MODE` that `nativeTheme.themeSource` sets on every window on
+/// Windows: the title bar, the frame and the acrylic's tint.
+pub fn set_dark_frame(window: &Window, dark: bool) {
+    #[cfg(windows)]
+    imp::set_dark_frame(window, dark);
+    #[cfg(not(windows))]
+    let _ = (window, dark);
+}
+
 /// Electron's `vibrancy: "sidebar"` on macOS and `backgroundMaterial: "acrylic"` on Windows. The
 /// window must be opened with a background that is not opaque.
 pub fn install_sidebar_vibrancy(window: &Window) -> bool {

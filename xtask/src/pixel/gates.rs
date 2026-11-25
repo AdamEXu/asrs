@@ -5,6 +5,8 @@
 use asrs_parity::pixel::{self, Rgb, Rgba};
 use asrs_parity::pixel3d;
 
+use super::antialias;
+
 pub type Rect = [f64; 4];
 
 pub const LAYOUT_TOLERANCE: f64 = 1.0;
@@ -48,6 +50,13 @@ pub struct Patch {
     pub rect: Rect,
 }
 
+/// A text box and its computed `color`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextInk {
+    pub rect: Rect,
+    pub color: [u8; 3],
+}
+
 #[derive(Clone, Debug)]
 pub struct Capture {
     pub scale: f64,
@@ -56,6 +65,10 @@ pub struct Capture {
     pub normalized: bool,
     pub probes: Vec<(String, Vec<Rect>)>,
     pub texts: Vec<Rect>,
+    /// The text boxes of an upstream capture that have an opaque colour.
+    pub text_inks: Vec<TextInk>,
+    /// Its form controls that hold text.
+    pub controls: Vec<Rect>,
     pub masks: Vec<(String, Rect)>,
     pub canvases: Vec<Dump>,
     pub gl: Vec<GlDump>,
@@ -494,6 +507,7 @@ fn window(reference: &Capture, port: &Capture, platform: &[PlatformMask], out: &
         ),
     );
     text_boxes(&visible_texts, reference, port, &masked, out);
+    antialiasing(reference, port, &masked, out);
     out.window_diff = Some(window_diff(ri, &diff, &outside, &inside));
 }
 
@@ -544,6 +558,38 @@ fn text_boxes(
             format!("{n} unmatched: {}", problems.join("; "))
         },
     );
+}
+
+fn antialiasing(reference: &Capture, port: &Capture, masked: &[bool], out: &mut Outcome) {
+    let ours = Boxes::new(&port.texts);
+    let inks = reference
+        .text_inks
+        .iter()
+        .filter(|ink| !centre_masked(ink.rect, reference, masked))
+        .filter(|ink| ours.has(ink.rect, TEXT_BOX_TOLERANCE));
+    let (theirs, mine) = (opaque(&reference.image), opaque(&port.image));
+    let controls: Vec<TextInk> = reference
+        .controls
+        .iter()
+        .filter(|rect| !centre_masked(**rect, reference, masked))
+        .map(|rect| TextInk {
+            rect: *rect,
+            color: antialias::contrast(&theirs, *rect, reference.scale),
+        })
+        .collect();
+    let compared = antialias::compare(inks.chain(&controls), &theirs, &mine, reference.scale);
+    let mut detail = format!(
+        "{} boxes LCD, {} grayscale, {} unclear",
+        compared.lcd, compared.grayscale, compared.unclear
+    );
+    let differing = &compared.differing;
+    if !differing.is_empty() {
+        detail += &format!("; {} differ:", differing.len());
+        for text in differing.iter().take(8) {
+            detail += &format!(" {text};");
+        }
+    }
+    out.push("3 text", "antialiasing", differing.is_empty(), detail);
 }
 
 fn window_diff(reference: &Rgba, diff: &[bool], outside: &[bool], inside: &[bool]) -> Rgba {
@@ -787,6 +833,8 @@ mod tests {
             normalized: false,
             probes: Vec::new(),
             texts: Vec::new(),
+            text_inks: Vec::new(),
+            controls: Vec::new(),
             masks: Vec::new(),
             canvases: Vec::new(),
             gl: Vec::new(),
@@ -898,6 +946,26 @@ mod tests {
         assert_eq!(
             failed(&compare(&a, &b, &[])),
             [("5 masks", "port masks".into())]
+        );
+    }
+
+    #[test]
+    fn a_text_box_keeps_the_antialiasing_of_the_reference() {
+        let mut a = capture(100, 40, 1.0);
+        a.text_inks = vec![TextInk {
+            rect: [10.0, 10.0, 40.0, 16.0],
+            color: [0x22; 3],
+        }];
+        a.texts = vec![[10.0, 10.0, 40.0, 16.0]];
+        let mut b = a.clone();
+        for x in 12..40 {
+            paint(&mut a, x, 15, [110, 111, 112, 255]);
+            paint(&mut b, x, 15, [90, 111, 130, 255]);
+        }
+        assert!(compare(&a, &a, &[]).pass());
+        assert_eq!(
+            failed(&compare(&a, &b, &[])),
+            [("3 text", "antialiasing".into())]
         );
     }
 

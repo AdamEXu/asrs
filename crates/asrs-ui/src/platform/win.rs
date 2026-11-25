@@ -13,7 +13,7 @@ use windows::Wdk::System::SystemServices::RtlGetVersion;
 use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
 use windows::Win32::Graphics::Dwm::{
     DWM_SYSTEMBACKDROP_TYPE, DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
-    DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
+    DWMWA_USE_IMMERSIVE_DARK_MODE, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
 };
 use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
@@ -22,11 +22,13 @@ use windows::Win32::UI::WindowsAndMessaging::{
     EndMenu, HWND_TOPMOST, PostMessageW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
     WM_CANCELMODE,
 };
+use windows::core::BOOL;
 
 pub(super) use super::fallback::*;
 use super::{MenuPath, PopupEntry, PopupMenu, SelectMenu, SelectMenuItemKind, WheelDelta};
 use crate::menu::{CloseHandler, ListStyle, MenuView, Placement};
 
+pub(super) mod dialog;
 mod menu;
 #[cfg(feature = "parity")]
 pub(crate) mod offscreen;
@@ -114,6 +116,22 @@ pub(super) fn install_sidebar_vibrancy(window: &Window) -> bool {
         .and_then(|()| DwmExtendFrameIntoClientArea(hwnd, &margins))
         .is_ok()
     }
+}
+
+pub(super) fn set_dark_frame(window: &Window, dark: bool) {
+    let Some(hwnd) = hwnd(window) else {
+        return;
+    };
+    let dark = BOOL::from(dark);
+    // SAFETY: the window is open, and the attribute's value is a BOOL.
+    let _ = unsafe {
+        DwmSetWindowAttribute(
+            hwnd,
+            DWMWA_USE_IMMERSIVE_DARK_MODE,
+            (&raw const dark).cast(),
+            size_of::<BOOL>() as u32,
+        )
+    };
 }
 
 /// Chromium's `alwaysOnTop`, `WS_EX_TOPMOST`.

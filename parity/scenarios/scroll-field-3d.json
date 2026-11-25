@@ -1,0 +1,242 @@
+{
+  "about": "Interaction (#412): the 3D field settings in a panel lower than they are, by wheel and by key",
+  "gl": true,
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 3,
+              "title": "3D",
+              "controller": {
+                "sources": [],
+                "game": "FRC:Evergreen"
+              },
+              "controllerUUID": "field3d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 100
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "top",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 1000,
+        "y": 600,
+        "deltaX": 0,
+        "deltaY": -10,
+        "precise": true
+      }
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "wheel",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 1000,
+        "y": 600,
+        "deltaX": 0,
+        "deltaY": -200,
+        "precise": true
+      }
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "wheel-end",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 1000,
+        "y": 600,
+        "deltaX": 0,
+        "deltaY": 200,
+        "precise": true
+      }
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "mouse": "move",
+      "x": 910,
+      "y": 580
+    },
+    {
+      "mouse": "click",
+      "x": 910,
+      "y": 580
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "key": "Down"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "down",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "key": "Up"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "up",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "key": "End"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "end",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "key": "Home"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "key": "PageDown"
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "page",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    }
+  ]
+}
