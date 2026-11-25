@@ -429,6 +429,22 @@ async fn sizes(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
         .expect("parent bounds");
     let cases = cases();
     assert!(cases.len() >= 12, "only {} distinct windows", cases.len());
+    let hub = cases.iter().find(|(case, _)| {
+        case.kind() == WindowKind::Hub && case.number("width") == Some(parent_bounds.width)
+    });
+    let request = hub.expect("the fresh hub").0.electron_json(false, None);
+    let theirs = measure_electron(cx, electron, &request).await.frame;
+    let Rect {
+        x,
+        y,
+        width,
+        height,
+    } = parent_bounds;
+    report.check(
+        "a first launch's hub",
+        (x, y, width, height) == theirs,
+        format!("ours {parent_bounds:?}, Electron {theirs:?}"),
+    );
     for (case, origin) in &cases {
         let kind = case.kind();
         let name = format!(

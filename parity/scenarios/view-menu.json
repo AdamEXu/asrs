@@ -1,0 +1,314 @@
+{
+  "about": "Interaction: the View and Tabs menus' items on the hub: zoom to the enabled range, sidebar and controls toggled off and on, next, previous and shifted tabs with the wrap at the ends, a new tab, a closed tab. Saved HubState and the timeline range are compared",
+  "titleBar": true,
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Graph",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            },
+            {
+              "type": 4,
+              "title": "One",
+              "controller": [],
+              "controllerUUID": "tableone000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Two",
+              "controller": [],
+              "controllerUUID": "tabletwo000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "appMenu": [
+        "Zoom to Enabled Range"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "enabled",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "appMenu": [
+        "Zoom to Enabled Range"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "enabled-again",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "appMenu": [
+        "Toggle Sidebar"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "no-sidebar",
+      "probes": [
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
+      "appMenu": [
+        "Toggle Controls"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "no-controls",
+      "probes": [
+        ".tab-bar",
+        ".renderer-content"
+      ]
+    },
+    {
+      "appMenu": [
+        "Toggle Sidebar"
+      ]
+    },
+    {
+      "appMenu": [
+        "Toggle Controls"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "restored",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "appMenu": [
+        "Next Tab"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "next",
+      "probes": [
+        ".tab-bar",
+        ".timeline",
+        ".renderer-content"
+      ]
+    },
+    {
+      "appMenu": [
+        "Shift Right"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "shifted",
+      "probes": [
+        ".tab-bar",
+        ".timeline",
+        ".renderer-content"
+      ]
+    },
+    {
+      "appMenu": [
+        "Shift Right"
+      ]
+    },
+    {
+      "appMenu": [
+        "Next Tab"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "at-the-end",
+      "probes": [
+        ".tab-bar",
+        ".timeline",
+        ".renderer-content"
+      ]
+    },
+    {
+      "appMenu": [
+        "Previous Tab"
+      ]
+    },
+    {
+      "appMenu": [
+        "Shift Left"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "back",
+      "probes": [
+        ".tab-bar",
+        ".renderer-content"
+      ]
+    },
+    {
+      "appMenu": [
+        "📊 Statistics"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "new-tab",
+      "probes": [
+        ".tab-bar",
+        ".timeline",
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
+      "appMenu": [
+        "Close Tab"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "closed",
+      "probes": [
+        ".tab-bar",
+        ".renderer-content"
+      ]
+    }
+  ]
+}

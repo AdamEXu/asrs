@@ -30,6 +30,7 @@ use super::layout::{
 };
 use crate::views::number::FormNumber;
 use crate::views::select::FormSelect;
+use crate::windows::{FocusEvents, focus_events};
 
 enum Widget {
     Text(Entity<TextField<PlainText>>),
@@ -69,6 +70,7 @@ pub struct PromptWindow {
     exit: FocusHandle,
     confirm: FocusHandle,
     help: FocusHandle,
+    _focus: FocusEvents,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -87,13 +89,11 @@ impl PromptWindow {
         window: &mut Window,
         cx: &mut Context<'_, Self>,
     ) -> PromptWindow {
-        let mut subscriptions = vec![
-            cx.observe_window_activation(window, |view, window, cx| {
-                let focused = JsValue::Bool(window.is_window_active());
-                view.message(&asrs_js::ops::object([("isFocused", focused)]), window, cx);
-            }),
-            Self::keys(window, cx),
-        ];
+        let focus = focus_events(window, cx, |view, focused, window, cx| {
+            let focused = JsValue::Bool(focused);
+            view.message(&asrs_js::ops::object([("isFocused", focused)]), window, cx);
+        });
+        let mut subscriptions = vec![Self::keys(window, cx)];
         let fields = page
             .controls()
             .into_iter()
@@ -108,6 +108,7 @@ impl PromptWindow {
             exit: cx.focus_handle(),
             confirm: cx.focus_handle(),
             help: cx.focus_handle().tab_stop(true),
+            _focus: focus,
             _subscriptions: subscriptions,
         }
     }

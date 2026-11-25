@@ -21,7 +21,7 @@ use crate::menu::{CloseHandler, ListStyle, MenuView, Placement};
 
 pub(super) mod probe;
 pub(super) mod window;
-mod x11;
+pub(super) mod x11;
 
 use x11::X11Window;
 
@@ -35,6 +35,7 @@ struct OpenPopup {
     window: AnyWindowHandle,
     cx: AsyncApp,
     _keys: Subscription,
+    _parent_closed: Subscription,
 }
 
 thread_local! {
@@ -98,7 +99,7 @@ fn placement(window: &Window, bounds: Bounds<Pixels>) -> Placement {
         origin.unwrap_or(window.bounds().origin) + bounds.origin,
         bounds.size,
     );
-    let monitor = x11.and_then(|x11| x11.monitor_at(anchor.origin).ok().flatten());
+    let monitor = x11.and_then(|x11| x11.menu_area(anchor).ok().flatten());
     Placement::Screen(anchor, monitor)
 }
 
@@ -214,6 +215,11 @@ fn show(
                 .ok();
         }
         let keys = intercept_keys(&view, cx);
+        let parent_closed = cx.on_window_closed(move |_, closed| {
+            if closed == parent.window_id() {
+                close_open_popup();
+            }
+        });
         OPEN.set(Some(OpenPopup {
             id,
             parent: parent.window_id(),
@@ -221,6 +227,7 @@ fn show(
             window: popup,
             cx: cx.to_async(),
             _keys: keys,
+            _parent_closed: parent_closed,
         }));
     });
 }

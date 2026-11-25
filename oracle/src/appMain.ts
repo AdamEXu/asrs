@@ -9,8 +9,9 @@ import { clipFolder } from "./app/clips";
 import { Desktop } from "./app/desktop";
 import { saveDisplayProfile, type DisplayProfile } from "./app/display";
 import { GENERATED_LOGS } from "./app/logs";
-import { busyReasons, domDump, downloadShows, focused, hubReady, placePoint, sendMainMessage } from "./app/page";
+import { busyReasons, domDump, downloadShows, focused, hubReady, sendMainMessage } from "./app/page";
 import { patchPageHtml } from "./app/patches";
+import { placePoint } from "./app/points";
 import { actionKind, parseScenario, type Action, type GlMode, type Scale, type Theme } from "./app/scenario";
 import { installTap } from "./app/tap";
 import { GRID_STEP, titleMap, titleMapArgs, type TitleMap } from "./app/tooltips";
@@ -326,6 +327,8 @@ app.on("browser-window-created", (_event, win) => {
     win.setFocusable(false);
     win.on("focus", () => errors.push(`a window took the focus during ${performing}`));
   }
+  // An X11 window manager gives a modal prompt the focus as it is shown.
+  if (process.platform === "linux") win.on("focus", () => win.blur());
   win.setIgnoreMouseEvents(true);
   // macOS still hands the page a move from the physical cursor when the window appears under
   // it, so every mouse event the scenario did not send is dropped.
@@ -658,6 +661,11 @@ function renderMode(name: string, attributes: any): string {
 }
 
 function resolveLog(spec: string): string {
+  if (spec.startsWith("public:")) {
+    const file = path.join(process.env.ASRS_CACHE!, "public-logs", spec.slice("public:".length));
+    if (!fs.existsSync(file)) throw new Error(`${spec} is not fetched; run \`cargo xtask corpus fetch\``);
+    return file;
+  }
   const generated = /^app:([a-z0-9-]+)$/.exec(spec);
   if (generated === null) return path.resolve(spec);
   const make = GENERATED_LOGS[generated[1]];
@@ -946,6 +954,8 @@ app.whenReady().then(() => {
       respond({});
     }
   });
+  // Off macOS Chromium downloads a dictionary for the spelling marks in fields, past the hook above.
+  if (process.platform !== "darwin") session.defaultSession.setSpellCheckerEnabled(false);
   const preload = path.join(out, "tap-preload.js");
   fs.writeFileSync(preload, `require("electron").contextBridge.executeInMainWorld({ func: ${installTap.toString()}, args: [${scenario.gl}] });\n`);
   session.defaultSession.registerPreloadScript({ type: "frame", id: "asrs-parity-tap", filePath: preload });
