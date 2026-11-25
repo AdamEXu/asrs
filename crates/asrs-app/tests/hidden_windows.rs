@@ -3,7 +3,7 @@
 //! The app's own windows on macOS, never shown and in an app that stays in the background, against
 //! what Electron's did in `parity/windows/macos.json`: where a first launch's hub and a satellite
 //! without saved bounds open, which of a window's notifications dim a prompt and the Download window
-//! and order the hubs, and that AppKit makes each of them main, panels too.
+//! and order the hubs, and that AppKit makes each of them main.
 
 use std::time::Duration;
 

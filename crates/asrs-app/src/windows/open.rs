@@ -235,8 +235,9 @@ fn content_limits(native: &NativeWindow, options: &WindowOptions) -> (Option<Siz
 /// What Electron's `BrowserWindow` constructor does that GPUI's options cannot: the exact content
 /// size (GPUI opens macOS windows 1 px taller than asked), frame-based sizes for windows without
 /// `useContentSize`, size limits, the place an X11 window manager would choose itself,
-/// `fullscreenable`, then showing the window, or attaching it as a sheet to its parent. GPUI's `Dialog` kind would attach it to whichever window is main, and
-/// to none while the app is inactive.
+/// `fullscreenable`, then showing the window, or attaching it as a sheet to its parent. GPUI's
+/// `Dialog` kind would attach it to whichever window is main, and to none while the app is
+/// inactive.
 fn finish(
     native: &NativeWindow,
     options: &WindowOptions,
