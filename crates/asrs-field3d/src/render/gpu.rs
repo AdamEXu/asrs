@@ -148,6 +148,13 @@ enum Pass {
     Shadow,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum Primitives {
+    Triangles,
+    Lines,
+    LineStrip,
+}
+
 struct GpuGeometry {
     position: wgpu::Buffer,
     normal: wgpu::Buffer,
@@ -218,6 +225,7 @@ pub struct Renderer {
     device: wgpu::Device,
     queue: wgpu::Queue,
     adapter_info: wgpu::AdapterInfo,
+    provoking_last: bool,
     shader: wgpu::ShaderModule,
     layout: wgpu::PipelineLayout,
     depth_layout: wgpu::PipelineLayout,
@@ -236,7 +244,7 @@ pub struct Renderer {
     blank_texture: wgpu::BindGroup,
     instance_buffer: Option<wgpu::Buffer>,
     line_quad: LineQuad,
-    geometries: HashMap<u64, GpuGeometry>,
+    geometries: HashMap<(u64, Primitives), GpuGeometry>,
     line_geometries: HashMap<u64, (wgpu::Buffer, u32)>,
     textures: HashMap<u64, GpuTexture>,
     shadow_maps: Option<ShadowMaps>,
@@ -255,17 +263,14 @@ impl Renderer {
         }))
         .map_err(|e| RenderError::NoAdapter(e.to_string()))?;
         let adapter_info = adapter.get_info();
-        let (device, queue) = pollster::block_on(adapter.request_device(&wgpu::DeviceDescriptor {
-            label: Some("field3d"),
-            ..Default::default()
-        }))
-        .map_err(|e| RenderError::Device(e.to_string()))?;
+        let (device, queue, gl_clip_space) = open_device(&adapter)?;
         let source = [
             include_str!("phong.wgsl"),
             match adapter_info.backend {
                 wgpu::Backend::Vulkan => include_str!("vulkan.wgsl"),
                 _ => include_str!("metal.wgsl"),
             },
+            &format!("const GL_CLIP_SPACE = {gl_clip_space};"),
             include_str!("shadow.wgsl"),
             include_str!("lines.wgsl"),
         ]
@@ -394,6 +399,16 @@ impl Renderer {
                 usage,
             })
         };
+        let provoking_last = adapter_info.backend == wgpu::Backend::Vulkan;
+        let quad_index: Vec<u16> = if provoking_last {
+            let indices = LINE_QUAD_INDEX.map(u32::from);
+            provoking_first(Primitives::Triangles, &indices)
+                .iter()
+                .map(|&i| i as u16)
+                .collect()
+        } else {
+            LINE_QUAD_INDEX.to_vec()
+        };
         let line_quad = LineQuad {
             position: init(
                 bytemuck::cast_slice(&LINE_QUAD_POSITIONS),
@@ -403,14 +418,12 @@ impl Renderer {
                 bytemuck::cast_slice(&LINE_QUAD_UVS),
                 wgpu::BufferUsages::VERTEX,
             ),
-            index: init(
-                bytemuck::cast_slice(&LINE_QUAD_INDEX),
-                wgpu::BufferUsages::INDEX,
-            ),
+            index: init(bytemuck::cast_slice(&quad_index), wgpu::BufferUsages::INDEX),
         };
         Ok(Renderer {
             device,
             queue,
+            provoking_last,
             adapter_info,
             shader,
             layout,
@@ -794,7 +807,7 @@ impl Renderer {
                 DrawKind::Mesh {
                     geometry, material, ..
                 } => {
-                    self.sync_geometry(geometry, &mut used_geometries);
+                    self.sync_geometry(geometry, Primitives::Triangles, &mut used_geometries);
                     if let Some(texture) = &material.map {
                         used_textures.insert(texture.key());
                         if !self.textures.contains_key(&texture.key()) {
@@ -808,8 +821,10 @@ impl Renderer {
                         }
                     }
                 }
-                DrawKind::Line { geometry, .. } => {
-                    self.sync_geometry(geometry, &mut used_geometries);
+                DrawKind::Line {
+                    geometry, segments, ..
+                } => {
+                    self.sync_geometry(geometry, line_primitives(*segments), &mut used_geometries);
                 }
                 DrawKind::FatLine { geometry, .. } => {
                     used_lines.insert(geometry.key());
@@ -825,11 +840,20 @@ impl Renderer {
         self.textures.retain(|k, _| used_textures.contains(k));
     }
 
-    fn sync_geometry(&mut self, geometry: &Geometry, used: &mut HashSet<u64>) {
-        let key = geometry.key();
+    fn sync_geometry(
+        &mut self,
+        geometry: &Geometry,
+        primitives: Primitives,
+        used: &mut HashSet<(u64, Primitives)>,
+    ) {
+        let key = (geometry.key(), primitives);
         used.insert(key);
         if !self.geometries.contains_key(&key) {
-            let gpu = upload_geometry(&self.device, geometry);
+            let gpu = upload_geometry(
+                &self.device,
+                geometry,
+                self.provoking_last.then_some(primitives),
+            );
             self.geometries.insert(key, gpu);
         }
     }
@@ -965,26 +989,26 @@ impl Renderer {
                     Program::Phong
                 },
                 instances.is_some(),
-                self.geometries[&geometry.key()].float_color,
+                self.geometries[&(geometry.key(), Primitives::Triangles)].float_color,
             ),
             DrawKind::FatLine { .. } => (Program::FatLine, false, false),
             DrawKind::Line {
                 geometry, segments, ..
             } => (
-                if *segments {
+                if *segments || self.provoking_last {
                     Program::Lines
                 } else {
                     Program::LineStrip
                 },
                 false,
-                self.geometries[&geometry.key()].float_color,
+                self.geometries[&(geometry.key(), line_primitives(*segments))].float_color,
             ),
         };
         let is_line = matches!(program, Program::Lines | Program::LineStrip);
         let shadow = pass == Pass::Shadow;
         let strip_index_format = match kind {
             DrawKind::Line { geometry, .. } if program == Program::LineStrip => self.geometries
-                [&geometry.key()]
+                [&(geometry.key(), Primitives::LineStrip)]
                 .index
                 .as_ref()
                 .map(|(_, format, _)| *format),
@@ -1055,7 +1079,7 @@ impl Renderer {
                             .map_or(&self.blank_texture, |t| &self.textures[&t.key()].bind_group);
                         pass.set_bind_group(2, texture, &[]);
                     }
-                    let geometry = &self.geometries[&geometry.key()];
+                    let geometry = &self.geometries[&(geometry.key(), Primitives::Triangles)];
                     let mut instance_count = 1;
                     if let (Some(offset), Some(matrices), Some(buffer)) =
                         (instance_offsets[index], instances, &self.instance_buffer)
@@ -1068,9 +1092,12 @@ impl Renderer {
                     }
                     draw_geometry(&mut pass, geometry, *group, instance_count);
                 }
-                DrawKind::Line { geometry, .. } => {
+                DrawKind::Line {
+                    geometry, segments, ..
+                } => {
                     pass.set_bind_group(2, &self.blank_texture, &[]);
-                    draw_geometry(&mut pass, &self.geometries[&geometry.key()], None, 1);
+                    let key = (geometry.key(), line_primitives(*segments));
+                    draw_geometry(&mut pass, &self.geometries[&key], None, 1);
                 }
                 DrawKind::FatLine { geometry, .. } => {
                     let (segments, count) = &self.line_geometries[&geometry.key()];
@@ -1501,6 +1528,21 @@ impl Renderer {
     }
 }
 
+/// The device, and whether it has GL's clip space.
+fn open_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue, bool), RenderError> {
+    let desc = wgpu::DeviceDescriptor {
+        label: Some("field3d"),
+        ..Default::default()
+    };
+    #[cfg(any(target_os = "linux", windows))]
+    if let Some((device, queue)) = super::gl_clip::open(adapter, &desc) {
+        return Ok((device, queue, true));
+    }
+    let (device, queue) = pollster::block_on(adapter.request_device(&desc))
+        .map_err(|e| RenderError::Device(e.to_string()))?;
+    Ok((device, queue, false))
+}
+
 struct FrameOptionsSize {
     width: u32,
     height: u32,
@@ -1649,7 +1691,7 @@ fn upload_segments(device: &wgpu::Device, geometry: &LineSegmentsGeometry) -> (w
     (buffer, geometry.segments.len() as u32)
 }
 
-fn draw_uniform(draw: &Draw, geometries: &HashMap<u64, GpuGeometry>) -> DrawU {
+fn draw_uniform(draw: &Draw, geometries: &HashMap<(u64, Primitives), GpuGeometry>) -> DrawU {
     let f = |v: f64| v as f32;
     let id = draw.object.0 as u32 + 1;
     let mut u = DrawU::zeroed();
@@ -1667,7 +1709,8 @@ fn draw_uniform(draw: &Draw, geometries: &HashMap<u64, GpuGeometry>) -> DrawU {
                 f(m.emissive.b * m.emissive_intensity),
             ];
             let shininess = asrs_js::math::max2(m.shininess, 1e-4);
-            let color_components = geometries[&geometry.key()].color_components;
+            let color_components =
+                geometries[&(geometry.key(), Primitives::Triangles)].color_components;
             u.normal_matrix = [
                 n[0], n[1], n[2], 0.0, n[3], n[4], n[5], 0.0, n[6], n[7], n[8], 0.0,
             ];
@@ -1704,10 +1747,13 @@ fn draw_uniform(draw: &Draw, geometries: &HashMap<u64, GpuGeometry>) -> DrawU {
             u.extra = [0, id, 0, 0];
         }
         DrawKind::Line {
-            geometry, material, ..
+            geometry,
+            material,
+            segments,
         } => {
             let m = material;
-            let color_components = geometries[&geometry.key()].color_components;
+            let color_components =
+                geometries[&(geometry.key(), line_primitives(*segments))].color_components;
             u.diffuse_opacity = [f(m.color.r), f(m.color.g), f(m.color.b), f(m.opacity)];
             u.flags = [
                 if m.vertex_colors { color_components } else { 0 },
@@ -1733,7 +1779,44 @@ fn attribute_f32(attribute: Option<&BufferAttribute>, size: usize, count: usize)
     out
 }
 
-fn upload_geometry(device: &wgpu::Device, geometry: &Geometry) -> GpuGeometry {
+fn line_primitives(segments: bool) -> Primitives {
+    if segments {
+        Primitives::Lines
+    } else {
+        Primitives::LineStrip
+    }
+}
+
+/// `indices` with the last vertex of every primitive first. ANGLE's Vulkan backend turns on GL's
+/// last-vertex provoking convention, and SwiftShader starts a primitive's setup from its provoking
+/// vertex, so its interpolation rounds differently for another order. Strips become segments.
+fn provoking_first(primitives: Primitives, indices: &[u32]) -> Vec<u32> {
+    match primitives {
+        Primitives::Triangles => {
+            let (triangles, rest) = indices.as_chunks::<3>();
+            triangles
+                .iter()
+                .flat_map(|&[a, b, c]| [c, a, b])
+                .chain(rest.iter().copied())
+                .collect()
+        }
+        Primitives::Lines => {
+            let (segments, rest) = indices.as_chunks::<2>();
+            segments
+                .iter()
+                .flat_map(|&[a, b]| [b, a])
+                .chain(rest.iter().copied())
+                .collect()
+        }
+        Primitives::LineStrip => indices.windows(2).flat_map(|w| [w[1], w[0]]).collect(),
+    }
+}
+
+fn upload_geometry(
+    device: &wgpu::Device,
+    geometry: &Geometry,
+    provoking_last: Option<Primitives>,
+) -> GpuGeometry {
     let g = &geometry.geometry;
     let position = g.attribute("position");
     let count = position.map_or(0, BufferAttribute::count);
@@ -1781,30 +1864,45 @@ fn upload_geometry(device: &wgpu::Device, geometry: &Geometry) -> GpuGeometry {
         }
         None => (init(&vec![255u8; count.max(1) * 4], vertex), false),
     };
-    let index = g.index.as_ref().map(|index| {
-        let usage = wgpu::BufferUsages::INDEX;
-        match &index.array {
-            ArrayData::Uint16(v) => {
-                let mut v = v.clone();
-                if v.len() % 2 == 1 {
-                    v.push(0);
+    let index = if let Some(primitives) = provoking_last {
+        let indices: Vec<u32> = match &g.index {
+            Some(index) => (0..index.array.len())
+                .map(|i| index.array.get(i) as u32)
+                .collect(),
+            None => (0..count as u32).collect(),
+        };
+        let indices = provoking_first(primitives, &indices);
+        Some((
+            init(bytemuck::cast_slice(&indices), wgpu::BufferUsages::INDEX),
+            wgpu::IndexFormat::Uint32,
+            indices.len() as u32,
+        ))
+    } else {
+        g.index.as_ref().map(|index| {
+            let usage = wgpu::BufferUsages::INDEX;
+            match &index.array {
+                ArrayData::Uint16(v) => {
+                    let mut v = v.clone();
+                    if v.len() % 2 == 1 {
+                        v.push(0);
+                    }
+                    (
+                        init(bytemuck::cast_slice(&v), usage),
+                        wgpu::IndexFormat::Uint16,
+                        index.array.len() as u32,
+                    )
                 }
-                (
-                    init(bytemuck::cast_slice(&v), usage),
-                    wgpu::IndexFormat::Uint16,
-                    index.array.len() as u32,
-                )
+                other => {
+                    let v: Vec<u32> = (0..other.len()).map(|i| other.get(i) as u32).collect();
+                    (
+                        init(bytemuck::cast_slice(&v), usage),
+                        wgpu::IndexFormat::Uint32,
+                        v.len() as u32,
+                    )
+                }
             }
-            other => {
-                let v: Vec<u32> = (0..other.len()).map(|i| other.get(i) as u32).collect();
-                (
-                    init(bytemuck::cast_slice(&v), usage),
-                    wgpu::IndexFormat::Uint32,
-                    v.len() as u32,
-                )
-            }
-        }
-    });
+        })
+    };
     GpuGeometry {
         position: init(bytemuck::cast_slice(&positions), vertex),
         normal: init(bytemuck::cast_slice(&normals), vertex),

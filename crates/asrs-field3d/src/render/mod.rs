@@ -8,6 +8,8 @@
 
 mod edges;
 mod frame;
+#[cfg(any(target_os = "linux", windows))]
+mod gl_clip;
 mod gpu;
 mod mixed;
 mod scene;

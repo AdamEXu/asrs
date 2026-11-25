@@ -16,6 +16,9 @@ png = "=0.18.1"
 pollster = "=0.4.0"
 wgpu = { version = "=30.0.2", default-features = false, features = ["metal", "dx12", "vulkan", "wgsl"] }
 
+[target.'cfg(any(target_os = "linux", windows))'.dependencies]
+ash = { version = "=0.38.0", default-features = false, features = ["std"] }
+
 [dev-dependencies]
 asrs-parity = { path = "../asrs-parity" }
 sha2 = "=0.10.9"
