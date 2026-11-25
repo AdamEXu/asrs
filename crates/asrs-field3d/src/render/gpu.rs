@@ -270,6 +270,7 @@ impl Renderer {
             include_str!("phong.wgsl"),
             match adapter_info.backend {
                 wgpu::Backend::Vulkan => include_str!("vulkan.wgsl"),
+                wgpu::Backend::Dx12 => include_str!("dx12.wgsl"),
                 _ => include_str!("metal.wgsl"),
             },
             &format!("const GL_CLIP_SPACE = {gl_clip_space};"),
