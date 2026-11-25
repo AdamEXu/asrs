@@ -121,6 +121,7 @@ pub fn any_set_value(set: &LogValueSetAny) -> Value {
         LogValueSetAny::NumberArray(s) => set_value(s),
         LogValueSetAny::StringArray(s) => set_value(s),
         LogValueSetAny::Empty(s) => set_value(s),
+        LogValueSetAny::Foreign(_, s) => set_value(s),
     }
 }
 

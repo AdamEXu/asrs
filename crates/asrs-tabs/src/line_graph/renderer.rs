@@ -12,6 +12,7 @@ use asrs_canvas::text::TextBackend;
 use asrs_js::json;
 use asrs_js::math;
 use asrs_js::number;
+use asrs_js::ops;
 use asrs_js::string::{JsError, JsString};
 use asrs_js::time::Clock;
 use asrs_js::value::{JsObject, JsValue, ToJs};
@@ -144,6 +145,13 @@ fn axis_value_text(value: f64, units: AxisUnits, filter: &JsValue) -> Result<Str
                 "TypeError",
                 "Cannot read properties of undefined (reading 'suffix')",
             ));
+        }
+        AxisUnits::Inherited => {
+            let property = match filter {
+                JsValue::Number(n) if *n == 1.0 || *n == 2.0 => "endsWith",
+                _ => "length",
+            };
+            return Err(ops::cannot_read(&JsValue::Undefined, property));
         }
         AxisUnits::Unit(config) => {
             let suffix = JsString::from(config.suffix);

@@ -1,0 +1,217 @@
+{
+  "entry": "dom",
+  "fixture": {
+    "seed": 73,
+    "geometry": "real",
+    "steps": [
+      {
+        "eval": "/*sidebar:recorder*/ (() => {\n  const w = window;\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const tree = w.__oracleTree;\n  const sideBar = document.getElementsByClassName(\"side-bar\")[0];\n  w.addEventListener(\"scroll\", (event) => {\n    if (event.target === sideBar) write({ sb: \"scroll\" });\n  }, true);\n  const search = document.getElementsByClassName(\"side-bar-search\")[0];\n  w.addEventListener(\"blur\", (event) => {\n    if (event.target === search) write({ sb: \"blur\" });\n  }, true);\n  w.addEventListener(\"mousedown\", (event) => {\n    if (event.target instanceof Element && event.target.closest(\".field-item-label\") !== null) {\n      write({ sb: \"mousedown\", offset: tree([event.offsetX, event.offsetY]) });\n    }\n  }, true);\n})()"
+      },
+      {
+        "log": [
+          [
+            "putRaw",
+            "/.schema/photonstruct:undefined",
+            0,
+            {
+              "b": "696e743820613b"
+            }
+          ],
+          [
+            "putRaw",
+            "/.schema/photonstruct:P",
+            0,
+            {
+              "b": "666c6f6174363420783b203b"
+            }
+          ],
+          [
+            "putRaw",
+            "/.schema/photonstruct:O",
+            0,
+            {
+              "b": "5020705b3f5d3b"
+            }
+          ],
+          [
+            "putNumber",
+            "/a/zz",
+            0,
+            1
+          ],
+          [
+            "putNumber",
+            "/a/aa",
+            0,
+            2
+          ],
+          [
+            "putNumber",
+            "/b/c",
+            0,
+            3
+          ],
+          [
+            "putPhotonStruct",
+            "/a",
+            1,
+            {
+              "b": "020000000000000440070000000000000c4008"
+            },
+            "O"
+          ]
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "collapsed"
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 0,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 6,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "expanded"
+      },
+      {
+        "event": {
+          "target": "#fieldList svg.field-item-icon",
+          "type": "click",
+          "index": 1,
+          "kind": "MouseEvent"
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "again"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          1
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "selected"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/q",
+            2,
+            1
+          ]
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "refreshed"
+      }
+    ]
+  }
+}

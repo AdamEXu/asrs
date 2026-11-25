@@ -104,6 +104,16 @@ fn photon_untyped_fields() {
 }
 
 #[test]
+fn prototype_keys() {
+    check_fn_vectors("log/prototype-keys", dispatch);
+}
+
+#[test]
+fn foreign_values() {
+    check_fn_vectors("log/foreign-values", dispatch);
+}
+
+#[test]
 fn log_key_utils() {
     check_fn_vectors("log/key-utils", dispatch);
 }

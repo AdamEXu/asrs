@@ -3,6 +3,7 @@
 use std::sync::Arc;
 
 use asrs_js::string::JsString;
+use asrs_js::value::JsValue;
 use asrs_log::log::{Log, LogValue, LogValues, SerializedLogField, StructuredType};
 use asrs_parity::{Utf16String, Value};
 
@@ -38,6 +39,29 @@ impl ToValue for JsString {
     }
 }
 
+impl ToValue for JsValue {
+    fn to_value(&self) -> Value {
+        match self {
+            JsValue::Undefined => Value::Undefined,
+            JsValue::Null => Value::Null,
+            JsValue::Bool(b) => Value::Bool(*b),
+            JsValue::Number(x) => Value::number(*x),
+            JsValue::String(s) => string_value(s),
+            JsValue::Array(items) => Value::Array(items.iter().map(ToValue::to_value).collect()),
+            JsValue::Object(object) => Value::Object(
+                object
+                    .iter()
+                    .map(|(k, v)| (Utf16String::from_units(k.units().to_vec()), v.to_value()))
+                    .collect(),
+            ),
+            JsValue::Bytes(bytes) => Value::Bytes(bytes.clone()),
+            JsValue::BigInt(b) => Value::BigInt(format!("{b}")),
+            JsValue::Date(t) => Value::Date(t.to_bits()),
+            JsValue::ExtData(..) => unreachable!("no unchecked source holds ExtData"),
+        }
+    }
+}
+
 impl ToValue for () {
     fn to_value(&self) -> Value {
         Value::Undefined
@@ -63,6 +87,7 @@ pub fn structured_type_value(t: &StructuredType) -> Value {
         StructuredType::Null => Value::Null,
         StructuredType::Undefined => Value::Undefined,
         StructuredType::Named(s) => string_value(s),
+        StructuredType::Foreign(value) => value.to_value(),
     }
 }
 
@@ -87,6 +112,7 @@ fn values_value(values: &LogValues) -> Value {
         LogValues::NumberArray(_) => column_value::<Vec<f64>>(values),
         LogValues::StringArray(_) => column_value::<Vec<JsString>>(values),
         LogValues::Empty(_) => column_value::<()>(values),
+        LogValues::Foreign(_, c) => Value::Array(c.iter().map(ToValue::to_value).collect()),
     }
 }
 

@@ -10,7 +10,7 @@ use asrs_js::ops;
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, Rng};
 use asrs_js::value::{JsObject, JsValue};
-use asrs_log::log::Log;
+use asrs_log::log::{Log, LoggableType};
 use asrs_log::units;
 
 use super::config;
@@ -239,7 +239,7 @@ impl FtcSource {
                             self.running = true;
                             log_rc
                                 .borrow_mut()
-                                .put_boolean(&js("RUNNING"), timestamp, true);
+                                .put_boolean(&js("RUNNING"), timestamp, true)?;
                         }
                         self.log_object(
                             &ops::get(&packet, "data")?,
@@ -262,7 +262,7 @@ impl FtcSource {
                         && ops::loose_equals(&op_mode_status, &JsValue::string("RUNNING"));
                     log_rc
                         .borrow_mut()
-                        .put_boolean(&js("RUNNING"), timestamp, self.running);
+                        .put_boolean(&js("RUNNING"), timestamp, self.running)?;
                 }
             }
         }
@@ -314,14 +314,14 @@ impl FtcSource {
         let value = ops::get(state, "__value")?;
         {
             let mut log = log_rc.borrow_mut();
-            match (var_type, value) {
-                (BasicVarType::Boolean, value) => {
-                    log.put_boolean(path, timestamp, matches!(value, JsValue::Bool(true)));
+            match var_type {
+                BasicVarType::Boolean => {
+                    log.put_untyped(path, timestamp, LoggableType::Boolean, value)?;
                 }
-                (BasicVarType::String, value) => {
-                    log.put_string(path, timestamp, value.into_string().unwrap_or_default());
+                BasicVarType::String => {
+                    log.put_untyped(path, timestamp, LoggableType::String, value)?;
                 }
-                (_, value) => log.put_number(path, timestamp, to_number(&value)),
+                _ => log.put_number(path, timestamp, to_number(&value))?,
             }
         }
         self.tunable_keys_types.insert(path.clone(), var_type);
@@ -392,19 +392,19 @@ impl FtcSource {
                 JsValue::String(text) => {
                     let num = number::to_number(text.units());
                     if !num.is_nan() && !number::parse_float(text.units()).is_nan() {
-                        log.put_number(&key, timestamp, num);
+                        log.put_number(&key, timestamp, num)?;
                     } else {
-                        log.put_string(&key, timestamp, text.clone());
+                        log.put_string(&key, timestamp, text.clone())?;
                     }
                 }
-                JsValue::Bool(value) => log.put_boolean(&key, timestamp, *value),
-                JsValue::Number(value) => log.put_number(&key, timestamp, *value),
-                JsValue::BigInt(value) => log.put_number(&key, timestamp, value.to_f64()),
+                JsValue::Bool(value) => log.put_boolean(&key, timestamp, *value)?,
+                JsValue::Number(value) => log.put_number(&key, timestamp, *value)?,
+                JsValue::BigInt(value) => log.put_number(&key, timestamp, value.to_f64())?,
                 _ => {}
             }
         }
         for (label, (translation, rotation)) in found_poses {
-            log.put_pose(&label, timestamp, translation, rotation);
+            log.put_pose(&label, timestamp, translation, rotation)?;
         }
         Ok(())
     }

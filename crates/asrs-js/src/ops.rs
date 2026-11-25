@@ -663,6 +663,12 @@ fn inherited(tables: &[&[&str]], key: &JsString) -> bool {
     })
 }
 
+/// `key in {}`: whether a plain object without an own `key` still has one through
+/// `Object.prototype`.
+pub fn is_object_prototype_member(key: &JsString) -> bool {
+    inherited(&[OBJECT_PROTO], key)
+}
+
 /// `key in value` with a JS string key, including members inherited through the
 /// prototype chain (`"toString" in {}`, `"length" in new Uint8Array()`).
 pub fn has_key(value: &JsValue, key: &JsString) -> Result<bool, JsError> {

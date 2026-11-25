@@ -497,7 +497,9 @@ impl HubHost for Host {
             (Ok(log), Some(options)) => export(&log, &options, &mut |value| {
                 replies.push(ExportReply::Progress(value))
             }),
-            (Err(LogError::Proto(_) | LogError::StackOverflow), _) => Err(ExportError::Rejected),
+            (Err(LogError::Proto(_) | LogError::Thrown(_) | LogError::StackOverflow), _) => {
+                Err(ExportError::Rejected)
+            }
             (Err(LogError::NeverCompletes), _) => Err(ExportError::Unported(
                 "a log the export worker never finishes reading",
             )),
