@@ -1,9 +1,11 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use bytemuck::{Pod, Zeroable};
 use wgpu::util::DeviceExt;
 
+use super::adapter::Opened;
 use super::frame::{Draw, DrawKind, Frame};
 use super::scene::{Filter, Geometry, LineSegmentsGeometry, MinFilter, Side, Texture};
 use crate::three::{ArrayData, BufferAttribute, Group};
@@ -35,6 +37,8 @@ const LINE_QUAD_INDEX: [u16; 18] = [0, 2, 1, 2, 3, 1, 2, 4, 3, 4, 5, 3, 4, 6, 5,
 pub enum RenderError {
     NoAdapter(String),
     Device(String),
+    /// The device is gone: open another renderer.
+    Lost(String),
 }
 
 impl std::fmt::Display for RenderError {
@@ -42,6 +46,7 @@ impl std::fmt::Display for RenderError {
         match self {
             RenderError::NoAdapter(e) => write!(f, "no graphics adapter: {e}"),
             RenderError::Device(e) => write!(f, "device request failed: {e}"),
+            RenderError::Lost(e) => write!(f, "the graphics device was lost: {e}"),
         }
     }
 }
@@ -224,6 +229,7 @@ struct ShadowMaps {
 pub struct Renderer {
     device: wgpu::Device,
     queue: wgpu::Queue,
+    lost: Arc<Mutex<Option<String>>>,
     adapter_info: wgpu::AdapterInfo,
     provoking_last: bool,
     shader: wgpu::ShaderModule,
@@ -253,17 +259,13 @@ pub struct Renderer {
 
 impl Renderer {
     pub fn new() -> Result<Self, RenderError> {
-        let instance =
-            wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle_from_env());
-        let adapter = pollster::block_on(instance.request_adapter(&wgpu::RequestAdapterOptions {
-            power_preference: wgpu::PowerPreference::None,
-            force_fallback_adapter: false,
-            compatible_surface: None,
-            apply_limit_buckets: false,
-        }))
-        .map_err(|e| RenderError::NoAdapter(e.to_string()))?;
-        let adapter_info = adapter.get_info();
-        let (device, queue, gl_clip_space) = open_device(&adapter)?;
+        let Opened {
+            info: adapter_info,
+            device,
+            queue,
+            gl_clip_space,
+            lost,
+        } = super::adapter::open()?;
         let source = [
             include_str!("phong.wgsl"),
             match adapter_info.backend {
@@ -423,6 +425,7 @@ impl Renderer {
         Ok(Renderer {
             device,
             queue,
+            lost,
             provoking_last,
             adapter_info,
             shader,
@@ -453,6 +456,20 @@ impl Renderer {
 
     pub fn adapter_info(&self) -> &wgpu::AdapterInfo {
         &self.adapter_info
+    }
+
+    /// Loses the device, as a driver reset would.
+    #[cfg(feature = "parity")]
+    pub fn lose_device(&self) {
+        self.device.destroy();
+    }
+
+    /// The bytes of a buffer whose mapping was requested before the last poll.
+    fn mapped(&self, buffer: &wgpu::Buffer) -> Result<wgpu::BufferView, RenderError> {
+        let lost = || self.lost.lock().ok().and_then(|l| l.clone());
+        buffer.slice(..).get_mapped_range().map_err(|e| {
+            RenderError::Lost(lost().unwrap_or_else(|| format!("no frame to read back ({e})")))
+        })
     }
 
     fn pipeline(&mut self, key: PipeKey) -> &wgpu::RenderPipeline {
@@ -1183,7 +1200,7 @@ impl Renderer {
 
     /// Renders `frame` and writes its pixels to `out` as tightly packed BGRA rows, top row
     /// first, which is `gl.readPixels` flipped to image order.
-    pub fn render(&mut self, frame: &Frame, out: &mut Vec<u8>) -> Timings {
+    pub fn render(&mut self, frame: &Frame, out: &mut Vec<u8>) -> Result<Timings, RenderError> {
         let t0 = Instant::now();
         let FrameOptionsSize {
             width,
@@ -1269,12 +1286,14 @@ impl Renderer {
         );
         self.queue.submit([encoder.finish()]);
         let t1 = Instant::now();
-        let slice = targets.readback.slice(..);
-        slice.map_async(wgpu::MapMode::Read, |_| {});
+        targets
+            .readback
+            .slice(..)
+            .map_async(wgpu::MapMode::Read, |_| {});
         let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
         let t2 = Instant::now();
         {
-            let data = slice.get_mapped_range().expect("mapped readback");
+            let data = self.mapped(&targets.readback)?;
             copy_rows(
                 &data,
                 padded as usize,
@@ -1286,11 +1305,11 @@ impl Renderer {
         targets.readback.unmap();
         self.targets = Some(targets);
         let t3 = Instant::now();
-        Timings {
+        Ok(Timings {
             encode_ms: (t1 - t0).as_secs_f64() * 1e3,
             gpu_and_map_ms: (t2 - t1).as_secs_f64() * 1e3,
             copy_ms: (t3 - t2).as_secs_f64() * 1e3,
-        }
+        })
     }
 
     /// The RGBA8 texels of the last frame's shadow map for `layer`, row 0 first (GL's bottom
@@ -1335,10 +1354,7 @@ impl Renderer {
         let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
         let mut out = Vec::with_capacity((width * height * 4) as usize);
         {
-            let data = buffer
-                .slice(..)
-                .get_mapped_range()
-                .expect("mapped shadow map");
+            let data = self.mapped(&buffer).expect("mapped shadow map");
             for row in data.chunks(padded as usize).take(height as usize) {
                 out.extend_from_slice(&row[..(width * 4) as usize]);
             }
@@ -1438,7 +1454,7 @@ impl Renderer {
         let read = |b: &wgpu::Buffer| {
             let mut bytes = Vec::new();
             {
-                let data = b.slice(..).get_mapped_range().expect("mapped aux readback");
+                let data = self.mapped(b).expect("mapped aux readback");
                 copy_rows(
                     &data,
                     padded as usize,
@@ -1526,21 +1542,6 @@ impl Renderer {
             encoder,
         );
     }
-}
-
-/// The device, and whether it has GL's clip space.
-fn open_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue, bool), RenderError> {
-    let desc = wgpu::DeviceDescriptor {
-        label: Some("field3d"),
-        ..Default::default()
-    };
-    #[cfg(any(target_os = "linux", windows))]
-    if let Some((device, queue)) = super::gl_clip::open(adapter, &desc) {
-        return Ok((device, queue, true));
-    }
-    let (device, queue) = pollster::block_on(adapter.request_device(&desc))
-        .map_err(|e| RenderError::Device(e.to_string()))?;
-    Ok((device, queue, false))
 }
 
 struct FrameOptionsSize {

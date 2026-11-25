@@ -6,6 +6,9 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+parity = []
+
 [dependencies]
 asrs-canvas = { path = "../asrs-canvas" }
 asrs-js = { path = "../asrs-js" }

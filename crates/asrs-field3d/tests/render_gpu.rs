@@ -66,7 +66,7 @@ fn readback_is_top_row_first_with_the_background_clear() {
     };
     let frame = build_frame(&mut scene, &mut camera, options);
     let mut bgra = Vec::new();
-    renderer.render(&frame, &mut bgra);
+    renderer.render(&frame, &mut bgra).expect("rendered");
     assert_eq!(bgra.len(), (W * H * 4) as usize);
     assert_eq!(pixel(&bgra, 0, 0), [0x22, 0x22, 0x22, 0xff]);
     assert_eq!(pixel(&bgra, W / 2, H / 4), [0, 0, 0xff, 0xff]);
@@ -101,6 +101,58 @@ fn render_thread_delivers_the_latest_frame_and_wakes() {
     thread.recycle(frame.bgra);
 }
 
+#[cfg(feature = "parity")]
+#[test]
+fn a_lost_device_is_an_error_and_another_renderer_takes_over() {
+    let Some(mut lost) = renderer() else {
+        return;
+    };
+    let options = FrameOptions::new(f64::from(W), f64::from(H), 1.0, true);
+    let (mut scene, mut camera) = scene_with_box_at(0.0);
+    let frame = build_frame(&mut scene, &mut camera, options);
+    let mut before = Vec::new();
+    lost.render(&frame, &mut before).expect("rendered");
+    lost.lose_device();
+    let error = lost.render(&frame, &mut Vec::new()).expect_err("lost");
+    assert!(
+        error
+            .to_string()
+            .starts_with("the graphics device was lost: Destroyed"),
+        "{error}"
+    );
+    let mut after = Vec::new();
+    Renderer::new()
+        .expect("a second device")
+        .render(&frame, &mut after)
+        .expect("rendered");
+    assert_eq!(before, after);
+}
+
+#[cfg(feature = "parity")]
+#[test]
+fn the_render_thread_replaces_a_lost_device() {
+    if renderer().is_none() {
+        return;
+    }
+    let (tx, rx) = mpsc::channel();
+    let thread = RenderThread::spawn(move || {
+        let _ = tx.send(());
+    })
+    .expect("render thread");
+    let options = FrameOptions::new(f64::from(W), f64::from(H), 1.0, true);
+    let (mut scene, mut camera) = scene_with_box_at(0.0);
+    let frame = build_frame(&mut scene, &mut camera, options);
+    let present = || {
+        thread.submit(frame.clone());
+        rx.recv_timeout(Duration::from_secs(20)).expect("woken");
+        assert_eq!(thread.failure(), None);
+        thread.take().expect("a frame").bgra
+    };
+    let before = present();
+    thread.lose_device();
+    assert_eq!(before, present());
+}
+
 #[test]
 fn an_instanced_mesh_with_no_instances_draws_nothing() {
     let Some(mut renderer) = renderer() else {
@@ -123,7 +175,7 @@ fn an_instanced_mesh_with_no_instances_draws_nothing() {
     };
     let frame = build_frame(&mut scene, &mut camera, options);
     let mut bgra = Vec::new();
-    renderer.render(&frame, &mut bgra);
+    renderer.render(&frame, &mut bgra).expect("rendered");
     assert_eq!(pixel(&bgra, W / 2, H / 4), [0, 0, 0xff, 0xff]);
     assert_eq!(pixel(&bgra, W / 2, H * 3 / 4), [0x22, 0x22, 0x22, 0xff]);
 }
@@ -174,7 +226,7 @@ fn a_shadowed_frame_with_lines_renders_and_dumps_its_shadow_map() {
     let frame = build_frame(&mut scene, &mut camera, options);
     assert_eq!(frame.shadows.len(), 1);
     let mut bgra = Vec::new();
-    renderer.render(&frame, &mut bgra);
+    renderer.render(&frame, &mut bgra).expect("rendered");
     let (w, h, texels) = renderer.shadow_map(0).expect("shadow map");
     assert_eq!((w, h, texels.len()), (512, 512, 512 * 512 * 4));
     assert_eq!(&texels[..4], &[255, 255, 255, 255]);
@@ -216,7 +268,7 @@ fn an_indexed_line_strip_draws() {
     let options = FrameOptions::new(f64::from(W), f64::from(H), 1.0, false);
     let frame = build_frame(&mut scene, &mut camera, options);
     let mut bgra = Vec::new();
-    renderer.render(&frame, &mut bgra);
+    renderer.render(&frame, &mut bgra).expect("rendered");
     let lit = (0..H).filter(|&y| pixel(&bgra, W / 2, y)[0] == 255).count();
     assert_eq!(lit, 1);
 }
@@ -276,7 +328,7 @@ fn every_pixel_a_line_lights_on_a_coplanar_floor_is_an_edge_pixel() {
             let (mut scene, mut camera) = floor_with_line(z);
             let frame = build_frame(&mut scene, &mut camera, options);
             let mut bgra = Vec::new();
-            renderer.render(&frame, &mut bgra);
+            renderer.render(&frame, &mut bgra).expect("rendered");
             (bgra, renderer.render_aux(&frame))
         };
         let (bare, _) = render(None);
@@ -315,7 +367,7 @@ fn a_viewport_wider_than_the_buffer_clips_its_last_column() {
             },
         );
         let mut bgra = Vec::new();
-        renderer.render(&frame, &mut bgra);
+        renderer.render(&frame, &mut bgra).expect("rendered");
         bgra
     };
     let exact = render([W, H]);

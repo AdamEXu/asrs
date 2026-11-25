@@ -6,7 +6,7 @@ use asrs_parity::json::Json;
 use asrs_parity::pixel::{self, Rgba};
 use asrs_parity::pixel3d;
 
-use crate::canvas::{platform, write};
+use crate::canvas::{self, platform, read_json, write};
 use crate::oracle::{self, Paths};
 use crate::{Result, cargo, gl};
 
@@ -20,13 +20,17 @@ commands:
   ref [<scene>...]    capture the references (ref/<scene>@<n>x-<theme>.png) with the 3D switches
                       of ASRS_GL (native, swiftshader or d3d11-warp; default native on macOS,
                       swiftshader elsewhere)
-  run [<scene>...]    render with the port (example field3d_scenes) into port/ and apply gate 4:
+  run [--manifest] [<scene>...]
+                      render with the port (example field3d_scenes) into port/ and apply gate 4:
                       SSIM >= 0.995, interior pixels (over 2 px from an edge of the port's id and
                       depth buffers) within 2 levels and at most 0.05 % differing, at most 1 %
                       of all pixels differing, no blob of over 4 px (edge zone included) more
                       than 32 levels off. Shadow maps must be equal texel for texel, and line
-                      widths at the scene's widthProbes within 0.05 px. On Linux under swiftshader
-                      the port runs on Electron's SwiftShader (VK_ICD_FILENAMES)
+                      widths at the scene's widthProbes within 0.05 px. The port runs on the
+                      reference's rasterizer: Electron's SwiftShader (Vulkan) under swiftshader,
+                      WARP (DX12) under d3d11-warp. With --manifest a run of every scene stores
+                      the pairing, the flags and the numbers as `field3d` in
+                      parity/vectors/canvas/<os>.json, per architecture and GL mode
   bench [<args>...]   frame-time benchmark of the render thread (example field3d_bench)";
 
 const SCALES: [u32; 2] = [1, 2];
@@ -39,7 +43,14 @@ pub fn run(args: &[String]) -> Result {
     let rest = args.get(1..).unwrap_or_default();
     match args.first().map(String::as_str) {
         Some("ref") => reference(&paths, rest),
-        Some("run") => run_port(&paths, rest),
+        Some("run") => {
+            let scenes: Vec<String> = rest
+                .iter()
+                .filter(|a| *a != "--manifest")
+                .cloned()
+                .collect();
+            run_port(&paths, &scenes, rest.len() != scenes.len())
+        }
         Some("bench") => bench(rest),
         _ => Err(USAGE.to_owned()),
     }
@@ -117,6 +128,8 @@ fn example(name: &str) -> Result<PathBuf> {
         "--release",
         "-p",
         "asrs-field3d",
+        "--features",
+        "parity",
         "--example",
         name,
     ])?;
@@ -224,7 +237,96 @@ fn diff_image(reference: &Rgba, port: &Rgba, edges: &[bool]) -> Rgba {
     }
 }
 
-fn run_port(paths: &Paths, wanted: &[String]) -> Result {
+fn check_adapter(adapter: &Json, gl: &str) -> Result {
+    let name = text(adapter, "name");
+    let software = ["llvmpipe", "lavapipe"];
+    if software.iter().any(|s| name.to_lowercase().contains(s)) {
+        return Err(format!("3D is never judged on {name}"));
+    }
+    match gl::port_adapter(gl) {
+        Some((_, wanted)) if !name.starts_with(wanted) => {
+            Err(format!("the port ran on {name:?}, not on {wanted}"))
+        }
+        _ => Ok(()),
+    }
+}
+
+fn text(object: &Json, key: &str) -> String {
+    object
+        .get(key)
+        .and_then(Json::as_str)
+        .map(|s| s.to_string_lossy())
+        .unwrap_or_default()
+}
+
+/// The pairing a run judged and the worst numbers it measured.
+fn manifest_entry(gl: &str, reference: &Json, adapter: &Json, rows: &[Json]) -> Json {
+    let extreme = |key: &str, pick: fn(f64, f64) -> f64, from: f64| {
+        Json::Number(
+            rows.iter()
+                .filter_map(|r| r.get(key).and_then(Json::as_f64))
+                .fold(from, pick),
+        )
+    };
+    let strings = |values: &[String]| Json::Array(values.iter().map(|s| Json::string(s)).collect());
+    let switches: Vec<String> = gl::electron_switches(gl)
+        .iter()
+        .map(|s| (*s).to_owned())
+        .collect();
+    let failed = rows
+        .iter()
+        .filter(|r| r.get("pass") == Some(&Json::Bool(false)))
+        .map(|r| text(r, "capture"))
+        .collect::<Vec<_>>();
+    let field = |key| reference.get(key).cloned().unwrap_or(Json::Null);
+    Json::object([
+        ("electronSwitches", strings(&switches)),
+        ("glRenderer", field("glRenderer")),
+        ("samples", field("samples")),
+        ("portEnvironment", strings(&gl::port_environment(gl))),
+        ("portAdapter", adapter.clone()),
+        ("captures", Json::Number(rows.len() as f64)),
+        ("failed", strings(&failed)),
+        ("ssimMin", extreme("ssim", f64::min, 1.0)),
+        ("differingPctMax", extreme("differingPct", f64::max, 0.0)),
+        (
+            "interiorMaxDelta",
+            extreme("interiorMaxDelta", f64::max, 0.0),
+        ),
+        (
+            "interiorDifferingPctMax",
+            extreme("interiorDifferingPct", f64::max, 0.0),
+        ),
+        ("maxDelta", extreme("maxDelta", f64::max, 0.0)),
+        ("outlierBlob", extreme("outlierBlob", f64::max, 0.0)),
+    ])
+}
+
+fn store_manifest(paths: &Paths, gl: &str, entry: Json) -> Result {
+    let merged = |old: Option<&Json>, key: &str, value: Json| {
+        let mut fields: Vec<(String, Json)> = match old {
+            Some(Json::Object(pairs)) => pairs
+                .iter()
+                .map(|(k, v)| (k.to_string_lossy(), v.clone()))
+                .filter(|(k, _)| k != key)
+                .collect(),
+            _ => Vec::new(),
+        };
+        fields.push((key.to_owned(), value));
+        fields.sort_by(|a, b| a.0.cmp(&b.0));
+        Json::object(fields.iter().map(|(k, v)| (k.as_str(), v.clone())))
+    };
+    let recorded = canvas::manifest_field(paths, platform(), "field3d");
+    let arch = std::env::consts::ARCH;
+    let modes = merged(recorded.as_ref().and_then(|r| r.get(arch)), gl, entry);
+    let hosts = merged(recorded.as_ref(), arch, modes);
+    canvas::set_manifest_field(paths, platform(), "field3d", hosts)
+}
+
+fn run_port(paths: &Paths, wanted: &[String], manifest: bool) -> Result {
+    if manifest && !wanted.is_empty() {
+        return Err("--manifest records a run of every scene".to_owned());
+    }
     let base = base_dir(paths);
     let current = fs::read_to_string(base.join(STAMP)).unwrap_or_default();
     let gl = gl::default_mode()?;
@@ -247,6 +349,8 @@ fn run_port(paths: &Paths, wanted: &[String]) -> Result {
     if !status.success() {
         return Err(format!("field3d_scenes failed ({status})"));
     }
+    let adapter = read_json(&port.join("adapter.json"))?;
+    check_adapter(&adapter, gl)?;
     fs::create_dir_all(port.join("diff")).map_err(|e| e.to_string())?;
     let mut rows = Vec::new();
     let mut failed = Vec::new();
@@ -394,6 +498,11 @@ fn run_port(paths: &Paths, wanted: &[String]) -> Result {
                 ]));
             }
         }
+    }
+    if manifest {
+        let reference = read_json(&base.join("ref/host.json"))?;
+        let entry = manifest_entry(gl, &reference, &adapter, &rows);
+        store_manifest(paths, gl, entry)?;
     }
     write(
         &port.join("report.json"),
