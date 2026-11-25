@@ -3,6 +3,7 @@ pub mod assets;
 pub mod build_constants;
 pub mod hub_state;
 pub mod json_file;
+pub mod layout_unit;
 pub mod mathjs;
 pub mod messages;
 pub mod preferences;
