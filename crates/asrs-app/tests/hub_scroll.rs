@@ -201,6 +201,14 @@ fn keys(page: &mut Page<'_>, name: &str, inside: &str, at: [f64; 2], height: f64
     }
     page.press("home");
     assert_eq!(moved(&start, &page.tops(), inside), 0.0, "{name}: home");
+    let [x, y, w, h] = page.rect("div.side-bar-handle");
+    page.click([x + w / 2.0, y + h / 2.0]);
+    page.press("down");
+    assert_eq!(
+        moved(&start, &page.tops(), inside),
+        0.0,
+        "{name}: pressed elsewhere"
+    );
 }
 
 fn open(headless: &mut HeadlessCapture, scale: f32) -> Page<'_> {
