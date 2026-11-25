@@ -363,6 +363,12 @@ pub fn screen_height() -> f64 {
     imp::probe::screen_height()
 }
 
+/// Posts AppKit's notification of a changed scrollbar style.
+#[cfg(target_os = "macos")]
+pub fn post_scroller_style_change() {
+    super::mac::scrollbars::post_style_change();
+}
+
 /// What AppKit gets for tooltips set one after the other on one view, and whether its tooltip
 /// manager then owns the view's tracking rect.
 pub fn tooltip_roundtrip(texts: &[&str]) -> Vec<(Option<String>, bool)> {

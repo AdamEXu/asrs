@@ -35,6 +35,8 @@ done
 export DISPLAY=$display XDG_SESSION_TYPE=x11 DBUS_SESSION_BUS_ADDRESS=disabled:
 export ELECTRON_OZONE_PLATFORM_HINT=x11
 unset WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE SWAYSOCK XAUTHORITY
+# Chromium takes a device scale from these, and above 1 it draws unhinted text.
+unset GDK_SCALE GDK_DPI_SCALE
 
 if command -v xfwm4 >/dev/null; then
   # xfwm4 writes its workspaces to xfconf, which would be the desktop's own configuration.

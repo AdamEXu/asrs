@@ -1,0 +1,57 @@
+{
+ "entry": "scrollers",
+ "platforms": [
+  "macos-aarch64"
+ ],
+ "fixture": {
+  "window": [
+   500,
+   500
+  ],
+  "css": [],
+  "jump": true,
+  "styles": [
+   "overlay",
+   "classic"
+  ],
+  "scales": [
+   1
+  ],
+  "steps": [
+   {
+    "name": "jump",
+    "markup": "<div id=a class=s style='position:absolute;left:50px;top:40px;width:200px;height:150px;overflow:auto;background:#fff'><div style='width:100px;height:1000px'></div></div>",
+    "ops": [
+     [
+      "wheel",
+      100,
+      80,
+      0,
+      10
+     ],
+     [
+      "move",
+      244,
+      150,
+      "quick"
+     ],
+     [
+      "press",
+      244,
+      150
+     ],
+     [
+      "move",
+      244,
+      130
+     ],
+     [
+      "release",
+      244,
+      130
+     ]
+    ]
+   }
+  ]
+ }
+}
