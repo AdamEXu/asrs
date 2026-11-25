@@ -259,8 +259,15 @@ impl Page {
     #[track_caller]
     fn assert_idle(&mut self, what: &str) {
         self.settle();
-        let drawn = self.drawn_in(300);
-        assert!(drawn.iter().all(|&drawn| drawn <= 10), "{what}: {drawn:?}");
+        // A software GPU can still be loading the 3D field's models when this starts.
+        let mut drawn = [0; 2];
+        for _ in 0..6 {
+            drawn = self.drawn_in(300);
+            if drawn.iter().all(|&drawn| drawn <= 10) {
+                return;
+            }
+        }
+        panic!("{what}: {drawn:?}");
     }
 
     fn mouse_move(&mut self, x: f32, y: f32) {
