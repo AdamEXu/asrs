@@ -677,9 +677,11 @@ impl Builder {
         let cull_right = !convex;
         let mut b = Builder { edges: Vec::new() };
         let mut pieces = Vec::new();
+        let mut quads = Vec::new();
         let mut finite = true;
         for e in path.edges() {
-            let quads: Vec<[P; 3]> = match e.verb {
+            quads.clear();
+            match e.verb {
                 Verb::Line => {
                     match clip {
                         Some(c) => {
@@ -693,8 +695,10 @@ impl Builder {
                     }
                     continue;
                 }
-                Verb::Quad => vec![e.quad_pts()],
-                Verb::Conic => crate::path::conic_to_quads(e.quad_pts(), e.weight, 0.25),
+                Verb::Quad => quads.push(e.quad_pts()),
+                Verb::Conic => {
+                    crate::path::add_conic_quads(e.quad_pts(), e.weight, 0.25, &mut quads);
+                }
                 Verb::Cubic => {
                     let pts = e.pts;
                     match clip {
@@ -714,8 +718,8 @@ impl Builder {
                     continue;
                 }
                 Verb::Move | Verb::Close => continue,
-            };
-            for q in quads {
+            }
+            for &q in &quads {
                 match clip {
                     Some(c) => {
                         pieces.clear();
