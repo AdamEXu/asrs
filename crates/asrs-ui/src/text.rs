@@ -7,6 +7,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ops::Range;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -14,9 +15,10 @@ use asrs_canvas::text::caret;
 use asrs_canvas::text::dom::{self, Layout, Lu};
 use asrs_canvas::text::font::FontKey;
 use asrs_canvas::text::lut::MaskGammaLut;
-use asrs_canvas::text::{FixedAdvance, TextBackend, platform_backend};
+use asrs_canvas::text::{Family, FixedAdvance, TextBackend, platform_backend};
+use gpui_kit::base::input::InputState;
 use gpui_kit::{
-    App, AvailableSpace, Bounds, ContentMask, Corners, Element, ElementId, Global, GlobalElementId,
+    App, AvailableSpace, Bounds, ContentMask, Corners, Element, ElementId, Entity, Global, GlobalElementId,
     InspectorElementId, IntoElement, LayoutId, Pixels, Refineable, RenderImage, Rgba, SharedString,
     Style, StyleRefinement, Styled, Window, WindowId, fill, point, px, size,
 };
@@ -257,6 +259,15 @@ pub fn font_metrics(cx: &mut App, style: &TextStyle, scale: f32) -> (f32, f32) {
     (ascent as f32 / 64.0, descent as f32 / 64.0)
 }
 
+/// The name GPUI's own text takes `font`'s family by, for what lays out but draws no text.
+pub fn gpui_family(font: &FontSpec) -> SharedString {
+    match font.family {
+        Family::Arial if cfg!(target_os = "linux") => "Liberation Sans".into(),
+        Family::Arial => "Arial".into(),
+        _ => ".SystemUIFont".into(),
+    }
+}
+
 /// The advance of a space in device px.
 pub fn space_width(cx: &mut App, style: &TextStyle, scale: f32) -> f32 {
     let system = cx.default_global::<TextSystem>();
@@ -363,6 +374,9 @@ pub struct Text {
     underline: bool,
     cut: Option<f64>,
     selected: Option<Rgba>,
+    selected_part: Option<(Range<usize>, SelectionColors)>,
+    scroll: Option<Entity<InputState>>,
+    marked: Option<Range<usize>>,
     gpui: StyleRefinement,
     /// Each width the measure function returned, snapped as GPUI will snap the box, with the
     /// exact width it stands for: lines wrap and align at the exact width, as in Chromium.
@@ -382,6 +396,9 @@ impl Text {
             underline: false,
             cut: None,
             selected: None,
+            selected_part: None,
+            scroll: None,
+            marked: None,
             gpui: StyleRefinement::default(),
             measured: Rc::default(),
         }
@@ -432,6 +449,24 @@ impl Text {
             Some(text) => self.color(text),
             None => self,
         }
+    }
+
+    /// Draws the bytes `part` of a single line selected.
+    pub fn selected_part(mut self, part: Range<usize>, colors: SelectionColors) -> Self {
+        self.selected_part = (!part.is_empty()).then_some((part, colors));
+        self
+    }
+
+    /// Underlines the bytes `marked` of a single line, which an input method composes.
+    pub fn marked(mut self, marked: Option<Range<usize>>) -> Self {
+        self.marked = marked;
+        self
+    }
+
+    /// Scrolls with a single-line editor laid out before this text.
+    pub fn scrolled_by(mut self, editor: &Entity<InputState>) -> Self {
+        self.scroll = Some(editor.clone());
+        self
     }
 
     /// Draws only what fits in `room` CSS px, for a box the line's ellipsis follows or replaces.
@@ -533,8 +568,11 @@ impl Element for Text {
         if let Some(room) = self.cut {
             dom::cut(&mut layout, dom::lu_round((room * f64::from(scale)) as f32));
         }
+        let scroll = self.scroll.as_ref().map_or(0.0, |editor| {
+            (f32::from(editor.read(cx).scroll_offset().x) * scale).round()
+        });
         let origin = (
-            dom::lu_round((f32::from(bounds.origin.x) + self.subpixel.0) * scale),
+            dom::lu_round((f32::from(bounds.origin.x) + self.subpixel.0) * scale + scroll),
             dom::lu_round((f32::from(bounds.origin.y) + self.subpixel.1) * scale),
         );
         Prepaint { layout, origin }
@@ -575,7 +613,47 @@ impl Element for Text {
                 }
             }
         }
+        let mut part = None;
+        let mut composition = None;
+        if (self.selected_part.is_some() || self.marked.is_some())
+            && let Some(line) = layout.lines.first()
+            && let (Some(first), Some(last)) = (line.fragments.first(), line.fragments.last())
+        {
+            let font = &self.style.font;
+            let carets = caret::carets(system.backend.as_mut(), font, &self.text, scale);
+            let caret = |byte: usize| {
+                let at = carets.partition_point(|&(b, _)| b < byte);
+                carets.get(at).or(carets.last()).map_or(0.0, |&(_, x)| x) * 64.0
+            };
+            let round = |lu: Lu| (lu + 32).div_euclid(64);
+            let top = round(origin.1 + line.top.min(line.baseline - layout.ascent));
+            let bottom = (line.top + line.height).max(line.baseline + layout.descent);
+            let bottom = round(origin.1 + bottom);
+            let span = |range: &Range<usize>| {
+                let right = match range.end == self.text.len() {
+                    true => last.x + last.width,
+                    false => first.x + caret(range.end).ceil() as Lu,
+                };
+                let left = first.x + caret(range.start).floor() as Lu;
+                [left, right].map(|x| round(origin.0 + x))
+            };
+            part = self.selected_part.as_ref().map(|(range, colors)| {
+                let [left, right] = span(range);
+                let color = colors
+                    .text
+                    .map(|c| [(c >> 16) as u8, (c >> 8) as u8, c as u8]);
+                let rect = [left, top, right - left, bottom - top];
+                (rect, colors.rgba(), color)
+            });
+            // `StyleableMarkerPainter`: a thin line, in from both ends of the marker.
+            composition = self.marked.as_ref().map(|range| {
+                let [left, right] = span(range);
+                let unit = scale.floor().max(1.0) as i32;
+                [left + unit, bottom - unit, right - left - 2 * unit, unit]
+            });
+        }
         let mut images = Vec::new();
+        let mut part_images = Vec::new();
         let mut underlines = Vec::new();
         for line in &layout.lines {
             let baseline = (origin.1 + line.baseline + 32).div_euclid(64);
@@ -591,6 +669,18 @@ impl Element for Text {
                     self.color,
                 ) {
                     images.push((x.div_euclid(64) + left, baseline + top, image));
+                }
+                if let Some((_, _, Some(color))) = part
+                    && let Some((left, top, image)) = system.run(
+                        window_id,
+                        &self.style.font,
+                        fragment,
+                        x.rem_euclid(64),
+                        scale,
+                        color,
+                    )
+                {
+                    part_images.push((x.div_euclid(64) + left, baseline + top, image));
                 }
             }
             if self.underline
@@ -629,14 +719,48 @@ impl Element for Text {
                 };
                 window.paint_quad(fill(rect, color));
             }
-            for (x, y, image) in images {
-                let s = image.size(0);
+            if let Some([x, y, w, h]) = composition {
                 let rect = Bounds {
                     origin: point(to_px(x), to_px(y)),
-                    size: size(to_px(s.width.0), to_px(s.height.0)),
+                    size: size(to_px(w.max(0)), to_px(h)),
                 };
-                let _ = window.paint_image(rect, rect, Corners::default(), image, 0, false);
+                window.paint_quad(fill(rect, Rgba { r, g, b, a: 1.0 }));
             }
+            let draw = |images: Vec<(i32, i32, Arc<RenderImage>)>, window: &mut Window| {
+                for (x, y, image) in images {
+                    let s = image.size(0);
+                    let rect = Bounds {
+                        origin: point(to_px(x), to_px(y)),
+                        size: size(to_px(s.width.0), to_px(s.height.0)),
+                    };
+                    let _ = window.paint_image(rect, rect, Corners::default(), image, 0, false);
+                }
+            };
+            let Some(([x, y, w, h], background, color)) = part else {
+                draw(images, window);
+                return;
+            };
+            let within = |left: Pixels, right: Pixels| ContentMask {
+                bounds: Bounds {
+                    origin: point(left, bounds.top()),
+                    size: size((right - left).max(px(0.0)), bounds.size.height),
+                },
+            };
+            let [left, right] = [to_px(x), to_px(x + w)];
+            let rect = Bounds {
+                origin: point(left, to_px(y)),
+                size: size(right - left, to_px(h)),
+            };
+            window.paint_quad(fill(rect, background));
+            if color.is_none() {
+                draw(images, window);
+                return;
+            }
+            for (left, right) in [(bounds.left(), left), (right, bounds.right())] {
+                let images = images.clone();
+                window.with_content_mask(Some(within(left, right)), |window| draw(images, window));
+            }
+            window.with_content_mask(Some(within(left, right)), |window| draw(part_images, window));
         });
         #[cfg(feature = "parity")]
         {

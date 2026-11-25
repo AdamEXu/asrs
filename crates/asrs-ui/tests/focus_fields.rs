@@ -1,7 +1,6 @@
-//! `:focus` on the fields gate 5 masks, whose window captures cannot show it: the `focus/fields`
-//! vector's backgrounds of `div.field-value input`, and the search field's cancel button, which the
-//! `focus-search` scenario's upstream captures have in the active window and not in the inactive
-//! one.
+//! `:focus` on fields: the `focus/fields` vector's backgrounds of `div.field-value input`, and the
+//! search field's cancel button, which the `focus-search` scenario's upstream captures have in the
+//! active window and not in the inactive one.
 
 #![allow(clippy::disallowed_methods)]
 

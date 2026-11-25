@@ -3,14 +3,14 @@ use std::ops::Range;
 use std::rc::Rc;
 
 use gpui_kit::base::input::{
-    Cut, Delete, Input, InputEvent, InputState, MoveDown, MoveUp, Paste, Position,
+    Cut, Delete, Input, InputEditorStyle, InputEvent, InputState, MoveDown, MoveUp, Paste, Position,
 };
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, ClipboardItem, Context, DispatchPhase, Entity,
-    EntityInputHandler, EventEmitter, FocusHandle, Focusable, Hsla, InteractiveElement,
+    EntityInputHandler, EventEmitter, FocusHandle, Focusable, FontWeight, Hsla, InteractiveElement,
     IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
     Point, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task,
-    WeakEntity, Window, canvas, div, px, rgba,
+    TextAlign, WeakEntity, Window, canvas, div, px, rgba,
 };
 
 use crate::focus;
@@ -22,8 +22,9 @@ use crate::input::spin::{self, paint_spin_button};
 use crate::input::style::{DISABLED_TEXT, FieldStyle, Frame, device_border};
 use crate::platform;
 use crate::selection;
+use crate::selection::colors::{SelectionColors, page_active};
 use crate::symbols::Symbol;
-use crate::text::{self, LineHeight, Overflow, Text, TextStyle, WhiteSpace};
+use crate::text::{self, Align, LineHeight, Overflow, Text, TextStyle, WhiteSpace};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FieldKind {
@@ -117,6 +118,12 @@ fn split(v: f32, scale: f32) -> (f32, f32) {
     let snapped = v.round();
     (snapped / scale, (v - snapped) / scale)
 }
+
+/// The editor's caret, as a part of its line height and in CSS px, and what it keeps clear of
+/// the end of left-aligned text.
+const EDITOR_CARET: f32 = 0.85;
+const CARET_WIDTH: f32 = 1.0;
+const EDITOR_MARGIN: f32 = 10.0;
 
 /// What an edit from `old` to `new` replaced: the range of `old`, and what it is now.
 fn edited<'a>(old: &str, new: &'a str) -> (Range<usize>, &'a str) {
@@ -213,8 +220,8 @@ impl Spin {
 }
 
 /// An `<input type="text|number|search">`. The editor (gpui-base's, for IME) is always
-/// present and takes clicks; its glyphs show only while it has focus. Unfocused, the shown
-/// text or the placeholder is painted with [`Text`], as Chromium paints it.
+/// present and takes clicks; only its caret shows. The text, its selection
+/// and the placeholder are painted with [`Text`], as Chromium paints them.
 pub struct TextField<M: FieldModel> {
     value: FieldValue<M>,
     kind: FieldKind,
@@ -661,6 +668,20 @@ impl<M: FieldModel> TextField<M> {
     }
 }
 
+fn utf8_range(text: &str, utf16: Range<usize>) -> Range<usize> {
+    let byte = |at: usize| {
+        let mut units = 0;
+        text.char_indices()
+            .find(|&(_, c)| {
+                let before = units;
+                units += c.len_utf16();
+                before >= at
+            })
+            .map_or(text.len(), |(byte, _)| byte)
+    };
+    byte(utf16.start)..byte(utf16.end)
+}
+
 /// Runs an action of the editor's, which its crate does not export.
 fn select_to(action: &str, window: &mut Window, cx: &mut App) {
     if let Ok(action) = cx.build_action(action, None) {
@@ -722,21 +743,66 @@ impl<M: FieldModel> Render for TextField<M> {
         let (top, dy) = split(ey, scale);
         let (right, _) = split(ex + ew, scale);
         let (bottom, _) = split(ey + eh, scale);
-        let text_color = rgba(color);
-        let editor_text_color: Hsla = if focused {
-            text_color.into()
+        let (shown, selected, marked) = self.editor.update(cx, |editor, cx| {
+            editor.set_text_align(
+                match style.align {
+                    Align::Center => TextAlign::Center,
+                    Align::End | Align::Right => TextAlign::Right,
+                    _ => TextAlign::Left,
+                },
+                cx,
+            );
+            let marked = editor.marked_text_range(window, cx);
+            (editor.value(), editor.selected_range(), marked)
+        });
+        let shown = if focused {
+            shown.to_string()
         } else {
-            gpui_kit::transparent_black()
+            self.value.shown().to_owned()
+        };
+        let caret = selected.is_empty() && page_active(window, cx) && !crate::parity::recording(cx);
+        let clear: Hsla = rgba(0x00000000).into();
+        // The editor replaces a colour whose alpha is 0 with its theme's.
+        let hidden = Hsla { a: 1e-4, ..clear };
+        self.editor.update(cx, |editor, _| {
+            editor.set_editor_style(InputEditorStyle {
+                caret: if caret { rgba(color).into() } else { hidden },
+                selection: hidden,
+                ..InputEditorStyle::default()
+            });
+        });
+        let (box_width, box_height) = (right - left, bottom - top);
+        let line_height = box_height / EDITOR_CARET;
+        let editor_width = match style.align {
+            Align::Center | Align::End | Align::Right => box_width,
+            _ => box_width + EDITOR_MARGIN - CARET_WIDTH,
         };
         let mut editor_box = div()
             .absolute()
             .left(px(left))
             .top(px(top))
-            .w(px(right - left))
-            .h(px(bottom - top))
-            .text_size(px(style.font.size))
-            .text_color(editor_text_color)
-            .child(Input::new(&self.editor));
+            .w(px(box_width))
+            .h(px(box_height))
+            .child(
+                div()
+                    .absolute()
+                    .left_0()
+                    .top(px((box_height - line_height) / 2.0))
+                    .w(px(box_width))
+                    .h(px(line_height))
+                    .overflow_hidden()
+                    .child(
+                        div()
+                            .w(px(editor_width))
+                            .h(px(line_height))
+                            .font_family(text::gpui_family(&style.font))
+                            .font_weight(FontWeight(style.font.weight))
+                            .text_size(px(style.font.size))
+                            .line_height(px(line_height))
+                            .text_color(clear)
+                            .child(Input::new(&self.editor)),
+                    ),
+            );
         let subpixel = (self.subpixel.0 + dx, self.subpixel.1 + dy);
         let page_selected = selection::all::colors(window, cx);
         let paint = |s: &str, rgba_hex: u32| {
@@ -747,7 +813,7 @@ impl<M: FieldModel> Render for TextField<M> {
                 .w(px(right - left))
                 .h(px(bottom - top))
         };
-        if self.value.shown().is_empty() && !self.placeholder.is_empty() {
+        if shown.is_empty() && !self.placeholder.is_empty() {
             let alpha = (style.placeholder & 0xff) as f32 / 255.0 * style.placeholder_opacity;
             editor_box = editor_box.child(
                 div()
@@ -757,16 +823,20 @@ impl<M: FieldModel> Render for TextField<M> {
                     .opacity(alpha)
                     .child(paint(&self.placeholder, style.placeholder)),
             );
-        } else if !focused && !self.value.shown().is_empty() {
+        } else if !shown.is_empty() {
             let alpha = (color & 0xff) as f32 / 255.0;
-            editor_box = editor_box.child(
-                div()
-                    .absolute()
-                    .left_0()
-                    .top_0()
-                    .opacity(alpha)
-                    .child(paint(self.value.shown(), color).selected(page_selected)),
-            );
+            let text = paint(&shown, color);
+            let text = match focused {
+                false => text.selected(page_selected),
+                true => {
+                    let colors = SelectionColors::new(page_active(window, cx));
+                    text.scrolled_by(&self.editor)
+                        .selected_part(selected, colors)
+                        .marked(marked.map(|range| utf8_range(&shown, range)))
+                }
+            };
+            editor_box =
+                editor_box.child(div().absolute().left_0().top_0().opacity(alpha).child(text));
         }
 
         let mut root = div()
@@ -870,8 +940,7 @@ impl<M: FieldModel> Render for TextField<M> {
                 .then(|| [utf16(selected.start), utf16(selected.end)]);
             root = root.child(
                 canvas(
-                    move |bounds, _, cx| {
-                        crate::parity::record_mask(cx, crate::parity::FOCUSED_INPUT, bounds);
+                    move |_, _, cx| {
                         crate::parity::record_focused_input(cx, || crate::parity::FocusedInput {
                             handle,
                             value,

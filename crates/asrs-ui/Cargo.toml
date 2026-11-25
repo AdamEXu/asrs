@@ -225,6 +225,11 @@ name = "focus_rings"
 required-features = ["parity"]
 
 [[test]]
+name = "field_text"
+harness = false
+required-features = ["parity"]
+
+[[test]]
 name = "focus_fields"
 harness = false
 required-features = ["parity"]

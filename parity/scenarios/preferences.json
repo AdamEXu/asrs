@@ -1,5 +1,5 @@
 {
-  "about": "Interaction (U20): the preferences window, opened through the application menu's own item on both sides and driven with real input: hovered and pressed controls, values typed in and picked by type-ahead and confirmed, which the hub's timeline shows, an edit cancelled, Enter pressed on the focused exit button (which confirms and then cancels), and the theme changed last (nothing is captured after it). prefs.json is compared byte for byte; nothing is masked but focused text inputs",
+  "about": "Interaction (U20): the preferences window, opened through the application menu's own item on both sides and driven with real input: hovered and pressed controls, values typed in and picked by type-ahead and confirmed, which the hub's timeline shows, an edit cancelled, Enter pressed on the focused exit button (which confirms and then cancels), and the theme changed last (nothing is captured after it). prefs.json is compared byte for byte; nothing is masked",
   "prefs": {
     "robotAddress": "",
     "remotePath": "/media/sda1/logs",

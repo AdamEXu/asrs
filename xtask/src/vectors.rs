@@ -591,6 +591,7 @@ const BORROWED_INPUTS: &[(&str, &str)] = &[
     ("spinButtons", "spinButtonsMain"),
     ("scrollers", "scrollersMain"),
     ("focusRings", "focusRingsMain"),
+    ("fieldText", "fieldTextMain"),
     ("genMenusHost", "genMenus"),
     ("genMenusHost", "genMenusMain"),
 ];
