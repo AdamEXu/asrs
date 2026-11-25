@@ -1,5 +1,6 @@
 {
   "about": "Selecting and copying values in the Statistics tab (#292): drags across cells, into the titles, which cannot be selected, and over the histogram; double and triple clicks, Select All, the scrolling of a drag past the edge, and a settings change, which takes the focus and rebuilds the table. Copies are compared as clipboard text",
+  "titleBar": true,
   "actions": [
     {
       "open": [

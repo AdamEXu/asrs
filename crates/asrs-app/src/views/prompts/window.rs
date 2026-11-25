@@ -148,7 +148,7 @@ impl PromptWindow {
         cx: &mut Context<'_, Self>,
     ) -> Field {
         let id = control.id;
-        let style = FieldStyle::native();
+        let style = FieldStyle::prompt();
         let widget = match control.value {
             ControlValue::Text(value) => {
                 let model = PlainText::new(&value.to_string_lossy());
@@ -173,7 +173,7 @@ impl PromptWindow {
                 let hidden = hidden_items(&select, control.hidden_options);
                 let mut model = FormSelect::new(select);
                 model.set_hidden(hidden);
-                let select = cx.new(|cx| Select::new(model, window, cx));
+                let select = cx.new(|cx| Select::new(model, window, cx).page_control());
                 subscriptions.push(cx.subscribe_in(
                     &select,
                     window,

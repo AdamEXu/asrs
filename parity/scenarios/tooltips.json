@@ -1,4 +1,5 @@
 {
+  "titleBar": true,
  "about": "The title tooltips no other scenario reaches: the sidebar's metadata of every kind and its type warning, source list items that are shown, hidden, missing or cut, table headers that are cut or missing, the update and feedback buttons, the controls of an empty Video and a 3D Field tab, and a satellite's table, which has no close buttons",
  "scales": [
   1

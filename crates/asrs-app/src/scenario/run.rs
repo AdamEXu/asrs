@@ -65,6 +65,8 @@ under inputs/); --probes defaults to probes.json beside the scenario directory;
 automatic folders of each variant's userData/; --licenses is the licenses.json the Licenses window
 lists; --work-area is the primary display's work area origin on the Electron driver's host, which
 places its window 16 px inside it (default 0,0), at one scale or at every scale;
+--points is the scenario's folder of an upstream run, whose run.json says where the mouse and wheel
+actions of each variant went;
 --robot is where the scenario's robot listens on 127.0.0.1; --no-captures renders no captures;
 --tooltips writes the tooltips (<name>.tooltips.json) at each capture the reference has, as the
 Electron driver does, and captures nothing else.";
@@ -162,6 +164,7 @@ struct Options {
     licenses: Option<PathBuf>,
     work_areas: Vec<(Option<u32>, (f64, f64))>,
     robot: Option<u16>,
+    points: Option<PathBuf>,
     no_captures: bool,
     tooltips: Option<PathBuf>,
 }
@@ -171,6 +174,7 @@ fn options(args: &[String]) -> Result<Options, String> {
     let (mut bundled_assets, mut licenses) = (None, None);
     let mut work_areas = Vec::new();
     let mut robot = None;
+    let mut points = None;
     let mut no_captures = false;
     let mut tooltips = None;
     let (mut scales, mut themes) = (Vec::new(), Vec::new());
@@ -187,6 +191,7 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--bundled-assets" => bundled_assets = Some(PathBuf::from(value()?)),
             "--licenses" => licenses = Some(PathBuf::from(value()?)),
             "--no-captures" => no_captures = true,
+            "--points" => points = Some(PathBuf::from(value()?)),
             "--robot" => robot = Some(value()?.parse().map_err(|_| "--robot is a port")?),
             "--tooltips" => tooltips = Some(PathBuf::from(value()?)),
             "--work-area" => {
@@ -218,6 +223,7 @@ fn options(args: &[String]) -> Result<Options, String> {
         licenses,
         work_areas,
         robot,
+        points,
         no_captures,
         tooltips,
     })
@@ -300,10 +306,18 @@ pub fn run(args: &[String]) -> Result<(), String> {
             if !options.themes.is_empty() && !options.themes.iter().any(|t| t == theme.name()) {
                 continue;
             }
-            let dir = options.out.join(format!("{scale}x-{}", theme.name()));
+            let variant_name = format!("{scale}x-{}", theme.name());
+            let dir = options.out.join(&variant_name);
+            let mut placed = scenario.clone();
+            if let Some(points) = &options.points {
+                let file = points.join(&variant_name).join("run.json");
+                placed
+                    .place(&file)
+                    .map_err(|e| format!("{}: {e}", file.display()))?;
+            }
             let mut variant = Variant {
                 headless: &mut headless,
-                scenario: &scenario,
+                scenario: &placed,
                 scenario_dir: options.scenario.parent().unwrap_or(Path::new("")),
                 probes: &probes,
                 inputs: options.inputs.as_deref(),

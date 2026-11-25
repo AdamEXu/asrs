@@ -13,6 +13,8 @@ pub use patches::{COLUMNS, PATCH, patch_colours};
 #[cfg(feature = "parity")]
 pub use run::{run, run_from_args};
 
+use std::path::Path;
+
 use asrs_js::ops;
 use asrs_js::value::JsValue;
 use asrs_model::messages::MainToHub;
@@ -245,6 +247,7 @@ const TOP_KEYS: [&str; 12] = [
     "robot",
     "scrollbars",
     "platforms",
+    "titleBar",
     "actions",
     "about",
 ];
@@ -474,6 +477,31 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
 }
 
 impl Scenario {
+    /// Moves each mouse and wheel action to where the Electron driver's `run.json` says it went,
+    /// and gives prompts the size they had there.
+    pub fn place(&mut self, run: &Path) -> Result<(), String> {
+        let text = std::fs::read_to_string(run).map_err(|e| e.to_string())?;
+        let run = asrs_js::json::parse_str(&text).map_err(|e| format!("{e:?}"))?;
+        let points = run.get("points").ok_or("no points")?;
+        for (i, action) in self.actions.iter_mut().enumerate() {
+            let (x, y, keys) = match action {
+                Action::Mouse { x, y, .. } => (x, y, ["x", "y"]),
+                Action::Wheel(wheel) => (&mut wheel.x, &mut wheel.y, ["x", "y"]),
+                Action::Prompt {
+                    size: Some((width, height)),
+                    ..
+                } => (width, height, ["width", "height"]),
+                _ => continue,
+            };
+            let point = points
+                .get(&i.to_string())
+                .ok_or_else(|| format!("action {i} has no point"))?;
+            *x = number(point, keys[0], None)?;
+            *y = number(point, keys[1], None)?;
+        }
+        Ok(())
+    }
+
     pub fn parse(name: &str, text: &str) -> Result<Self, String> {
         let root = asrs_js::json::parse_str(text).map_err(|e| format!("{name}: {e:?}"))?;
         if root.as_object().is_none() {
@@ -572,7 +600,7 @@ mod tests {
     use super::*;
 
     fn scenario_file(name: &str) -> String {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../parity/scenarios")
             .join(format!("{name}.json"));
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))

@@ -1,6 +1,6 @@
 //! Where `prompts.css` and Blink's table layout put a prompt's parts, in client coordinates.
 
-use asrs_ui::input::style::{CONTROL_FONT, device_border};
+use asrs_ui::input::style::{PAGE_CONTROL_FONT, device_border};
 use asrs_ui::input::{FieldStyle, Frame};
 use asrs_ui::text::{self, TextStyle};
 use asrs_ui::theme::FONT_FAMILY;
@@ -73,14 +73,14 @@ pub struct ControlHeights {
 impl ControlHeights {
     pub fn measure(cx: &mut App, scale: f32) -> ControlHeights {
         let zoom = f64::from(scale);
-        let style = FieldStyle::native();
+        let style = FieldStyle::prompt();
         let border = match style.frame {
             Frame::Native => f64::from(style.border) * zoom,
             Frame::Css { .. } => f64::from(device_border(style.border, scale)),
         };
         let padding = f64::from(style.padding[0] + style.padding[2]) * zoom;
         let line = text::layout(cx, &TextStyle::new(style.font), "0", scale, None).height;
-        let (ascent, descent) = text::font_metrics(cx, &TextStyle::new(CONTROL_FONT), scale);
+        let (ascent, descent) = text::font_metrics(cx, &TextStyle::new(PAGE_CONTROL_FONT), scale);
         let select_border = f64::from(device_border(1.0, scale));
         ControlHeights {
             input: (f64::from(line) / 64.0 + padding + 2.0 * border) / zoom,

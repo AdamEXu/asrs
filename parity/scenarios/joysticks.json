@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U16): the generated panels log with a layout in userAssets on restored Joysticks tabs: no layout, a layout before any time is selected, the layout and the generic view at a selected time, a time clicked on the timeline, three, five and six joysticks, and a layout that does not exist (which falls back to None). The selects open native popups, which neither side can drive, so layouts change through restore-state. Saved HubState is compared at each capture; nothing is masked",
+  "titleBar": true,
   "userData": {
     "userAssets/Joystick_ParityPad/config.json": {
       "name": "Parity Pad",

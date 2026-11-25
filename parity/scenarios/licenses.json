@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U22): the licenses window, opened through the application menu's item on both sides, listing upstream's own licenses.json. Every line box of the whole document is compared in every capture, including those scrolled out of view",
+  "titleBar": true,
   "actions": [
     {
       "idle": true

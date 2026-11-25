@@ -1,5 +1,6 @@
 {
   "about": "Focus rings (#355) in the active hub: the 2D field's orientation and size switchers and its source link, pressed and after keys",
+  "titleBar": true,
   "prefs": {
     "coordinateSystem": "wall-blue"
   },

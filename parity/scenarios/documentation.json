@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U18): a layout with a Documentation tab that is not shown yet (its saved hash is lost, as upstream loses it), the tab opened with a click once, a layout restored over it, the tab hidden and shown again, and a hash the URL parser rewrites. Saved HubState is compared at each capture. The documentation itself is masked (gate 5): a native webview has no pixels in a headless capture, and the port's scenario mode loads no page",
+  "titleBar": true,
   "actions": [
     {
       "main": "restore-state",

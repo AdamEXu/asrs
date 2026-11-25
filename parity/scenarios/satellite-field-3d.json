@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U23): a 3D field popped out; its camera orbited with a drag, then set to a field camera through the menu and the field of view through the prompt on the satellite, which the satellite's saved state holds",
+  "titleBar": true,
   "gl": true,
   "actions": [
     {

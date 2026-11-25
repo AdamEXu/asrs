@@ -382,7 +382,7 @@ fn part(
     cx: &mut Context<'_, View>,
 ) -> Part {
     let value = c.value.clone().unwrap_or_default();
-    let (model_kind, style) = match c.preset.as_str() {
+    let (model_kind, mut style) = match c.preset.as_str() {
         "sidebar-search" => (FieldKind::Search, FieldStyle::sidebar_search(appearance)),
         "console-filter" => (FieldKind::Search, FieldStyle::console_filter()),
         "field-value" => (FieldKind::Number, FieldStyle::field_value()),
@@ -427,7 +427,7 @@ fn part(
             let disabled = c.disabled;
             return Part::View(
                 cx.new(|cx| {
-                    let mut select = Select::new(model, window, cx);
+                    let mut select = Select::new(model, window, cx).page_control();
                     select.set_size(rect[2], rect[3]);
                     select.set_subpixel(
                         snap_remainder(rect[0], scale),
@@ -441,6 +441,8 @@ fn part(
         }
         other => panic!("unknown control preset {other}"),
     };
+    // Every control is in the scene's initial HTML.
+    style.font.hinted = true;
     let look = (model_kind, style);
     Part::View(match model_kind {
         FieldKind::Number => field(number(c), look, c, rect, scale, window, cx),

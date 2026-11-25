@@ -1,5 +1,6 @@
 {
   "about": "Focus styling (#355) in the active hub: the statistics tab's number inputs take no ring",
+  "titleBar": true,
   "actions": [
     {
       "open": [

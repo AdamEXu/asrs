@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U23): swerve, points and joysticks tabs popped out one after another and shown together with the hub's own tab, which is the only one it renders itself; every satellite follows the selected time. Swerve and points lock their windows' aspect ratios, and a 960x100 points tab's ratio is cut to 5; state.json at the end holds the four windows' sizes",
+  "titleBar": true,
   "userData": {
     "userAssets/Joystick_ParityPad/config.json": {
       "name": "Parity Pad",
