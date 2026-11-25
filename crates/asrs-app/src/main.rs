@@ -40,6 +40,7 @@ fn main() {
             cx.set_app_identity(APP_USER_MODEL_ID, asrs_app::IDENTITY.name);
         }
         asrs_ui::init(cx);
+        asrs_ui::scroll::use_system_style(cx);
         windows::init(cx);
         main_process::start(cx, &argv, open_events);
     });
