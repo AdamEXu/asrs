@@ -661,6 +661,11 @@ function renderMode(name: string, attributes: any): string {
 }
 
 function resolveLog(spec: string): string {
+  if (spec.startsWith("public:")) {
+    const file = path.join(process.env.ASRS_CACHE!, "public-logs", spec.slice("public:".length));
+    if (!fs.existsSync(file)) throw new Error(`${spec} is not fetched; run \`cargo xtask corpus fetch\``);
+    return file;
+  }
   const generated = /^app:([a-z0-9-]+)$/.exec(spec);
   if (generated === null) return path.resolve(spec);
   const make = GENERATED_LOGS[generated[1]];

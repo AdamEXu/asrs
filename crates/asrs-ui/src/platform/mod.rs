@@ -19,6 +19,7 @@ use win as imp;
 
 pub mod dialog;
 pub mod displays;
+pub mod motion;
 #[cfg(not(target_os = "linux"))]
 pub mod parent;
 pub mod power;

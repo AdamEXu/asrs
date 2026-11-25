@@ -1726,7 +1726,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     width,
                 } => item
                     .child(source_list::drag_item(
-                        &list_item, width, blurred, appearance,
+                        &list_item, width, blurred, appearance, cx,
                     ))
                     .into_any_element(),
             };

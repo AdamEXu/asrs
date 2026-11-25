@@ -1,0 +1,135 @@
+{
+  "about": "The same real match on a 3D field in wall-blue coordinates: a robot with its module velocities, a ghost and vision targets, from the default camera and from a driver station. The drawing buffer is compared under gate 4. The log is public and not redistributable, so `cargo xtask corpus fetch` puts it in place",
+  "gl": true,
+  "prefs": {
+    "coordinateSystem": "wall-blue"
+  },
+  "actions": [
+    {
+      "open": [
+        "public:rar1741/akit_25-03-15_15-13-09_inkok_q21.wpilog"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/RadioStatus"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 3,
+              "title": "3D",
+              "controller": {
+                "sources": [
+                  {
+                    "type": "robot",
+                    "logKey": "/RealOutputs/Odometry/PoseEstimator/Pose2d",
+                    "logType": "Pose2d",
+                    "visible": true,
+                    "options": {
+                      "model": "KitBot"
+                    }
+                  },
+                  {
+                    "type": "ghost",
+                    "logKey": "/RealOutputs/Odometry/GoalPose",
+                    "logType": "Pose2d",
+                    "visible": true,
+                    "options": {
+                      "model": "KitBot",
+                      "color": "#00ff00"
+                    }
+                  },
+                  {
+                    "type": "swerveModuleVelocities",
+                    "logKey": "/RealOutputs/SwerveDrive/CurrentStates",
+                    "logType": "SwerveModuleState[]",
+                    "visible": true,
+                    "options": {
+                      "color": "#ff0000",
+                      "arrangement": "0,1,2,3"
+                    }
+                  },
+                  {
+                    "type": "vision",
+                    "logKey": "/RealOutputs/Odometry/Limelight/Pose",
+                    "logType": "Pose2d",
+                    "visible": true,
+                    "options": {
+                      "color": "#ffff00",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "game": "FRC:Evergreen"
+              },
+              "controllerUUID": "field3d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "selection": [
+        "setSelectedTime",
+        40
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "capture": "auto",
+      "probes": [
+        ".renderer-content",
+        ".controls-content"
+      ]
+    },
+    {
+      "main": "set-3d-camera",
+      "data": -4
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 500
+    },
+    {
+      "capture": "station",
+      "probes": [
+        ".renderer-content"
+      ]
+    }
+  ]
+}
