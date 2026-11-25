@@ -7,10 +7,10 @@ use gpui_kit::base::input::{
 };
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, ClipboardItem, Context, DispatchPhase, Entity,
-    EntityInputHandler, EventEmitter, FocusHandle, Focusable, FontWeight, Hsla, InteractiveElement,
-    IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Pixels,
-    Point, Render, SharedString, StatefulInteractiveElement, Styled, Subscription, Task, TextAlign,
-    WeakEntity, Window, canvas, div, point, px, rgba, size,
+    EntityInputHandler, EventEmitter, FocusHandle, Focusable, FontWeight, HoverListenerMode, Hsla,
+    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
+    ParentElement, Pixels, Point, Render, SharedString, StatefulInteractiveElement, Styled,
+    Subscription, Task, TextAlign, WeakEntity, Window, canvas, div, point, px, rgba, size,
 };
 
 use crate::focus;
@@ -632,6 +632,7 @@ impl<M: FieldModel> TextField<M> {
             .w(px(right - left))
             .h(px(bottom - top))
             .cursor_default()
+            .hover_listener_mode(HoverListenerMode::InputModalityIndependent)
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
                 this.spin.hovered = *hovered;
                 cx.notify();
@@ -943,6 +944,7 @@ impl<M: FieldModel> Render for TextField<M> {
             .relative()
             .w(px(width))
             .h(px(height))
+            .hover_listener_mode(HoverListenerMode::InputModalityIndependent)
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
                 this.hovered = *hovered;
                 this.spin.hovered &= *hovered;
