@@ -599,9 +599,11 @@ impl SidebarView {
         let italic = row.full_key.is_some();
         let bold = row.label_bold == Some(true);
         let title = row.title.to_string_lossy();
-        let mut title_el = div()
-            .relative()
-            .child(Text::new(title.clone(), label_style(italic, bold)).color(theme.text));
+        let mut title_el = div().relative().child(
+            Text::new(title.clone(), label_style(italic, bold))
+                .color(theme.text)
+                .grayscale(),
+        );
         if row.known_label {
             let (w, _) = asrs_ui::text::measure(cx, &label_style(italic, bold), &title, 1.0);
             title_el = title_el.child(
@@ -622,7 +624,11 @@ impl SidebarView {
                     .id(("field-item-warning", flat))
                     .h(px(INLINE_HEIGHT))
                     .cursor(asrs_ui::gpui::CursorStyle::PointingHand)
-                    .child(Text::new(" \u{26A0}", label_style(italic, bold)).color(theme.text))
+                    .child(
+                        Text::new(" \u{26A0}", label_style(italic, bold))
+                            .color(theme.text)
+                            .grayscale(),
+                    )
                     .on_click(cx.listener(move |view, _, _, cx| {
                         view.input(cx, |s, _| s.warning_click(flat));
                     })),
@@ -633,7 +639,8 @@ impl SidebarView {
             label = label.child(
                 div().opacity(opacity).child(
                     Text::new(type_label.to_string_lossy(), label_style(false, false))
-                        .color(theme.text),
+                        .color(theme.text)
+                        .grayscale(),
                 ),
             );
         }

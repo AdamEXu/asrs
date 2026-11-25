@@ -311,7 +311,7 @@ impl TextSystem {
                         scale,
                         lcd_ink,
                     );
-                    let Some(image) = lcd_image(image) else {
+                    let Some(image) = image.and_then(lcd_image) else {
                         break;
                     };
                     if run.lcd.len() >= LCD_IMAGES {

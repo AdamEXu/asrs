@@ -748,24 +748,23 @@ impl<M: FieldModel> Render for TextField<M> {
                 .h(px(bottom - top))
         };
         if self.value.shown().is_empty() && !self.placeholder.is_empty() {
-            let alpha = (style.placeholder & 0xff) as f32 / 255.0 * style.placeholder_opacity;
+            let alpha = (style.placeholder & 0xff) as f32 / 255.0;
             editor_box = editor_box.child(
                 div()
                     .absolute()
                     .left_0()
                     .top_0()
-                    .opacity(alpha)
-                    .child(paint(&self.placeholder, style.placeholder)),
+                    .opacity(style.placeholder_opacity)
+                    .child(paint(&self.placeholder, style.placeholder).alpha(alpha)),
             );
         } else if !focused && !self.value.shown().is_empty() {
             let alpha = (color & 0xff) as f32 / 255.0;
             editor_box = editor_box.child(
-                div()
-                    .absolute()
-                    .left_0()
-                    .top_0()
-                    .opacity(alpha)
-                    .child(paint(self.value.shown(), color).selected(page_selected)),
+                div().absolute().left_0().top_0().child(
+                    paint(self.value.shown(), color)
+                        .alpha(alpha)
+                        .selected(page_selected),
+                ),
             );
         }
 
