@@ -203,6 +203,11 @@ impl Hub {
         self.host.decode_threads()
     }
 
+    /// Decode threads ever started, whether or not they still run.
+    pub fn decode_threads_started(&self) -> u64 {
+        self.host.decode_threads_started()
+    }
+
     pub(crate) fn live_posted(&self) -> SyncSender<()> {
         self.host.posted()
     }
