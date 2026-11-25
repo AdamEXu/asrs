@@ -83,6 +83,7 @@ pub struct CanvasInputs {
     pub parent: Option<[f64; 2]>,
     pub device_pixel_ratio: f64,
     pub dark: bool,
+    pub reduced_motion: bool,
 }
 
 /// The hub's `Field3dRenderer`. The view writes what the DOM would answer into `inputs`; each
@@ -134,7 +135,7 @@ impl Field3dTab {
             parent_size: inputs.parent,
             device_pixel_ratio: inputs.device_pixel_ratio,
             is_dark: inputs.dark,
-            reduced_motion: false,
+            reduced_motion: inputs.reduced_motion,
             performance_now: now,
             date_now: now,
         }
@@ -994,6 +995,7 @@ impl<H: FrameHost> HubFrame<H> {
             parent: Some(parent),
             device_pixel_ratio: f64::from(dpr),
             dark,
+            reduced_motion: platform::motion::prefers_reduced_motion(cx),
         });
         let image = view.presenter.image().cloned();
 

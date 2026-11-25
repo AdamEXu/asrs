@@ -1,0 +1,313 @@
+{
+  "about": "Interaction (#174, #200): the timeline over a canvas tab: hovered at a fractional position, clicked, a range dragged with shift, trackpad zoom, pan, and the selected time cleared. The canvas, the timeline range and the hovered time are compared",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 11,
+              "title": "Points",
+              "controller": {
+                "sources": [],
+                "width": 960,
+                "height": 720,
+                "orientation": "xr,yd",
+                "origin": "ul"
+              },
+              "controllerUUID": "points00000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "capture": "idle",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 500.6,
+      "y": 104.4
+    },
+    {
+      "wait": 200
+    },
+    {
+      "hover": "fraction"
+    },
+    {
+      "capture": "hovered",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 640.5,
+      "y": 104
+    },
+    {
+      "hover": "half"
+    },
+    {
+      "mouse": "click",
+      "x": 640.5,
+      "y": 104
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "capture": "clicked",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 600,
+        "y": 104,
+        "deltaX": 0,
+        "deltaY": 60,
+        "precise": true
+      }
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "zoomed",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 600,
+        "y": 104,
+        "deltaX": -70,
+        "deltaY": 0,
+        "precise": true
+      }
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "panned",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 450,
+      "y": 104
+    },
+    {
+      "mouse": "down",
+      "x": 450,
+      "y": 104
+    },
+    {
+      "mouse": "move",
+      "x": 470,
+      "y": 104
+    },
+    {
+      "mouse": "move",
+      "x": 600,
+      "y": 104
+    },
+    {
+      "mouse": "move",
+      "x": 760,
+      "y": 104
+    },
+    {
+      "mouse": "up",
+      "x": 760,
+      "y": 104
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "dragged",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 450,
+      "y": 104
+    },
+    {
+      "mouse": "down",
+      "x": 450,
+      "y": 104,
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 104,
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 720,
+      "y": 104,
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "wait": 200
+    },
+    {
+      "capture": "shift-drag",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "mouse": "up",
+      "x": 720,
+      "y": 104,
+      "modifiers": [
+        "shift"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "shift-zoomed",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 500,
+      "y": 104
+    },
+    {
+      "mouse": "click",
+      "x": 500,
+      "y": 104,
+      "button": "right"
+    },
+    {
+      "wait": 200
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "idle": true
+    },
+    {
+      "capture": "right-click",
+      "probes": [
+        ".side-bar",
+        ".tab-bar",
+        ".renderer-content",
+        ".controls-content",
+        ".timeline"
+      ]
+    }
+  ]
+}

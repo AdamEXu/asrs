@@ -3,9 +3,8 @@
 //! Tab and Shift+Tab, the arrow keys in inputs and the pointer leaving through the real windows,
 //! headless, against what `cargo xtask app run` recorded of upstream at 1x in the light theme:
 //! `document.activeElement` at each `traverse` step of the scenarios and the hovered time at each
-//! `hover`. `data/focus_macos.jsonl` is of `focus-order` on macOS, from before the recorder kept
-//! `stop` and values, and of `traverse-field-settings`. `data/focus_linux.jsonl` is of every scenario here on Linux x86_64 under the
-//! render host's fonts (`xtask/hosts/linux/fonts.sh`). An argument picks one. The logs in `parity/scenarios/inputs` are what the driver generates.
+//! `hover`, of every scenario here: `data/focus_macos.jsonl` on macOS, `data/focus_linux.jsonl` on
+//! Linux x86_64 under the render host's fonts (`xtask/hosts/linux/fonts.sh`). An argument picks one. The logs in `parity/scenarios/inputs` are what the driver generates.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
