@@ -211,11 +211,12 @@ impl WpilogWorker {
         &mut self,
         key: &JsString,
         type_: &JsString,
+        type_name: Option<&str>,
         record: &WpilogRecord<'_>,
     ) -> Result<(), Abort> {
         let timestamp = record.timestamp() / 1000000.0;
         let log = &mut self.log;
-        match type_.as_string().as_deref() {
+        match type_name {
             Some("boolean") => {
                 if let Ok(value) = record.boolean() {
                     log.put_boolean(key, timestamp, value);
@@ -322,6 +323,7 @@ impl WpilogWorker {
         }
         if let Some(positions) = self.data_record_positions.remove(&key) {
             let type_ = self.entry_types[&key].clone();
+            let type_name = type_.as_string();
             let data = Arc::clone(&self.data);
             let decoder = WpilogDecoder::new(&data);
             for (i, position) in positions.into_iter().enumerate() {
@@ -329,7 +331,7 @@ impl WpilogWorker {
                     return Err(Abort::Threw);
                 }
                 if let Some((record, _)) = decoder.record_at(position as usize) {
-                    self.put_record(&key, &type_, &record)?;
+                    self.put_record(&key, &type_, type_name.as_deref(), &record)?;
                 }
             }
         }

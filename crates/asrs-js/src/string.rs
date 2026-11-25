@@ -189,8 +189,9 @@ impl JsString {
         if search.0.len() > len {
             return -1;
         }
+        let first = search.0[0];
         for i in pos..=(len - search.0.len()) {
-            if self.0[i..i + search.0.len()] == search.0[..] {
+            if self.0[i] == first && self.0[i..i + search.0.len()] == search.0[..] {
                 return i as i64;
             }
         }
