@@ -266,18 +266,7 @@ impl Renderer {
             gl_clip_space,
             lost,
         } = super::adapter::open()?;
-        let source = [
-            include_str!("phong.wgsl"),
-            match adapter_info.backend {
-                wgpu::Backend::Vulkan => include_str!("vulkan.wgsl"),
-                wgpu::Backend::Dx12 => include_str!("dx12.wgsl"),
-                _ => include_str!("metal.wgsl"),
-            },
-            &format!("const GL_CLIP_SPACE = {gl_clip_space};"),
-            include_str!("shadow.wgsl"),
-            include_str!("lines.wgsl"),
-        ]
-        .join("\n");
+        let source = shader_source(adapter_info.backend, gl_clip_space);
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("field3d"),
             source: wgpu::ShaderSource::Wgsl(source.into()),
@@ -1543,6 +1532,24 @@ impl Renderer {
             encoder,
         );
     }
+}
+
+fn shader_source(backend: wgpu::Backend, gl_clip_space: bool) -> String {
+    let backend_source = match backend {
+        wgpu::Backend::Vulkan => format!(
+            "const GL_CLIP_SPACE = {gl_clip_space};\n{}",
+            include_str!("vulkan.wgsl")
+        ),
+        wgpu::Backend::Dx12 => include_str!("dx12.wgsl").to_owned(),
+        _ => include_str!("metal.wgsl").to_owned(),
+    };
+    [
+        include_str!("phong.wgsl"),
+        &backend_source,
+        include_str!("shadow.wgsl"),
+        include_str!("lines.wgsl"),
+    ]
+    .join("\n")
 }
 
 struct FrameOptionsSize {
