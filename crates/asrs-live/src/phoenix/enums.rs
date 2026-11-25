@@ -208,7 +208,7 @@ pub fn lookup(name: &JsString, key: &JsString) -> Result<Lookup, JsError> {
     };
     if let Some((_, values)) = TABLE.iter().find(|(n, _)| is(name, n)) {
         return Ok(match values.iter().find(|(k, _)| is(key, k)) {
-            Some((_, value)) => Lookup::Value(JsValue::string(*value)),
+            Some((_, value)) => Lookup::Value(JsValue::string(value)),
             None => inherited,
         });
     }

@@ -1,0 +1,201 @@
+{
+  "entry": "dom",
+  "fixture": {
+    "seed": 74,
+    "geometry": "real",
+    "steps": [
+      {
+        "eval": "/*sidebar:recorder*/ (() => {\n  const w = window;\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const tree = w.__oracleTree;\n  const sideBar = document.getElementsByClassName(\"side-bar\")[0];\n  w.addEventListener(\"scroll\", (event) => {\n    if (event.target === sideBar) write({ sb: \"scroll\" });\n  }, true);\n  const search = document.getElementsByClassName(\"side-bar-search\")[0];\n  w.addEventListener(\"blur\", (event) => {\n    if (event.target === search) write({ sb: \"blur\" });\n  }, true);\n  w.addEventListener(\"mousedown\", (event) => {\n    if (event.target instanceof Element && event.target.closest(\".field-item-label\") !== null) {\n      write({ sb: \"mousedown\", offset: tree([event.offsetX, event.offsetY]) });\n    }\n  }, true);\n})()"
+      },
+      {
+        "log": [
+          [
+            "putRaw",
+            "/.schema/photonstruct:undefined",
+            0,
+            {
+              "b": "696e743820613b"
+            }
+          ],
+          [
+            "putRaw",
+            "/.schema/photonstruct:P",
+            0,
+            {
+              "b": "666c6f617436342078203b"
+            }
+          ],
+          [
+            "putNumber",
+            "/a/zz",
+            0,
+            1
+          ],
+          [
+            "putNumber",
+            "/a/aa",
+            0,
+            2
+          ],
+          [
+            "putNumber",
+            "/b/c",
+            0,
+            3
+          ],
+          [
+            "putPhotonStruct",
+            "/a",
+            1,
+            {
+              "b": "000000000000044007"
+            },
+            "P"
+          ],
+          [
+            "putNumber",
+            "/zz",
+            1,
+            1
+          ]
+        ]
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 300,
+            "expanded": [
+              "/a",
+              "/b"
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc00000000000000000000000000",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 1,
+                "title": "",
+                "controller": {
+                  "leftSources": [],
+                  "rightSources": [],
+                  "discreteSources": [],
+                  "leftLockedRange": null,
+                  "rightLockedRange": null,
+                  "leftUnitConversion": {
+                    "autoTarget": null,
+                    "preset": null
+                  },
+                  "rightUnitConversion": {
+                    "autoTarget": null,
+                    "preset": null
+                  },
+                  "leftFilter": 0,
+                  "rightFilter": 0,
+                  "showRobotMode": false
+                },
+                "controllerUUID": "line0000000000000000000000000",
+                "renderer": null,
+                "controlsHeight": 200
+              },
+              {
+                "type": 2,
+                "title": "",
+                "controller": {
+                  "sources": [],
+                  "field": "",
+                  "orientation": 0,
+                  "size": "large"
+                },
+                "controllerUUID": "odom0000000000000000000000000",
+                "renderer": {
+                  "zoom": 1,
+                  "pan": [
+                    0,
+                    0
+                  ],
+                  "trackingMode": 0,
+                  "isFTC": false
+                },
+                "controlsHeight": 200
+              },
+              {
+                "type": 3,
+                "title": "",
+                "controller": {
+                  "sources": [],
+                  "game": ""
+                },
+                "controllerUUID": "joy00000000000000000000000000",
+                "renderer": null,
+                "controlsHeight": 200
+              }
+            ]
+          }
+        }
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "restored"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/q",
+            2,
+            1
+          ]
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "refreshed"
+      }
+    ]
+  }
+}

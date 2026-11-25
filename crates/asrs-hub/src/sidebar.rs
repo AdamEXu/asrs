@@ -386,7 +386,7 @@ enum ValueState {
     None,
     Bool(BoolState),
     Number(Box<NumberState>),
-    Text(TextState),
+    Text(Box<TextState>),
 }
 
 impl ValueState {
@@ -2052,10 +2052,10 @@ impl Sidebar {
                     }
                 }
                 Some(LoggableType::String) => {
-                    self.nodes[id].value = ValueState::Text(TextState {
+                    self.nodes[id].value = ValueState::Text(Box::new(TextState {
                         first_update: true,
                         ..Default::default()
-                    });
+                    }));
                 }
                 _ => {}
             }

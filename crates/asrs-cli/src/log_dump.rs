@@ -55,7 +55,7 @@ impl ToValue for JsValue {
                     .collect(),
             ),
             JsValue::Bytes(bytes) => Value::Bytes(bytes.clone()),
-            JsValue::BigInt(b) => Value::BigInt(b.to_string()),
+            JsValue::BigInt(b) => Value::BigInt(format!("{b}")),
             JsValue::Date(t) => Value::Date(t.to_bits()),
             JsValue::ExtData(..) => unreachable!("no unchecked source holds ExtData"),
         }

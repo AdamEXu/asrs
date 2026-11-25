@@ -284,20 +284,15 @@ fn number_preview(
     key: &JsString,
     time: f64,
 ) -> Result<Option<String>, SourceListError> {
-    let field = cache.fields.get_key(key);
-    if field.is_none() && !ops::is_object_prototype_member(key) {
+    let Some(field) = cache.fields.get_key(key) else {
         return Ok(None);
-    }
+    };
     if time < selection.get_timeline_range()[0]
         || (time > selection.get_timeline_range()[1]
             && selection.get_mode() != SelectionMode::Locked)
     {
         return Ok(None);
     }
-    let Some(field) = field else {
-        // `upperBound(command.timestamps, time)` on the inherited member.
-        return Err(thrown(ops::cannot_read(&JsValue::Undefined, "length")));
-    };
     let index = upper_bound(&field.timestamps, time, 0);
     if index == 0 {
         return Ok(None);

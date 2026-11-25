@@ -63,7 +63,7 @@ fn values(values: &LogValues) -> Json {
         LogValues::Raw(c) => list(c, |bytes| {
             let bytes = bytes.iter().enumerate();
             let pairs = bytes.map(|(i, b)| {
-                let index = Utf16String::from(i.to_string().as_str());
+                let index = Utf16String::from(format!("{i}").as_str());
                 (index, Json::Number(f64::from(*b)))
             });
             Json::Object(pairs.collect())
