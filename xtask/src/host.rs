@@ -6,51 +6,73 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use asrs_parity::json::{self, Json};
+use asrs_parity::pixel::{self, Rgba};
 
 use crate::oracle::{self, Paths};
-use crate::{Result, canvas, pack};
+use crate::{Result, canvas, gl, pack};
 
 const USAGE: &str = r"usage: cargo xtask host <command>
 
-Render hosts for the Windows and Linux parity track. Both are VMs on the dev machine and are
-driven over SSH; neither has GPU acceleration, so Chromium and native code render in software
-(`cargo xtask host local describe` records which rasterizers are in use).
+Render hosts for the Windows and Linux parity track: VMs driven over SSH. Neither has GPU
+acceleration, so Chromium and native code render in software (`cargo xtask host local describe`
+records which rasterizers are in use).
 
-  windows   Windows 11 Pro ARM64 in UTM (`Win11-ARM`), files in /Volumes/T9/vms/win11-arm
-            (override with ASRS_WINDOWS_VM). SSH dev@127.0.0.1:2222 with keys/id_ed25519.
-            Checkout C:\work\asrs, oracle pack C:\work\asrs-pack.tar.zst. GUI programs run in
-            the logged-in desktop session through a scheduled task. Its fonts have changed with
-            an update, so parity/vectors/canvas/windows.json and the vectors it lists come from
-            an x86_64 VM, inside which the `local` and `canvas` commands run (#59).
-  linux     Ubuntu 24.04 ARM64 tart VM `asrs-linux` under TART_HOME=/Volumes/T9/tart, Xorg on
-            virtio-gpu with an autologin xfce session on :0. SSH admin@$(tart ip asrs-linux) with
-            /Volumes/T9/asrs/hosts/asrs-linux/id_ed25519 (override with ASRS_LINUX_KEYS).
-            Checkout ~/asrs, oracle pack ~/asrs-pack.tar.zst.
+  windows      Windows 11 x86_64 (QEMU), the Windows reference: ~/vms/win11-x64 on omarchy
+               (ASRS_WINDOWS_VM; README.md there). ASRS_WINDOWS_VIA is the ssh destination of the
+               machine it runs on, empty when that is this one. The VM's own vm.sh starts it and reaches
+               it. `start` takes the VM's lock directory `in-use`
+               for this ASRS_HOST_DIR and `stop` gives it back; a lock of anyone else's is
+               refused. Start it cold (`restart`) for captures: once Windows' shell has been used
+               for a while its Snap Layouts flyout can cover a hovered caption button.
+  windows-arm  Windows 11 ARM64 (UTM, Win11-ARM), /Volumes/T9/vms/win11-arm
+               (ASRS_WINDOWS_ARM_VM), for windows-aarch64 data vectors. An update changed its
+               fonts, so it is not a pixel reference. Shared with other projects: do not stop it
+               while someone else is using it.
+  linux        Ubuntu 24.04 ARM64 (tart), the Linux reference: `asrs-linux` under
+               TART_HOME=/Volumes/T9/tart, Xorg on virtio-gpu with an autologin xfce session on
+               :0, 2880x1800 so that a 2200x1300 window (1100x650 at scale 2) fits. SSH
+               admin@$(tart ip asrs-linux) with /Volumes/T9/asrs/hosts/asrs-linux/id_ed25519
+               (ASRS_LINUX_KEYS).
 
-ASRS_HOST_DIR=<name> replaces `asrs` in those host paths (and suffixes the Windows .sync and
-.gui directories, the desktop task and the local sync state in target/hosts), so agents sharing
-a VM keep separate checkouts.
+Another Linux machine can run the `local` commands and the suites with the same fonts and a
+display of the same size, without touching its own desktop: unpack the fonts with
+xtask/hosts/linux/fonts.sh and run `FONTCONFIG_FILE=<dir>/gray.conf
+xtask/hosts/linux/display.sh <command>`. It is a check on another architecture, not a reference.
 
-The dev machine has 16 GB of memory; the Windows VM takes 8 GB and the Linux VM 6 GB (plus 8 GB
-of swap inside it), so avoid heavy builds on both at once. The Windows VM is shared with other
-projects: do not stop it while someone else is using it.
+Checkouts are C:\work\asrs and ~/asrs, oracle packs C:\work\asrs-pack.tar.zst and
+~/asrs-pack.tar.zst. ASRS_HOST_DIR=<name> replaces `asrs` in those paths (and suffixes the Windows
+.sync and .gui directories, the desktop task and the local sync state in target/hosts), so agents
+sharing a VM keep separate checkouts.
+
+The dev machine has 16 GB of memory; the ARM64 VMs take 8 GB (Windows) and 6 GB (Linux, plus 8 GB
+of swap inside it), so avoid heavy builds on both at once.
 
 commands on a host (cargo xtask host <name> ...):
-  start | stop | status   boot the VM and wait for SSH, shut it down, or report its state
+  start | stop | restart | status
+                          boot the VM and wait for SSH, shut it down, both, or report its state
   ssh [<command>...]      interactive shell, or one remote command
-  provision               run xtask/hosts/<name>/provision.* there (packages, display, theme,
-                          fonts, toolchains); idempotent
+  provision               run xtask/hosts/<os>/provision.* there (packages, display, text
+                          rendering, theme, updates, toolchains) and on Linux unpack the fonts of
+                          fonts.sh into ~/asrs-fonts; idempotent. `host local describe --check`
+                          then compares the host with its recorded description
   sync                    copy the checkout (tracked plus untracked files that are not ignored),
                           remove files deleted since the last sync, and upload the oracle pack
                           (`cargo xtask oracle pack` first when it is missing or older than the
                           oracle install)
   setup                   `cargo xtask oracle setup --from-pack` there
-  run <command>...        run a command in the checkout over SSH
-  gui <command>...        run a command in the checkout inside the desktop session and wait
+  run [<options>] <command>...
+                          run a command in the checkout over SSH
+  gui [<options>] <command>...
+                          run a command in the checkout inside the desktop session and wait. One
+                          runs at a time on a host, whoever started it; the others queue.
+                          Both set ASRS_GL, the rasterizer of 3D references (--gl native,
+                          swiftshader or d3d11-warp; default swiftshader), and on Linux
+                          FONTCONFIG_FILE (--fonts gray, the default, for grayscale DOM text, or
+                          stock for LCD)
   fetch [<dir>]           copy target/parity[/<dir>] from the host into target/parity/<name>/
   gen <id>...             sync, run `oracle gen <id>...` there for the host's platform vectors
-                          (specs with `platforms`), and copy those vectors and their manifest
-                          entries back into parity/vectors
+                          and architecture (specs with `platforms`), and copy those vectors and
+                          their manifest entries back into parity/vectors
   theme light|dark        switch the desktop theme
   screenshot <file>       PNG of the host display
   manifest                store the fetched host description (target/parity/<name>/host/host.json)
@@ -59,13 +81,17 @@ commands on a host (cargo xtask host <name> ...):
                           smoke, `oracle gen --check` (in the desktop session: the proto-renderer
                           vector opens a BrowserWindow), a workspace build, `host local
                           gui-check` (host description, colour patches at 1x and 2x, real app
-                          launch), the S1 spike window, then fetch target/parity/host
+                          launch), the 3D references, DOM text antialiasing (under both font
+                          profiles on Linux), the S1 spike window, then fetch target/parity/host
 
 commands on the machine itself (cargo xtask host local ...):
-  describe [--manifest]   write target/parity/host/host.json: OS, Electron, displays, theme,
-                          Chromium and native rasterizers, sha256 of the UI font files. With
-                          --manifest also store it as `host` in parity/vectors/canvas/<os>.json,
-                          unless a font recorded there is another file on this host
+  describe [--manifest | --check]
+                          write target/parity/host/host.json: OS, Electron, displays, theme,
+                          Chromium and native rasterizers, text rendering settings, update
+                          settings, sha256 of the UI font files. With --manifest also store it as
+                          `host` in parity/vectors/canvas/<os>.json, unless a font recorded there
+                          is another file on this host. With --check require that it equals the
+                          one stored there
   colour-patch            512 sRGB patches through capturePage at device scale 1 and 2, with
                           and without --force-color-profile=srgb. Gate on Windows and Linux,
                           whose display profile is pinned to sRGB: every patch exact in both
@@ -73,12 +99,17 @@ commands on the machine itself (cargo xtask host local ...):
                           without it is recorded only
   launch                  start the real upstream app with isolated userData and capture its hub
   gui-check               describe, colour-patch and launch
+  dom-text                Chromium's DOM text at device scale 1 and 2: every text box grayscale
+                          under fontconfig's gray.conf; under stock.conf and on Windows every one
+                          LCD up to 48 device px and grayscale above
   s1                      run the S1 spike (`auto`) and require that its window opened
 
 Results land in target/parity/host/ on the machine that ran them.";
 
-const WINDOWS_PATH: &str = r"C:\tools\node-v24.18.0-win-arm64;C:\tools\clang-20.1.8\bin";
 const LINUX_VM: &str = "asrs-linux";
+const LINUX_DISPLAY: &str = "2880x1800";
+const FONT_PROFILES: [&str; 2] = ["gray", "stock"];
+const VM_LOCK: &str = "in-use";
 const COLOUR_SWITCHES: &[&str] = &["--force-color-profile=srgb", "--lang=en-US"];
 const S1_TIMEOUT: Duration = Duration::from_secs(120);
 
@@ -88,21 +119,237 @@ enum Os {
     Linux,
 }
 
+enum Vm {
+    Script(VmScript),
+    Tart,
+}
+
+/// A VM with a `vm.sh` that starts it and reaches it over SSH.
+struct VmScript {
+    dir: &'static str,
+    dir_variable: &'static str,
+    via: &'static str,
+    via_variable: Option<&'static str>,
+    port: u16,
+    locked: bool,
+    path: &'static str,
+}
+
 struct Host {
     name: &'static str,
     os: Os,
+    arch: &'static str,
+    reference: bool,
+    gl: &'static str,
+    vm: Vm,
 }
 
-const HOSTS: [Host; 2] = [
+const HOSTS: [Host; 3] = [
     Host {
         name: "windows",
         os: Os::Windows,
+        arch: "x86_64",
+        reference: true,
+        gl: "swiftshader",
+        vm: Vm::Script(VmScript {
+            dir: "vms/win11-x64",
+            dir_variable: "ASRS_WINDOWS_VM",
+            via: "omarchy",
+            via_variable: Some("ASRS_WINDOWS_VIA"),
+            port: 2223,
+            locked: true,
+            path: r"C:\tools\node-v24.18.0-win-x64",
+        }),
+    },
+    Host {
+        name: "windows-arm",
+        os: Os::Windows,
+        arch: "aarch64",
+        reference: false,
+        gl: "swiftshader",
+        vm: Vm::Script(VmScript {
+            dir: "/Volumes/T9/vms/win11-arm",
+            dir_variable: "ASRS_WINDOWS_ARM_VM",
+            via: "",
+            via_variable: None,
+            port: 2222,
+            locked: false,
+            path: r"C:\tools\node-v24.18.0-win-arm64;C:\tools\clang-20.1.8\bin",
+        }),
     },
     Host {
         name: "linux",
         os: Os::Linux,
+        arch: "aarch64",
+        reference: true,
+        gl: "swiftshader",
+        vm: Vm::Tart,
     },
 ];
+
+impl VmScript {
+    fn via(&self) -> Vec<String> {
+        self.via_variable
+            .and_then(|v| std::env::var(v).ok())
+            .unwrap_or_else(|| self.via.to_owned())
+            .split_whitespace()
+            .map(str::to_owned)
+            .collect()
+    }
+
+    fn dir(&self) -> String {
+        let dir = std::env::var(self.dir_variable).unwrap_or_else(|_| self.dir.to_owned());
+        match std::env::var("HOME") {
+            Ok(home) if self.via().is_empty() && !dir.starts_with('/') => format!("{home}/{dir}"),
+            _ => dir,
+        }
+    }
+
+    fn shell(&self, script: &str, terminal: bool) -> Command {
+        let via = self.via();
+        if via.is_empty() {
+            let mut command = Command::new("sh");
+            command.arg("-c").arg(script);
+            return command;
+        }
+        let mut command = Command::new("ssh");
+        command.args(if terminal {
+            ["-t"].as_slice()
+        } else {
+            &["-o", "BatchMode=yes"]
+        });
+        command
+            .args(["-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=30"])
+            .args(via)
+            .arg(script);
+        command
+    }
+
+    fn vm_sh(&self, args: &[&str]) -> Command {
+        self.shell(&self.vm_sh_line(args), false)
+    }
+
+    fn vm_sh_line(&self, args: &[&str]) -> String {
+        [format!("{}/vm.sh", self.dir())]
+            .iter()
+            .map(String::as_str)
+            .chain(args.iter().copied())
+            .map(sh_quote)
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+
+    fn guest_scp(&self, from: &str, to: &str) -> String {
+        let keys = format!("{}/keys", self.dir());
+        format!(
+            "scp -q -i {} -P {} -o IdentitiesOnly=yes -o BatchMode=yes -o LogLevel=ERROR -o UserKnownHostsFile={} {from} {to}",
+            sh_quote(&format!("{keys}/id_ed25519")),
+            self.port,
+            sh_quote(&format!("{keys}/known_hosts")),
+        )
+    }
+
+    // Not through the guest's own standard input: its login shell, PowerShell, reads that too.
+    fn upload(&self, remote: &str) -> Command {
+        let copy = self.guest_scp("\"$file\"", &sh_quote(&format!("dev@127.0.0.1:{remote}")));
+        self.shell(
+            &format!(
+                "file=$(mktemp) && cat >\"$file\" && {copy}; status=$?; unlink \"$file\"; exit $status"
+            ),
+            false,
+        )
+    }
+
+    fn download(&self, remote: &str) -> Command {
+        let copy = self.guest_scp(&sh_quote(&format!("dev@127.0.0.1:{remote}")), "\"$file\"");
+        self.shell(
+            &format!(
+                "file=$(mktemp) && {copy} && cat \"$file\"; status=$?; unlink \"$file\"; exit $status"
+            ),
+            false,
+        )
+    }
+
+    fn lock(&self) -> Result {
+        if !self.locked {
+            return Ok(());
+        }
+        exec(&mut self.shell(&lock_script(&self.dir(), &host_dir()), false))
+            .map_err(|_| format!("{}: the VM is locked", self.dir()))
+    }
+
+    fn stop(&self) -> Result {
+        if !self.locked {
+            return exec(&mut self.vm_sh(&["stop"]));
+        }
+        let script = unlock_script(&self.dir(), &host_dir(), &self.vm_sh_line(&["stop"]));
+        exec(&mut self.shell(&script, false))
+    }
+}
+
+fn lock_script(dir: &str, owner: &str) -> String {
+    let (lock, owner) = (sh_quote(&format!("{dir}/{VM_LOCK}")), sh_quote(owner));
+    format!(
+        r#"if mkdir {lock} 2>/dev/null; then printf '%s\n' {owner} >{lock}/owner; fi
+if [ "$(cat {lock}/owner 2>/dev/null)" != {owner} ]; then
+  echo "{lock} is held by $(cat {lock}/owner 2>/dev/null || echo someone else)" >&2; exit 1
+fi"#
+    )
+}
+
+fn unlock_script(dir: &str, owner: &str, stop: &str) -> String {
+    let (lock, owner) = (sh_quote(&format!("{dir}/{VM_LOCK}")), sh_quote(owner));
+    format!(
+        r#"if [ -e {lock} ] && [ "$(cat {lock}/owner 2>/dev/null)" != {owner} ]; then
+  echo "{lock} is held by $(cat {lock}/owner 2>/dev/null || echo someone else)" >&2; exit 1
+fi
+{stop} && if [ -e {lock} ]; then gio trash {lock}; fi"#
+    )
+}
+
+struct RunOptions {
+    fonts: Option<&'static str>,
+    gl: &'static str,
+    command: String,
+}
+
+impl RunOptions {
+    fn parse(host: &Host, args: &[String]) -> Result<Self> {
+        let mut options = Self::new(host, "");
+        let mut rest = args;
+        loop {
+            match rest {
+                [flag, value, tail @ ..] if flag == "--fonts" => {
+                    let profile = FONT_PROFILES.into_iter().find(|p| p == value);
+                    if host.os != Os::Linux || profile.is_none() {
+                        return Err(format!(
+                            "--fonts is {} on Linux hosts",
+                            FONT_PROFILES.join(" or ")
+                        ));
+                    }
+                    options.fonts = profile;
+                    rest = tail;
+                }
+                [flag, value, tail @ ..] if flag == "--gl" => {
+                    options.gl = gl::parse(value)?;
+                    rest = tail;
+                }
+                [] => return Err(USAGE.to_owned()),
+                _ => break,
+            }
+        }
+        options.command = rest.join(" ");
+        Ok(options)
+    }
+
+    fn new(host: &Host, command: &str) -> Self {
+        Self {
+            fonts: (host.os == Os::Linux).then_some(FONT_PROFILES[0]),
+            gl: host.gl,
+            command: command.to_owned(),
+        }
+    }
+}
 
 pub fn run(args: &[String]) -> Result {
     let paths = Paths::new()?;
@@ -124,16 +371,19 @@ fn run_remote(paths: &Paths, host: &Host, command: &str, rest: &[String]) -> Res
     match (command, rest) {
         ("start", []) => host.start(),
         ("stop", []) => host.stop(),
+        ("restart", []) => host.stop().and_then(|()| host.start()),
         ("status", []) => host.status(),
         ("ssh", _) => host.ssh_interactive(&joined),
         ("provision", []) => host.provision(paths),
         ("sync", []) => host.sync(paths),
-        ("setup", []) => host.run(&host.setup_command()),
-        ("run", [_, ..]) => host.run(&joined),
-        ("gui", [_, ..]) => host.gui(&joined),
+        ("setup", []) => host.run(paths, &RunOptions::new(host, &host.setup_command())),
+        ("run", _) => host.run(paths, &RunOptions::parse(host, rest)?),
+        ("gui", _) => host.gui(paths, &RunOptions::parse(host, rest)?),
         ("fetch", []) => host.fetch(paths, ""),
         ("fetch", [dir]) => host.fetch(paths, dir),
-        ("theme", [theme]) if theme == "light" || theme == "dark" => host.theme(theme == "dark"),
+        ("theme", [theme]) if theme == "light" || theme == "dark" => {
+            host.theme(paths, theme == "dark")
+        }
         ("screenshot", [file]) => host.screenshot(Path::new(file)),
         ("check", []) => host.check(paths),
         ("manifest", []) => host.record_manifest(paths),
@@ -143,68 +393,71 @@ fn run_remote(paths: &Paths, host: &Host, command: &str, rest: &[String]) -> Res
 }
 
 impl Host {
-    fn ssh_target(&self) -> Result<(Vec<String>, String)> {
-        let (keys, port, destination) = match self.os {
-            Os::Windows => (
-                windows_vm().join("keys"),
-                "2222",
-                "dev@127.0.0.1".to_owned(),
-            ),
-            Os::Linux => (linux_keys(), "22", format!("admin@{}", linux_ip()?)),
-        };
-        let options = [
-            "-i".to_owned(),
-            keys.join("id_ed25519").display().to_string(),
-            "-p".to_owned(),
-            port.to_owned(),
-            "-o".to_owned(),
-            format!("UserKnownHostsFile={}", keys.join("known_hosts").display()),
-        ]
-        .into_iter()
-        .chain(
-            [
-                "IdentitiesOnly=yes",
-                "StrictHostKeyChecking=accept-new",
-                "ConnectTimeout=10",
-                "ServerAliveInterval=30",
-                "LogLevel=ERROR",
-            ]
-            .iter()
-            .flat_map(|o| ["-o".to_owned(), (*o).to_owned()]),
-        )
-        .collect();
-        Ok((options, destination))
-    }
-
-    fn ssh(&self, remote: &str) -> Result<Command> {
-        let (options, destination) = self.ssh_target()?;
+    fn tart_ssh(&self, terminal: bool) -> Result<Command> {
+        let keys = linux_keys();
         let mut command = Command::new("ssh");
         command
-            .args(options)
-            .args(["-o", "BatchMode=yes"])
-            .arg(destination)
-            .arg(remote);
+            .arg("-i")
+            .arg(keys.join("id_ed25519"))
+            .arg("-o")
+            .arg(format!(
+                "UserKnownHostsFile={}",
+                keys.join("known_hosts").display()
+            ));
+        for option in [
+            "IdentitiesOnly=yes",
+            "StrictHostKeyChecking=accept-new",
+            "ConnectTimeout=10",
+            "ServerAliveInterval=30",
+            "LogLevel=ERROR",
+        ] {
+            command.args(["-o", option]);
+        }
+        command
+            .args(if terminal {
+                ["-t"].as_slice()
+            } else {
+                &["-o", "BatchMode=yes"]
+            })
+            .arg(format!("admin@{}", linux_ip()?));
         Ok(command)
     }
 
-    fn scp(&self, from: &str, to: &str) -> Result {
-        let (options, destination) = self.ssh_target()?;
-        let options: Vec<String> = options
-            .into_iter()
-            .map(|o| if o == "-p" { "-P".to_owned() } else { o })
-            .collect();
-        let remote = |p: &str| match p.strip_prefix(':') {
-            Some(path) => format!("{destination}:{path}"),
-            None => p.to_owned(),
+    fn ssh(&self, remote: &str) -> Result<Command> {
+        let mut command = match &self.vm {
+            Vm::Script(vm) => vm.vm_sh(&["ssh", remote]),
+            Vm::Tart => {
+                let mut command = self.tart_ssh(false)?;
+                command.arg(remote);
+                command
+            }
         };
-        exec(
-            Command::new("scp")
-                .arg("-q")
-                .args(options)
-                .args(["-o", "BatchMode=yes"])
-                .arg(remote(from))
-                .arg(remote(to)),
-        )
+        command.stdin(Stdio::null());
+        Ok(command)
+    }
+
+    fn upload(&self, file: &Path, remote: &str) -> Result {
+        let mut command = match &self.vm {
+            Vm::Script(vm) => vm.upload(remote),
+            Vm::Tart => self.ssh(&self.remote_script(&format!("cat > {remote}")))?,
+        };
+        command.stdin(File::open(file).map_err(|e| format!("{}: {e}", file.display()))?);
+        exec(&mut command)
+    }
+
+    fn download(&self, remote: &str, file: &Path) -> Result {
+        match &self.vm {
+            Vm::Script(vm) => {
+                let out = File::create(file).map_err(|e| format!("{}: {e}", file.display()))?;
+                exec(vm.download(remote).stdin(Stdio::null()).stdout(out))
+            }
+            Vm::Tart => self.script_to(&format!("cat {remote}"), file),
+        }
+    }
+
+    fn script_to(&self, body: &str, file: &Path) -> Result {
+        let out = File::create(file).map_err(|e| format!("{}: {e}", file.display()))?;
+        exec(self.ssh(&self.remote_script(body))?.stdout(out))
     }
 
     fn remote_script(&self, body: &str) -> String {
@@ -221,27 +474,12 @@ impl Host {
         exec(&mut self.ssh(&self.remote_script(body))?)
     }
 
-    fn script_output(&self, body: &str) -> Result<Vec<u8>> {
-        let output = self
-            .ssh(&self.remote_script(body))?
-            .stderr(Stdio::inherit())
-            .output()
-            .map_err(|e| format!("ssh: {e}"))?;
-        if output.status.success() {
-            Ok(output.stdout)
-        } else {
-            Err(format!(
-                "{}: remote script failed ({})",
-                self.name, output.status
-            ))
-        }
-    }
-
     fn state_dir(&self, paths: &Paths) -> PathBuf {
         let hosts = paths.root.join("target/hosts");
+        let name = format!("{}-{}", self.name, self.arch);
         match host_dir().as_str() {
-            "asrs" => hosts.join(self.name),
-            dir => hosts.join(format!("{}-{dir}", self.name)),
+            "asrs" => hosts.join(name),
+            dir => hosts.join(format!("{name}-{dir}")),
         }
     }
 
@@ -269,12 +507,40 @@ impl Host {
         }
     }
 
-    fn run(&self, command: &str) -> Result {
+    fn path(&self) -> &'static str {
+        match &self.vm {
+            Vm::Script(vm) => vm.path,
+            Vm::Tart => "",
+        }
+    }
+
+    fn linux_environment(paths: &Paths, options: &RunOptions) -> Result<String> {
+        let conf = format!(
+            "{}/{}.conf",
+            linux_fonts(paths)?,
+            options.fonts.unwrap_or(FONT_PROFILES[0])
+        );
+        Ok(format!(
+            "test -f {conf} || {{ echo '{conf} is missing; run `cargo xtask host linux provision`' >&2; exit 1; }}\nexport FONTCONFIG_FILE={conf} {}={}\n",
+            gl::VARIABLE,
+            options.gl
+        ))
+    }
+
+    fn run(&self, paths: &Paths, options: &RunOptions) -> Result {
+        let command = &options.command;
         eprintln!("[{}] $ {command}", self.name);
         let body = match self.os {
-            Os::Linux => format!("cd {} && {command}", self.checkout()),
+            Os::Linux => format!(
+                "{}cd {} && {command}",
+                Self::linux_environment(paths, options)?,
+                self.checkout()
+            ),
             Os::Windows => format!(
-                "$ErrorActionPreference = 'Continue'\n$env:Path = '{WINDOWS_PATH};' + $env:Path\nSet-Location {}\n& {{ {command} }} | Out-String -Stream\nexit $LASTEXITCODE",
+                "$ErrorActionPreference = 'Continue'\n$env:Path = '{};' + $env:Path\n$env:{} = '{}'\nSet-Location {}\n& {{ {command} }} | Out-String -Stream\nexit $LASTEXITCODE",
+                self.path(),
+                gl::VARIABLE,
+                options.gl,
                 self.checkout()
             ),
         };
@@ -282,47 +548,31 @@ impl Host {
             .map_err(|_| format!("{}: `{command}` failed", self.name))
     }
 
-    fn gui(&self, command: &str) -> Result {
+    fn gui(&self, paths: &Paths, options: &RunOptions) -> Result {
+        let command = &options.command;
         eprintln!("[{} desktop] $ {command}", self.name);
         let body = match self.os {
-            Os::Linux => format!(
-                "export DISPLAY=:0 XAUTHORITY=$HOME/.Xauthority DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus\ncd {} && {command}",
-                self.checkout()
+            Os::Linux => linux_gui_script(
+                &Self::linux_environment(paths, options)?,
+                &self.checkout(),
+                command,
             ),
             Os::Windows => {
-                let gui_dir = windows_aux_dir("gui");
-                let task = gui_task();
-                let gui = gui_dir.replace('/', "\\");
+                let stamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_err(|e| e.to_string())?
+                    .as_nanos();
+                let id = format!("{}-{stamp}", std::process::id());
+                let gui_dir = format!("{}/{id}", windows_aux_dir("gui"));
                 let batch = format!(
-                    "@echo off\r\nset PATH={WINDOWS_PATH};%PATH%\r\ncd /d {}\r\n{command} > {gui}\\last.log 2>&1\r\necho %ERRORLEVEL% > {gui}\\exit.txt\r\n",
-                    self.checkout().replace('/', "\\")
+                    "@echo off\r\nset PATH={};%PATH%\r\nset {}={}\r\ncd /d {}\r\n{command} > {}\\last.log 2>&1\r\n",
+                    self.path(),
+                    gl::VARIABLE,
+                    options.gl,
+                    self.checkout().replace('/', "\\"),
+                    gui_dir.replace('/', "\\"),
                 );
-                format!(
-                    r#"$ErrorActionPreference = 'Stop'
-New-Item -Force -ItemType Directory {gui_dir} | Out-Null
-Remove-Item -Force -ErrorAction SilentlyContinue {gui_dir}/exit.txt, {gui_dir}/last.log
-Set-Content -NoNewline -Encoding ascii {gui_dir}/run.cmd @'
-{batch}
-'@
-$action = New-ScheduledTaskAction -Execute "{gui}\run.cmd" -WorkingDirectory "{gui}"
-$principal = New-ScheduledTaskPrincipal -UserId dev -LogonType Interactive -RunLevel Highest
-$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 4) -AllowStartIfOnBatteries
-Register-ScheduledTask -TaskName {task} -Action $action -Principal $principal -Settings $settings -Force | Out-Null
-Start-ScheduledTask -TaskName {task}
-$idle = 0
-while (-not (Test-Path {gui_dir}/exit.txt)) {{
-    Start-Sleep -Milliseconds 500
-    if ((Get-ScheduledTask -TaskName {task}).State -eq 'Ready') {{ $idle++ }} else {{ $idle = 0 }}
-    if ($idle -ge 20 -and -not (Test-Path {gui_dir}/exit.txt)) {{
-        Get-Content -ErrorAction SilentlyContinue {gui_dir}/last.log
-        [Console]::Error.WriteLine('the desktop task stopped without an exit code (is dev logged in to the desktop?)')
-        exit 1
-    }}
-}}
-Start-Sleep -Milliseconds 200
-Get-Content {gui_dir}/last.log
-exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
-                )
+                windows_gui_script(&gui_dir, &format!("{}-{id}", gui_task()), &batch)
             }
         };
         self.script(&body)
@@ -330,13 +580,15 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
     }
 
     fn start(&self) -> Result {
-        match self.os {
-            Os::Windows => {
-                vm_sh(&["start"])?;
-                vm_sh(&["wait-ssh", "600"])
+        match &self.vm {
+            Vm::Script(vm) => {
+                vm.lock()?;
+                exec(&mut vm.vm_sh(&["start"]))?;
+                exec(&mut vm.vm_sh(&["wait-ssh", "600"]))
             }
-            Os::Linux => {
+            Vm::Tart => {
                 if !linux_running()? {
+                    exec(&mut tart(&["set", LINUX_VM, "--display", LINUX_DISPLAY]))?;
                     let log = tart_home().join("tmp").join(format!("{LINUX_VM}.log"));
                     exec(
                         Command::new("sh")
@@ -372,11 +624,19 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
     }
 
     fn stop(&self) -> Result {
-        match self.os {
-            Os::Windows => vm_sh(&["stop"]),
-            Os::Linux => {
+        match &self.vm {
+            Vm::Script(vm) => vm.stop(),
+            Vm::Tart => {
                 if linux_running()? {
-                    exec(&mut tart(&["stop", LINUX_VM, "--timeout", "60"]))?;
+                    // `tart stop` cuts the power, which loses what the guest wrote last.
+                    let _ = self.script("sync; sudo systemctl poweroff");
+                    let start = Instant::now();
+                    while linux_running()? && start.elapsed() < Duration::from_secs(90) {
+                        std::thread::sleep(Duration::from_secs(1));
+                    }
+                    if linux_running()? {
+                        exec(&mut tart(&["stop", LINUX_VM, "--timeout", "60"]))?;
+                    }
                 }
                 eprintln!("stopped");
                 Ok(())
@@ -385,9 +645,9 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
     }
 
     fn status(&self) -> Result {
-        match self.os {
-            Os::Windows => vm_sh(&["status"]),
-            Os::Linux => {
+        match &self.vm {
+            Vm::Script(vm) => exec(&mut vm.vm_sh(&["status"])),
+            Vm::Tart => {
                 let running = linux_running()?;
                 println!(
                     "vm:  {LINUX_VM} {}",
@@ -411,40 +671,35 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
     }
 
     fn ssh_interactive(&self, command: &str) -> Result {
-        let (options, destination) = self.ssh_target()?;
-        let mut ssh = Command::new("ssh");
-        ssh.args(options).arg("-t").arg(destination);
-        if !command.is_empty() {
-            ssh.arg(command);
+        let arguments: Vec<&str> = [command].into_iter().filter(|c| !c.is_empty()).collect();
+        match &self.vm {
+            Vm::Script(vm) => {
+                let line = vm.vm_sh_line(&[&["ssh"], arguments.as_slice()].concat());
+                exec(&mut vm.shell(&line, true))
+            }
+            Vm::Tart => exec(self.tart_ssh(true)?.args(arguments)),
         }
-        exec(&mut ssh)
     }
 
     fn provision(&self, paths: &Paths) -> Result {
+        let hosts = paths.root.join("xtask/hosts");
         match self.os {
             Os::Linux => {
-                self.scp(
-                    &paths
-                        .root
-                        .join("xtask/hosts/linux/provision.sh")
-                        .display()
-                        .to_string(),
-                    ":asrs-provision.sh",
-                )?;
-                self.script("bash $HOME/asrs-provision.sh")
+                let dir = linux_fonts(paths)?;
+                self.upload(&hosts.join("linux/provision.sh"), "$HOME/asrs-provision.sh")?;
+                self.upload(&hosts.join("linux/fonts.sh"), "$HOME/asrs-fonts.sh")?;
+                self.script(&format!(
+                    "set -e\nexec 9>>$HOME/.asrs-gui.lock\nflock 9\nbash $HOME/asrs-provision.sh\nif [ -e {dir} ]; then gio trash {dir}; fi\nbash $HOME/asrs-fonts.sh $HOME/.cache/asrs-fonts {dir}\nsync"
+                ))
             }
             Os::Windows => {
                 let sync_dir = windows_aux_dir("sync");
                 self.script(&format!(
                     "New-Item -Force -ItemType Directory {sync_dir} | Out-Null"
                 ))?;
-                self.scp(
-                    &paths
-                        .root
-                        .join("xtask/hosts/windows/provision.ps1")
-                        .display()
-                        .to_string(),
-                    &format!(":{sync_dir}/provision.ps1"),
+                self.upload(
+                    &hosts.join("windows/provision.ps1"),
+                    &format!("{sync_dir}/provision.ps1"),
                 )?;
                 self.script(&format!("& {sync_dir}/provision.ps1\nexit $LASTEXITCODE"))
             }
@@ -477,12 +732,12 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
 
         match self.os {
             Os::Linux => {
-                let mut ssh = self.ssh(&self.remote_script(&format!(
-                    "mkdir -p {0} && tar -xzf - -C {0}",
+                let remote = format!("{}.sync.tar.gz", self.checkout());
+                self.upload(&tarball, &remote)?;
+                self.script(&format!(
+                    "mkdir -p {0} && tar -xzf {remote} -C {0} && unlink {remote}",
                     self.checkout()
-                )))?;
-                ssh.stdin(File::open(&tarball).map_err(|e| format!("{}: {e}", tarball.display()))?);
-                exec(&mut ssh)?;
+                ))?;
                 if !removed.is_empty() {
                     let list: Vec<String> = removed.iter().map(|f| sh_quote(f)).collect();
                     self.script(&format!(
@@ -498,10 +753,7 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
                     "New-Item -Force -ItemType Directory {}, {sync_dir} | Out-Null",
                     self.checkout()
                 ))?;
-                self.scp(
-                    &tarball.display().to_string(),
-                    &format!(":{sync_dir}/asrs.tar.gz"),
-                )?;
+                self.upload(&tarball, &format!("{sync_dir}/asrs.tar.gz"))?;
                 let mut body = format!(
                     "tar.exe -xzf {sync_dir}/asrs.tar.gz -C {}\nif ($LASTEXITCODE) {{ exit $LASTEXITCODE }}\nRemove-Item {sync_dir}/asrs.tar.gz\n",
                     self.checkout()
@@ -543,10 +795,7 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
             return Ok(());
         }
         eprintln!("upload oracle pack -> {}:{}", self.name, self.pack_path());
-        self.scp(
-            &pack_file.display().to_string(),
-            &format!(":{}", self.pack_path()),
-        )?;
+        self.upload(&pack_file, &self.pack_path())?;
         fs::write(&stamp, format!("{digest}\n")).map_err(|e| format!("{}: {e}", stamp.display()))
     }
 
@@ -564,11 +813,8 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
         let tarball = state.join("fetch.tar.gz");
         match self.os {
             Os::Linux => {
-                let bytes = self.script_output(&format!(
-                    "tar -czf - -C {}/target {source}",
-                    self.checkout()
-                ))?;
-                fs::write(&tarball, bytes).map_err(|e| format!("{}: {e}", tarball.display()))?;
+                let body = format!("tar -czf - -C {}/target {source}", self.checkout());
+                self.script_to(&body, &tarball)?;
             }
             Os::Windows => {
                 let sync_dir = windows_aux_dir("sync");
@@ -576,10 +822,7 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
                     "New-Item -Force -ItemType Directory {sync_dir} | Out-Null\ntar.exe -czf {sync_dir}/fetch.tar.gz -C {}/target {source}\nexit $LASTEXITCODE",
                     self.checkout()
                 ))?;
-                self.scp(
-                    &format!(":{sync_dir}/fetch.tar.gz"),
-                    &tarball.display().to_string(),
-                )?;
+                self.download(&format!("{sync_dir}/fetch.tar.gz"), &tarball)?;
             }
         }
         let dest = paths.root.join("target/parity").join(self.name);
@@ -588,66 +831,65 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
         Ok(())
     }
 
-    fn theme(&self, dark: bool) -> Result {
-        match self.os {
-            Os::Linux => self.gui(&format!(
+    fn theme(&self, paths: &Paths, dark: bool) -> Result {
+        let command = match self.os {
+            Os::Linux => format!(
                 "xfconf-query -c xsettings -p /Net/ThemeName -s {}",
                 if dark { "Adwaita-dark" } else { "Adwaita" }
-            )),
-            Os::Windows => {
-                let value = if dark { 0 } else { 1 };
-                self.script(&format!(
-                    "$key = 'HKCU:/Software/Microsoft/Windows/CurrentVersion/Themes/Personalize'\nSet-ItemProperty $key AppsUseLightTheme {value} -Type DWord\nSet-ItemProperty $key SystemUsesLightTheme {value} -Type DWord"
-                ))
-            }
-        }
+            ),
+            Os::Windows => ["AppsUseLightTheme", "SystemUsesLightTheme"]
+                .map(|name| {
+                    format!(
+                        r"reg add HKCU\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize /v {name} /t REG_DWORD /d {} /f",
+                        u8::from(!dark)
+                    )
+                })
+                .join(" && "),
+        };
+        self.gui(paths, &RunOptions::new(self, &command))
     }
 
     fn screenshot(&self, file: &Path) -> Result {
         let file = std::path::absolute(file).map_err(|e| e.to_string())?;
-        match self.os {
-            Os::Windows => vm_sh(&["screenshot", &file.display().to_string()]),
-            Os::Linux => {
-                let png = self.script_output(
-                    "DISPLAY=:0 XAUTHORITY=$HOME/.Xauthority import -window root png:-",
-                )?;
-                fs::write(&file, png).map_err(|e| format!("{}: {e}", file.display()))?;
-                println!("{}", file.display());
-                Ok(())
+        match &self.vm {
+            Vm::Script(vm) => {
+                let shot = format!("{}/run/asrs-shot.png", vm.dir());
+                let line = vm.vm_sh_line(&["screenshot", &shot]);
+                let script = format!("{line} >/dev/null && cat {}", sh_quote(&shot));
+                let out = File::create(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+                exec(vm.shell(&script, false).stdout(out))?;
             }
+            Vm::Tart => self.script_to(
+                "DISPLAY=:0 XAUTHORITY=$HOME/.Xauthority import -window root png:-",
+                &file,
+            )?,
         }
+        println!("{}", file.display());
+        Ok(())
     }
 
     fn gen_vectors(&self, paths: &Paths, ids: &[String]) -> Result {
         self.sync(paths)?;
-        self.run(&format!("cargo xtask oracle gen {}", ids.join(" ")))?;
-        let remote_dir = match self.os {
-            Os::Windows => format!("{}/parity/vectors", self.checkout()),
-            Os::Linux => format!("{}/parity/vectors", host_dir()),
-        };
+        let command = format!("cargo xtask oracle gen {}", ids.join(" "));
+        self.run(paths, &RunOptions::new(self, &command))?;
+        let remote_dir = format!("{}/parity/vectors", self.checkout());
         let state = self.state_dir(paths);
         fs::create_dir_all(&state).map_err(|e| format!("{}: {e}", state.display()))?;
         let manifest = state.join("MANIFEST.json");
-        self.scp(
-            &format!(":{remote_dir}/MANIFEST.json"),
-            &manifest.display().to_string(),
-        )?;
+        self.download(&format!("{remote_dir}/MANIFEST.json"), &manifest)?;
         let text =
             fs::read_to_string(&manifest).map_err(|e| format!("{}: {e}", manifest.display()))?;
         let remote = json::parse(&text).map_err(|e| format!("{}: {e}", manifest.display()))?;
-        let os = match self.os {
-            Os::Windows => "windows",
-            Os::Linux => "linux",
-        };
-        crate::vectors::import_platform_vectors(paths, &remote, ids, os, |id, dest| {
-            self.scp(
-                &format!(":{remote_dir}/{id}.jsonl.zst"),
-                &dest.display().to_string(),
-            )
+        let platform = format!("{}-{}", self.os.name(), self.arch);
+        crate::vectors::import_platform_vectors(paths, &remote, ids, &platform, |id, dest| {
+            self.download(&format!("{remote_dir}/{id}.jsonl.zst"), dest)
         })
     }
 
     fn record_manifest(&self, paths: &Paths) -> Result {
+        if !self.reference {
+            return Err(format!("{} is not a reference host", self.name));
+        }
         let file = paths
             .root
             .join("target/parity")
@@ -661,10 +903,7 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
             )
         })?;
         let description = json::parse(&text).map_err(|e| format!("{}: {e}", file.display()))?;
-        let platform = match self.os {
-            Os::Windows => "windows",
-            Os::Linux => "linux",
-        };
+        let platform = self.os.name();
         canvas::set_manifest_host(paths, platform, description)?;
         eprintln!("host description stored in parity/vectors/canvas/{platform}.json");
         Ok(())
@@ -672,23 +911,36 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
 
     fn check(&self, paths: &Paths) -> Result {
         self.sync(paths)?;
-        self.run(&self.setup_command())?;
+        self.run(paths, &RunOptions::new(self, &self.setup_command()))?;
         let s1_build = "cargo build --release --manifest-path spikes/s1-gpui-shell/Cargo.toml";
-        let steps: [(&str, bool, &str); 7] = [
-            ("selftest", false, "cargo xtask oracle selftest"),
-            ("smoke", false, "cargo xtask oracle smoke"),
-            ("gen --check", true, "cargo xtask oracle gen --check"),
-            ("port build", false, "cargo build --workspace --all-targets"),
-            ("gui-check", true, "cargo xtask host local gui-check"),
-            ("s1 build", false, s1_build),
-            ("s1 window", true, "cargo xtask host local s1"),
+        let dom_text = "cargo xtask host local dom-text";
+        let mut steps = vec![
+            ("selftest", false, None, "cargo xtask oracle selftest"),
+            ("smoke", false, None, "cargo xtask oracle smoke"),
+            ("gen --check", true, None, "cargo xtask oracle gen --check"),
+            (
+                "port build",
+                false,
+                None,
+                "cargo build --workspace --all-targets",
+            ),
+            ("gui-check", true, None, "cargo xtask host local gui-check"),
+            ("3D references", true, None, "cargo xtask field3d ref"),
+            ("DOM text", true, None, dom_text),
+            ("s1 build", false, None, s1_build),
+            ("s1 window", true, None, "cargo xtask host local s1"),
         ];
+        if self.os == Os::Linux {
+            steps.push(("DOM text, stock fonts", true, Some("stock"), dom_text));
+        }
         let mut results = Vec::new();
-        for (name, gui, command) in steps {
+        for (name, gui, fonts, command) in steps {
+            let mut options = RunOptions::new(self, command);
+            options.fonts = fonts.or(options.fonts);
             let result = if gui {
-                self.gui(command)
+                self.gui(paths, &options)
             } else {
-                self.run(command)
+                self.run(paths, &options)
             };
             results.push((name, result));
         }
@@ -713,6 +965,76 @@ exit [int](Get-Content {gui_dir}/exit.txt).Trim()"#
     }
 }
 
+impl Os {
+    fn name(self) -> &'static str {
+        match self {
+            Os::Windows => "windows",
+            Os::Linux => "linux",
+        }
+    }
+}
+
+/// Where `fonts.sh` unpacks on the Linux host: one directory per version of the script.
+fn linux_fonts(paths: &Paths) -> Result<String> {
+    let script = oracle::read(&paths.root.join("xtask/hosts/linux/fonts.sh"))?;
+    Ok(format!(
+        "$HOME/asrs-fonts/{}",
+        &crate::sha256_hex(&script)[..12]
+    ))
+}
+
+fn linux_gui_script(environment: &str, checkout: &str, command: &str) -> String {
+    format!(
+        r#"{environment}export DISPLAY=:0 XAUTHORITY=$HOME/.Xauthority DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$(id -u)/bus
+exec 9>>$HOME/.asrs-gui.lock
+flock -n 9 || {{ echo 'waiting for the other desktop run' >&2; flock 9; }}
+cd {checkout} && {{ {command}
+}} 9>&-"#
+    )
+}
+
+/// The lock is a mutex of the task's own process, not of this SSH session: the desktop run goes
+/// on when SSH drops.
+fn windows_gui_script(gui_dir: &str, task: &str, batch: &str) -> String {
+    let gui = gui_dir.replace('/', "\\");
+    format!(
+        r#"$ErrorActionPreference = 'Stop'
+New-Item -Force -ItemType Directory {gui_dir} | Out-Null
+Set-Content -NoNewline -Encoding ascii {gui_dir}/run.cmd @'
+{batch}
+'@
+Set-Content -Encoding ascii {gui_dir}/run.ps1 @'
+$mutex = New-Object Threading.Mutex($false, 'Global\asrs-gui')
+try {{ [void]$mutex.WaitOne() }} catch [Threading.AbandonedMutexException] {{ }}
+cmd.exe /c {gui}\run.cmd
+$code = $LASTEXITCODE
+$mutex.ReleaseMutex()
+Set-Content -Encoding ascii {gui}\exit.txt $code
+'@
+$action = New-ScheduledTaskAction -Execute powershell.exe -Argument '-NoProfile -ExecutionPolicy Bypass -File {gui}\run.ps1' -WorkingDirectory '{gui}'
+$principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 8) -AllowStartIfOnBatteries
+Register-ScheduledTask -TaskName {task} -Action $action -Principal $principal -Settings $settings -Force | Out-Null
+Start-ScheduledTask -TaskName {task}
+$idle = 0
+while (-not (Test-Path {gui_dir}/exit.txt)) {{
+    Start-Sleep -Milliseconds 500
+    if ((Get-ScheduledTask -TaskName {task}).State -eq 'Ready') {{ $idle++ }} else {{ $idle = 0 }}
+    if ($idle -ge 20 -and -not (Test-Path {gui_dir}/exit.txt)) {{
+        Get-Content -ErrorAction SilentlyContinue {gui_dir}/last.log
+        [Console]::Error.WriteLine("the desktop task stopped without an exit code (is $env:USERNAME logged in to the desktop?)")
+        exit 1
+    }}
+}}
+Start-Sleep -Milliseconds 200
+Get-Content {gui_dir}/last.log
+$code = [int](Get-Content {gui_dir}/exit.txt).Trim()
+Unregister-ScheduledTask -TaskName {task} -Confirm:$false
+Remove-Item -Recurse -Force {gui_dir}
+exit $code"#
+    )
+}
+
 fn host_dir() -> String {
     std::env::var("ASRS_HOST_DIR")
         .ok()
@@ -732,11 +1054,6 @@ fn gui_task() -> String {
         "asrs" => "asrs-gui".to_owned(),
         dir => format!("asrs-gui-{dir}"),
     }
-}
-
-fn windows_vm() -> PathBuf {
-    std::env::var_os("ASRS_WINDOWS_VM")
-        .map_or_else(|| PathBuf::from("/Volumes/T9/vms/win11-arm"), PathBuf::from)
 }
 
 fn linux_keys() -> PathBuf {
@@ -783,10 +1100,6 @@ fn linux_ip() -> Result<String> {
             "{LINUX_VM} has no IP address; start it with `cargo xtask host linux start`"
         ))
     }
-}
-
-fn vm_sh(args: &[&str]) -> Result {
-    exec(Command::new(windows_vm().join("vm.sh")).args(args))
 }
 
 fn exec(command: &mut Command) -> Result {
@@ -955,13 +1268,20 @@ fn run_local(paths: &Paths, args: &[String]) -> Result {
     let out = paths.root.join("target/parity/host");
     fs::create_dir_all(&out).map_err(|e| format!("{}: {e}", out.display()))?;
     match args {
-        [cmd] if cmd == "describe" => describe(paths, &out, false),
-        [cmd, flag] if cmd == "describe" && flag == "--manifest" => describe(paths, &out, true),
+        [cmd] if cmd == "describe" => describe(paths, &out).map(|_| ()),
+        [cmd, flag] if cmd == "describe" && flag == "--manifest" => {
+            let description = describe(paths, &out)?;
+            canvas::set_manifest_host(paths, canvas::platform(), description)
+        }
+        [cmd, flag] if cmd == "describe" && flag == "--check" => {
+            check_description(paths, &describe(paths, &out)?)
+        }
+        [cmd] if cmd == "dom-text" => dom_text(paths, &out),
         [cmd] if cmd == "colour-patch" => colour_patch(paths, &out),
         [cmd] if cmd == "launch" => launch(paths, &out),
         [cmd] if cmd == "gui-check" => {
             let results = [
-                ("describe", describe(paths, &out, false)),
+                ("describe", describe(paths, &out).map(|_| ())),
                 ("colour-patch", colour_patch(paths, &out)),
                 ("launch", launch(paths, &out)),
             ];
@@ -1129,7 +1449,158 @@ fn launch(paths: &Paths, out: &Path) -> Result {
     }
 }
 
-fn describe(paths: &Paths, out: &Path, manifest: bool) -> Result {
+/// Every text box of Chromium's DOM text scenes is grayscale or LCD as the host's settings say.
+/// Grey text on a grey background has a pixel whose channels differ only under LCD.
+fn dom_text(paths: &Paths, out: &Path) -> Result {
+    let lcd = match std::env::consts::OS {
+        "windows" => true,
+        "linux" => match font_profile().as_deref() {
+            Some("gray") => false,
+            Some("stock") => true,
+            _ => return Err("FONTCONFIG_FILE is not gray.conf or stock.conf".to_owned()),
+        },
+        os => return Err(format!("dom-text: {os} has no LCD text to tell apart")),
+    };
+    canvas::check_fonts(paths)?;
+    oracle::build_harness(paths)?;
+    let out = out.join(if lcd { "dom-lcd" } else { "dom-gray" });
+    let mut failures = Vec::new();
+    for scale in ["1", "2"] {
+        canvas::electron_with(
+            paths,
+            &[format!("--force-device-scale-factor={scale}")],
+            &[
+                "dom".to_owned(),
+                out.display().to_string(),
+                scale.to_owned(),
+            ],
+        )?;
+        for theme in ["light", "dark"] {
+            let base = out.join("dom").join(format!("dom-text-{theme}@{scale}x"));
+            let boxes = read_json_file(&base.with_extension("json"))?;
+            let image = pixel::read_png(&base.with_extension("png"))?;
+            let rows = chromatic_rows(&boxes, &image)?;
+            let chromatic = rows.iter().filter(|(_, n)| *n > 0).count();
+            let wrong: Vec<&str> = rows
+                .iter()
+                .filter(|(row, n)| (*n > 0) != (lcd && lcd_sized(row, scale)))
+                .map(|(row, _)| row.as_str())
+                .collect();
+            eprintln!(
+                "dom-text-{theme}@{scale}x: {chromatic} of {} grey text boxes have coloured pixels",
+                rows.len()
+            );
+            if rows.is_empty() || !wrong.is_empty() {
+                failures.push(format!(
+                    "dom-text-{theme}@{scale}x: not {}: {}",
+                    if lcd { "LCD" } else { "grayscale" },
+                    wrong.join(", ")
+                ));
+            }
+        }
+    }
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(failures.join("\n"))
+    }
+}
+
+/// Skia draws no LCD text above 48 device pixels. A row is named by its font size (`25px/0`).
+fn lcd_sized(row: &str, scale: &str) -> bool {
+    let size = row.split("px").next().and_then(|n| n.parse::<f64>().ok());
+    let scale: f64 = scale.parse().unwrap_or(f64::NAN);
+    size.is_some_and(|size| size * scale <= 48.0)
+}
+
+/// The boxes of grey text, with how many of their pixels are not grey.
+fn chromatic_rows(boxes: &Json, image: &Rgba) -> Result<Vec<(String, usize)>> {
+    let scale = boxes
+        .get("scale")
+        .and_then(Json::as_f64)
+        .ok_or("DOM capture without a scale")?;
+    let rows = boxes
+        .get("rows")
+        .and_then(Json::as_array)
+        .ok_or("DOM capture without rows")?;
+    let mut counted = Vec::new();
+    for row in rows {
+        let id = row
+            .get("id")
+            .and_then(Json::as_str)
+            .ok_or("DOM row without an id")?
+            .to_string_lossy();
+        if id.starts_with("color/") {
+            continue;
+        }
+        let rect: Vec<f64> = row
+            .get("rect")
+            .and_then(Json::as_array)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(Json::as_f64)
+            .collect();
+        let &[x, y, width, height] = rect.as_slice() else {
+            return Err(format!("DOM row {id} without a rectangle"));
+        };
+        let clamp = |v: f64, max: u32| (v * scale).clamp(0.0, f64::from(max)) as u32;
+        let (left, right) = (clamp(x, image.width), clamp(x + width, image.width));
+        let (top, bottom) = (clamp(y, image.height), clamp(y + height, image.height));
+        let chromatic = (top..bottom)
+            .flat_map(|y| (left..right).map(move |x| ((y * image.width + x) * 4) as usize))
+            .filter(|&at| {
+                let p = &image.data[at..at + 3];
+                p[0] != p[1] || p[1] != p[2]
+            })
+            .count();
+        counted.push((id, chromatic));
+    }
+    Ok(counted)
+}
+
+fn check_description(paths: &Paths, description: &Json) -> Result {
+    let name = format!("{}.json", canvas::platform());
+    let manifest = read_json_file(&paths.root.join("parity/vectors/canvas").join(&name))?;
+    let recorded = manifest
+        .get("host")
+        .ok_or_else(|| format!("{name} records no host"))?;
+    let mut differences = Vec::new();
+    description_differences("", recorded, description, &mut differences);
+    if differences.is_empty() {
+        eprintln!("the host equals its description in {name}");
+        Ok(())
+    } else {
+        Err(format!(
+            "the host differs from its description in {name}:\n  {}",
+            differences.join("\n  ")
+        ))
+    }
+}
+
+fn description_differences(at: &str, recorded: &Json, here: &Json, out: &mut Vec<String>) {
+    match (recorded, here) {
+        (Json::Object(a), Json::Object(b)) => {
+            let keys: BTreeSet<String> = a
+                .iter()
+                .chain(b)
+                .map(|(k, _)| k.to_string_lossy())
+                .collect();
+            for key in keys {
+                let field = |v: &Json| v.get(&key).cloned().unwrap_or(Json::Null);
+                let at = format!("{at}/{key}");
+                description_differences(&at, &field(recorded), &field(here), out);
+            }
+        }
+        _ if recorded == here => {}
+        _ => out.push(format!(
+            "{at}: recorded {}, here {}",
+            recorded.to_pretty(),
+            here.to_pretty()
+        )),
+    }
+}
+
+fn describe(paths: &Paths, out: &Path) -> Result<Json> {
     build_host_bundle(paths)?;
     electron_host(
         paths,
@@ -1173,6 +1644,8 @@ fn describe(paths: &Paths, out: &Path, manifest: bool) -> Result {
         ),
         ("nativeRasterizers", native_rasterizers()),
         ("displayProfile", display_profile()),
+        ("fontRules", font_rules()?),
+        ("updates", updates()),
         (
             "fonts",
             Json::object(fonts.iter().map(|(path, hash)| {
@@ -1186,10 +1659,7 @@ fn describe(paths: &Paths, out: &Path, manifest: bool) -> Result {
     let text = description.to_pretty() + "\n";
     fs::write(out.join("host.json"), &text).map_err(|e| e.to_string())?;
     print!("{text}");
-    if manifest {
-        canvas::set_manifest_host(paths, canvas::platform(), description)?;
-    }
-    Ok(())
+    Ok(description)
 }
 
 fn command_text(program: &str, args: &[&str]) -> Option<String> {
@@ -1270,7 +1740,7 @@ fn display_profile() -> Json {
     match std::env::consts::OS {
         "linux" => {
             let icc = command_text("xprop", &["-root", "_ICC_PROFILE"]).unwrap_or_default();
-            Json::string(if icc.contains("not found") || icc.is_empty() {
+            Json::string(if icc.is_empty() || !icc.contains(" = ") {
                 "none (sRGB)"
             } else {
                 "_ICC_PROFILE set on the root window"
@@ -1311,6 +1781,100 @@ fn display_profile() -> Json {
         }
         _ => Json::Null,
     }
+}
+
+fn font_profile() -> Option<String> {
+    let file = PathBuf::from(std::env::var_os("FONTCONFIG_FILE")?);
+    Some(file.file_stem()?.to_str()?.to_owned())
+}
+
+/// What `fonts.sh` unpacked: its packages and rules, and the profile in use.
+fn font_rules() -> Result<Json> {
+    let Some(file) = std::env::var_os("FONTCONFIG_FILE").map(PathBuf::from) else {
+        return Ok(Json::Null);
+    };
+    let dir = file.parent().ok_or("FONTCONFIG_FILE has no directory")?;
+    let Ok(packages) = fs::read_to_string(dir.join("packages.txt")) else {
+        return Ok(Json::Null);
+    };
+    let rules_dir = dir.join("conf.d");
+    let mut rules: Vec<PathBuf> = fs::read_dir(&rules_dir)
+        .map_err(|e| format!("{}: {e}", rules_dir.display()))?
+        .filter_map(|e| Some(e.ok()?.path()))
+        .collect();
+    rules.sort();
+    let profile = String::from_utf8_lossy(&oracle::read(&file)?).into_owned();
+    let mut bytes = profile.replace(&dir.display().to_string(), "").into_bytes();
+    for rule in &rules {
+        bytes.extend(oracle::read(rule)?);
+    }
+    let packages = packages.lines().filter_map(|l| l.split_once(' '));
+    let text = |t: Option<String>| t.map_or(Json::Null, |t| Json::string(&t));
+    Ok(Json::object([
+        ("profile", text(font_profile())),
+        ("rules", Json::string(&crate::sha256_hex(&bytes))),
+        (
+            "fontconfig",
+            text(command_text(
+                "dpkg-query",
+                &["-W", "-f", "${Version}", "libfontconfig1"],
+            )),
+        ),
+        (
+            "packages",
+            Json::object(packages.map(|(hash, file)| (file, Json::string(hash)))),
+        ),
+    ]))
+}
+
+/// What keeps the host's operating system at its recorded state.
+fn updates() -> Json {
+    match std::env::consts::OS {
+        "linux" => {
+            let units = [
+                "apt-daily.timer",
+                "apt-daily-upgrade.timer",
+                "unattended-upgrades.service",
+            ];
+            // A masked unit makes is-enabled exit nonzero.
+            let state = |unit: &str| {
+                let output = Command::new("systemctl")
+                    .args(["is-enabled", unit])
+                    .output();
+                output.map_or(Json::Null, |o| {
+                    Json::string(String::from_utf8_lossy(&o.stdout).trim())
+                })
+            };
+            Json::object(units.map(|unit| (unit, state(unit))))
+        }
+        "windows" => {
+            let script = r"$v = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
+[string]::Concat('build=', $v.CurrentBuild, '.', $v.UBR)
+foreach ($s in 'wuauserv', 'UsoSvc', 'WaaSMedicSvc', 'InstallService') {
+  $s + '=' + (Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\$s).Start
+}
+$wu = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate'
+foreach ($n in 'WUServer', 'WUStatusServer', 'DoNotConnectToWindowsUpdateInternetLocations', 'ExcludeWUDriversInQualityUpdate', 'TargetReleaseVersionInfo') { $n + '=' + (Get-ItemProperty $wu -ErrorAction SilentlyContinue).$n }
+foreach ($n in 'UseWUServer', 'NoAutoUpdate') { $n + '=' + (Get-ItemProperty $wu\AU -ErrorAction SilentlyContinue).$n }
+$store = Get-ItemProperty HKLM:\SOFTWARE\Policies\Microsoft\WindowsStore -ErrorAction SilentlyContinue
+'StoreAutoDownload=' + $store.AutoDownload
+'RemoveWindowsStore=' + $store.RemoveWindowsStore";
+            let text =
+                command_text("powershell", &["-NoProfile", "-Command", script]).unwrap_or_default();
+            Json::object(
+                text.lines()
+                    .filter_map(|l| l.trim().split_once('='))
+                    .map(|(name, value)| (name, Json::string(value))),
+            )
+        }
+        _ => Json::Null,
+    }
+}
+
+// fontconfig finds the pinned files under the directory fonts.sh unpacked to.
+fn font_key(path: &str) -> &str {
+    path.find("/usr/share/fonts/")
+        .map_or(path, |at| &path[at..])
 }
 
 fn font_hashes() -> Result<Vec<(String, Option<String>)>> {
@@ -1401,7 +1965,7 @@ fn font_hashes() -> Result<Vec<(String, Option<String>)>> {
         .into_iter()
         .map(|f| {
             let hash = fs::read(&f).ok().map(|b| crate::sha256_hex(&b));
-            (f, hash)
+            (font_key(&f).to_owned(), hash)
         })
         .collect())
 }
@@ -1471,6 +2035,134 @@ mod tests {
         ] {
             assert_eq!(base64(input.as_bytes()), expected);
         }
+    }
+
+    #[test]
+    fn every_host_has_its_own_port_tools_and_name() {
+        for (i, host) in HOSTS.iter().enumerate() {
+            assert!(HOSTS[i + 1..].iter().all(|h| h.name != host.name));
+            let node = match host.arch {
+                "x86_64" => "win-x64",
+                _ => "win-arm64",
+            };
+            assert_eq!(host.path().contains(node), host.os == Os::Windows);
+        }
+        for os in [Os::Windows, Os::Linux] {
+            let references = HOSTS.iter().filter(|h| h.os == os && h.reference);
+            assert_eq!(references.count(), 1);
+        }
+    }
+
+    #[test]
+    fn run_options_pick_fonts_and_rasterizer() {
+        let args = |line: &str| -> Vec<String> { line.split(' ').map(str::to_owned).collect() };
+        let [windows, _, linux] = &HOSTS;
+        let options = RunOptions::parse(linux, &args("--fonts stock cargo test --gl")).unwrap();
+        assert_eq!(options.fonts, Some("stock"));
+        assert_eq!(options.gl, "swiftshader");
+        assert_eq!(options.command, "cargo test --gl");
+        let options = RunOptions::parse(linux, &args("cargo test")).unwrap();
+        assert_eq!(options.fonts, Some("gray"));
+        let options = RunOptions::parse(windows, &args("--gl d3d11-warp cargo run")).unwrap();
+        assert_eq!((options.fonts, options.gl), (None, "d3d11-warp"));
+        assert!(RunOptions::parse(windows, &args("--fonts gray cargo run")).is_err());
+        assert!(RunOptions::parse(linux, &args("--fonts lcd cargo run")).is_err());
+        assert!(RunOptions::parse(linux, &[]).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_vm_lock_is_only_taken_and_given_back_by_its_owner() {
+        let dir = std::env::temp_dir().join(format!("asrs host-lock-{}", std::process::id()));
+        fs::create_dir_all(dir.join(VM_LOCK)).unwrap();
+        let path = dir.display().to_string();
+        let run = |script: &str| {
+            let output = Command::new("sh").arg("-c").arg(script).output().unwrap();
+            output.status.success()
+        };
+        assert!(!run(&lock_script(&path, "a")));
+        fs::remove_dir(dir.join(VM_LOCK)).unwrap();
+        assert!(run(&lock_script(&path, "a")));
+        assert!(run(&lock_script(&path, "a")));
+        assert!(!run(&lock_script(&path, "b")));
+        let stopped = dir.join("stopped");
+        let stop = format!("touch {}", sh_quote(&stopped.display().to_string()));
+        assert!(!run(&unlock_script(&path, "b", &stop)));
+        assert!(!stopped.exists());
+        let trash = "gio() { mv \"$2\" \"$2.gone\"; }\n";
+        assert!(run(&format!("{trash}{}", unlock_script(&path, "a", &stop))));
+        assert!(stopped.exists() && !dir.join(VM_LOCK).exists());
+        fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn desktop_runs_queue() {
+        let home = std::env::temp_dir().join(format!("asrs-host-gui-{}", std::process::id()));
+        fs::create_dir_all(&home).unwrap();
+        let script = linux_gui_script("", "$HOME", "echo start >> log; sleep 0.2; echo end >> log");
+        let children: Vec<_> = (0..3)
+            .map(|_| {
+                let mut command = Command::new("bash");
+                command.arg("-c").arg(&script).env("HOME", &home);
+                command.stderr(Stdio::null()).spawn().unwrap()
+            })
+            .collect();
+        for mut child in children {
+            assert!(child.wait().unwrap().success());
+        }
+        assert_eq!(
+            fs::read_to_string(home.join("log")).unwrap(),
+            "start\nend\n".repeat(3)
+        );
+        fs::remove_dir_all(&home).unwrap();
+    }
+
+    #[test]
+    fn description_differences_name_the_field() {
+        let parse = |text: &str| json::parse(text).unwrap();
+        let differences = |a: &str, b: &str| {
+            let mut out = Vec::new();
+            description_differences("", &parse(a), &parse(b), &mut out);
+            out
+        };
+        assert!(differences(r#"{"a":{"b":1},"c":2}"#, r#"{"c":2,"a":{"b":1}}"#).is_empty());
+        let found = differences(
+            r#"{"a":{"b":"x"},"gone":1}"#,
+            r#"{"a":{"b":"y"},"new":[2]}"#,
+        );
+        assert_eq!(found.len(), 3);
+        assert!(found[0].starts_with("/a/b: recorded \"x\", here \"y\""));
+    }
+
+    #[test]
+    fn grey_text_is_told_from_lcd_text() {
+        let mut image = Rgba {
+            width: 4,
+            height: 2,
+            data: [128, 128, 128, 255].repeat(8),
+        };
+        let boxes = json::parse(
+            r#"{"scale":2,"rows":[{"id":"a","rect":[0,0,1,1]},{"id":"b","rect":[1,0,1,1]},{"id":"color/0","rect":[0,0,2,1]}]}"#,
+        )
+        .unwrap();
+        image.data[4 * 3] = 129;
+        assert_eq!(
+            chromatic_rows(&boxes, &image).unwrap(),
+            [("a".to_owned(), 0), ("b".to_owned(), 1)]
+        );
+    }
+
+    #[test]
+    fn font_files_are_named_without_the_unpacked_directory() {
+        assert_eq!(
+            font_key("/home/admin/asrs-fonts/1/root/usr/share/fonts/truetype/a.ttf"),
+            "/usr/share/fonts/truetype/a.ttf"
+        );
+        assert_eq!(
+            font_key("C:/Windows/Fonts/arial.ttf"),
+            "C:/Windows/Fonts/arial.ttf"
+        );
     }
 
     #[test]
