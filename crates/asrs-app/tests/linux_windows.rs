@@ -33,7 +33,7 @@ use asrs_ui::platform::{
 };
 
 const ELECTRON_MAIN: &str = r#"
-const { app, BrowserWindow, Menu } = require("electron");
+const { app, BrowserWindow, Menu, screen } = require("electron");
 const readline = require("readline");
 const out = (line) => process.stdout.write(line + "\n");
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -76,6 +76,15 @@ app.whenReady().then(() => {
       out("wheel ready");
     } else if (request.op === "wheels") {
       out("wheels " + JSON.stringify(await win.webContents.executeJavaScript("window.__wheel")));
+    } else if (request.op === "displays") {
+      const areas = screen.getAllDisplays().map(({ workArea: a }) => [a.x, a.y, a.width, a.height].map((v) => v.toFixed(1)));
+      out("displays [" + areas.map((a) => "[" + a.join(", ") + "]").join(", ") + "]");
+    } else if (request.op === "centred") {
+      const win = new BrowserWindow({ width: 900, height: 500, minWidth: 200, minHeight: 100, show: false });
+      await wait(300);
+      const { x, y } = win.getBounds();
+      out("centred [" + x.toFixed(1) + ", " + y.toFixed(1) + "]");
+      win.destroy();
     } else if (request.op === "close") {
       win.destroy();
       await wait(300);
@@ -739,9 +748,16 @@ async fn lists(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
         format!("{got:?}"),
     );
 
+    let Some(port) = std::env::var_os("ASRS_RFB_PORT") else {
+        println!("linux windows: one screen only, ASRS_RFB_PORT is not set");
+        return;
+    };
     let edge = x + 400.0;
-    let split = probe::split_monitors(Some(edge as u16));
-    report.check("two monitors", split, "");
+    let screens = [
+        format!("{edge}x1800+0+0"),
+        format!("{}x1800+{edge}+0", 2880.0 - edge),
+    ];
+    report.check("two screens", set_screens(&port, &screens), "");
     sleep(cx, 900).await;
     let (x, _, _, _) = with_window(cx, handle, |w| platform::window_bounds(w)).expect("bounds");
     with_window(cx, handle, |w| w.activate_window());
@@ -802,8 +818,73 @@ async fn lists(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
             sleep(cx, 400).await;
         }
     }
-    report.check("one monitor", probe::split_monitors(None), "");
+    with_window(cx, handle, |w| w.activate_window());
+    sleep(cx, 600).await;
+    let (x, y, _, _) = with_window(cx, handle, |w| platform::window_bounds(w)).expect("bounds");
+    // A panel under the left screen, which ends a row below where the menu opens.
+    let bottom = y + 120.0 + 2.0 * row;
+    let panel = [0.0, 0.0, edge, bottom].map(|v| format!("{v}")).join(", ");
+    let set = Command::new("xprop")
+        .args(["-root", "-f", "_NET_WORKAREA", "32c"])
+        .args(["-set", "_NET_WORKAREA", &panel])
+        .status();
+    report.check("a work area", set.is_ok_and(|s| s.success()), "");
+    sleep(cx, 600).await;
+    let electron = Electron::start();
+    electron.reply(cx, "ready ").await;
+    let theirs = electron
+        .request(cx, r#"{"op":"displays"}"#, "displays ")
+        .await;
+    let displays = platform::x11_displays(2880.0).expect("displays");
+    let ours: Vec<_> = displays.displays.iter().map(|d| d.work_area).collect();
+    report.check(
+        "work areas",
+        format!("{ours:?}") == theirs,
+        format!("{ours:?}, Electron {theirs}"),
+    );
+    cx.update(|cx| {
+        handle.update(cx, |_, window, cx| {
+            platform::popup_menu(window, cx, menu(), (edge - x) as i32 - 300, 120, |_, _| {});
+        })
+    })
+    .expect("window");
     sleep(cx, 900).await;
+    let menu = popup_bounds(cx, handle).expect("a menu");
+    report.check(
+        "the menu stays above the panel",
+        menu.1 + menu.3 <= bottom,
+        format!("{menu:?} {bottom}"),
+    );
+    probe::post_keys(&[ESCAPE]);
+    sleep(cx, 700).await;
+    let satellite = cx
+        .update(|cx| windows::open_satellite(cx, "u", SatellitePlacement::Unplaced, blank))
+        .expect("satellite")
+        .0;
+    sleep(cx, 900).await;
+    let placed = handle_of(cx, satellite);
+    let bounds = with_window(cx, placed, |w| platform::window_bounds(w)).expect("bounds");
+    let request = r#"{"op":"centred"}"#;
+    let theirs = electron.request(cx, request, "centred ").await;
+    let ours = format!("{:?}", [bounds.0, bounds.1]);
+    report.check(
+        "a window without a place",
+        ours == theirs,
+        format!("{ours}, Electron {theirs}"),
+    );
+    cx.update(|cx| windows::close(cx, satellite));
+    sleep(cx, 600).await;
+    let one = set_screens(&port, &["2880x1800+0+0".to_owned()]);
+    report.check("one screen", one, "");
+    sleep(cx, 900).await;
+}
+
+fn set_screens(port: &std::ffi::OsStr, screens: &[String]) -> bool {
+    Command::new(vectors::workspace_root().join("xtask/hosts/linux/screens.py"))
+        .arg(port)
+        .args(screens)
+        .status()
+        .is_ok_and(|status| status.success())
 }
 
 fn main() {
