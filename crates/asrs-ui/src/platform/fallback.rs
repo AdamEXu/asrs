@@ -230,6 +230,7 @@ pub(super) mod window {
     }
 }
 
+#[cfg(not(windows))]
 pub(super) mod dialog {
     use std::path::PathBuf;
 

@@ -25,6 +25,7 @@ pub(super) use super::fallback::*;
 use super::{MenuPath, PopupEntry, PopupMenu, SelectMenu, SelectMenuItemKind, WheelDelta};
 use crate::menu::{CloseHandler, ListStyle, MenuView, Placement};
 
+pub(super) mod dialog;
 mod menu;
 #[cfg(feature = "parity")]
 pub(crate) mod offscreen;
