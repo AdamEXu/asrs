@@ -235,6 +235,8 @@ pub struct TextField<M: FieldModel> {
     committed: String,
     hovered: bool,
     pressed: bool,
+    /// Whether the press was on the line of text, which a drag then selects from.
+    selecting: bool,
     spin: Spin,
     _subscription: Subscription,
 }
@@ -281,6 +283,7 @@ impl<M: FieldModel> TextField<M> {
             committed: shown,
             hovered: false,
             pressed: false,
+            selecting: false,
             spin: Spin::default(),
             _subscription: subscription,
         }
@@ -598,6 +601,26 @@ impl<M: FieldModel> TextField<M> {
         });
     }
 
+    /// A drag above or below the line, which on some platforms selects to its end there.
+    fn drag_beside(&mut self, y: Pixels, line: Bounds<Pixels>, cx: &mut Context<'_, Self>) {
+        let start = y < line.top();
+        if !Behavior::current().moves_to_line_edge() || (!start && y < line.bottom()) {
+            return;
+        }
+        self.editor.update(cx, |state, cx| {
+            let selected = state.selected_range();
+            let anchor = match state.is_selection_reversed() {
+                true => selected.end,
+                false => selected.start,
+            };
+            if start {
+                state.set_selected_range_with_direction(0..anchor, true, cx);
+            } else {
+                state.set_selected_range(anchor..state.value().len(), cx);
+            }
+        });
+    }
+
     /// The spin button in the box `[x, y, width, height]` (device px), which the pointer keeps
     /// turning after a press on it wherever it goes.
     fn spin_button(
@@ -905,7 +928,7 @@ impl<M: FieldModel> Render for TextField<M> {
             size: size(px(box_width), px(box_height)),
         };
         let placed = Rc::new(std::cell::Cell::new(None::<Bounds<Pixels>>));
-        let pressed_at = placed.clone();
+        let (pressed_at, pressed_in, dragged_in) = (placed.clone(), placed.clone(), placed.clone());
         let mut root = div()
             .id("text-field")
             .key_context(match self.kind {
@@ -976,9 +999,14 @@ impl<M: FieldModel> Render for TextField<M> {
                 .absolute()
                 .inset_0(),
             )
-            .capture_any_mouse_down(cx.listener(|this, event: &MouseDownEvent, _, cx| {
+            .capture_any_mouse_down(cx.listener(move |this, event: &MouseDownEvent, _, cx| {
                 if event.button == MouseButton::Left {
                     this.pressed = true;
+                    this.selecting = pressed_in.get().is_some_and(|bounds| {
+                        let mut line = editor_bounds;
+                        line.origin += bounds.origin;
+                        line.contains(&event.position)
+                    });
                     cx.notify();
                 }
             }))
@@ -986,14 +1014,32 @@ impl<M: FieldModel> Render for TextField<M> {
             .child(editor_box);
         if self.pressed {
             let field = cx.weak_entity();
+            let selecting = self.selecting;
             root = root.child(
                 canvas(
                     |_, _, _| {},
                     move |_, _, window, _| {
+                        let dragged = field.clone();
+                        window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
+                            let Some(bounds) = dragged_in.get() else {
+                                return;
+                            };
+                            if phase != DispatchPhase::Capture || !selecting || !event.dragging() {
+                                return;
+                            }
+                            let mut line = editor_bounds;
+                            line.origin += bounds.origin;
+                            let (y, field) = (event.position.y, dragged.clone());
+                            // After the editor has followed the pointer.
+                            cx.defer(move |cx| {
+                                let _ = field.update(cx, |this, cx| this.drag_beside(y, line, cx));
+                            });
+                        });
                         window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| {
                             if phase == DispatchPhase::Capture {
                                 let _ = field.update(cx, |this, cx| {
                                     this.pressed = false;
+                                    this.selecting = false;
                                     cx.notify();
                                 });
                             }
