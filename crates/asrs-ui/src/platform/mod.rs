@@ -18,8 +18,8 @@ use mac as imp;
 use win as imp;
 
 pub mod dialog;
-#[cfg(not(target_os = "linux"))]
 pub mod motion;
+#[cfg(not(target_os = "linux"))]
 pub mod parent;
 pub mod power;
 pub mod probe;
