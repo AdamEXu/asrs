@@ -14,8 +14,8 @@ use asrs_parity::cve1::Value;
 use asrs_parity::json::{self, Json};
 use asrs_parity::vectors::{self, Record};
 use asrs_services::video::{
-    Handle, LogArg, LogLevel, MessageBox, OpenDialog, VideoConfig, VideoEvent, VideoHost,
-    VideoProcessor,
+    FfmpegInstall, Handle, LogArg, LogLevel, MessageBox, OpenDialog, VideoConfig, VideoEvent,
+    VideoHost, VideoProcessor,
 };
 
 #[path = "../../asrs-cli/src/js_json.rs"]
@@ -257,23 +257,8 @@ impl VideoHost for Host {
     fn mkdir_recursive(&mut self, _path: &str) -> Result<(), JsError> {
         Ok(())
     }
-    fn read_file(&mut self, path: &str) -> Result<Vec<u8>, JsError> {
-        panic!("read {path}");
-    }
     fn read_file_sync(&mut self, path: &str) -> Result<Vec<u8>, JsError> {
         panic!("read {path}");
-    }
-    fn unlink(&mut self, path: &str) -> Result<(), JsError> {
-        panic!("unlink {path}");
-    }
-    fn rename(&mut self, from: &str, _to: &str) -> Result<(), JsError> {
-        panic!("rename {from}");
-    }
-    fn chmod(&mut self, path: &str, _mode: u32) -> Result<(), JsError> {
-        panic!("chmod {path}");
-    }
-    fn sha256_hex(&mut self, _data: &[u8]) -> String {
-        panic!("sha256");
     }
     fn random(&mut self) -> f64 {
         self.random.pop_front().expect("recorded random numbers")
@@ -304,6 +289,9 @@ impl VideoHost for Host {
     }
     fn download(&mut self, url: &str, _folder: &str, _filename: &str) -> Handle {
         panic!("download {url}");
+    }
+    fn install(&mut self, install: FfmpegInstall) -> Handle {
+        panic!("install {install:?}");
     }
     fn fetch(&mut self, _: &JsString, _: &[(JsString, JsValue)], _: f64) -> Handle {
         panic!("fetch");
