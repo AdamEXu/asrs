@@ -1,0 +1,58 @@
+{
+  "protocol": "ftc",
+  "seed": 205,
+  "latencyMs": 1,
+  "endMs": 4000,
+  "client": { "source": "ftc", "address": "192.168.43.1" },
+  "server": { "status": { "activeOpMode": "Tele" } },
+  "steps": [
+    { "t": 0, "client": ["connect"] },
+    { "t": 1100, "server": ["send", { "type": "RECEIVE_CONFIG", "configRoot": { "__type": "custom", "__value": {
+      "b": { "__type": "boolean", "__value": true },
+      "s": { "__type": "string", "__value": "ok" },
+      "bn": { "__type": "boolean", "__value": null },
+      "sn": { "__type": "string", "__value": null },
+      "by": { "__type": "boolean", "__value": "yes" },
+      "s5": { "__type": "string", "__value": 5 },
+      "bm": { "__type": "boolean" },
+      "sm": { "__type": "string" },
+      "ba": { "__type": "boolean", "__value": [1, "a"] },
+      "so": { "__type": "string", "__value": { "a": [true] } },
+      "t/.type": { "__type": "string", "__value": 5 },
+      "u/.type": { "__type": "string", "__value": null },
+      "v/.type": { "__type": "string", "__value": "Pose2d" },
+      "w/.type": { "__type": "string" },
+      "n": { "__type": "double", "__value": "x" },
+      "toString": { "__type": "string", "__value": 1 },
+      "constructor": { "__type": "boolean", "__value": 0 }
+    } } }] },
+    { "t": 1200, "client": ["dump"] },
+    { "t": 1300, "server": ["send", { "type": "RECEIVE_CONFIG", "configRoot": { "__type": "custom", "__value": {
+      "b": { "__type": "boolean", "__value": "yes" },
+      "s": { "__type": "string", "__value": 5 },
+      "bn": { "__type": "boolean", "__value": true },
+      "sn": { "__type": "string", "__value": "now" },
+      "by": { "__type": "boolean", "__value": "yes" },
+      "s5": { "__type": "string", "__value": 5 },
+      "ba": { "__type": "boolean", "__value": [1, "a"] },
+      "so": { "__type": "string", "__value": { "a": [true] } },
+      "t/.type": { "__type": "string", "__value": "Pose2d" },
+      "v/.type": { "__type": "string", "__value": null },
+      "n": { "__type": "string", "__value": "conflict" }
+    } } }] },
+    { "t": 1400, "client": ["dump"] },
+    { "t": 1500, "server": ["send", { "type": "UPDATE_CONFIG", "configRoot": { "__type": "custom", "__value": {
+      "s": { "__type": "string", "__value": "back" },
+      "b": { "__type": "boolean", "__value": null },
+      "by": { "__type": "boolean", "__value": true }
+    } } }] },
+    { "t": 1600, "client": ["dump"] },
+    { "t": 1700, "server": ["send", { "telemetry": [{ "data": { "before": 1, "toString": 5, "after": 2 } }] }] },
+    { "t": 1710, "server": ["sendtext", "{\"telemetry\":[{\"data\":{\"__proto__\":true,\"last\":3}}]}"] },
+    { "t": 1720, "server": ["send", { "telemetry": [{ "data": { "valueOf": "text" } }, { "data": { "skipped": 1 } }] }] },
+    { "t": 1730, "server": ["send", { "telemetry": [{ "data": { "hasOwnProperty/.type": "Pose2d", "hasOwnProperty x": 4 } }] }] },
+    { "t": 1740, "server": ["send", { "status": { "constructor": 1, "toString": "x" } }] },
+    { "t": 1750, "server": ["send", { "telemetry": [{ "data": { "x": 1, "isPrototypeOf": 3 } }] }] },
+    { "t": 1800, "client": ["dump"] }
+  ]
+}

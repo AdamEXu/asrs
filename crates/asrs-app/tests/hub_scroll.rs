@@ -65,13 +65,15 @@ impl Page<'_> {
             let mut log = model.page().shared_log().borrow_mut();
             for i in 0..ROWS {
                 let time = i as f64 / 10.0;
-                log.put_number(&JsString::from("/Value"), time, i as f64);
+                log.put_number(&JsString::from("/Value"), time, i as f64)
+                    .unwrap();
                 let line = JsString::from(format!("line {i}").as_str());
-                log.put_string(&JsString::from("/Messages"), time, line);
+                log.put_string(&JsString::from("/Messages"), time, line)
+                    .unwrap();
             }
             for i in 0..80 {
                 let key = JsString::from(format!("/Field{i:02}").as_str());
-                log.put_number(&key, 0.0, 0.0);
+                log.put_number(&key, 0.0, 0.0).unwrap();
             }
             drop(log);
             model
