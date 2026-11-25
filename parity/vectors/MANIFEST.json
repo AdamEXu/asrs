@@ -578,7 +578,7 @@
     "scroll/jump/macos-aarch64": {"cases":10,"content":"21906c617c41a0d3","generator":"3b6a629908377c37","spec":"parity/specs/scroll/jump.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "scroll/keys/linux-x86_64": {"cases":132,"content":"690550c755f47960","generator":"f723b8d5b425ee2e","spec":"parity/specs/scroll/keys.entry.json","zone":"UTC","generatedOn":"linux-x86_64"},
     "scroll/keys/macos-aarch64": {"cases":132,"content":"38f0b3492993a904","generator":"f723b8d5b425ee2e","spec":"parity/specs/scroll/keys.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
-    "scroll/settings/macos-aarch64": {"cases":552,"content":"71085d3e26e5cefd","generator":"4aef48ea39553b37","spec":"parity/specs/scroll/settings.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
+    "scroll/settings/macos-aarch64": {"cases":504,"content":"7c3033b824b8b515","generator":"b075d7e9d8bfa553","spec":"parity/specs/scroll/settings.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "selection/gestures/linux-aarch64": {"cases":6281,"content":"243918f6f5a3cde5","generator":"43821f2ff5452e20","spec":"parity/specs/selection/gestures.entry.json","zone":"UTC","generatedOn":"linux-aarch64"},
     "selection/gestures/macos-aarch64": {"cases":6292,"content":"e90f8b61ac66183b","generator":"43821f2ff5452e20","spec":"parity/specs/selection/gestures.entry.json","zone":"UTC","generatedOn":"macos-aarch64"},
     "selection/gestures/windows-aarch64": {"cases":6281,"content":"2d8a9b35c924fe56","generator":"43821f2ff5452e20","spec":"parity/specs/selection/gestures.entry.json","zone":"UTC","generatedOn":"windows-aarch64"},
