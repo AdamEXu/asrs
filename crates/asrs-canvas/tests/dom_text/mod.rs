@@ -255,9 +255,16 @@ pub fn check_eligibility(backend: &mut dyn TextBackend, dir: &str, max_channel: 
         let scene = json::parse(&std::fs::read_to_string(read("json")).unwrap()).unwrap();
         backend.set_device_scale(scale as f32);
         let (mut checked, mut max) = (0, 0);
+        let drawn = |id: &str| {
+            id.starts_with("size-")
+                || matches!(id, "opaque-box" | "translucent-box" | "translucent-text")
+        };
         for row in scene.get("rows").and_then(Json::as_array).unwrap() {
             let string = |key: &str| row.get(key).unwrap().as_str().unwrap().to_string_lossy();
             let (id, mode) = (string("id"), string("mode"));
+            if !drawn(&id) {
+                continue;
+            }
             let size = id.strip_prefix("size-");
             let (color, alpha, behind) = match &*id {
                 "opaque-box" => (color, 255, [if dark { 0x44 } else { 0xcc }; 3]),
@@ -266,8 +273,7 @@ pub fn check_eligibility(backend: &mut dyn TextBackend, dir: &str, max_channel: 
                     (color, 255, [tint.round() as u8; 3])
                 }
                 "translucent-text" => ([edge; 3], 64, page),
-                _ if size.is_some() => (color, 255, page),
-                _ => continue,
+                _ => (color, 255, page),
             };
             let rect: Vec<f64> = row
                 .get("rect")
