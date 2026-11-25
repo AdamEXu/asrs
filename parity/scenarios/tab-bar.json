@@ -1,0 +1,382 @@
+{
+  "about": "Interaction (#200): more tabs than fit: a click selects a tab, the bar scrolled by trackpad with both shadows, a hovered tab, a tab dragged to another place and captured mid-drag, the close button, and the add button's menu. Saved HubState (order, selection) is compared",
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Drive"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 1,
+              "title": "Graph",
+              "controller": {
+                "leftSources": [
+                  {
+                    "type": "stepped",
+                    "logKey": "/Drive/LeftVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#2b66a2",
+                      "size": "normal"
+                    }
+                  }
+                ],
+                "rightSources": [
+                  {
+                    "type": "smooth",
+                    "logKey": "/Drive/RightVelocity",
+                    "logType": "Number",
+                    "visible": true,
+                    "options": {
+                      "color": "#e5b31b",
+                      "size": "bold"
+                    }
+                  }
+                ],
+                "discreteSources": [
+                  {
+                    "type": "stripes",
+                    "logKey": "/Drive/Mode",
+                    "logType": "String",
+                    "visible": true,
+                    "options": {
+                      "color": "#80588e"
+                    }
+                  }
+                ],
+                "leftLockedRange": null,
+                "rightLockedRange": null,
+                "leftUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "rightUnitConversion": {
+                  "autoTarget": null,
+                  "preset": null
+                },
+                "leftFilter": 0,
+                "rightFilter": 0,
+                "showRobotMode": false
+              },
+              "controllerUUID": "linegraph00000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 200
+            },
+            {
+              "type": 4,
+              "title": "Table number 0",
+              "controller": [],
+              "controllerUUID": "tabletablenumber0000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table number 1",
+              "controller": [],
+              "controllerUUID": "tabletablenumber1000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table number 2",
+              "controller": [],
+              "controllerUUID": "tabletablenumber2000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table number 3",
+              "controller": [],
+              "controllerUUID": "tabletablenumber3000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table number 4",
+              "controller": [],
+              "controllerUUID": "tabletablenumber4000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table number 5",
+              "controller": [],
+              "controllerUUID": "tabletablenumber5000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table number 6",
+              "controller": [],
+              "controllerUUID": "tabletablenumber6000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table number 7",
+              "controller": [],
+              "controllerUUID": "tabletablenumber7000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            },
+            {
+              "type": 4,
+              "title": "Table number 8",
+              "controller": [],
+              "controllerUUID": "tabletablenumber8000000000000000",
+              "renderer": null,
+              "controlsHeight": 0
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "capture": "overflow",
+      "probes": [
+        ".tab-bar"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 560,
+      "y": 64
+    },
+    {
+      "wait": 300
+    },
+    {
+      "capture": "hover",
+      "probes": [
+        ".tab-bar"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 560,
+      "y": 64
+    },
+    {
+      "mouse": "click",
+      "x": 560,
+      "y": 64
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "capture": "clicked",
+      "probes": [
+        ".tab-bar",
+        ".timeline"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 64,
+        "deltaX": -180,
+        "deltaY": 0,
+        "precise": true
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "scrolled",
+      "probes": [
+        ".tab-bar"
+      ]
+    },
+    {
+      "wheel": {
+        "x": 700,
+        "y": 64,
+        "deltaX": -4000,
+        "deltaY": 0,
+        "precise": true
+      }
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "scrolled-end",
+      "probes": [
+        ".tab-bar"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 64
+    },
+    {
+      "mouse": "down",
+      "x": 700,
+      "y": 64
+    },
+    {
+      "mouse": "move",
+      "x": 690,
+      "y": 64
+    },
+    {
+      "mouse": "move",
+      "x": 620,
+      "y": 64
+    },
+    {
+      "mouse": "move",
+      "x": 540,
+      "y": 64
+    },
+    {
+      "wait": 200
+    },
+    {
+      "capture": "dragging",
+      "probes": [
+        ".tab-bar"
+      ]
+    },
+    {
+      "mouse": "up",
+      "x": 540,
+      "y": 64
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "wait": 300
+    },
+    {
+      "capture": "dragged",
+      "probes": [
+        ".tab-bar"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1007,
+      "y": 22
+    },
+    {
+      "mouse": "click",
+      "x": 1007,
+      "y": 22
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "capture": "closed",
+      "probes": [
+        ".tab-bar"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1074,
+      "y": 22
+    },
+    {
+      "mouse": "click",
+      "x": 1074,
+      "y": 22
+    },
+    {
+      "menu": [
+        "📍 Points"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 630
+    },
+    {
+      "capture": "added",
+      "probes": [
+        ".tab-bar",
+        ".timeline",
+        ".controls-content"
+      ]
+    }
+  ]
+}
