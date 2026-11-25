@@ -29,12 +29,12 @@ use asrs_ui::canvas_view::{
 use asrs_ui::caption::caption_buttons;
 use asrs_ui::focus::{self, FocusRing, ScrollAxis, Traversal};
 use asrs_ui::gpui::{
-    AnyElement, App, AppContext, BoxShadow, ClickEvent, Context, CursorStyle, DispatchPhase,
-    Entity, ExternalPaths, FocusHandle, InteractiveElement, IntoElement, KeyDownEvent, KeyUpEvent,
-    MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent, MouseUpEvent, ParentElement,
-    Render, ScrollDelta, ScrollEvent, ScrollHandle, SharedString, StatefulInteractiveElement,
-    Styled, Subscription, TouchDragEvent, TouchPhase, Window, WindowControlArea, canvas, div,
-    point, px, rgb, rgba,
+    AnyElement, App, AppContext, Bounds, BoxShadow, ClickEvent, Context, CursorStyle,
+    DispatchPhase, Entity, ExternalPaths, FocusHandle, Hsla, InteractiveElement, IntoElement,
+    KeyDownEvent, KeyUpEvent, MouseButton, MouseDownEvent, MouseExitEvent, MouseMoveEvent,
+    MouseUpEvent, ParentElement, Render, ScrollDelta, ScrollEvent, ScrollHandle, SharedString,
+    StatefulInteractiveElement, Styled, Subscription, TouchDragEvent, TouchPhase, Window,
+    WindowControlArea, canvas, div, fill, point, px, rgb, rgba, size,
 };
 use asrs_ui::icon::IconFit;
 use asrs_ui::input;
@@ -364,7 +364,7 @@ fn drag_text_style(bold: bool) -> TextStyle {
 /// A CSS `box-shadow`; GPUI's blur radius is the Gaussian's sigma, half the CSS blur.
 fn box_shadow(color: u32, blur: f32, spread: f32) -> BoxShadow {
     let [r, g, b, a] = color.to_be_bytes();
-    let c: asrs_ui::gpui::Hsla = rgba(u32::from_be_bytes([r, g, b, a])).into();
+    let c: Hsla = rgba(u32::from_be_bytes([r, g, b, a])).into();
     BoxShadow {
         color: c,
         offset: point(px(0.0), px(0.0)),
@@ -372,6 +372,80 @@ fn box_shadow(color: u32, blur: f32, spread: f32) -> BoxShadow {
         spread_radius: px(spread),
         inset: false,
     }
+}
+
+/// How much of a pixel `distance` CSS px outside an edge a `box-shadow` covers.
+fn shadow_coverage(distance: f64, blur: f64, spread: f64, scale: f64) -> f64 {
+    let inside = spread - distance;
+    if blur == 0.0 {
+        return (inside * scale + 0.5).clamp(0.0, 1.0);
+    }
+    let x = inside / (blur / 2.0) / std::f64::consts::SQRT_2;
+    let t = 1.0 / (1.0 + 0.5 * x.abs());
+    // Numerical Recipes' erfc, 1.2e-7 off at most.
+    let poly = [
+        -1.265_512_23,
+        1.000_023_68,
+        0.374_091_96,
+        0.096_784_18,
+        -0.186_288_06,
+        0.278_868_07,
+        -1.135_203_98,
+        1.488_515_87,
+        -0.822_152_23,
+        0.170_872_77,
+    ];
+    let sum = poly.iter().rev().fold(0.0, |sum, c| sum * t + c);
+    let erfc = t * (-x * x + sum).exp();
+    let erf = if x < 0.0 { erfc - 1.0 } else { 1.0 - erfc };
+    (1.0 + erf) / 2.0
+}
+
+/// The `box-shadow` below a box in the window's top left corner, without the part inside the box:
+/// CSS clips that away, and GPUI, which paints it, drops a shadow whose box is outside the clip.
+fn shadow_below(
+    rect: [f64; 4],
+    color: u32,
+    blur: f64,
+    spread: f64,
+    scale: f64,
+) -> impl IntoElement {
+    let [_, _, width, height] = rect;
+    let reach = (blur * 1.5 + spread).ceil();
+    let strip = place([0.0, height, width, reach], (0.0, 0.0));
+    strip.child(
+        canvas(
+            |_, _, _| {},
+            move |bounds, (), window, _| {
+                let coverage = |distance| shadow_coverage(distance, blur, spread, scale);
+                let pixels = |length: f64| (length * scale).ceil() as usize;
+                let (columns, rows, edge) = (pixels(width), pixels(reach), pixels(reach));
+                let edge = edge.min(columns / 2);
+                let mut spans: Vec<(usize, usize)> = (0..edge).map(|x| (x, 1)).collect();
+                spans.push((edge, columns - 2 * edge));
+                spans.extend((columns - edge..columns).map(|x| (x, 1)));
+                let color: Hsla = rgba(color).into();
+                for row in 0..rows {
+                    let y = row as f64 / scale;
+                    for &(column, count) in &spans {
+                        let x = column as f64 / scale;
+                        let center = x + 0.5 / scale;
+                        let alpha = coverage(y + 0.5 / scale)
+                            * coverage(-center)
+                            * coverage(center - width);
+                        let origin = point(px(x as f32), px(y as f32));
+                        let cell =
+                            size(px((count as f64 / scale) as f32), px((1.0 / scale) as f32));
+                        window.paint_quad(fill(
+                            Bounds::new(bounds.origin + origin, cell),
+                            color.opacity(alpha as f32),
+                        ));
+                    }
+                }
+            },
+        )
+        .size_full(),
+    )
 }
 
 /// `canvas.timeline-canvas`'s `border` and `border-radius`.
@@ -1399,15 +1473,14 @@ impl<H: FrameHost> Render for HubFrame<H> {
         if let Some(rect) = layout.rect(FrameElement::SideBarShadow)
             && shadow_shown
         {
-            let shadow = if dark {
-                box_shadow(0x000000ff, 0.0, 0.7)
+            let (color, blur, spread) = if dark {
+                (0x000000ff, 0.0, 0.7)
             } else {
-                box_shadow(0x777777ff, 3.0, 0.0)
+                (0x777777ff, 3.0, 0.0)
             };
-            root = root.child(probe(
-                FrameElement::SideBarShadow,
-                place(rect, (0.0, 0.0)).shadow(vec![shadow]),
-            ));
+            root = root.child(probe(FrameElement::SideBarShadow, place(rect, (0.0, 0.0))));
+            let below = shadow_below(rect, color, blur, spread, f64::from(scale));
+            root = root.child(below);
         }
         if let Some(rect) = layout.rect(FrameElement::ViewerBackground) {
             let mut bg = place(rect, (0.0, 0.0)).bg(rgb(theme.background));
@@ -1773,5 +1846,33 @@ impl<H: FrameHost> Render for HubFrame<H> {
             root = root.child(caption_buttons(dark, window, cx));
         }
         root
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::shadow_coverage;
+
+    #[test]
+    fn box_shadows_follow_the_gaussian() {
+        // The standard normal distribution at these many standard deviations of 1.5 px.
+        for (sigmas, expected) in [
+            (0.0, 0.5),
+            (1.0, 0.158_655_3),
+            (-1.0, 0.841_344_7),
+            (2.0, 0.022_750_1),
+        ] {
+            let coverage = shadow_coverage(sigmas * 1.5, 3.0, 0.0, 1.0);
+            assert!((coverage - expected).abs() < 1e-6, "{sigmas}: {coverage}");
+        }
+    }
+
+    #[test]
+    fn a_shadow_without_blur_is_its_spread() {
+        let row = |pixel: f64, scale: f64| shadow_coverage((pixel + 0.5) / scale, 0.0, 0.7, scale);
+        let close = |coverage: f64, expected: f64| (coverage - expected).abs() < 1e-9;
+        assert!(close(row(0.0, 1.0), 0.7) && close(row(1.0, 1.0), 0.0));
+        assert!(close(row(0.0, 2.0), 1.0) && close(row(1.0, 2.0), 0.4));
+        assert!(close(row(-1.0, 1.0), 1.0));
     }
 }

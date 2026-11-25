@@ -100,6 +100,11 @@ fn a_touch_drags_a_field() {
     run_in_a_fresh_home("touch_drag");
 }
 
+#[test]
+fn a_reopened_hub_keeps_its_controls() {
+    run_in_a_fresh_home("reopened_hub");
+}
+
 fn records() -> Vec<Record> {
     vectors::load("files/hub-messages").unwrap_or_else(|e| panic!("{e}"))
 }
@@ -839,4 +844,37 @@ fn touch_drag() {
     app.touch(hub, TouchPhase::Ended, list[0], list[1]);
     assert_eq!(app.drag(hub, "Field"), None);
     assert_eq!(app.page(hub, items), 1, "dropped into the list");
+}
+
+#[test]
+#[ignore = "run by a_reopened_hub_keeps_its_controls with its own home directory"]
+fn reopened_hub() {
+    let Some(mut app) = AppUnderTest::start(|_| {}) else {
+        return;
+    };
+    let first = app.only_hub();
+    let saved = |height: f64| {
+        let tab = r#"{"type":1,"title":"Line Graph","controller":null,"controllerUUID":"tab","renderer":null,"controlsHeight":HEIGHT}"#
+            .replace("HEIGHT", &height.to_string());
+        let state = format!(
+            r#"{{"x":10,"y":10,"width":1100,"height":650,"state":{{"sidebar":{{"width":300,"expanded":[]}},"tabs":{{"selected":0,"tabs":[{tab}]}}}}}}"#
+        );
+        asrs_js::json::parse_str(&state).expect("a state")
+    };
+    for height in [200.0, 0.0] {
+        let opened = app
+            .cx
+            .update(|cx| MainProcess::open_hub(cx, Some(&saved(height)), Vec::new()))
+            .expect("a hub");
+        app.settle();
+        assert_ne!(opened, first);
+        let controls = app.page(opened, |hub| {
+            hub.tabs()
+                .tab(0)
+                .expect("the tab")
+                .controls_height()
+                .clone()
+        });
+        assert_eq!(controls, JsValue::Number(height));
+    }
 }

@@ -1452,7 +1452,9 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
         asset_download::start(asset_download::Config::new(folders), cx);
     }
     every(cx, ASSET_RELOAD_PERIOD, |cx| {
-        MainProcess::assets_updated(cx);
+        asset_download::between_extractions(cx, |cx| {
+            MainProcess::assets_updated(cx);
+        });
     });
     every(cx, STATE_SAVE_PERIOD, MainProcess::save_state);
     every(

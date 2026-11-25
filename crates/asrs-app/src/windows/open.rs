@@ -3,6 +3,7 @@ use asrs_ui::gpui::{
     WindowBackgroundAppearance, WindowBounds, point, px, size,
 };
 use asrs_ui::platform::{self, NativeWindow};
+use asrs_ui::theme::{Appearance, ThemeSource};
 
 use super::{Rect, WindowId, WindowKind, WindowOptions, Windows, focus_events, placement};
 
@@ -184,6 +185,27 @@ fn track<V: Render>(
     });
 }
 
+fn follow_theme<V: Render>(window: &mut Window, entity: &Entity<V>, cx: &mut App) {
+    set_dark_frame(window, cx);
+    entity.update(cx, |_, cx| {
+        cx.observe_window_appearance(window, |_, window, cx| {
+            // GPUI sets the frame to the system's theme after it has told its observers.
+            let handle = window.window_handle();
+            cx.spawn(async move |_, cx| {
+                let _ = handle.update(cx, |_, window, cx| set_dark_frame(window, cx));
+            })
+            .detach();
+        })
+        .detach();
+        cx.observe_global_in::<ThemeSource>(window, |_, window, cx| set_dark_frame(window, cx))
+            .detach();
+    });
+}
+
+fn set_dark_frame(window: &Window, cx: &App) {
+    platform::set_dark_frame(window, Appearance::of(window, cx) == Appearance::Dark);
+}
+
 /// Electron's size constraints for the window, converted to content sizes. A constraint with a
 /// zero dimension is `IsEmpty()` there and is not applied.
 fn content_limits(native: &NativeWindow, options: &WindowOptions) -> (Option<Size>, Option<Size>) {
@@ -280,6 +302,9 @@ pub(super) fn open<V: Render>(
                 platform::keep_visible_when_inactive(window);
             }
             track(id, frame, window, &entity, cx);
+            if cfg!(windows) {
+                follow_theme(window, &entity, cx);
+            }
             native = platform::native_window(window);
             entity
         },
