@@ -12,16 +12,14 @@ mod swerve;
 
 use std::collections::{HashMap, HashSet};
 
-use asrs_hub::hub::{HubModel, HubPage};
-use asrs_hub::tabs::TabRef;
+use asrs_hub::hub::HubModel;
 use asrs_js::math;
 use asrs_model::tab_type::TabType;
-use asrs_ui::gpui::{
-    AnyElement, App, Bounds, Context, Div, FocusHandle, Pixels, Styled, Window, div, px,
-};
+use asrs_ui::gpui::{AnyElement, App, Context, Div, Styled, Window, div, px};
 use asrs_ui::theme::Appearance;
 
 use super::frame::{FrameHost, HubFrame};
+use super::settings_panel::tab_key;
 
 pub use joysticks::JoysticksTab;
 pub use settings::Control;
@@ -41,16 +39,6 @@ pub struct CanvasTabViews {
 }
 
 impl CanvasTabViews {
-    /// Scrolls the settings panel that holds the focused element, at `bounds`, to it.
-    pub fn scroll_to(&mut self, focused: &FocusHandle, bounds: Bounds<Pixels>, window: &Window) {
-        self.settings.scroll_to(focused, bounds, window);
-    }
-
-    /// The tab whose settings panel holds the focused element.
-    pub fn holding(&self, focused: &FocusHandle, window: &Window) -> Option<usize> {
-        self.settings.holding(focused, window)
-    }
-
     fn retain(&mut self, live: &HashSet<usize>, cx: &mut App) {
         let mut dropped = Vec::new();
         self.swerve.retain(|key, view| {
@@ -66,11 +54,6 @@ impl CanvasTabViews {
         self.joysticks.retain(|key, _| live.contains(key));
         self.settings.retain(live);
     }
-}
-
-/// A tab by the address of its controller, which stays put while the tab exists.
-fn tab_key(tab: &TabRef<'_, HubPage>) -> usize {
-    std::ptr::from_ref(tab.controller()).cast::<()>() as usize
 }
 
 /// The index and key of the displayed tab when its type is `kind`.
@@ -141,6 +124,7 @@ impl<H: FrameHost> HubFrame<H> {
         let live = self.host().hub(cx).tabs().tabs();
         let live = live.map(|tab| tab_key(&tab)).collect();
         self.canvas_tabs.retain(&live, cx);
+        self.settings_panels.retain(&live);
         if let Some(element) = self.swerve_element(rect, appearance, scale, window, cx) {
             return Some(element);
         }

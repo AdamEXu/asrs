@@ -1,0 +1,189 @@
+{
+  "about": "Tab (#375) through the 2D and 3D field settings in a panel lower than they are, which scrolls to the focused control",
+  "prefs": {
+    "coordinateSystem": "wall-blue"
+  },
+  "userData": {
+    "userAssets/Field2d_Rings/config.json": {
+      "name": "Rings",
+      "sourceUrl": "https://example.com/",
+      "isFTC": false,
+      "coordinateSystem": "center-red",
+      "topLeft": [
+        20,
+        20
+      ],
+      "bottomRight": [
+        700,
+        300
+      ],
+      "widthInches": 648,
+      "heightInches": 324
+    },
+    "userAssets/Field2d_Rings/image.png": {
+      "$file": "assets/parity-pad.png"
+    }
+  },
+  "gl": true,
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 2,
+              "title": "Field",
+              "controller": {
+                "sources": [],
+                "field": "FRC:Rings",
+                "orientation": 0,
+                "size": "large"
+              },
+              "controllerUUID": "field2d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 100
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "focus": true
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "2d",
+      "count": 24
+    },
+    {
+      "traverse": "2d-back",
+      "count": 24,
+      "back": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 3,
+              "title": "3D",
+              "controller": {
+                "sources": [],
+                "game": "FRC:Evergreen"
+              },
+              "controllerUUID": "field3d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 100
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "move",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "down",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "up",
+      "x": 150,
+      "y": 60
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 80
+    },
+    {
+      "traverse": "3d",
+      "count": 16
+    },
+    {
+      "traverse": "3d-back",
+      "count": 16,
+      "back": true
+    }
+  ]
+}

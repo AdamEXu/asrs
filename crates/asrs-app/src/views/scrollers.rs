@@ -19,7 +19,7 @@ pub enum Area {
     Console(usize),
     Statistics(usize),
     StatisticsSettings(usize),
-    CanvasSettings(usize),
+    Settings(usize),
     /// A source list's UUID.
     List(String),
     SideBar,
@@ -194,7 +194,7 @@ impl<H: FrameHost> HubFrame<H> {
             Area::Console(key) => self.console_scroll_to(*key, to[1], cx),
             Area::Statistics(key) => self.statistics_scroll_to(*key, to, cx),
             Area::StatisticsSettings(key) => self.statistics_settings_scroll_to(*key, to[1], cx),
-            Area::CanvasSettings(key) => self.canvas_settings_scroll_to(*key, to[1], scale),
+            Area::Settings(key) => self.settings_scroll_to(*key, to[1], scale),
             Area::List(uuid) => self.source_list_scroll_to(uuid, to[1], scale),
             Area::SideBar
             | Area::Timeline
@@ -211,7 +211,7 @@ impl<H: FrameHost> HubFrame<H> {
             Area::Console(key) => self.console_smooth(*key, by[1], cx),
             Area::Statistics(key) => self.statistics_smooth(*key, by, cx),
             Area::StatisticsSettings(key) => self.statistics_settings_smooth(*key, by[1], cx),
-            Area::CanvasSettings(key) => self.canvas_settings_smooth(*key, by[1], cx),
+            Area::Settings(key) => self.settings_smooth(*key, by[1], cx),
             Area::List(uuid) => self.source_list_smooth(uuid, by[1], cx),
             Area::SideBar => self.host_mut().side_bar_smooth(by[1], cx),
             Area::Timeline => self.timeline_smooth(by, cx),
@@ -229,10 +229,10 @@ impl<H: FrameHost> HubFrame<H> {
             Area::Console(key) => self.console_range(*key),
             Area::Statistics(key) => self.statistics_range(*key),
             Area::StatisticsSettings(key) => self.statistics_settings_range(*key),
-            Area::CanvasSettings(key) if self.scrollers.bars.contains_key(area) => {
-                self.canvas_settings_range(*key)
+            Area::Settings(key) if self.scrollers.bars.contains_key(area) => {
+                self.settings_range(*key)
             }
-            Area::CanvasSettings(_) => None,
+            Area::Settings(_) => None,
             Area::List(uuid) => self.source_list_range(uuid),
             Area::SideBar => self.host().side_bar_range(cx),
             Area::Timeline => self.timeline_range(),
@@ -253,8 +253,8 @@ impl<H: FrameHost> HubFrame<H> {
             return Some(Area::SideBar);
         }
         let list = self.focused_source_list(focused, window).map(Area::List);
-        let settings = || self.canvas_tabs.holding(focused, window);
-        list.or_else(|| settings().map(Area::CanvasSettings))
+        let settings = || self.settings_panels.holding(focused, window);
+        list.or_else(|| settings().map(Area::Settings))
             .or_else(|| self.focused_statistics(focused, cx))
             .or_else(|| self.focused_table(focused).map(Area::Table))
     }

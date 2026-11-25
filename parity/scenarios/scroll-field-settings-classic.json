@@ -1,0 +1,268 @@
+{
+  "about": "Interaction (#412): the classic scrollbars of the 2D and 3D field settings, hovered and pressed, and what is laid out next to one",
+  "scrollbars": "classic",
+  "platforms": [
+    "darwin"
+  ],
+  "prefs": {
+    "coordinateSystem": "wall-blue"
+  },
+  "userData": {
+    "userAssets/Field2d_Rings/config.json": {
+      "name": "Rings",
+      "sourceUrl": "https://example.com/",
+      "isFTC": false,
+      "coordinateSystem": "center-red",
+      "topLeft": [
+        20,
+        20
+      ],
+      "bottomRight": [
+        700,
+        300
+      ],
+      "widthInches": 648,
+      "heightInches": 324
+    },
+    "userAssets/Field2d_Rings/image.png": {
+      "$file": "assets/parity-pad.png"
+    }
+  },
+  "gl": true,
+  "actions": [
+    {
+      "open": [
+        "app:drive"
+      ]
+    },
+    {
+      "idle": true
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 2,
+              "title": "Field",
+              "controller": {
+                "sources": [],
+                "field": "FRC:Rings",
+                "orientation": 0,
+                "size": "large"
+              },
+              "controllerUUID": "field2d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 100
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "2d-top",
+      "probes": [
+        ".controls-content",
+        "div.field-2d-settings",
+        "select.field-select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1094,
+      "y": 560
+    },
+    {
+      "mouse": "move",
+      "x": 1094,
+      "y": 561
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "2d-hover",
+      "probes": [
+        ".controls-content",
+        "div.field-2d-settings",
+        "select.field-select"
+      ]
+    },
+    {
+      "mouse": "down",
+      "x": 1094,
+      "y": 645
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "up",
+      "x": 1094,
+      "y": 645
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "2d-paged",
+      "probes": [
+        ".controls-content",
+        "div.field-2d-settings",
+        "select.field-select"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "2d-rest",
+      "probes": [
+        ".controls-content",
+        "div.field-2d-settings",
+        "select.field-select"
+      ]
+    },
+    {
+      "main": "restore-state",
+      "data": {
+        "sidebar": {
+          "width": 300,
+          "expanded": [
+            "/Odometry"
+          ]
+        },
+        "tabs": {
+          "selected": 1,
+          "tabs": [
+            {
+              "type": 0,
+              "title": "",
+              "controller": null,
+              "controllerUUID": "documentation0000000000000000000",
+              "renderer": "",
+              "controlsHeight": 0
+            },
+            {
+              "type": 3,
+              "title": "3D",
+              "controller": {
+                "sources": [],
+                "game": "FRC:Evergreen"
+              },
+              "controllerUUID": "field3d0000000000000000000000000",
+              "renderer": null,
+              "controlsHeight": 100
+            }
+          ]
+        }
+      }
+    },
+    {
+      "idle": true
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "3d-top",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 1094,
+      "y": 560
+    },
+    {
+      "mouse": "move",
+      "x": 1094,
+      "y": 561
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "3d-hover",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "mouse": "down",
+      "x": 1094,
+      "y": 645
+    },
+    {
+      "wait": 100
+    },
+    {
+      "mouse": "up",
+      "x": 1094,
+      "y": 645
+    },
+    {
+      "wait": 600
+    },
+    {
+      "capture": "3d-paged",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    },
+    {
+      "mouse": "move",
+      "x": 700,
+      "y": 20
+    },
+    {
+      "wait": 1500
+    },
+    {
+      "capture": "3d-rest",
+      "probes": [
+        ".controls-content",
+        "div.field-3d-settings",
+        "select.field-select",
+        "div.xr-button"
+      ]
+    }
+  ]
+}

@@ -21,6 +21,7 @@ pub mod range;
 pub mod satellite_host;
 mod scrollers;
 pub mod select;
+pub mod settings_panel;
 pub mod sidebar;
 pub mod source_list;
 pub mod statistics;

@@ -41,13 +41,15 @@ use asrs_ui::input::style::CONTROL_FONT;
 use asrs_ui::input::{Select, SelectEvent};
 use asrs_ui::parity::probed;
 use asrs_ui::platform;
+use asrs_ui::scroll;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FOCUS_RING_WIDTH, FONT_FAMILY, chains};
 use asrs_ui::tooltip::{titled, untitled};
 
-use super::frame::{FrameHost, HubFrame, SETTINGS_SECTION};
+use super::frame::{FrameHost, HubFrame};
 use super::select::FormSelect;
+use super::settings_panel::{self, SettingsPanel};
 use crate::main_process::app_root;
 
 /// `div.field-3d-canvas-container`'s `height: calc(100% + 26px)`, or `+ 10px` when `.fixed`.
@@ -1210,6 +1212,7 @@ impl<H: FrameHost> HubFrame<H> {
         let (index, tab) = tab?;
         let renderer = tab.renderer().downcast_ref::<Field3dTab>()?;
         let key = tab_key(renderer);
+        let panel_key = settings_panel::tab_key(&tab);
         let controller = tab.controller().downcast_ref::<Field3dController>()?;
         let page = hub.page();
         let names: Vec<(JsString, JsString, bool)> = page
@@ -1240,15 +1243,21 @@ impl<H: FrameHost> HubFrame<H> {
         let dark = appearance == Appearance::Dark;
         let theme = appearance.theme();
 
-        let width = math::min2(layout_unit(controls[2] * 0.4), SETTINGS_MAX_WIDTH);
+        let outer = math::min2(layout_unit(controls[2] * 0.4), SETTINGS_MAX_WIDTH);
         let settings = [
-            controls[0] + controls[2] - width - 1.0,
+            controls[0] + controls[2] - outer - 1.0,
             controls[1],
-            width + 1.0,
+            outer + 1.0,
             controls[3],
         ];
         let content_x = settings[0] + 1.0;
         let tall = math::min2(math::max2(controls[3] - 85.0, 40.0), 100.0);
+        let content_height = 5.0 + 2.0 * TITLE_HEIGHT + FIELD_INPUT_HEIGHT + tall;
+        let width = if content_height > controls[3] {
+            outer - scroll::style(cx).reserved()
+        } else {
+            outer
+        };
 
         let select_w = {
             let mut style = TextStyle::new(CONTROL_FONT);
@@ -1332,11 +1341,11 @@ impl<H: FrameHost> HubFrame<H> {
         let field_title = title("Field", 5.0, window);
         let xr_title = title("XR", 5.0 + TITLE_HEIGHT + FIELD_INPUT_HEIGHT, window);
 
-        let split_w = width * 0.8;
-        let button_w = split_w * 0.6;
-        let button_h = tall * 0.65;
+        let split_w = layout_unit(width * 0.8);
+        let button_w = layout_unit(split_w * 0.6);
+        let button_h = layout_unit(tall * 0.65);
         let button = [
-            width / 2.0 - split_w / 2.0 + (split_w - button_w) / 2.0,
+            width / 2.0 - split_w / 2.0 + layout_unit((split_w - button_w) / 2.0),
             5.0 + 2.0 * TITLE_HEIGHT + FIELD_INPUT_HEIGHT + 8.0,
             button_w,
             button_h,
@@ -1408,11 +1417,7 @@ impl<H: FrameHost> HubFrame<H> {
             .w(px(select_w as f32))
             .h(px(SELECT_HEIGHT as f32))
             .child(select);
-        let place = focus::place(("field-3d-settings", key), window, cx);
-        let block = focus::section(local(settings, controls), SETTINGS_SECTION, &place)
-            .border_l_1()
-            .border_color(rgb(if dark { 0x000000 } else { 0xdddddd }))
-            .overflow_hidden()
+        let content = div()
             .child(field_title)
             .child(probed(
                 "select.field-select",
@@ -1420,7 +1425,15 @@ impl<H: FrameHost> HubFrame<H> {
             ))
             .child(xr_title)
             .child(probed("div.xr-button", titled("Start XR streaming", xr)));
-        Some(probed("div.field-3d-settings", block).into_any_element())
+        let panel = SettingsPanel {
+            key: panel_key,
+            probe: "div.field-3d-settings",
+            controls,
+            rect: settings,
+            content,
+            content_height,
+        };
+        Some(self.settings_scroller(panel, appearance, scale, window, cx))
     }
 }
 
