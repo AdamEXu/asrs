@@ -92,13 +92,14 @@ pub(super) fn open(
     // wgpu itself asks for plus one the adapter reports.
     let open = unsafe {
         let hal = adapter.as_hal::<vulkan::Api>()?;
-        if !hal
-            .physical_device_capabilities()
-            .supports_extension(EXTENSION)
+        let shared = hal.shared_instance();
+        let device = hal.physical_device_capabilities();
+        if !device.supports_extension(EXTENSION)
+            || device.properties().api_version < vk::API_VERSION_1_1
+            || shared.instance_api_version() < vk::API_VERSION_1_1
         {
             return None;
         }
-        let shared = hal.shared_instance();
         let (entry, instance) = (shared.entry(), shared.raw_instance());
         let mut supported = vk::PhysicalDeviceDepthClipControlFeaturesEXT::default();
         let mut query = vk::PhysicalDeviceFeatures2::default().push_next(&mut supported);
