@@ -10,7 +10,7 @@ export function placePoint(x: number, y: number, titleBar: boolean, on: string |
     if (x >= top.left && y < controls) y += top.top - 38;
   }
   const at = (px: number, py: number) => document.elementFromPoint(px, py);
-  if (on !== null && (right !== null || at(x, y)?.closest(on) === null)) {
+  if (on !== null && (right !== null || !at(x, y)?.closest(on))) {
     const shown = Array.from(document.querySelectorAll(on)).find((el) => {
       const box = el.getBoundingClientRect();
       return box.width > 0 && box.height > 0;
