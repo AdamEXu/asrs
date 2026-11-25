@@ -474,22 +474,27 @@ fn parse_action(action: &JsValue) -> Result<Action, String> {
 }
 
 impl Scenario {
-    /// Moves each mouse and wheel action to where the Electron driver's `run.json` says it went.
+    /// Moves each mouse and wheel action to where the Electron driver's `run.json` says it went,
+    /// and gives prompts the size they had there.
     pub fn place(&mut self, run: &Path) -> Result<(), String> {
         let text = std::fs::read_to_string(run).map_err(|e| e.to_string())?;
         let run = asrs_js::json::parse_str(&text).map_err(|e| format!("{e:?}"))?;
         let points = run.get("points").ok_or("no points")?;
         for (i, action) in self.actions.iter_mut().enumerate() {
-            let (x, y) = match action {
-                Action::Mouse { x, y, .. } => (x, y),
-                Action::Wheel(wheel) => (&mut wheel.x, &mut wheel.y),
+            let (x, y, keys) = match action {
+                Action::Mouse { x, y, .. } => (x, y, ["x", "y"]),
+                Action::Wheel(wheel) => (&mut wheel.x, &mut wheel.y, ["x", "y"]),
+                Action::Prompt {
+                    size: Some((width, height)),
+                    ..
+                } => (width, height, ["width", "height"]),
                 _ => continue,
             };
             let point = points
                 .get(&i.to_string())
                 .ok_or_else(|| format!("action {i} has no point"))?;
-            *x = number(point, "x", None)?;
-            *y = number(point, "y", None)?;
+            *x = number(point, keys[0], None)?;
+            *y = number(point, keys[1], None)?;
         }
         Ok(())
     }

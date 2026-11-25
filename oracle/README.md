@@ -1433,9 +1433,9 @@ Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-fi
 the folder of a clip `src/app/clips.ts` draws into `inputs/`, as `video-data`'s `imgFolder`, dispatched on the hub's
 `messagePort`, e.g. `new-tab`, `restore-state`), `{"eval": js}`,
 `{"selection": [method, ...args]}`,
-`{"mouse": "move"|"down"|"up"|"click"|"leave", "x", "y", "modifiers": [...], "on": selector}` (`on`
-is what the point has to hit; off macOS, where text is another size, it moves to that element's
-centre when it does not),
+`{"mouse": "move"|"down"|"up"|"click"|"leave", "x", "y", "modifiers": [...], "on": selector, "right": px}`
+(`on` is what the point has to hit; off macOS, where text and scrollbars have other sizes, it moves
+to that element's centre when it does not, or to `right` px from its right edge),
 `{"wheel": {"x", "y", "deltaX", "deltaY", "wheelTicksX", "wheelTicksY", "precise"}}`,
 `{"key": keyCode, "modifiers": [...]}` (`commandOrControl` is Cmd on macOS and Ctrl elsewhere), `{"dialog": button index | file name | null}` (queued
 answer for the next dialog; a name ending in `/` is a folder that exists), `{"menu": [label, ...]}` (clicks the item at that label path of the

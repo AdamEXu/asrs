@@ -9,9 +9,10 @@ export type Action =
   | { selection: [string, ...unknown[]] }
   | { wait: number }
   | { idle: true }
-  /** `on` is a selector of what the point has to hit: off macOS, where text has another size, the
-   *  point moves to its centre when it does not. */
-  | { mouse: "move" | "down" | "up" | "click" | "leave"; x: number; y: number; button?: "left" | "right" | "middle"; clickCount?: number; modifiers?: string[]; on?: string }
+  /** `on` is a selector of what the point has to hit: off macOS, where text and scrollbars have
+   *  other sizes, the point moves to its centre when it does not, or to `right` px from its right
+   *  edge. */
+  | { mouse: "move" | "down" | "up" | "click" | "leave"; x: number; y: number; button?: "left" | "right" | "middle"; clickCount?: number; modifiers?: string[]; on?: string; right?: number }
   | {
       wheel: { x: number; y: number; deltaX?: number; deltaY?: number; wheelTicksX?: number; wheelTicksY?: number; precise?: boolean };
     }

@@ -712,13 +712,13 @@ async function traverse(contents: Electron.WebContents, name: string, count: num
   fs.writeFileSync(path.join(folder, `${name}.json`), records.map((record) => JSON.stringify(record) + "\n").join(""));
 }
 
-// Where each mouse and wheel action went, by its index.
-const points: Record<number, { x: number; y: number; hit: string | null }> = {};
+// Where each mouse and wheel action went and the size prompt actions left the prompt at, by index.
+const points: Record<number, { x: number; y: number; hit: string | null } | { width: number; height: number }> = {};
 
-async function place(index: number, x: number, y: number, on?: string) {
+async function place(index: number, x: number, y: number, on?: string, right?: number) {
   const win = active();
   const titleBar = scenario.titleBar && win === target && process.platform === "linux";
-  const at = scenario.page === "app" ? await exec<{ x: number; y: number; hit: string | null }>(call(placePoint, x, y, titleBar, on ?? null), win) : { x, y, hit: null };
+  const at = scenario.page === "app" ? await exec<{ x: number; y: number; hit: string | null }>(call(placePoint, x, y, titleBar, on ?? null, process.platform === "darwin" ? null : (right ?? null)), win) : { x, y, hit: null };
   if (process.platform === "darwin" && (at.x !== x || at.y !== y)) throw new Error(`[${x}, ${y}] does not hit ${on}`);
   points[index] = at;
   return at;
@@ -744,7 +744,7 @@ async function perform(action: Action, index: number) {
     await waitIdle();
   } else if ("mouse" in action) {
     const button = action.button ?? "left";
-    const { x, y } = await place(index, action.x, action.y, action.on);
+    const { x, y } = await place(index, action.x, action.y, action.on, action.right);
     pointer[0] = x;
     pointer[1] = y;
     for (const type of MOUSE_TYPES[action.mouse]) {
@@ -790,6 +790,11 @@ async function perform(action: Action, index: number) {
     clickAppMenu(action.appMenu);
   } else if ("prompt" in action) {
     await switchPrompt(action.prompt, action.index ?? 0, action.width, action.height);
+    if (action.width !== undefined) {
+      // A window manager keeps it at its least size, which on Linux is its content's.
+      const [width, height] = prompt!.getContentSize();
+      points[index] = { width, height };
+    }
   } else if ("download" in action) {
     await until(`the download window to show ${JSON.stringify(action.download)}`, READY_TIMEOUT_MS, () => exec<boolean>(call(downloadShows, action.download), active()));
   } else if ("role" in action) {

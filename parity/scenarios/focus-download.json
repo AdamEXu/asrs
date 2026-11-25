@@ -131,12 +131,12 @@
     {
       "mouse": "move",
       "x": 477,
-      "y": 449
+      "y": 449, "on": "#download"
     },
     {
       "mouse": "down",
       "x": 477,
-      "y": 449
+      "y": 449, "on": "#download"
     },
     {
       "mouse": "move",

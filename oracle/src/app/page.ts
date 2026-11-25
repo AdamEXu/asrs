@@ -133,7 +133,7 @@ export function domDump(probes: string[], maskSelectors: string[]) {
 /** Where `[x, y]` is on this page, and what is there. `titleBar` points were measured in a hub
  *  whose viewer starts 38 px down; here the viewer may start at the top, with only the tab
  *  controls where they were. */
-export function placePoint(x: number, y: number, titleBar: boolean, on: string | null): { x: number; y: number; hit: string | null } {
+export function placePoint(x: number, y: number, titleBar: boolean, on: string | null, right: number | null): { x: number; y: number; hit: string | null } {
   const viewer = titleBar ? document.querySelector("div.viewer") : null;
   if (viewer !== null && y >= 38) {
     const top = document.querySelector("div.viewer")!.getBoundingClientRect();
@@ -142,15 +142,15 @@ export function placePoint(x: number, y: number, titleBar: boolean, on: string |
     if (x >= top.left && y < controls) y += top.top - 38;
   }
   const at = (px: number, py: number) => document.elementFromPoint(px, py);
-  if (on !== null && at(x, y)?.closest(on) === null) {
+  if (on !== null && (right !== null || at(x, y)?.closest(on) === null)) {
     const shown = Array.from(document.querySelectorAll(on)).find((el) => {
       const box = el.getBoundingClientRect();
       return box.width > 0 && box.height > 0;
     });
     if (shown === undefined) throw new Error(`no ${on} is shown`);
     const box = shown.getBoundingClientRect();
-    [x, y] = [Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)];
-    if (at(x, y)?.closest(on) !== shown) throw new Error(`${on} is covered at its centre`);
+    [x, y] = [Math.round(right === null ? box.x + box.width / 2 : box.right - right), Math.round(box.y + box.height / 2)];
+    if (at(x, y)?.closest(on) !== shown) throw new Error(`${on} is covered at [${x}, ${y}]`);
   }
   const hit = at(x, y);
   const names = [];
