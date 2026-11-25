@@ -6,6 +6,7 @@ use asrs_model::app_identity::{APP_USER_MODEL_ID, BUNDLE_ID};
 
 use super::associations::{ASSOCIATIONS, CSV};
 use super::{Bundle, NAME, VERSION, run_tool, write};
+use crate::version::Version;
 use crate::{Result, workspace_root};
 
 pub fn package(bundle: &Bundle) -> Result {
@@ -21,7 +22,7 @@ pub fn package(bundle: &Bundle) -> Result {
             .arg(bundle.file_stem()),
     )?;
     let script = bundle.out.join("installer.iss");
-    write(&script, &installer(bundle, &stage))?;
+    write(&script, &installer(bundle, &stage, &Version::current()?))?;
     run_tool(Command::new(inno_setup()?).arg("/Q").arg(&script))
 }
 
@@ -48,7 +49,7 @@ fn inno_setup() -> Result<PathBuf> {
 /// extension's own default value, which names the default program, is never written. CSV files
 /// often have no default, and the only program in OpenWithProgids then becomes it, so for them
 /// asrs is only among the programs that support the type.
-fn installer(bundle: &Bundle, stage: &Path) -> String {
+fn installer(bundle: &Bundle, stage: &Path, version: &Version) -> String {
     let architecture = match bundle.arch {
         "arm64" => "arm64",
         _ => "x64compatible",
@@ -82,7 +83,9 @@ AppName={NAME}
 AppVersion={VERSION}
 AppPublisher=Adam Xu
 AppPublisherURL=https://github.com/AdamEXu/asrs
-VersionInfoVersion={VERSION}
+VersionInfoVersion={windows}
+VersionInfoTextVersion={VERSION}
+VersionInfoProductTextVersion={VERSION}
 DefaultDirName={{autopf}}\\{NAME}
 PrivilegesRequired=lowest
 DisableProgramGroupPage=yes
@@ -110,6 +113,7 @@ Root: HKCU; Subkey: \"Software\\Classes\\Applications\\asrs.exe\\shell\\open\\co
 [Run]
 Filename: \"{{app}}\\asrs.exe\"; Description: \"{{cm:LaunchProgram,{NAME}}}\"; Flags: nowait postinstall skipifsilent
 ",
+        windows = version.windows(),
         icon = icon.display(),
         out = bundle.out.display(),
         stem = bundle.file_stem(),

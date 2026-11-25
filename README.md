@@ -23,6 +23,7 @@ cargo xtask licenses    # third-party license bundle for release builds
 cargo xtask libm        # build the LGPL sin/cos library asrs loads at runtime
 cargo xtask bundle      # release packages: app, sin/cos library, documentation, licenses
 cargo xtask smoke       # check the packages: install, start, OCR, file types, library swap
+cargo xtask version     # the version, its numeric forms, and whether a tag matches it
 ```
 
 Building needs a checkout of upstream AdvantageScope at the commit pinned in
@@ -43,7 +44,8 @@ documentation instead.
 | Windows 10 and later | `.zip`, installer for the current user | [Inno Setup 6](https://jrsoftware.org) |
 | Linux (the build machine's glibc and later) | `.tar.gz` with `install.sh`, AppImage | squashfs-tools |
 
-The packages carry the workspace's version. They are unsigned; `asrs.app` is signed ad hoc with
+The packages carry the workspace's version (see [Versions and releases](#versions-and-releases)).
+They are unsigned; `asrs.app` is signed ad hoc with
 the hardened runtime and `packaging/macos/entitlements.plist`, as a Developer ID signature would
 be. asrs registers as an alternate program for `.wpilog`, `.wpilogxz`, `.rlog`, `.revlog`,
 `.dslog` and `.dsevents` files, so they open in it only where the user picks it or nothing else
@@ -51,7 +53,41 @@ opens them. On macOS and Windows it is also offered for `.csv` files, in a way t
 their default anywhere; Linux has no such way, so there it is not. The icon in `packaging/icons` is a placeholder.
 `--no-docs` leaves out the documentation, which may not be published yet (#310).
 
-`asrs --self-test [<image> <left> <top> <width> <height>]` checks a package without a window.
+`asrs --self-test [<image> <left> <top> <width> <height>]` checks a package without a window, and
+`asrs --version` prints its version.
+
+## Versions and releases
+
+asrs has versions of its own, unrelated to upstream's. `version` under `[workspace.package]` in
+`Cargo.toml` is the only place one is written: a SemVer version, `<major>.<minor>.<patch>` or that
+with `-alpha.<n>`, `-beta.<n>` or `-rc.<n>`. A release's tag is `v` and the version, for example
+`v0.1.0-alpha.1`. About, `--version`, crash output and the packages take it from there.
+
+The version of upstream asrs is a port of is `VERSION` in
+`crates/asrs-model/src/build_constants.rs`. Layout files and the state file's name carry it and
+they do not change with asrs's version; parity builds present it in place of asrs's. About and
+`--version` show both: `asrs 0.1.0-alpha.1 (AdvantageScope 27.0.0-alpha-6)`.
+
+Some fields hold numbers only. `cargo xtask version` prints what they get, with a build number made
+from the pre-release: `alpha.<n>` is n, `beta.<n>` 1000 + n, `rc.<n>` 2000 + n (n from 1 to 999)
+and a release 3000. It grows with the version, so each package counts as newer than the ones before:
+
+| Field | Form | `0.1.0-alpha.1` | `0.1.0` |
+|---|---|---|---|
+| macOS `CFBundleShortVersionString` | major.minor.patch | `0.1.0` | `0.1.0` |
+| macOS `CFBundleVersion` | (major x 1000 + minor).patch.build | `1.0.1` | `1.0.3000` |
+| Windows file and product version | major.minor.patch.build | `0.1.0.1` | `0.1.0.3000` |
+
+To prepare a release (nothing in the repository tags or publishes one):
+
+1. Set the version in `Cargo.toml` and run `cargo update --workspace` for `Cargo.lock`. A
+   version that was released is not reused, even for the same code built again.
+2. Run `cargo xtask version --tag v<version>` and `cargo xtask check`, and merge the change.
+3. Wait for CI on that commit of `main`: its `package` jobs build and check the packages.
+4. Check that the packages and their file names have the version, and that they may be published
+   (#310 for the documentation; the AppImage needs its runtime's source next to it).
+5. Install over the previous release on macOS and Windows and open a saved layout.
+6. Tag that commit, after running `cargo xtask version --tag v<version>` on it once more.
 
 ## Public logs and local vectors
 

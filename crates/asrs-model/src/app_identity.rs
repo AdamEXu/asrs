@@ -2,10 +2,18 @@
 //! AdvantageScope install. Bytes under the parity bar (NT4 client name, export metadata, files in
 //! the user-data directory, layout JSON) keep upstream's strings and never pass through here.
 
+use crate::build_constants;
+
+/// asrs's own version, the workspace's. Upstream's, which files and the state file's name carry,
+/// is `build_constants::VERSION`.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AppIdentity {
     /// `app.name`, as presentation strings (window titles, the app menu, About, dialogs) use it.
     pub name: &'static str,
+    /// The version it presents, and the one an update check compares releases with.
+    pub version: &'static str,
 }
 
 impl AppIdentity {
@@ -13,9 +21,31 @@ impl AppIdentity {
     /// compare against upstream unchanged.
     pub const UPSTREAM: AppIdentity = AppIdentity {
         name: "AdvantageScope",
+        version: build_constants::VERSION,
     };
 
-    pub const RELEASE: AppIdentity = AppIdentity { name: "asrs" };
+    pub const RELEASE: AppIdentity = AppIdentity {
+        name: "asrs",
+        version: VERSION,
+    };
+
+    /// The version with the version of upstream it is a port of.
+    pub fn full_version(&self) -> String {
+        if *self == Self::UPSTREAM {
+            return self.version.to_owned();
+        }
+        format!(
+            "{} ({} {})",
+            self.version,
+            Self::UPSTREAM.name,
+            Self::UPSTREAM.version
+        )
+    }
+
+    /// What `--version` and crash output print.
+    pub fn version_line(&self) -> String {
+        format!("{} {}", self.name, self.full_version())
+    }
 
     /// Upstream's presentation text with the app name this identity presents. Not for URLs.
     pub fn text(&self, upstream: &str) -> String {
