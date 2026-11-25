@@ -415,7 +415,24 @@ diff --git a/src/window.rs b/src/window.rs
      /// Accessor for the text system.
      pub fn text_system(&self) -> &Rc<WindowTextSystem> {
          &self.text_system
-@@ -3414,7 +3501,7 @@
+@@ -2927,6 +3014,16 @@
+         self.invalidator.wake_platform();
+     }
+ 
++    /// Whether the window's next frame will draw it.
++    pub fn is_dirty(&self) -> bool {
++        self.invalidator.is_dirty()
++    }
++
++    /// Whether callbacks scheduled via [`Self::on_next_frame`] are waiting.
++    pub fn has_next_frame_callbacks(&self) -> bool {
++        !self.next_frame_callbacks.borrow().is_empty()
++    }
++
+     /// Schedule a frame to be drawn on the next animation frame.
+     ///
+     /// This is useful for elements that need to animate continuously, such as a video player or an animated GIF.
+@@ -3414,7 +3511,7 @@
      #[inline]
      pub fn pixel_snap_f64(&self, value: f64) -> f64 {
          let scale_factor = f64::from(self.scale_factor());
@@ -424,7 +441,7 @@ diff --git a/src/window.rs b/src/window.rs
      }
  
      /// Snaps a bounds' origin and size to the nearest device pixel.
-@@ -3644,6 +3731,12 @@
+@@ -3644,6 +3741,12 @@
          self.last_input_modality == InputModality::Keyboard
      }
  
@@ -437,7 +454,7 @@ diff --git a/src/window.rs b/src/window.rs
      /// Returns whether the last input event came from a touch screen.
      pub fn last_input_was_touch(&self) -> bool {
          self.last_input_modality == InputModality::Touch
-@@ -4458,7 +4551,8 @@
+@@ -4458,7 +4561,8 @@
          result
      }
  
@@ -447,7 +464,7 @@ diff --git a/src/window.rs b/src/window.rs
          &mut self,
          opacity: Option<f32>,
          f: impl FnOnce(&mut Self) -> R,
-@@ -4551,7 +4645,7 @@
+@@ -4551,7 +4655,7 @@
      /// Obtain the current element opacity. This method should only be called during the
      /// prepaint phase of element drawing.
      #[inline]
@@ -456,7 +473,7 @@ diff --git a/src/window.rs b/src/window.rs
          self.invalidator.debug_assert_paint_or_prepaint();
          self.element_opacity
      }
-@@ -5877,7 +5971,10 @@
+@@ -5877,7 +5981,10 @@
              PlatformInput::Touch(_) => InputModality::Touch,
              _ => self.last_input_modality,
          };
@@ -468,7 +485,7 @@ diff --git a/src/window.rs b/src/window.rs
              self.refresh();
          }
  
-@@ -6008,6 +6105,7 @@
+@@ -6008,6 +6115,7 @@
          } else if let Some(touch_event) = event.touch_event() {
              self.dispatch_touch_event(touch_event, cx);
          }

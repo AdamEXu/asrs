@@ -56,6 +56,8 @@ pub struct VideoController {
     playing: bool,
     play_start_frame: f64,
     play_start_real: f64,
+    /// Whether the last command moved the slider.
+    slider_moved: bool,
 }
 
 impl VideoController {
@@ -79,6 +81,7 @@ impl VideoController {
             playing: false,
             play_start_frame: 0.0,
             play_start_real: 0.0,
+            slider_moved: false,
         };
         controller.update_buttons();
         controller
@@ -389,6 +392,7 @@ impl<Cx: VideoCx + ?Sized> TabController<Cx> for VideoController {
     /// `getCommand()`: the frame's image path, or `""`.
     fn command(&mut self, cx: &mut Cx, _uuid: &JsValue) -> Result<Command, JsError> {
         let mut path = JsString::new();
+        let before = self.slider.number();
         if self.has_data() {
             let render_time = cx.tab_selection().get_render_time();
             if self.locked && render_time.is_some() {
@@ -415,7 +419,12 @@ impl<Cx: VideoCx + ?Sized> TabController<Cx> for VideoController {
                 path.push_str(&JsString::from(".jpg"));
             }
         }
+        self.slider_moved = self.slider.number() != before;
         Ok(Rc::new(path))
+    }
+
+    fn needs_draw(&self) -> bool {
+        self.slider_moved
     }
 }
 

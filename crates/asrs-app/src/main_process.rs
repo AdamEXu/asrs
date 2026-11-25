@@ -404,11 +404,16 @@ impl MainProcess {
                 Self::open_satellite(cx, config);
             }
             HubEvent::SatelliteUpdate(update) => {
+                let hub = Self::hub_windows(cx)
+                    .into_iter()
+                    .find(|(hub, _)| *hub == id);
+                let hub = hub.and_then(|(_, hub)| hub.upgrade());
+                let moving = hub.is_none_or(|hub| hub.read(cx).moving());
                 let uuid = ops::to_string(&update.uuid).to_string_lossy();
                 let satellites = Self::satellites(cx, &uuid);
                 for (window, satellite) in satellites {
                     if Windows::is_visible(cx, window) {
-                        satellite.update(cx, |page, cx| page.render_command(update, cx));
+                        satellite.update(cx, |page, cx| page.render_command(update, moving, cx));
                     }
                 }
             }

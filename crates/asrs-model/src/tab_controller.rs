@@ -70,6 +70,11 @@ pub trait TabController<Cx: ?Sized>: AsAny {
     /// `controller.UUID`, which `Tabs` owns because a restore may set it to any value.
     fn command(&mut self, cx: &mut Cx, uuid: &JsValue) -> Result<Command, JsError>;
 
+    /// Whether the last `command` changed a control on its own. See [`TabRenderer::needs_draw`].
+    fn needs_draw(&self) -> bool {
+        false
+    }
+
     /// The controller's `SourceList`s in construction order.
     fn source_lists(&self) -> Vec<&SourceList> {
         Vec::new()
@@ -114,6 +119,12 @@ pub trait TabRenderer<Cx: ?Sized>: AsAny {
     /// the tab is shown, after the hub's own. Each one's exception is reported on its own.
     fn animation_frame(&mut self, _cx: &mut Cx) -> Vec<JsError> {
         Vec::new()
+    }
+
+    /// Whether the last `render` or `animation_frame` left something the host has not drawn, apart
+    /// from what follows from the page's input, messages and time. The host draws those itself.
+    fn needs_draw(&self) -> bool {
+        false
     }
 
     /// `TableRenderer.UUID`. `Tabs` reads it only on Table tabs.

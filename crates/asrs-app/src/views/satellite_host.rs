@@ -13,7 +13,7 @@ use asrs_model::source_list::{Rect, SourceListDom};
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
 use asrs_tabs::console::controller::{ConsoleController, ConsoleRenderer};
-use asrs_ui::gpui::{App, AppContext, Entity};
+use asrs_ui::gpui::{App, AppContext, Entity, Window};
 
 use super::frame::{FrameGeometry, FrameHost, HubFrame};
 use super::hub_host;
@@ -136,6 +136,18 @@ impl FrameHost for SatelliteHost {
 
     fn hub<'a>(&'a self, cx: &'a App) -> &'a HubModel {
         self.satellite.read(cx).model().hub()
+    }
+
+    fn begin_draw(&mut self, cx: &mut App) {
+        self.satellite.update(cx, |page, _| page.begin_draw());
+    }
+
+    fn end_draw(&mut self, window: &Window, cx: &mut App) {
+        self.satellite.update(cx, |page, _| page.end_draw(window));
+    }
+
+    fn touched(&mut self, cx: &mut App) {
+        self.satellite.update(cx, |page, _| page.touched());
     }
 
     fn input<R>(&mut self, cx: &mut App, f: impl FnOnce(&mut HubModel) -> R) -> R {

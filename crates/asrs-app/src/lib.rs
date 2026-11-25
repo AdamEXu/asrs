@@ -13,6 +13,7 @@ pub mod live;
 pub mod main_process;
 pub mod menus;
 pub mod quit;
+mod repaint;
 pub mod satellite;
 pub mod scenario;
 pub mod self_test;

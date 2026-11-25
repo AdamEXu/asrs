@@ -472,6 +472,8 @@ pub struct FrameOutput {
     pub error: Option<TabsError>,
 }
 
+pub(crate) type FrameState = ([Option<&'static str>; 2], Option<bool>, ControlsView, bool);
+
 pub struct Tabs<Cx: ?Sized> {
     factory: Box<dyn TabFactory<Cx>>,
     tabs: Vec<Tab<Cx>>,
@@ -1194,6 +1196,16 @@ impl<Cx: TabsHost + ?Sized> Tabs<Cx> {
     /// `style.opacity` of `div.tab-bar-shadow-left` and `-right`, `None` until first set.
     pub fn shadows(&self) -> [Option<&'static str>; 2] {
         self.shadows
+    }
+
+    /// What a frame itself sets of the frame around the tabs.
+    pub(crate) fn frame_state(&self) -> FrameState {
+        (
+            self.shadows,
+            self.show_timeline,
+            self.controls,
+            self.frame_loop_alive,
+        )
     }
 
     /// The frame's scroll step for the tab bar's overlay, which runs before the frame's

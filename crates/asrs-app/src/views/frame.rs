@@ -96,6 +96,11 @@ pub trait FrameHost: 'static {
     fn satellite_key_down(&mut self, _code: &str, _cx: &mut App) -> bool {
         false
     }
+    /// The window is being drawn, until [`FrameHost::end_draw`].
+    fn begin_draw(&mut self, _cx: &mut App) {}
+    fn end_draw(&mut self, _window: &Window, _cx: &mut App) {}
+    /// Input that only the next draw applies, such as a scroll.
+    fn touched(&mut self, _cx: &mut App) {}
     /// The hub's frame clock (ms), which its scroll sensors animate on.
     fn frame_time(&self, cx: &App) -> f64;
     /// Runs `f`, the frame's handler for an input event, as one page task.
@@ -1254,6 +1259,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
         if self.tab_key.is_none() {
             self.tab_key = Some(Self::intercept_tab(window, cx));
         }
+        self.host.begin_draw(cx);
         let appearance = Appearance::of(window, cx);
         let theme = appearance.theme();
         let dark = appearance == Appearance::Dark;
@@ -1277,7 +1283,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
         self.field3d_frame(window, cx);
         self.text_frame(window, cx);
         self.scrollers_frame();
-        if show_fps {
+        if show_fps || self.timeline.next_timer().is_some() {
             window.request_animation_frame();
         }
         let fps_text = self
@@ -1356,6 +1362,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
         let drawn = entity.clone();
         window.defer(cx, move |window, cx| {
             let _ = drawn.update(cx, |frame, cx| {
+                frame.host.end_draw(window, cx);
                 let body = frame.body.clone();
                 let builds = frame.host.hub(cx).tabs().bar_builds();
                 if std::mem::replace(&mut frame.bar_builds, builds) != builds
@@ -1398,6 +1405,12 @@ impl<H: FrameHost> Render for HubFrame<H> {
                             frame.line_graph_mouse_exit(cx);
                             frame.field_2d_mouse_exit(cx);
                         });
+                    }
+                });
+                let frame = entity.clone();
+                window.on_mouse_event(move |_: &ScrollEvent, phase, _, cx| {
+                    if phase == DispatchPhase::Capture {
+                        let _ = frame.update(cx, |frame, cx| frame.host.touched(cx));
                     }
                 });
                 let frame = entity.clone();
@@ -1624,7 +1637,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(content) = self.host.slot(FrameSlot::ControlsContent, window, cx) {
                     controls = controls.child(content);
                 }
-                self.layout_source_lists(rect, width, scale, cx);
+                self.layout_source_lists(rect, width, scale, window, cx);
                 controls = controls.children(self.source_lists(rect, appearance, window, cx));
                 if let Some(settings) = self.field_2d_controls(rect, appearance, scale, window, cx)
                 {
