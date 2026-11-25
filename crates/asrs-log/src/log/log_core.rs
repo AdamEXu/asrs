@@ -755,10 +755,11 @@ impl Log {
                     Position::Node(existing_child(children, &table))
                 } else if prototype.full_key.is_some() && table == JsString::from("fullKey") {
                     Position::FullKey
-                } else if table == JsString::from("__proto__") {
-                    Position::Prototype
                 } else if ops::is_object_prototype_member(&table) {
-                    Position::Function
+                    match table == JsString::from("__proto__") {
+                        true => Position::Prototype,
+                        false => Position::Function,
+                    }
                 } else {
                     children.insert(table.clone(), LogFieldTree::default());
                     Position::Node(existing_child(children, &table))

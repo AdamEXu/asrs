@@ -981,7 +981,8 @@ impl Runner<'_> {
                 if !self.loop_dead {
                     let outcome = self.sidebar.periodic(&mut senv!(self));
                     self.loop_dead = outcome != EventOutcome::Ok;
-                    self.emitted.extend(exception_emit("requestAnimationFrame", outcome));
+                    self.emitted
+                        .extend(exception_emit("requestAnimationFrame", outcome));
                 }
                 if self.show_pending {
                     self.show_pending = false;
