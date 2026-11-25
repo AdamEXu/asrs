@@ -6,8 +6,6 @@
 //! pixel y snapping, 1/16 pixel x snapping, the trapezoid alpha approximations, the RLE blitter's
 //! alpha snapping) decides the low bits of every edge pixel.
 
-use std::ops::Range;
-
 use crate::blit::Spans;
 use crate::clip::{self, ClipRect, Piece};
 use crate::hairline::P;
@@ -877,7 +875,8 @@ enum Additive {
     },
     Rle {
         row: Vec<u8>,
-        touched: Range<usize>,
+        /// The cells written since the last flush, from the first to past the last.
+        touched: (usize, usize),
         left: i32,
         top: i32,
         curr_y: i32,
@@ -885,11 +884,11 @@ enum Additive {
     },
 }
 
-const UNTOUCHED: Range<usize> = usize::MAX..0;
+const UNTOUCHED: (usize, usize) = (usize::MAX, 0);
 
-fn touch(touched: &mut Range<usize>, from: usize, to: usize) {
-    touched.start = touched.start.min(from);
-    touched.end = touched.end.max(to);
+fn touch(touched: &mut (usize, usize), from: usize, to: usize) {
+    touched.0 = touched.0.min(from);
+    touched.1 = touched.1.max(to);
 }
 
 fn catch_overflow(a: i32) -> u8 {
@@ -953,9 +952,8 @@ impl Ctx<'_> {
         } = &mut self.blitter
             && *curr_y >= *top
         {
-            let used = std::mem::replace(touched, UNTOUCHED);
-            let x = used.start;
-            let row = row.get_mut(used).unwrap_or_default();
+            let (x, end) = std::mem::replace(touched, UNTOUCHED);
+            let row = row.get_mut(x..end).unwrap_or_default();
             for a in row.iter_mut() {
                 *a = if *a > 247 {
                     255

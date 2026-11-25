@@ -457,18 +457,20 @@ fn field_commands(
             done.push((i, run(job)));
         }
     };
-    let mut fields = std::thread::scope(|scope| {
+    let mut fields: Vec<_> = jobs.iter().map(|_| None).collect();
+    std::thread::scope(|scope| {
         let others: Vec<_> = (1..cores.min(jobs.len()))
             .map(|_| scope.spawn(work))
             .collect();
-        let mut fields = work();
+        let mut done = work();
         for other in others {
-            fields.extend(other.join().expect("a statistics thread"));
+            done.extend(other.join().expect("a statistics thread"));
         }
-        fields
+        for (i, field) in done {
+            fields[i] = Some(field);
+        }
     });
-    fields.sort_by_key(|(i, _)| *i);
-    fields.into_iter().map(|(_, field)| field).collect()
+    fields.into_iter().flatten().collect()
 }
 
 fn field_command(
