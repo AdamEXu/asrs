@@ -497,9 +497,14 @@ impl Frame {
         };
         let thickness = self.style.thickness() * scale;
         let room = bar.button.min(thickness);
-        let side = ((if pressed { 7.0 } else { 9.0 }) * scale).ceil().min(room);
+        let side = if pressed {
+            7.0 * scale
+        } else {
+            bar.button.max(thickness) / 2.0
+        };
+        let side = side.ceil().min(room);
         // Centred in whole pixels.
-        let side = side - (room - side).rem_euclid(2.0).floor();
+        let side = side + (room - side).rem_euclid(2.0).floor();
         let rows = (side / 2.0).ceil();
         // `NativeThemeFluent::GetArrowRect` without its icon font, and `PathForArrow` in it.
         let outward = scale.round() * [-1.0, 1.0][end];
