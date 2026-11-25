@@ -117,6 +117,40 @@ fn main() {
         asrs_ui::init(cx);
         cx.set_global(Recorder::default());
     });
+    for width in [1.0, 4.0, 8.0] {
+        let window = capture
+            .open_window(size(px(500.0), px(100.0)), 1.0, |window, cx| {
+                let field = cx.new(|cx| {
+                    let model = PlainText::new("12.5");
+                    let style = FieldStyle::native();
+                    let mut field = TextField::new(model, FieldKind::Number, style, window, cx);
+                    field.set_size(width, 21.0);
+                    field
+                });
+                cx.new(|_| Page {
+                    field,
+                    origin: [10.0, 10.0],
+                    background: 0xffffff,
+                })
+            })
+            .expect("a window");
+        capture.capture(window.into()).expect("capture");
+        let cx = capture.context();
+        cx.update_window(window.into(), |_, window, cx| {
+            window.dispatch_event(
+                PlatformInput::MouseDown(MouseDownEvent {
+                    button: MouseButton::Left,
+                    position: point(px(10.5), px(10.5)),
+                    click_count: 1,
+                    ..MouseDownEvent::default()
+                }),
+                cx,
+            );
+        })
+        .expect("open");
+        let closed = window.update(capture.context(), |_, window, _| window.remove_window());
+        closed.expect("open");
+    }
     let records =
         vectors::load("focus/text/macos-aarch64").unwrap_or_else(|e| panic!("focus/text: {e}"));
     let (mut compared, mut presses, mut failures) = (0, 0, Vec::new());
