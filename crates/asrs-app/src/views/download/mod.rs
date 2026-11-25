@@ -31,7 +31,7 @@ use asrs_ui::theme::{Appearance, FONT_FAMILY, MONOSPACE_FAMILY};
 
 use crate::views::frame::wheel_of;
 use crate::views::scrollers::smooth;
-use crate::windows::{self, SingletonOpening, WindowId};
+use crate::windows::{self, FocusEvents, SingletonOpening, WindowId, focus_events};
 use line::InlineRun;
 use loading::Loading;
 
@@ -79,6 +79,7 @@ pub struct DownloadWindow {
     scale: f32,
     frames_since: Instant,
     loading: Loading,
+    _focus: FocusEvents,
     _subscriptions: Vec<Subscription>,
 }
 
@@ -96,13 +97,11 @@ fn now_ms() -> f64 {
 
 impl DownloadWindow {
     pub fn new(platform: &str, window: &mut Window, cx: &mut Context<'_, Self>) -> DownloadWindow {
-        let subscriptions = vec![
-            cx.observe_window_activation(window, |view, window, cx| {
-                view.page.set_focused(window.is_window_active());
-                cx.notify();
-            }),
-            Self::keys(window, cx),
-        ];
+        let focus = focus_events(window, cx, |view, focused, _, cx| {
+            view.page.set_focused(focused);
+            cx.notify();
+        });
+        let subscriptions = vec![Self::keys(window, cx)];
         let mut page = DownloadPage::default();
         page.set_platform(platform);
         let body = cx.focus_handle();
@@ -122,6 +121,7 @@ impl DownloadWindow {
             scale: window.scale_factor(),
             frames_since: cx.background_executor().now(),
             loading: Loading::default(),
+            _focus: focus,
             _subscriptions: subscriptions,
         };
         view.measure(window);
