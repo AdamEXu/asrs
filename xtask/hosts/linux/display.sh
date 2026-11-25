@@ -26,6 +26,8 @@ done
 export DISPLAY=$display XDG_SESSION_TYPE=x11 DBUS_SESSION_BUS_ADDRESS=disabled:
 export ELECTRON_OZONE_PLATFORM_HINT=x11
 unset WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE SWAYSOCK XAUTHORITY
+# Chromium takes a device scale from these, and above 1 it draws unhinted text.
+unset GDK_SCALE GDK_DPI_SCALE
 
 if command -v xfwm4 >/dev/null; then
   env -u DBUS_SESSION_BUS_ADDRESS dbus-run-session -- xfwm4 --compositor=off >/dev/null 2>&1 9>&- &
