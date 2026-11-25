@@ -10,6 +10,13 @@ pub const CONTROL_FONT: FontSpec = FontSpec {
     size: 40.0 / 3.0,
     weight: 400.0,
     italic: false,
+    hinted: false,
+};
+
+/// [`CONTROL_FONT`] of a control in a page's initial HTML.
+pub const PAGE_CONTROL_FONT: FontSpec = FontSpec {
+    hinted: true,
+    ..CONTROL_FONT
 };
 
 /// `body { font-family }` of `global.css` at the given size.
@@ -19,6 +26,7 @@ pub const fn system_font(size: f32) -> FontSpec {
         size,
         weight: 400.0,
         italic: false,
+        hinted: false,
     }
 }
 
@@ -98,7 +106,10 @@ impl FieldStyle {
     pub fn sidebar_search(appearance: Appearance) -> FieldStyle {
         let dark = appearance == Appearance::Dark;
         FieldStyle {
-            font: system_font(13.0),
+            font: FontSpec {
+                hinted: true,
+                ..system_font(13.0)
+            },
             align: Align::Start,
             border: 0.5,
             padding: [5.0, 5.0, 5.0, 28.0],
@@ -146,9 +157,17 @@ impl FieldStyle {
         }
     }
 
-    /// `input` in `prompts.css`, and the jump-to-time inputs of `renderers.css`.
+    /// The jump-to-time inputs of `renderers.css`.
     pub fn native() -> FieldStyle {
         FieldStyle::NATIVE
+    }
+
+    /// `input` in `prompts.css`.
+    pub fn prompt() -> FieldStyle {
+        FieldStyle {
+            font: PAGE_CONTROL_FONT,
+            ..FieldStyle::NATIVE
+        }
     }
 
     /// `table.console-table input.filter` in `renderers.css`.

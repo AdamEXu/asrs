@@ -210,7 +210,8 @@ fn zero_size_font_measures_nothing() {
 }
 
 /// Chromium draws text unhinted on a display scaled above 1, which moves ink off the pixel grid
-/// the light autohinter snaps it to, and lays the descent out a pixel deeper where it rounds down.
+/// the light autohinter snaps it to, and lays the descent out a pixel deeper where it rounds down,
+/// but for the fonts a page made before it knew.
 #[test]
 fn a_scaled_display_turns_hinting_off() {
     if !fonts_are_pinned(&["10px sans-serif"]) {
@@ -228,6 +229,17 @@ fn a_scaled_display_turns_hinting_off() {
     assert_eq!((hinted.ascent, hinted.descent), (9.0, 2.0));
     assert_eq!((scaled.ascent, scaled.descent), (8.0, 3.0));
     assert_ne!(*backend.raw_mask(glyph, 1.0, 1.0, 0).unwrap(), *mask);
+    let page = FontSpec {
+        hinted: true,
+        ..font
+    };
+    let glyph_of_page = backend.shape(&page, "x", 1.0).glyphs[0].glyph;
+    assert_eq!(
+        *backend.raw_mask(glyph_of_page, 1.0, 1.0, 0).unwrap(),
+        *mask
+    );
+    let kept = backend.metrics(&page);
+    assert_eq!((kept.ascent, kept.descent), (9.0, 2.0));
     assert!(backend.set_device_scale(1.0));
     assert_eq!(*backend.raw_mask(glyph, 1.0, 1.0, 0).unwrap(), *mask);
 }

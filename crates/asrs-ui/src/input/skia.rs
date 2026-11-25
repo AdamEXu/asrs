@@ -261,3 +261,32 @@ pub fn device_size(bounds: Bounds<Pixels>, scale: f32) -> (u32, u32) {
     let s = |v: Pixels| (f32::from(v) * scale).round().max(0.0) as u32;
     (s(bounds.size.width), s(bounds.size.height))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The top left corner of `<input type="number">` in Electron on Linux, at 1x and 2x.
+    #[test]
+    fn a_field_border_is_aliased_as_cpu_skia_draws_it() {
+        let corner = |stroke: f64, radius: f64| {
+            let mut pixmap = Pixmap::new(24, 24).unwrap();
+            let i = stroke / 2.0;
+            let rect = [i, i, 24.0 - stroke, 24.0 - stroke];
+            stroke_aliased_rrect(&mut pixmap, rect, radius, stroke, 0x767676ff);
+            let row = |y: u32| {
+                let alpha = |x| pixmap.pixel(x, y).unwrap().alpha();
+                (0..6).map(|x| if alpha(x) == 255 { '#' } else { '.' })
+            };
+            (0..5).map(|y| row(y).collect()).collect::<Vec<String>>()
+        };
+        assert_eq!(
+            corner(1.0, 2.0),
+            [".#####", "#.....", "#.....", "#.....", "#....."]
+        );
+        assert_eq!(
+            corner(2.0, 4.0),
+            ["...###", ".#####", ".##...", "##....", "##...."]
+        );
+    }
+}

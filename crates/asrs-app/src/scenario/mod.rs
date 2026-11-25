@@ -593,7 +593,7 @@ mod tests {
     use super::*;
 
     fn scenario_file(name: &str) -> String {
-        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../../parity/scenarios")
             .join(format!("{name}.json"));
         std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
