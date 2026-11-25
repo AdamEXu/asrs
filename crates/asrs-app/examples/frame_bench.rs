@@ -2,6 +2,7 @@
 //! pixels, playing back a real log, every sidebar field expanded. One JSON line per scene:
 //! - `p50`, `p95`, `max`: a frame on the foreground thread, from the animation frame through
 //!   model, layout, paint and scene building.
+//! - `threadP95`: the CPU time that thread used for a frame (Unix).
 //! - `imageP95`: the same frame, then the 3D render thread's answer, then Metal drawing the scene
 //!   and reading the image back.
 //! - `cpu`: CPU time per frame over the whole process and the first pass, timers included.
@@ -344,11 +345,11 @@ impl Page<'_> {
     /// One animation frame and the draw after it, in milliseconds. The timers that come due and
     /// the tasks the frame wakes run outside the time: GPUI's test mode draws after each of them,
     /// where a display draws once a frame.
-    fn frame_showing(&mut self, range: Option<[f64; 2]>) -> f64 {
+    fn frame_showing(&mut self, range: Option<[f64; 2]>) -> Frame {
         let hub = self.hub.clone();
         let cx = self.headless.context();
         cx.advance_clock(FRAME);
-        let start = Instant::now();
+        let (start, cpu) = (Instant::now(), thread_cpu_ms());
         cx.update_window(self.window.into(), |_, window, cx| {
             if let Some(range) = range {
                 hub.update(cx, |hub, cx| {
@@ -361,9 +362,12 @@ impl Page<'_> {
             window.simulate_next_frame(cx);
         })
         .expect("window");
-        let time = ms(start);
+        let frame = Frame {
+            wall: ms(start),
+            cpu: thread_cpu_ms() - cpu,
+        };
         cx.run_until_parked();
-        time
+        frame
     }
 
     fn rendering(&mut self) -> bool {
@@ -436,6 +440,24 @@ fn memory_mb() -> f64 {
     ps("rss=").parse::<f64>().unwrap_or(f64::NAN) / 1024.0
 }
 
+#[derive(Clone, Copy)]
+struct Frame {
+    wall: f64,
+    cpu: f64,
+}
+
+/// CPU time of the calling thread, which other processes' load does not add to.
+#[cfg(unix)]
+fn thread_cpu_ms() -> f64 {
+    let time = rustix::time::clock_gettime(rustix::time::ClockId::ThreadCPUTime);
+    time.tv_sec as f64 * 1e3 + time.tv_nsec as f64 / 1e6
+}
+
+#[cfg(not(unix))]
+fn thread_cpu_ms() -> f64 {
+    f64::NAN
+}
+
 fn percentile(values: &[f64], p: f64) -> f64 {
     let mut sorted = values.to_vec();
     sorted.sort_by(f64::total_cmp);
@@ -484,26 +506,30 @@ fn run(page: &mut Page<'_>, spec: &SceneSpec, expanded: &str) -> String {
         page.image();
     }
     let mut times = Vec::with_capacity(FRAMES);
+    let mut thread = Vec::with_capacity(FRAMES);
     let cpu = cpu_seconds();
     for _ in 0..FRAMES {
-        times.push(page.frame_showing(range()));
+        let frame = page.frame_showing(range());
+        times.push(frame.wall);
+        thread.push(frame.cpu);
         page.wait_rendered();
     }
     let cpu = (cpu_seconds() - cpu) * 1e3 / FRAMES as f64;
     let mut images = Vec::with_capacity(IMAGE_FRAMES);
     for _ in 0..IMAGE_FRAMES {
-        let time = page.frame_showing(range());
+        let time = page.frame_showing(range()).wall;
         let start = Instant::now();
         page.wait_rendered();
         page.image();
         images.push(time + ms(start));
     }
     format!(
-        r#"{{"scene":"{}","p50":{:.3},"p95":{:.3},"max":{:.3},"cpu":{cpu:.3},"imageP95":{:.3},"memoryMb":{:.1}}}"#,
+        r#"{{"scene":"{}","p50":{:.3},"p95":{:.3},"max":{:.3},"threadP95":{:.3},"cpu":{cpu:.3},"imageP95":{:.3},"memoryMb":{:.1}}}"#,
         spec.name,
         percentile(&times, 0.5),
         percentile(&times, 0.95),
         percentile(&times, 1.0),
+        percentile(&thread, 0.95),
         percentile(&images, 0.95),
         memory_mb(),
     )

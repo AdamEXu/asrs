@@ -368,6 +368,7 @@ dependencies = [
  "futures-util",
  "image",
  "png 0.18.1",
+ "rustix",
  "rustls",
  "sha2 0.10.9",
  "socket2",

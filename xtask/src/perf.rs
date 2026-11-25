@@ -411,7 +411,7 @@ fn frames(args: &[String]) -> Result {
     }
     println!("load average before: {before}; after: {}", load_average());
     println!(
-        "{} runs, medians over the runs, milliseconds\n\n| scene | frame p50 | frame p95 | frame max | frame CPU (mean) | frame and image p95 | budget {FRAME_BUDGET_MS} | memory (MB) |\n|---|---|---|---|---|---|---|---|",
+        "{} runs, medians over the runs, milliseconds\n\n| scene | frame p50 | frame p95 | frame max | foreground CPU p95 | process CPU (mean) | frame and image p95 | budget {FRAME_BUDGET_MS} | memory (MB) |\n|---|---|---|---|---|---|---|---|---|",
         opts.runs
     );
     let mut over = Vec::new();
@@ -428,9 +428,10 @@ fn frames(args: &[String]) -> Result {
             "over"
         };
         println!(
-            "| {name} | {:.2} | {frame_p95:.2} | {:.2} | {:.2} | {:.2} | {verdict} | {:.0} |",
+            "| {name} | {:.2} | {frame_p95:.2} | {:.2} | {:.2} | {:.2} | {:.2} | {verdict} | {:.0} |",
             value("p50")?,
             value("max")?,
+            value("threadP95")?,
             value("cpu")?,
             value("imageP95")?,
             value("memoryMb")?,
