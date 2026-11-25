@@ -25,7 +25,7 @@ use asrs_ui::gpui::{
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, PlainText, TextField};
 use asrs_ui::parity::probed;
 use asrs_ui::selection::{Document, Hit, Place};
-use asrs_ui::text::{self, TextStyle, snap_remainder};
+use asrs_ui::text::{self, TextStyle, scroller, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 use asrs_ui::tooltip::titled;
 
@@ -489,7 +489,9 @@ impl Rows<'_> {
                     piece = piece.opacity(FAINT as f32);
                 } else if style.faint {
                     piece = self.grid.text(
-                        plain(text, cell_style(font), blend(color)).form_control(),
+                        plain(text, cell_style(font), blend(color))
+                            .form_control()
+                            .grayscale(),
                         [x, line_top],
                     );
                 }
@@ -692,7 +694,7 @@ impl<H: FrameHost> HubFrame<H> {
                 grid.place([x, y - scroll_top, width, layout.table_height()])
                     .track_focus(&focus::last(&rows_place)),
             )
-            .child(layer)
+            .child(scroller(layout.table_height() > height, layer))
             .child(probed(
                 ".console-table-container",
                 grid.place([x, y, width, height]),

@@ -21,9 +21,10 @@ use asrs_canvas::text::font::FontKey;
 use asrs_canvas::text::lut::{LcdGammaLut, MaskGammaLut};
 use asrs_canvas::text::{FixedAdvance, TextBackend, platform_backend};
 use gpui_kit::{
-    App, AvailableSpace, Bounds, ContentMask, Corners, Element, ElementId, Global, GlobalElementId,
-    InspectorElementId, IntoElement, LayoutId, Pixels, Refineable, RenderImage, Rgba, Scene,
-    SharedString, Style, StyleRefinement, Styled, Window, WindowId, fill, point, px, size,
+    AnyElement, App, AvailableSpace, Bounds, ContentMask, Corners, Element, ElementId, Global,
+    GlobalElementId, InspectorElementId, IntoElement, LayoutId, Pixels, Refineable, RenderImage,
+    Rgba, Scene, SharedString, Style, StyleRefinement, Styled, Window, WindowId, fill, point, px,
+    size,
 };
 use image::{Frame, RgbaImage};
 
@@ -94,6 +95,8 @@ pub struct CacheStats {
     pub entries: usize,
     pub bytes: usize,
     pub rasterized: u64,
+    /// Those of `rasterized` that were blended onto a background in LCD.
+    pub lcd: u64,
     pub evicted: u64,
 }
 
@@ -110,6 +113,7 @@ pub struct TextSystem {
     lut: MaskGammaLut,
     lcd_lut: Option<LcdGammaLut>,
     windows: HashMap<WindowId, WindowText>,
+    layers: Vec<Layer>,
     clock: u64,
     budget: (usize, usize),
 }
@@ -121,6 +125,7 @@ impl Default for TextSystem {
             lut: MaskGammaLut::embedded().unwrap_or_else(MaskGammaLut::identity),
             lcd_lut: LcdGammaLut::embedded(),
             windows: HashMap::new(),
+            layers: Vec::new(),
             clock: 0,
             budget: (CACHE_BYTES, CACHE_ENTRIES),
         }
@@ -133,6 +138,14 @@ impl TextSystem {
     /// Changes the per-window cache budget, for tests that exercise eviction.
     pub fn set_budget(cx: &mut App, bytes: usize, entries: usize) {
         cx.default_global::<TextSystem>().budget = (bytes, entries);
+    }
+
+    /// Replaces the platform's glyphs and LCD table, for tests of what the platform does not draw.
+    pub fn set_backend(cx: &mut App, backend: Box<dyn TextBackend>, lcd_lut: Option<LcdGammaLut>) {
+        let system = cx.default_global::<TextSystem>();
+        system.backend = backend;
+        system.lcd_lut = lcd_lut;
+        system.windows.clear();
     }
 
     pub fn stats(cx: &mut App, window: WindowId) -> CacheStats {
@@ -297,6 +310,7 @@ impl TextSystem {
                 Some(at) => at,
                 None => {
                     stats.rasterized += 1;
+                    stats.lcd += 1;
                     let lcd_ink = dom::LcdInk {
                         color: ink.color,
                         alpha: ink.alpha,
@@ -340,6 +354,112 @@ impl TextSystem {
         }
         cache.bytes = cache.bytes + run.bytes - before;
         self.evict(window);
+    }
+}
+
+/// The compositing layer Chromium draws text on: it is grayscale where the layer's own pixels are
+/// not all opaque.
+#[derive(Clone, Copy)]
+enum Layer {
+    /// The page's own, whatever the window is.
+    Page,
+    Always,
+    /// A scroller is its own layer where Chromium prefers compositing to LCD text
+    /// (`PreferCompositingToLCDText`).
+    Scroller,
+}
+
+impl Layer {
+    fn grayscale(self, scale: f32) -> bool {
+        match self {
+            Layer::Page => false,
+            Layer::Always => true,
+            Layer::Scroller => scale >= 1.5,
+        }
+    }
+}
+
+/// A wrapper that draws the text inside as Chromium draws it on a layer that is not opaque.
+pub struct TextLayer {
+    layer: Layer,
+    child: AnyElement,
+}
+
+/// What CSS puts on a layer of its own or behind a mask or filter: its text is grayscale.
+pub fn grayscale_layer(child: impl IntoElement) -> TextLayer {
+    TextLayer {
+        layer: Layer::Always,
+        child: child.into_any_element(),
+    }
+}
+
+/// A scroller of the page that has no opaque background of its own.
+pub fn scroller(overflows: bool, child: impl IntoElement) -> TextLayer {
+    TextLayer {
+        layer: if overflows {
+            Layer::Scroller
+        } else {
+            Layer::Page
+        },
+        child: child.into_any_element(),
+    }
+}
+
+impl IntoElement for TextLayer {
+    type Element = Self;
+
+    fn into_element(self) -> Self {
+        self
+    }
+}
+
+impl Element for TextLayer {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static core::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, ()) {
+        (self.child.request_layout(window, cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.child.prepaint(window, cx);
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut (),
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        cx.default_global::<TextSystem>().layers.push(self.layer);
+        self.child.paint(window, cx);
+        cx.default_global::<TextSystem>().layers.pop();
     }
 }
 
@@ -588,7 +708,7 @@ impl Text {
         self
     }
 
-    /// Text that Chromium puts on a layer that is not opaque, such as one behind a CSS mask.
+    /// [`grayscale_layer`] of this text alone.
     pub fn grayscale(mut self) -> Self {
         self.grayscale = true;
         self
@@ -769,6 +889,7 @@ impl Element for Text {
         let may_be_lcd = system.lcd_lut.is_some()
             && !self.grayscale
             && !text.grayscale
+            && !system.layers.iter().any(|layer| layer.grayscale(scale))
             && window.element_opacity() >= 1.0;
         let Prepaint { layout, origin } = prepaint;
         let mut selection = Vec::new();

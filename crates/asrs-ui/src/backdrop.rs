@@ -294,3 +294,207 @@ fn blend(under: [u8; 3], fill: Fill) -> Option<[u8; 3]> {
         ((over[i] * c.a + under * (1.0 - c.a)) * 255.0).round() as u8
     }))
 }
+
+#[cfg(test)]
+mod tests {
+    use gpui_kit::{
+        BorderStyle, ContentMask, Corners, Edges, Shadow, linear_color_stop, linear_gradient,
+        point, rgb, rgba, size,
+    };
+
+    use super::*;
+
+    const WHITE: [u8; 3] = [0xff; 3];
+    const RUN: Rect = [100, 110, 160, 124];
+
+    fn bounds([l, t, r, b]: Rect) -> Bounds<ScaledPixels> {
+        let px = |v: i32| ScaledPixels(v as f32);
+        Bounds {
+            origin: point(px(l), px(t)),
+            size: size(px(r - l), px(b - t)),
+        }
+    }
+
+    fn quad(rect: Rect, color: Rgba) -> Quad {
+        Quad {
+            order: 0,
+            border_style: BorderStyle::Solid,
+            bounds: bounds(rect),
+            content_mask: ContentMask {
+                bounds: bounds([0, 0, 2000, 2000]),
+            },
+            background: color.into(),
+            border_color: gpui_kit::transparent_black(),
+            corner_radii: Corners::default(),
+            border_widths: Edges::default(),
+        }
+    }
+
+    fn read(quads: impl IntoIterator<Item = Quad>) -> Backdrop {
+        let mut scene = Scene::default();
+        for quad in quads {
+            scene.insert_primitive(quad);
+        }
+        let mut backdrop = Backdrop::default();
+        backdrop.read(&scene);
+        backdrop
+    }
+
+    fn page() -> Quad {
+        quad([0, 0, 1000, 800], rgb(0xffffff))
+    }
+
+    #[test]
+    fn the_topmost_opaque_quad_is_the_background() {
+        let backdrop = read([page(), quad([90, 100, 400, 130], rgb(0x2b66a2))]);
+        assert_eq!(backdrop.regions(RUN), Some(vec![(RUN, [0x2b, 0x66, 0xa2])]));
+        let below = [100, 500, 160, 520];
+        assert_eq!(backdrop.regions(below), Some(vec![(below, WHITE)]));
+    }
+
+    #[test]
+    fn nothing_opaque_behind_a_part_is_no_background() {
+        assert_eq!(read([]).regions(RUN), None);
+        let half = quad([0, 0, 130, 800], rgb(0xffffff));
+        assert_eq!(read([half]).regions(RUN), None);
+        let faint = quad([0, 0, 1000, 800], rgba(0xffffff80));
+        assert_eq!(read([faint]).regions(RUN), None);
+    }
+
+    #[test]
+    fn translucent_quads_blend_onto_what_they_cover() {
+        let backdrop = read([page(), quad([0, 100, 1000, 130], rgba(0x00000080))]);
+        assert_eq!(backdrop.regions(RUN), Some(vec![(RUN, [127; 3])]));
+    }
+
+    #[test]
+    fn a_run_over_several_colours_has_a_region_of_each() {
+        let backdrop = read([page(), quad([120, 100, 140, 130], rgb(0x3399ff))]);
+        assert_eq!(
+            backdrop.regions(RUN),
+            Some(vec![
+                ([100, 110, 120, 124], WHITE),
+                ([120, 110, 140, 124], [0x33, 0x99, 0xff]),
+                ([140, 110, 160, 124], WHITE),
+            ])
+        );
+        let backdrop = read([page(), quad([0, 120, 1000, 130], rgb(0))]);
+        assert_eq!(
+            backdrop.regions(RUN),
+            Some(vec![
+                ([100, 110, 160, 120], WHITE),
+                ([100, 120, 160, 124], [0; 3]),
+            ])
+        );
+    }
+
+    #[test]
+    fn rows_cut_alike_are_one_region() {
+        let backdrop = read([
+            page(),
+            quad([0, 0, 1000, 118], rgb(0xeeeeee)),
+            quad([0, 118, 1000, 800], rgb(0xeeeeee)),
+        ]);
+        assert_eq!(backdrop.regions(RUN), Some(vec![(RUN, [0xee; 3])]));
+    }
+
+    #[test]
+    fn gradients_shadows_and_rounded_corners_are_unknown() {
+        let mut gradient = quad([90, 100, 400, 130], rgb(0));
+        let stop = |c, at| linear_color_stop(rgb(c), at);
+        gradient.background = linear_gradient(90.0, stop(0, 0.0), stop(0xffffff, 1.0));
+        assert_eq!(read([page(), gradient]).regions(RUN), None);
+
+        let mut rounded = quad([155, 100, 400, 130], rgb(0));
+        rounded.corner_radii.bottom_left = ScaledPixels(10.0);
+        assert_eq!(read([page(), rounded]).regions(RUN), None);
+        rounded.bounds = bounds([90, 100, 400, 140]);
+        assert_eq!(
+            read([page(), rounded]).regions(RUN),
+            Some(vec![(RUN, [0; 3])])
+        );
+
+        let mut scene = Scene::default();
+        scene.insert_primitive(page());
+        scene.insert_primitive(Shadow {
+            order: 0,
+            blur_radius: ScaledPixels(4.0),
+            bounds: bounds([170, 100, 300, 200]),
+            corner_radii: Corners::default(),
+            content_mask: ContentMask {
+                bounds: bounds([0, 0, 2000, 2000]),
+            },
+            color: gpui_kit::black(),
+            element_bounds: bounds([170, 100, 300, 200]),
+            element_corner_radii: Corners::default(),
+            inset: 0,
+            pad: 0,
+        });
+        let mut backdrop = Backdrop::default();
+        backdrop.read(&scene);
+        assert_eq!(backdrop.regions(RUN), None);
+    }
+
+    #[test]
+    fn borders_are_their_own_colour() {
+        let mut bordered = quad([90, 100, 400, 122], rgb(0xdddddd));
+        bordered.border_color = rgb(0x888888).into();
+        bordered.border_widths.bottom = ScaledPixels(2.0);
+        assert_eq!(
+            read([page(), bordered]).regions(RUN),
+            Some(vec![
+                ([100, 110, 160, 120], [0xdd; 3]),
+                ([100, 120, 160, 122], [0x88; 3]),
+                ([100, 122, 160, 124], WHITE),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_clipped_quad_ends_at_its_clip() {
+        let mut clipped = quad([0, 0, 1000, 800], rgb(0));
+        clipped.content_mask.bounds = bounds([0, 0, 1000, 112]);
+        assert_eq!(
+            read([page(), clipped]).regions(RUN),
+            Some(vec![
+                ([100, 110, 160, 112], [0; 3]),
+                ([100, 112, 160, 124], WHITE),
+            ])
+        );
+    }
+
+    #[test]
+    fn a_run_across_bands_sees_each_quad_once_in_order() {
+        let run = [10, 50, 60, 140];
+        let backdrop = read([
+            page(),
+            quad([0, 0, 1000, 800], rgba(0x00000080)),
+            quad([0, 0, 1000, 800], rgba(0xffffff80)),
+        ]);
+        assert_eq!(backdrop.regions(run), Some(vec![(run, [191; 3])]));
+        assert_eq!(backdrop.behind(run).len(), 3);
+    }
+
+    #[test]
+    fn skipped_primitives_are_not_behind_anything() {
+        let mut scene = Scene::default();
+        let mut backdrop = Backdrop::default();
+        scene.insert_primitive(page());
+        let start = scene.len();
+        scene.insert_primitive(quad([0, 0, 1000, 800], rgb(0)));
+        backdrop.skip(start..scene.len());
+        scene.insert_primitive(quad([0, 0, 110, 800], rgb(0xff0000)));
+        backdrop.read(&scene);
+        let regions = backdrop.regions(RUN);
+        assert_eq!(
+            regions,
+            Some(vec![
+                ([100, 110, 110, 124], [0xff, 0, 0]),
+                ([110, 110, 160, 124], WHITE),
+            ])
+        );
+        backdrop.clear();
+        backdrop.read(&Scene::default());
+        assert_eq!(backdrop.regions(RUN), None);
+    }
+}
