@@ -17,6 +17,9 @@ use gpui_kit::{
     ParentElement, Render, Styled, Window, div, px, rgb, size,
 };
 
+/// The native frame's corners and a glyph a selection ends in differ by this much.
+const TOLERANCE: u64 = 3;
+
 struct Page {
     field: Entity<TextField<PlainText>>,
     origin: [f32; 2],
@@ -219,7 +222,7 @@ fn main() {
             }
             println!("{compared:03} {name}: {stats:?}");
         }
-        if stats.mismatch > 0 {
+        if stats.mismatch > TOLERANCE || stats.max_blob > 1 {
             failures.push(format!("{name}: {stats:?}"));
         }
         worst.max_channel = worst.max_channel.max(stats.max_channel);

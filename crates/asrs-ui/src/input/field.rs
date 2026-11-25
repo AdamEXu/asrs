@@ -1035,6 +1035,12 @@ impl<M: FieldModel> Render for TextField<M> {
             let (cb, _) = split(cy0 + ch, scale);
             let (box_w, box_h) = (cr - cl, cb - ct);
             let side = box_w.min(box_h);
+            // `background-size: contain` at 50 % 50 %: the snapped box sizes the image, and the
+            // unsnapped one centres it.
+            let anchor = [(cx0, cw, cl), (cy0, ch, ct)].map(|(start, size, snapped)| {
+                let start = lu(start) + (lu(size) - lu(side * scale)) / 2;
+                f64::from((start + 31).div_euclid(64) as f32 / scale - snapped)
+            });
             let filter = style.cancel_filter;
             root = root.child(
                 div()
@@ -1051,7 +1057,6 @@ impl<M: FieldModel> Render for TextField<M> {
                             |_, _, _| {},
                             move |bounds, _, window, cx| {
                                 let dpr = f64::from(window.scale_factor());
-                                let anchor = [box_w, box_h].map(|v| f64::from((v - side) / 2.0));
                                 let side = f64::from(side) * dpr;
                                 let placement = Placement {
                                     anchor,
