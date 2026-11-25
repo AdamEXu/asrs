@@ -315,7 +315,9 @@ impl VideoHost for Host<'_> {
     }
 
     fn kill(&mut self, process: Handle) -> bool {
-        self.io().children.kill(process)
+        let io = self.io();
+        let quitting = io.quitting.load(Ordering::SeqCst);
+        io.children.kill(process, quitting)
     }
 
     fn message_box(&mut self, options: &MessageBox) -> Handle {

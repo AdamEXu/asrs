@@ -82,12 +82,17 @@ fn crashes() {
     let named = home.to_string_lossy().into_owned();
     let log = CrashLog::new(home.join("data"), VERSION, Some(named));
     let told = home.join("told");
-    crash_log::install(log, move |logged| {
-        let _ = fs::write(&told, if logged { "logged" } else { "lost" });
+    crash_log::install(log, move |logged, aborts| {
+        let logged = if logged { "logged" } else { "lost" };
+        let aborts = if aborts { ", aborts" } else { "" };
+        let _ = fs::write(&told, format!("{logged}{aborts}"));
     });
     match case.as_str() {
         "panic" => panic!("cannot read {}", home.join("robot.wpilog").display()),
         "abort" => cannot_unwind(),
+        "abort-thread" => {
+            let _ = std::thread::spawn(|| cannot_unwind()).join();
+        }
         "thread" => {
             let thread = std::thread::Builder::new().name("decoder".to_owned());
             let thread = thread.spawn(|| panic!("in a thread")).expect("a thread");
@@ -151,9 +156,13 @@ fn a_panic_is_logged() {
 
 #[test]
 fn a_panic_that_aborts_is_logged() {
-    let home = Home::new("abort");
-    assert!(!wait(home.start("abort", Stdio::null())).success());
-    assert!(home.log().contains("in a window procedure"));
+    for case in ["abort", "abort-thread"] {
+        let home = Home::new(case);
+        assert!(!wait(home.start(case, Stdio::null())).success());
+        assert!(home.log().contains("in a window procedure"));
+        let told = fs::read_to_string(home.0.join("told")).expect("told");
+        assert_eq!(told, "logged, aborts");
+    }
 }
 
 #[test]

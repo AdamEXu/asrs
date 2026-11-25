@@ -103,14 +103,23 @@ impl CrashLog {
 }
 
 /// Records every panic in `log` before the hook installed so far runs, and then tells `then`
-/// whether it is there.
-pub fn install(log: CrashLog, then: impl Fn(bool) + Send + Sync + 'static) {
+/// whether it is there, and whether the process aborts next, whichever thread panicked.
+pub fn install(log: CrashLog, then: impl Fn(bool, bool) + Send + Sync + 'static) {
     let hook = panic::take_hook();
     panic::set_hook(Box::new(move |info| {
         let logged = log.record(info);
         hook(info);
-        then(logged);
+        then(logged, aborts(info));
     }));
+}
+
+/// `PanicHookInfo::can_unwind` is unstable: these are core's messages for a panic that leaves an
+/// `extern` function or a destructor run by another panic.
+fn aborts(info: &PanicHookInfo<'_>) -> bool {
+    matches!(
+        info.payload_as_str(),
+        Some("panic in a function that cannot unwind" | "panic in a destructor during cleanup")
+    )
 }
 
 fn wait(done: &Receiver<bool>) -> bool {

@@ -64,9 +64,11 @@ fn log_panics() {
     let log = CrashLog::new(PathBuf::from(dir), &version, home);
     let path = log.path();
     let main = thread::current().id();
-    crash_log::install(log, move |logged| {
-        // Nothing catches a panic on the main thread. Other threads' leave the app running.
-        if cfg!(windows) && thread::current().id() == main && APP.swap(false, Ordering::SeqCst) {
+    crash_log::install(log, move |logged, aborts| {
+        // Nothing catches a panic on the main thread. One on another thread ends the app only
+        // where it aborts, as it does in GPUI's thread pool, whose callbacks cannot unwind.
+        let ends = aborts || thread::current().id() == main;
+        if cfg!(windows) && ends && APP.swap(false, Ordering::SeqCst) {
             show_crash(&version, logged.then(|| path.display().to_string()));
         }
     });

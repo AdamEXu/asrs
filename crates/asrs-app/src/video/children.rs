@@ -14,11 +14,12 @@ use asrs_services::video::{Handle, VideoEvent};
 
 const EXIT_POLL: Duration = Duration::from_millis(10);
 const KILL_WAIT: Duration = Duration::from_millis(200);
+const QUIT_START_WAIT: Duration = Duration::from_secs(5);
 const CHUNK: usize = 64 * 1024;
 
 enum State {
     Starting { killed: bool },
-    Running(Child),
+    Running { child: Child, killed: bool },
     Failed,
 }
 
@@ -52,32 +53,32 @@ impl Children {
 
     /// `child.kill()`, but with SIGKILL where Node sends SIGTERM: ffmpeg takes seconds to act on
     /// that, writes frames all the while and reports progress once more. Quitting deletes those
-    /// frames, so the child gets a moment to be gone.
-    pub fn kill(&mut self, process: Handle) -> bool {
+    /// frames, so the child gets a moment to be gone. A child still starting as the app quits gets
+    /// longer: nothing would kill it once the app is gone.
+    pub fn kill(&mut self, process: Handle, quitting: bool) -> bool {
         let Some(child) = self.0.get(&process) else {
             return false;
         };
         match &mut *lock(child) {
             State::Starting { killed } => *killed = true,
-            State::Running(child) => {
+            State::Running { child, killed } => {
                 if !matches!(child.try_wait(), Ok(None)) || child.kill().is_err() {
                     return false;
                 }
+                *killed = true;
             }
             State::Failed => return false,
         }
-        let killed = Instant::now();
-        while killed.elapsed() < KILL_WAIT {
-            let gone = match &mut *lock(child) {
-                State::Starting { .. } => false,
-                State::Running(child) => !matches!(child.try_wait(), Ok(None)),
-                State::Failed => true,
-            };
-            if gone {
-                break;
-            }
-            thread::sleep(Duration::from_millis(1));
+        if quitting {
+            wait_while(child, QUIT_START_WAIT, |state| {
+                matches!(state, State::Starting { .. })
+            });
         }
+        wait_while(child, KILL_WAIT, |state| match state {
+            State::Starting { .. } => true,
+            State::Running { child, .. } => matches!(child.try_wait(), Ok(None)),
+            State::Failed => false,
+        });
         true
     }
 
@@ -89,6 +90,13 @@ impl Children {
 
 fn lock(child: &Shared) -> std::sync::MutexGuard<'_, State> {
     child.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+fn wait_while(child: &Shared, limit: Duration, mut waits: impl FnMut(&mut State) -> bool) {
+    let start = Instant::now();
+    while waits(&mut lock(child)) && start.elapsed() < limit {
+        thread::sleep(Duration::from_millis(1));
+    }
 }
 
 /// Reports a started child's events until it closes.
@@ -123,11 +131,9 @@ fn report(
     let stderr = child.stderr.take();
     {
         let mut state = lock(shared);
-        if matches!(*state, State::Starting { killed: true }) {
-            let _ = child.kill();
-        }
+        let killed = matches!(*state, State::Starting { killed: true }) && child.kill().is_ok();
         // The stdin pipe stays open in the child's handle until the child exits.
-        *state = State::Running(child);
+        *state = State::Running { child, killed };
     }
     let readers = [
         stdout.map(|pipe| {
@@ -217,8 +223,12 @@ fn pump(
 /// Polls, so that a kill can take the child between two looks.
 fn wait(child: &Shared) -> (Option<i32>, Option<String>) {
     loop {
-        if let State::Running(child) = &mut *lock(child) {
+        if let State::Running { child, killed } = &mut *lock(child) {
             match child.try_wait() {
+                // Windows has no signals: libuv reports the one it was asked to send, and no code.
+                Ok(Some(_)) if cfg!(windows) && *killed => {
+                    return (None, Some("SIGTERM".to_owned()));
+                }
                 Ok(Some(status)) => return (status.code(), signal(status)),
                 Ok(None) => {}
                 Err(_) => return (None, None),
@@ -336,18 +346,27 @@ mod tests {
         );
     }
 
-    #[cfg(unix)]
+    const LONG: (&str, &[&str]) = if cfg!(windows) {
+        ("ping", &["-n", "60", "127.0.0.1"])
+    } else {
+        ("/bin/sleep", &["60"])
+    };
+
+    fn long_args() -> Vec<JsString> {
+        LONG.1.iter().map(|arg| JsString::from(*arg)).collect()
+    }
+
     #[test]
     fn a_killed_child_reports_its_signal() {
         let (send, receive) = mpsc::channel();
         let mut children = Children::default();
-        children.spawn(1, "/bin/sleep", &[JsString::from("60")], None, move |e| {
+        children.spawn(1, LONG.0, &long_args(), None, move |e| {
             let _ = send.send(e);
         });
         while matches!(*lock(&children.0[&1]), State::Starting { .. }) {
             thread::sleep(Duration::from_millis(1));
         }
-        assert!(children.kill(1));
+        assert!(children.kill(1, false));
         let events: Vec<VideoEvent> = receive.into_iter().collect();
         assert!(matches!(
             events.last(),
@@ -357,12 +376,11 @@ mod tests {
                 ..
             })
         ));
-        assert!(!children.kill(1));
+        assert!(!children.kill(1, false));
         children.closed(1);
-        assert!(!children.kill(1));
+        assert!(!children.kill(1, false));
     }
 
-    #[cfg(unix)]
     #[test]
     fn a_child_killed_as_it_starts_is_killed_once_started() {
         let (send, receive) = mpsc::channel();
@@ -372,20 +390,41 @@ mod tests {
         let shared = Arc::new(Mutex::new(State::Starting { killed: false }));
         let mut children = Children::default();
         children.0.insert(1, shared.clone());
-        assert!(children.kill(1));
-        let started = start("/bin/sleep", &["60".to_owned()], None);
-        report(1, "/bin/sleep", &shared, started, emit);
-        let signals: Vec<bool> = receive
+        assert!(children.kill(1, false));
+        let args: Vec<String> = LONG.1.iter().map(|arg| (*arg).to_owned()).collect();
+        let started = start(LONG.0, &args, None);
+        report(1, LONG.0, &shared, started, emit);
+        let closes: Vec<(Option<i32>, bool)> = receive
             .into_iter()
-            .map(|event| match event {
-                VideoEvent::Exit { signal, .. } | VideoEvent::Close { signal, .. } => {
-                    signal.as_deref() == Some("SIGKILL")
+            .filter_map(|event| match event {
+                VideoEvent::Exit { code, signal, .. } | VideoEvent::Close { code, signal, .. } => {
+                    Some((code, signal.is_some()))
                 }
-                other => panic!("{other:?}"),
+                _ => None,
             })
             .collect();
-        assert_eq!(signals, [true, true]);
-        assert!(!children.kill(1));
+        assert_eq!(closes, [(None, true), (None, true)]);
+        assert!(!children.kill(1, false));
+    }
+
+    #[test]
+    fn quitting_waits_for_a_child_that_takes_long_to_start() {
+        let shared = Arc::new(Mutex::new(State::Starting { killed: false }));
+        let mut children = Children::default();
+        children.0.insert(1, shared.clone());
+        let starter = shared.clone();
+        let thread = thread::spawn(move || {
+            thread::sleep(KILL_WAIT * 3);
+            let args: Vec<String> = LONG.1.iter().map(|arg| (*arg).to_owned()).collect();
+            report(1, LONG.0, &starter, start(LONG.0, &args, None), |_| {});
+        });
+        assert!(children.kill(1, true));
+        let gone = match &mut *lock(&shared) {
+            State::Running { child, .. } => matches!(child.try_wait(), Ok(Some(_))),
+            _ => false,
+        };
+        assert!(gone);
+        thread.join().expect("reported");
     }
 
     #[test]
@@ -396,6 +435,6 @@ mod tests {
             let _ = send.send(event);
         });
         assert_eq!(receive.into_iter().count(), 2);
-        assert!(!children.kill(1));
+        assert!(!children.kill(1, false));
     }
 }
