@@ -113,29 +113,39 @@ fn run_log_step(log: &RefCell<Log>, calls: &[Value]) -> Result<(), String> {
         let key = |i: usize| js_string(&args[i]);
         let log = &mut *log.borrow_mut();
         match method.as_str() {
-            "putBoolean" => log.put_boolean(&key(0)?, number(&args[1])?, truthy(&args[2])),
-            "putNumber" => log.put_number(&key(0)?, number(&args[1])?, number(&args[2])?),
-            "putString" => log.put_string(&key(0)?, number(&args[1])?, js_string(&args[2])?),
-            "putBooleanArray" => log.put_boolean_array(
-                &key(0)?,
-                number(&args[1])?,
-                args[2]
-                    .as_array()
-                    .ok_or_else(|| err("putBooleanArray value is an array"))?
-                    .iter()
-                    .map(truthy)
-                    .collect(),
-            ),
-            "putNumberArray" => log.put_number_array(
-                &key(0)?,
-                number(&args[1])?,
-                args[2]
-                    .as_array()
-                    .ok_or_else(|| err("putNumberArray value is an array"))?
-                    .iter()
-                    .map(number)
-                    .collect::<Result<_, String>>()?,
-            ),
+            "putBoolean" => log
+                .put_boolean(&key(0)?, number(&args[1])?, truthy(&args[2]))
+                .unwrap(),
+            "putNumber" => log
+                .put_number(&key(0)?, number(&args[1])?, number(&args[2])?)
+                .unwrap(),
+            "putString" => log
+                .put_string(&key(0)?, number(&args[1])?, js_string(&args[2])?)
+                .unwrap(),
+            "putBooleanArray" => log
+                .put_boolean_array(
+                    &key(0)?,
+                    number(&args[1])?,
+                    args[2]
+                        .as_array()
+                        .ok_or_else(|| err("putBooleanArray value is an array"))?
+                        .iter()
+                        .map(truthy)
+                        .collect(),
+                )
+                .unwrap(),
+            "putNumberArray" => log
+                .put_number_array(
+                    &key(0)?,
+                    number(&args[1])?,
+                    args[2]
+                        .as_array()
+                        .ok_or_else(|| err("putNumberArray value is an array"))?
+                        .iter()
+                        .map(number)
+                        .collect::<Result<_, String>>()?,
+                )
+                .unwrap(),
             "clearBeforeTime" => log.clear_before_time(number(&args[0])?, truthy(&args[1])),
             "deleteField" => log.delete_field(&key(0)?),
             "updateRangeWithTimestamp" => log.update_range_with_timestamp(number(&args[0])?),

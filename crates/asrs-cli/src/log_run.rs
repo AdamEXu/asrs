@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use asrs_js::string::JsString;
+use asrs_js::string::{JsError, JsString};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use asrs_js::time::Rng;
@@ -170,9 +170,44 @@ fn dump_all(log: &Log) -> Value {
     Value::Object(pairs)
 }
 
+fn push_threw(results: &mut Vec<Value>, error: &JsError) {
+    results.push(Value::object([(
+        "threw",
+        Value::Error(
+            Utf16String::from(error.name),
+            Utf16String::from(error.message.as_str()),
+        ),
+    )]));
+}
+
+/// `putBoolean`, `putNumber` and `putString` take whatever value the op holds, as upstream's do.
+fn put_scalar(
+    log: &mut Log,
+    op: &[Value],
+    ty: LoggableType,
+) -> Result<Result<(), LogError>, String> {
+    let key = js_string(&arg(op, 1))?;
+    let timestamp = number(&arg(op, 2))?;
+    let value = arg(op, 3);
+    Ok(match (ty, &value) {
+        (LoggableType::Boolean, Value::Bool(b)) => log.put_boolean(&key, timestamp, *b),
+        (LoggableType::Number, Value::Number(_)) => {
+            log.put_number(&key, timestamp, number(&value)?)
+        }
+        (LoggableType::String, Value::String(_)) => {
+            log.put_string(&key, timestamp, js_string(&value)?)
+        }
+        _ => log.put_untyped(&key, timestamp, ty, js_json::to_js(&value)?),
+    })
+}
+
 fn threw(results: &mut Vec<Value>, result: Result<(), LogError>) -> Result<(), String> {
     match result {
         Ok(()) => Ok(()),
+        Err(LogError::Thrown(e)) => {
+            push_threw(results, &e);
+            Ok(())
+        }
         Err(LogError::Proto(e)) => {
             results.push(Value::object([(
                 "threw",
@@ -353,18 +388,21 @@ pub(crate) fn apply(
             results.push(Value::Array(units));
         }
         "dumpAll" => results.push(dump_all(log)),
-        "putBoolean" => log.put_boolean(&key()?, timestamp()?, boolean(&arg(op, 3))?),
-        "putNumber" => log.put_number(&key()?, timestamp()?, number(&arg(op, 3))?),
-        "putString" => log.put_string(&key()?, timestamp()?, js_string(&arg(op, 3))?),
-        "putBooleanArray" => {
-            log.put_boolean_array(&key()?, timestamp()?, array(&arg(op, 3), boolean)?)
-        }
-        "putNumberArray" => {
-            log.put_number_array(&key()?, timestamp()?, array(&arg(op, 3), number)?)
-        }
-        "putStringArray" => {
-            log.put_string_array(&key()?, timestamp()?, array(&arg(op, 3), js_string)?)
-        }
+        "putBoolean" => threw(results, put_scalar(log, op, LoggableType::Boolean)?)?,
+        "putNumber" => threw(results, put_scalar(log, op, LoggableType::Number)?)?,
+        "putString" => threw(results, put_scalar(log, op, LoggableType::String)?)?,
+        "putBooleanArray" => threw(
+            results,
+            log.put_boolean_array(&key()?, timestamp()?, array(&arg(op, 3), boolean)?),
+        )?,
+        "putNumberArray" => threw(
+            results,
+            log.put_number_array(&key()?, timestamp()?, array(&arg(op, 3), number)?),
+        )?,
+        "putStringArray" => threw(
+            results,
+            log.put_string_array(&key()?, timestamp()?, array(&arg(op, 3), js_string)?),
+        )?,
         "putJSON" => {
             let result = log.put_json(&key()?, timestamp()?, js_string(&arg(op, 3))?);
             threw(results, result)?;
@@ -378,15 +416,19 @@ pub(crate) fn apply(
             );
             threw(results, result)?;
         }
-        "putPose" => log.put_pose(
-            &key()?,
-            timestamp()?,
-            pair(&arg(op, 3))?,
-            number(&arg(op, 4))?,
-        ),
-        "putTranslationArray" => {
-            log.put_translation_array(&key()?, timestamp()?, &array(&arg(op, 3), pair)?)
-        }
+        "putPose" => threw(
+            results,
+            log.put_pose(
+                &key()?,
+                timestamp()?,
+                pair(&arg(op, 3))?,
+                number(&arg(op, 4))?,
+            ),
+        )?,
+        "putTranslationArray" => threw(
+            results,
+            log.put_translation_array(&key()?, timestamp()?, &array(&arg(op, 3), pair)?),
+        )?,
         "createBlankField" => log.create_blank_field(&key()?, loggable_type(&arg(op, 2))?),
         "setField" => log.set_field(
             &key()?,
@@ -412,9 +454,20 @@ pub(crate) fn apply(
             ("keys", strings(log.field_keys())),
             ("count", Value::number(log.get_field_count() as f64)),
         ])),
-        "fieldTree" => results.push(tree_value(
-            &log.get_field_tree(boolean(&arg(op, 1))?, &js_string(&arg(op, 2))?),
-        )),
+        "fieldTree" => match log.get_field_tree(
+            boolean(&arg(op, 1))?,
+            &js_string(&arg(op, 2))?,
+            &mut realm.object_prototype,
+        ) {
+            Ok(tree) => results.push(tree_value(&tree)),
+            Err(error) => push_threw(results, &error),
+        },
+        "type" => match log.try_get_type(&key()?) {
+            Ok(ty) => {
+                results.push(ty.map_or(Value::Null, |ty| Value::number(f64::from(ty as u8))));
+            }
+            Err(error) => threw(results, Err(error))?,
+        },
         "range" => results.push(Value::object([
             ("range", numbers(&log.get_timestamp_range())),
             (
@@ -511,6 +564,7 @@ fn iterator_values(set: &Option<LogValueSetAny>, times: &[f64]) -> Vec<Value> {
         Some(LogValueSetAny::NumberArray(s)) => run(Some(s), times),
         Some(LogValueSetAny::StringArray(s)) => run(Some(s), times),
         Some(LogValueSetAny::Empty(s)) => run(Some(s), times),
+        Some(LogValueSetAny::Foreign(_, s)) => run(Some(s), times),
         None => run::<()>(None, times),
     }
 }
@@ -681,5 +735,8 @@ fn log_script(args: &[Value]) -> Response {
     }
 }
 
-pub const FUNCTIONS: &[(&str, functions::Function)] =
-    &[("oracle:logRun", log_run), ("oracle:logScript", log_script)];
+pub const FUNCTIONS: &[(&str, functions::Function)] = &[
+    ("oracle:logRun", log_run),
+    ("oracle:logRealmRun", log_run),
+    ("oracle:logScript", log_script),
+];

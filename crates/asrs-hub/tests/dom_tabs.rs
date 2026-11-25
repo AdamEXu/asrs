@@ -1090,21 +1090,21 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
         };
         let mut log = log.borrow_mut();
         match method.as_str() {
-            "putBoolean" => log.put_boolean(&key(0)?, ts(1)?, truthy(&js_json::from_js(&args[2]))),
-            "putNumber" => log.put_number(&key(0)?, ts(1)?, args[2].as_f64().unwrap_or(f64::NAN)),
-            "putString" => {
-                let v = match &args[2] {
-                    JsValue::String(s) => s.clone(),
-                    _ => return Err(err("putString value is a string")),
+            "putBoolean" | "putNumber" | "putString" => {
+                let ty = match method.as_str() {
+                    "putBoolean" => LoggableType::Boolean,
+                    "putNumber" => LoggableType::Number,
+                    _ => LoggableType::String,
                 };
-                log.put_string(&key(0)?, ts(1)?, v);
+                log.put_untyped(&key(0)?, ts(1)?, ty, args[2].clone())
+                    .unwrap();
             }
             "putBooleanArray" => {
                 let JsValue::Array(items) = &args[2] else {
                     return Err(err("putBooleanArray value is an array"));
                 };
                 let items = items.iter().map(|v| truthy(&js_json::from_js(v))).collect();
-                log.put_boolean_array(&key(0)?, ts(1)?, items);
+                log.put_boolean_array(&key(0)?, ts(1)?, items).unwrap();
             }
             "putNumberArray" => {
                 let JsValue::Array(items) = &args[2] else {
@@ -1114,7 +1114,7 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
                     .iter()
                     .map(|v| v.as_f64().unwrap_or(f64::NAN))
                     .collect();
-                log.put_number_array(&key(0)?, ts(1)?, items);
+                log.put_number_array(&key(0)?, ts(1)?, items).unwrap();
             }
             "putStringArray" => {
                 let JsValue::Array(items) = &args[2] else {
@@ -1127,7 +1127,7 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
                         _ => JsString::new(),
                     })
                     .collect();
-                log.put_string_array(&key(0)?, ts(1)?, items);
+                log.put_string_array(&key(0)?, ts(1)?, items).unwrap();
             }
             "putUnknownStruct" => {
                 log.put_unknown_struct(&key(0)?, ts(1)?, &args[2], false)
@@ -1164,7 +1164,7 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
                     .map_err(|e| e.message)?
                     .as_f64()
                     .unwrap_or(f64::NAN);
-                log.put_pose(&key(0)?, ts(1)?, [x, y], r);
+                log.put_pose(&key(0)?, ts(1)?, [x, y], r).unwrap();
             }
             "createBlankField" => {
                 let ty = match args[1].as_f64() {
@@ -3270,9 +3270,10 @@ impl Runner {
 
 /// Fixtures that ran on Blink with real geometry and hold one Table tab; their other geometry
 /// records are the sidebar's, tab bar's and timeline's, which other models replay.
-const TABLE_FIXTURES: [&str; 7] = [
+const TABLE_FIXTURES: [&str; 8] = [
     "dom/tabs/table",
     "dom/tabs/table-edit",
+    "dom/tabs/table-foreign",
     "dom/tabs/table-ranges",
     "dom/tabs/table-resize",
     "dom/tabs/table-wide",

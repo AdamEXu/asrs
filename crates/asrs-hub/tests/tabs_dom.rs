@@ -902,8 +902,8 @@ fn apply_log(log: &mut Log, ops: &Json) -> Result<(), String> {
         let key = key.ok_or("log op key")?;
         let time = op.get(2).and_then(Json::as_f64).ok_or("log op time")?;
         match (method.as_str(), op.get(3)) {
-            ("putBoolean", Some(Json::Bool(b))) => log.put_boolean(&key, time, *b),
-            ("putNumber", Some(Json::Number(n))) => log.put_number(&key, time, *n),
+            ("putBoolean", Some(Json::Bool(b))) => log.put_boolean(&key, time, *b).unwrap(),
+            ("putNumber", Some(Json::Number(n))) => log.put_number(&key, time, *n).unwrap(),
             _ => return Err(format!("unsupported log op {method}")),
         }
     }

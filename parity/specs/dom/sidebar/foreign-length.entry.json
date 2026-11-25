@@ -1,0 +1,174 @@
+{
+  "entry": "dom",
+  "fixture": {
+    "seed": 72,
+    "geometry": "real",
+    "steps": [
+      {
+        "eval": "/*sidebar:recorder*/ (() => {\n  const w = window;\n  const write = (record) => w.__oracleWrite(JSON.stringify(record));\n  const tree = w.__oracleTree;\n  const sideBar = document.getElementsByClassName(\"side-bar\")[0];\n  w.addEventListener(\"scroll\", (event) => {\n    if (event.target === sideBar) write({ sb: \"scroll\" });\n  }, true);\n  const search = document.getElementsByClassName(\"side-bar-search\")[0];\n  w.addEventListener(\"blur\", (event) => {\n    if (event.target === search) write({ sb: \"blur\" });\n  }, true);\n  w.addEventListener(\"mousedown\", (event) => {\n    if (event.target instanceof Element && event.target.closest(\".field-item-label\") !== null) {\n      write({ sb: \"mousedown\", offset: tree([event.offsetX, event.offsetY]) });\n    }\n  }, true);\n})()"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/A",
+            0,
+            1.5
+          ],
+          [
+            "putString",
+            "/B",
+            0,
+            "ok"
+          ],
+          [
+            "putString",
+            "/B",
+            1,
+            {
+              "o": [
+                [
+                  "length",
+                  {
+                    "n": "4058c00000000000"
+                  }
+                ]
+              ]
+            }
+          ],
+          [
+            "putNumber",
+            "/C",
+            0,
+            3
+          ],
+          [
+            "putNumber",
+            "/C",
+            1,
+            4
+          ]
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          0
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "before"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          1
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "threw"
+      },
+      {
+        "selection": [
+          "setSelectedTime",
+          0
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "dead"
+      },
+      {
+        "log": [
+          [
+            "putNumber",
+            "/D",
+            0,
+            9
+          ]
+        ]
+      },
+      {
+        "frames": 2
+      },
+      {
+        "capture": [
+          {
+            "kind": "dom",
+            "selector": "#fieldList",
+            "attributes": [
+              "title",
+              "placeholder",
+              "fill",
+              "style"
+            ]
+          },
+          {
+            "kind": "dom",
+            "selector": "div.side-bar-title"
+          }
+        ],
+        "label": "refreshed"
+      }
+    ]
+  }
+}

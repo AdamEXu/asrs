@@ -182,6 +182,17 @@
   "focusRingsMain": [
     "src/focusRingsMain.ts"
   ],
+  "foreignLogs": [
+    "src/corpus/bytes.ts",
+    "src/corpus/rlog.ts",
+    "src/corpus/roadrunner.ts",
+    "src/corpus/wpilog.ts",
+    "src/cve1.ts",
+    "src/environment.ts",
+    "src/foreignLogs.ts",
+    "src/logRun.ts",
+    "src/shims.ts"
+  ],
   "genAssetDownload": [
     "src/environment.ts",
     "src/genAssetDownload.ts"
@@ -797,6 +808,10 @@
     "src/dom/recordingCanvas.ts",
     "src/heatmap/fakeDom.ts",
     "src/lazyHelpers/field3dRendererRun.ts"
+  ],
+  "lazyHelpers/logRealmRun": [
+    "src/lazyHelpers/logRealmRun.ts",
+    "src/logRun.ts"
   ],
   "lazyHelpers/mergeCalculatorRun": [
     "src/lazyHelpers/mergeCalculatorRun.ts"
