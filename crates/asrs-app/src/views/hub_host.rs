@@ -271,6 +271,7 @@ impl HubEntityHost {
     ) -> Entity<HubFrame<HubEntityHost>> {
         let geometry = FrameGeometry::default();
         geometry.set_dark(dark);
+        geometry.set_inner_height(f64::from(f32::from(window.viewport_size().height)));
         let sidebar_geometry = ViewGeometry::new();
         let lists = ListsGeometry::default();
         let view = Box::new(FrameView {
