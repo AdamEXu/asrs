@@ -579,7 +579,6 @@ fn negated(width: f64) -> f64 {
     }
 }
 
-/// `this.sidebarWidth === lastSidebarWidth`: an object is only the same until it is replaced.
 /// Whether two reads of a field's raw value are `===`: an object read twice is the same object.
 fn same_sample(a: &Option<JsValue>, b: &Option<JsValue>) -> bool {
     match (a, b) {
@@ -627,6 +626,7 @@ fn foreign_text(value: &JsValue, max_characters: f64) -> Result<(JsString, JsVal
     Ok((ops::to_string(value), length))
 }
 
+/// `this.sidebarWidth === lastSidebarWidth`: an object is only the same until it is replaced.
 fn same_width(a: &Rc<JsValue>, b: &Rc<JsValue>) -> bool {
     ops::strict_equals(&**a, &**b)
         || (Rc::ptr_eq(a, b) && matches!(**a, JsValue::Array(_) | JsValue::Object(_)))

@@ -284,20 +284,34 @@ impl LogField {
         uuid: Option<&str>,
         start_offset: Option<i64>,
     ) -> Option<LogValueSet<T>> {
-        if self.get_type() != T::TYPE {
+        let Some(column) = self.values.as_slice::<T>() else {
+            return self.get_converted(start, end, uuid, start_offset);
+        };
+        let range = self.get_range_indices(start, end, uuid, start_offset);
+        Some(LogValueSet {
+            timestamps: self.timestamps[range.clone()].to_vec(),
+            values: column[range].to_vec(),
+        })
+    }
+
+    #[cold]
+    fn get_converted<T: LogValue>(
+        &self,
+        start: f64,
+        end: f64,
+        uuid: Option<&str>,
+        start_offset: Option<i64>,
+    ) -> Option<LogValueSet<T>> {
+        let LogValues::Foreign(ty, column) = &self.values else {
+            return None;
+        };
+        if *ty != T::TYPE {
             return None;
         }
         let range = self.get_range_indices(start, end, uuid, start_offset);
-        let values = match (T::column(&self.values), &self.values) {
-            (Some(column), _) => column[range.clone()].to_vec(),
-            (None, LogValues::Foreign(_, column)) => {
-                column[range.clone()].iter().map(T::from_js).collect()
-            }
-            (None, _) => return None,
-        };
         Some(LogValueSet {
-            timestamps: self.timestamps[range].to_vec(),
-            values,
+            timestamps: self.timestamps[range.clone()].to_vec(),
+            values: column[range].iter().map(T::from_js).collect(),
         })
     }
 

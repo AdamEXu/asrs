@@ -590,6 +590,7 @@ pub struct HubModel {
     page: HubPage,
     tabs: Tabs<HubPage>,
     sidebar: Sidebar,
+    sidebar_periodic_ended: bool,
     filenames: Filenames,
     historical: Vec<SourceEntry>,
     platform: Platform,
@@ -748,6 +749,7 @@ impl HubModel {
             page,
             tabs,
             sidebar,
+            sidebar_periodic_ended: false,
             filenames,
             historical: Vec::new(),
             platform: Platform::default(),
@@ -1395,10 +1397,14 @@ impl HubModel {
                 if self.sidebar.next_timeout().is_some() {
                     self.sidebar.fire_timeouts(host.now());
                 }
-                match sidebar_result(self.with_sidebar(Sidebar::periodic)) {
-                    Ok(()) => host.request_animation_frame(HubFrame::Sidebar),
-                    Err(e) => host.exception("requestAnimationFrame", format!("{e}")),
+                // Upstream's loop ends where `periodic` throws; its timeouts still fire.
+                if !self.sidebar_periodic_ended
+                    && let Err(e) = sidebar_result(self.with_sidebar(Sidebar::periodic))
+                {
+                    self.sidebar_periodic_ended = true;
+                    host.exception("requestAnimationFrame", format!("{e}"));
                 }
+                host.request_animation_frame(HubFrame::Sidebar);
             }
             HubFrame::Tabs => {
                 let now = host.frame_time();

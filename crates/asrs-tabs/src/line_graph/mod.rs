@@ -731,6 +731,14 @@ impl LineGraphController {
     }
 }
 
+/// `values[i] + values[Math.max(i - 1, 0)]`, where `+` concatenates strings.
+#[cold]
+fn neighbor_sums(values: &[JsValue]) -> Result<Vec<f64>, JsError> {
+    (0..values.len())
+        .map(|i| ops::value_to_number(&ops::add(&values[i], &values[i.saturating_sub(1)])?))
+        .collect()
+}
+
 /// `addNumeric` for one axis: the visible fields' commands and the data range.
 fn add_numeric(
     log: &Log,
@@ -837,15 +845,14 @@ fn add_numeric(
                 let mut start_index = None;
                 let mut integral = 0.0;
                 let mut integrated = Vec::with_capacity(values.len());
+                let foreign_sums = foreign.as_deref().map(neighbor_sums).transpose()?;
                 for i in 0..values.len() {
                     let prev = i.saturating_sub(1);
                     if timestamps[i] > time_range[0] && start_index.is_none() {
                         start_index = Some(i.saturating_sub(1));
                     }
-                    let sum = match &foreign {
-                        Some(foreign) => {
-                            ops::value_to_number(&ops::add(&foreign[i], &foreign[prev])?)?
-                        }
+                    let sum = match &foreign_sums {
+                        Some(sums) => sums[i],
                         None => values[i] + values[prev],
                     };
                     integral += (timestamps[i] - timestamps[prev]) * sum * 0.5;

@@ -234,8 +234,6 @@ pub fn lookup(name: &JsString, key: &JsString) -> Result<Lookup, JsError> {
                  mode functions or the arguments objects for calls to them",
             ));
         }
-        "apply" | "bind" | "call" => Lookup::Inherited,
-        "prototype" if method == "constructor" => Lookup::Inherited,
         _ => inherited,
     })
 }

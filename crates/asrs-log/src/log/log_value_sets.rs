@@ -63,14 +63,18 @@ pub trait LogValue: Clone + Sized {
     fn column_mut(values: &mut LogValues) -> Option<&mut Arc<Vec<Self>>>;
     fn log_values_equal(&self, other: &Self) -> bool;
     fn into_any(set: LogValueSet<Self>) -> LogValueSetAny;
-    fn into_js(self) -> JsValue;
+    fn into_js(self) -> JsValue {
+        unreachable!("only Boolean, Number and String columns turn foreign")
+    }
     /// What a consumer that expects this type makes of a foreign value.
-    fn from_js(value: &JsValue) -> Self;
+    fn from_js(_value: &JsValue) -> Self {
+        unreachable!("only Boolean, Number and String columns turn foreign")
+    }
 }
 
 macro_rules! log_value {
-    ($ty:ty, $variant:ident, |$a:ident, $b:ident| $equal:expr, |$v:ident| $into:expr,
-     |$f:ident| $from:expr) => {
+    ($ty:ty, $variant:ident, |$a:ident, $b:ident| $equal:expr
+        $(, |$v:ident| $into:expr, |$f:ident| $from:expr)?) => {
         impl LogValue for $ty {
             const TYPE: LoggableType = LoggableType::$variant;
 
@@ -96,49 +100,26 @@ macro_rules! log_value {
             fn into_any(set: LogValueSet<Self>) -> LogValueSetAny {
                 LogValueSetAny::$variant(set)
             }
+            $(
+                fn into_js(self) -> JsValue {
+                    let $v = self;
+                    $into
+                }
 
-            fn into_js(self) -> JsValue {
-                let $v = self;
-                $into
-            }
-
-            fn from_js($f: &JsValue) -> Self {
-                $from
-            }
+                fn from_js($f: &JsValue) -> Self {
+                    $from
+                }
+            )?
         }
     };
 }
 
-fn array<T>(values: Vec<T>, item: impl Fn(T) -> JsValue) -> JsValue {
-    JsValue::Array(values.into_iter().map(item).collect())
-}
-
-fn items<T>(value: &JsValue, item: impl Fn(&JsValue) -> T) -> Vec<T> {
-    match value {
-        JsValue::Array(values) => values.iter().map(item).collect(),
-        _ => Vec::new(),
-    }
-}
-
-fn to_number(value: &JsValue) -> f64 {
-    ops::value_to_number(value).unwrap_or(f64::NAN)
-}
-
-log_value!(
-    RawValue,
-    Raw,
-    |a, b| a[..] == b[..],
-    |v| JsValue::Bytes(v.to_vec()),
-    |f| match f {
-        JsValue::Bytes(bytes) => RawValue::from(bytes.as_slice()),
-        _ => RawValue::default(),
-    }
-);
+log_value!(RawValue, Raw, |a, b| a[..] == b[..]);
 log_value!(bool, Boolean, |a, b| a == b, |v| JsValue::Bool(v), |f| {
     ops::to_boolean(f)
 });
 log_value!(f64, Number, |a, b| a == b, |v| JsValue::Number(v), |f| {
-    to_number(f)
+    ops::value_to_number(f).unwrap_or(f64::NAN)
 });
 log_value!(
     JsString,
@@ -147,28 +128,10 @@ log_value!(
     |v| JsValue::String(v),
     |f| ops::to_string(f)
 );
-log_value!(
-    Vec<bool>,
-    BooleanArray,
-    |a, b| a == b,
-    |v| array(v, JsValue::Bool),
-    |f| items(f, ops::to_boolean)
-);
-log_value!(
-    Vec<f64>,
-    NumberArray,
-    |a, b| a == b,
-    |v| array(v, JsValue::Number),
-    |f| items(f, to_number)
-);
-log_value!(
-    Vec<JsString>,
-    StringArray,
-    |a, b| a == b,
-    |v| array(v, JsValue::String),
-    |f| items(f, ops::to_string)
-);
-log_value!((), Empty, |_a, _b| false, |_v| JsValue::Null, |_f| ());
+log_value!(Vec<bool>, BooleanArray, |a, b| a == b);
+log_value!(Vec<f64>, NumberArray, |a, b| a == b);
+log_value!(Vec<JsString>, StringArray, |a, b| a == b);
+log_value!((), Empty, |_a, _b| false);
 
 impl LogValues {
     pub fn new(ty: LoggableType) -> Self {
@@ -227,15 +190,10 @@ impl LogValues {
         }
         if !matches!(self, LogValues::Foreign(..)) {
             let values = match self {
-                LogValues::Raw(c) => convert(c),
                 LogValues::Boolean(c) => convert(c),
                 LogValues::Number(c) => convert(c),
                 LogValues::String(c) => convert(c),
-                LogValues::BooleanArray(c) => convert(c),
-                LogValues::NumberArray(c) => convert(c),
-                LogValues::StringArray(c) => convert(c),
-                LogValues::Empty(c) => convert(c),
-                LogValues::Foreign(_, c) => c.to_vec(),
+                _ => unreachable!("only Boolean, Number and String columns turn foreign"),
             };
             *self = LogValues::Foreign(self.loggable_type(), Arc::new(values));
         }
