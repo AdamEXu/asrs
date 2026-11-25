@@ -1,8 +1,10 @@
 use std::collections::{BTreeSet, HashSet};
 use std::fs;
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Write};
+use std::net::TcpListener;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::time::Duration;
 
 use asrs_parity::json::{self, Json};
 use asrs_parity::pixel::{self, Rgba};
@@ -190,6 +192,42 @@ impl Drop for Robot {
     }
 }
 
+/// A scenario's RLOG server for one variant: sends its file to the first connection, in one
+/// message, and stops.
+pub(crate) struct Live {
+    pub(crate) port: u16,
+}
+
+const LIVE_HOLD: Duration = Duration::from_millis(1500);
+
+impl Live {
+    /// `None` for a scenario without `live`.
+    pub(crate) fn start(paths: &Paths, scenario: &Path) -> Result<Option<Live>> {
+        let scenario = read_json(scenario)?;
+        let Some(live) = scenario.get("live") else {
+            return Ok(None);
+        };
+        let file = live
+            .get("rlog")
+            .and_then(Json::as_str)
+            .ok_or("live needs an rlog file")?;
+        let file = paths.root.join(file.to_string_lossy());
+        let log = fs::read(&file).map_err(|e| format!("{}: {e}", file.display()))?;
+        let listener = TcpListener::bind("127.0.0.1:0").map_err(|e| format!("live: {e}"))?;
+        let port = listener.local_addr().map_err(|e| e.to_string())?.port();
+        std::thread::spawn(move || {
+            if let Ok((mut socket, _)) = listener.accept() {
+                let length = (log.len() as u32).to_be_bytes();
+                let _ = socket
+                    .write_all(&length)
+                    .and_then(|()| socket.write_all(&log));
+                std::thread::sleep(LIVE_HOLD);
+            }
+        });
+        Ok(Some(Live { port }))
+    }
+}
+
 struct Scenario {
     name: String,
     file: PathBuf,
@@ -319,6 +357,7 @@ fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path)
     } = variant;
     let gl_switch = scenario.gl.then_some(*gl);
     let robot = Robot::start(paths, &scenario.file)?;
+    let live = Live::start(paths, &scenario.file)?;
     let mut command = Command::new(paths.electron()?);
     command
         .args(electron_switches(*scale, gl_switch, colour))
@@ -330,6 +369,7 @@ fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path)
         .arg(format!("--gl={gl}"))
         .arg(format!("--colour={colour}"))
         .args(robot.iter().map(|r| format!("--robot={}", r.port)))
+        .args(live.iter().map(|l| format!("--live={}", l.port)))
         .args(scrollbar_defaults(scenario.classic_scrollbars))
         .current_dir(&paths.root)
         .env("ASRS_CACHE", &paths.cache)

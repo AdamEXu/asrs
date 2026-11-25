@@ -23,6 +23,7 @@ mod mutate;
 mod oracle;
 mod pack;
 mod parity;
+mod perf;
 mod pixel;
 mod public;
 mod sessions;
@@ -31,6 +32,7 @@ mod tables;
 mod text;
 mod ui;
 mod vectors;
+mod version;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
@@ -49,6 +51,7 @@ commands:
   licenses  third-party license bundle for releases into target/licenses (needs cargo-about)
   bundle    release packages: app, LGPL sin/cos library, license bundle (see `cargo xtask bundle help`)
   smoke     check the release packages: install, start, OCR, library swap (see `cargo xtask smoke help`)
+  version   the version, its numeric forms, and whether a tag matches it (see `cargo xtask version help`)
   libm      build or plant-test the LGPL sin/cos library asrs loads at runtime (see `cargo xtask libm help`)
   oracle    parity oracle: setup, gen, fn, smoke (see `cargo xtask oracle`)
   corpus    test corpora: gen, list, fuzz, fetch (see `cargo xtask corpus`)
@@ -56,6 +59,7 @@ commands:
   gpui      vendored gpui patches and parity feature checks (see `cargo xtask gpui`)
   mutate    mutation testing of port files or recorded vectors (see `cargo xtask mutate`)
   parity    compare the oracle with the port: cve1, fn, diff (see `cargo xtask parity`)
+  perf      decode time against upstream, frame time per view (see `cargo xtask perf`)
   pixel     section 2.5 pixel gates between upstream and port runs, port scenarios, selftest
             (see `cargo xtask pixel`)
   canvas    canvas suite: Chromium references, mask-gamma LUT, text metrics, gates (see `cargo xtask canvas`)
@@ -76,12 +80,14 @@ fn main() -> ExitCode {
         Some("licenses") => licenses::run(),
         Some("bundle") => bundle::run(&args[1..]),
         Some("smoke") => smoke::run(&args[1..]),
+        Some("version") => version::run(&args[1..]),
         Some("libm") => libm::run(&args[1..]),
         Some("oracle") => oracle::run(&args[1..]),
         Some("corpus") => corpus::run(&args[1..]),
         Some("gpui") => gpui::run(&args[1..]),
         Some("mutate") => mutate::run(&args[1..]),
         Some("parity") => parity::run(&args[1..]),
+        Some("perf") => perf::run(&args[1..]),
         Some("pixel") => pixel::run(&args[1..]),
         Some("canvas") => canvas::run(&args[1..]),
         Some("ui") => ui::run(&args[1..]),

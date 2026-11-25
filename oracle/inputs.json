@@ -22,6 +22,7 @@
     "src/canvas/png.ts",
     "src/canvas/r07Traces.json",
     "src/canvas/scenes.ts",
+    "src/canvas/textMode.ts",
     "src/canvas/timelineTraces.json",
     "src/canvas/ui.ts",
     "src/canvasMain.ts",
@@ -93,6 +94,17 @@
   "decode": [
     "src/cve1.ts",
     "src/decode.ts",
+    "src/environment.ts",
+    "src/historical/dump.ts",
+    "src/historical/mainProcess.ts",
+    "src/historical/scheduler.ts",
+    "src/historical/session.ts",
+    "src/historical/timers.ts",
+    "src/shims.ts"
+  ],
+  "decodeBench": [
+    "src/cve1.ts",
+    "src/decodeBench.ts",
     "src/environment.ts",
     "src/historical/dump.ts",
     "src/historical/mainProcess.ts",

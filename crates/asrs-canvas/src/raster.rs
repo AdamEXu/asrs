@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use asrs_js::string::JsString;
 use tiny_skia::{LineCap, LineJoin, Pixmap};
@@ -173,6 +174,53 @@ pub struct Raster<'a> {
     calls: usize,
     unflushed: bool,
     shades: ShadeCache,
+    deferred: Vec<DeferredStroke>,
+}
+
+/// A stroke whose coverage is still to be computed. Consecutive ones are computed on several
+/// threads and blended in order, before anything else reads or paints the pixels.
+struct DeferredStroke {
+    path: SkPath,
+    style: stroke::Style,
+    ctm: Matrix,
+    clip: Option<RasterClip>,
+    source: Source,
+}
+
+/// The points a stroke needs for a thread to be worth it.
+const DEFER_POINTS: usize = 256;
+
+/// The strokes computed together, which bounds the coverage held at once.
+const DEFER_STROKES: usize = 64;
+
+impl DeferredStroke {
+    fn spans(&self, width: u32, height: u32) -> Spans {
+        let device = stroke::stroke_path(&self.path, &self.style).mapped(&self.ctm);
+        let spans = path_spans(&device, self.clip.as_ref(), width, height, false);
+        match &self.clip {
+            None => spans,
+            Some(clip) => clip.apply(spans),
+        }
+    }
+}
+
+/// The blits `SkDraw::drawDevPath` makes to fill a device path.
+fn path_spans(
+    path: &SkPath,
+    clip: Option<&RasterClip>,
+    width: u32,
+    height: u32,
+    even_odd: bool,
+) -> Spans {
+    let mut spans = Spans::new(width, height);
+    if dev_path_drawable(path) {
+        let (bounds, force_rle) = match clip {
+            None => ([0, 0, width as i32, height as i32], false),
+            Some(clip) => (clip.bounds(), clip.force_rle()),
+        };
+        aaa::fill_path_clipped(path, bounds, force_rle, even_odd, &mut spans);
+    }
+    spans
 }
 
 /// What `drawImage` draws: an `<img>` is decoded by cc at the mip level the draw needs, while a
@@ -301,6 +349,36 @@ const OUT_OF_MEMORY: CanvasError = CanvasError::Range("Out of memory at ImageDat
 enum Source {
     Solid([u8; 4]),
     Gradient(Box<gradient::Paint>),
+}
+
+/// `f` of every item, in order, on as many threads as the machine has cores.
+fn parallel_map<T: Sync, R: Send>(items: &[T], f: impl Fn(&T) -> R + Sync) -> Vec<R> {
+    let cores = std::thread::available_parallelism().map_or(1, usize::from);
+    let threads = cores.min(items.len());
+    if threads <= 1 {
+        return items.iter().map(f).collect();
+    }
+    let next = AtomicUsize::new(0);
+    let work = || {
+        let mut done = Vec::new();
+        loop {
+            let i = next.fetch_add(1, Ordering::Relaxed);
+            let Some(item) = items.get(i) else {
+                return done;
+            };
+            done.push((i, f(item)));
+        }
+    };
+    let mut results = std::thread::scope(|scope| {
+        let others: Vec<_> = (1..threads).map(|_| scope.spawn(work)).collect();
+        let mut results = work();
+        for other in others {
+            results.extend(other.join().expect("a coverage thread"));
+        }
+        results
+    });
+    results.sort_by_key(|(i, _)| *i);
+    results.into_iter().map(|(_, result)| result).collect()
 }
 
 /// A `CanvasPath` point argument pair, or `None` when Blink ignores the call.
@@ -490,6 +568,7 @@ impl<'a> Raster<'a> {
             calls: 0,
             unflushed: false,
             shades: ShadeCache::default(),
+            deferred: Vec::new(),
         })
     }
 
@@ -565,11 +644,17 @@ impl<'a> Raster<'a> {
 
     pub fn run(&mut self, calls: &[Call]) {
         for call in calls {
-            self.apply(call);
+            self.apply_deferring(call);
         }
+        self.paint_deferred();
     }
 
     pub fn apply(&mut self, call: &Call) {
+        self.apply_deferring(call);
+        self.paint_deferred();
+    }
+
+    fn apply_deferring(&mut self, call: &Call) {
         self.calls += 1;
         if let Err(e) = self.apply_call(call) {
             self.errors.push((self.calls - 1, e));
@@ -577,6 +662,32 @@ impl<'a> Raster<'a> {
     }
 
     fn apply_call(&mut self, call: &Call) -> Result<(), CanvasError> {
+        let leaves_pixels_alone = matches!(
+            call,
+            Call::Set(_)
+                | Call::Save
+                | Call::Restore
+                | Call::Scale(..)
+                | Call::Rotate(_)
+                | Call::Translate(..)
+                | Call::SetTransform(_)
+                | Call::ResetTransform
+                | Call::BeginPath
+                | Call::ClosePath
+                | Call::MoveTo(..)
+                | Call::LineTo(..)
+                | Call::QuadraticCurveTo(..)
+                | Call::BezierCurveTo(..)
+                | Call::Rect(..)
+                | Call::Arc { .. }
+                | Call::Ellipse { .. }
+                | Call::Clip
+                | Call::SetLineDash(_)
+        );
+        // A stroke defers itself or paints the deferred ones first, in `paint_spans`.
+        if !leaves_pixels_alone && !matches!(call, Call::Stroke) {
+            self.paint_deferred();
+        }
         self.unflushed |= matches!(
             call,
             Call::Fill
@@ -1095,6 +1206,7 @@ impl<'a> Raster<'a> {
 
     /// Blends `source` through `spans` in blit order.
     fn paint_spans(&mut self, spans: &Spans, source: &Source) {
+        self.paint_deferred();
         let clipped;
         let spans = match &self.state.clip {
             None => spans,
@@ -1103,9 +1215,25 @@ impl<'a> Raster<'a> {
                 &clipped
             }
         };
+        self.blend_spans(spans, source);
+    }
+
+    fn blend_spans(&mut self, spans: &Spans, source: &Source) {
         match source {
             Source::Solid(color) => scan::blit_spans_solid(&mut self.pixmap, spans, *color),
             Source::Gradient(paint) => gradient::blit(&mut self.pixmap, spans, paint),
+        }
+    }
+
+    fn paint_deferred(&mut self) {
+        let strokes = std::mem::take(&mut self.deferred);
+        if strokes.is_empty() {
+            return;
+        }
+        let (width, height) = (self.pixmap.width(), self.pixmap.height());
+        let spans = parallel_map(&strokes, |stroke| stroke.spans(width, height));
+        for (stroke, spans) in strokes.iter().zip(&spans) {
+            self.blend_spans(spans, &stroke.source);
         }
     }
 
@@ -1125,17 +1253,14 @@ impl<'a> Raster<'a> {
         self.paint_spans(&spans, &source);
     }
 
-    /// The blits `SkDraw::drawDevPath` makes to fill a device path.
     fn path_spans(&self, path: &SkPath, even_odd: bool) -> Spans {
-        let mut spans = Spans::new(self.pixmap.width(), self.pixmap.height());
-        if dev_path_drawable(path) {
-            let (bounds, force_rle) = match &self.state.clip {
-                None => (self.canvas_rect(), false),
-                Some(clip) => (clip.bounds(), clip.force_rle()),
-            };
-            aaa::fill_path_clipped(path, bounds, force_rle, even_odd, &mut spans);
-        }
-        spans
+        path_spans(
+            path,
+            self.state.clip.as_ref(),
+            self.pixmap.width(),
+            self.pixmap.height(),
+            even_odd,
+        )
     }
 
     fn canvas_rect(&self) -> [i32; 4] {
@@ -1274,6 +1399,21 @@ impl<'a> Raster<'a> {
             join: s.line_join,
             res_scale,
         };
+        if source.pts.len() >= DEFER_POINTS || !self.deferred.is_empty() {
+            if let Some(paint) = self.source(&stroke, 256) {
+                self.deferred.push(DeferredStroke {
+                    path: source,
+                    style,
+                    ctm: self.state.ctm,
+                    clip: self.state.clip.clone(),
+                    source: paint,
+                });
+                if self.deferred.len() >= DEFER_STROKES {
+                    self.paint_deferred();
+                }
+            }
+            return;
+        }
         let outline = stroke::stroke_path(&source, &style);
         let device = outline.mapped(&self.state.ctm);
         self.fill_sk(&device, &stroke);
@@ -2295,6 +2435,62 @@ mod tests {
             want[18..].fill(255);
             assert_eq!(column, want, "{far}");
         }
+    }
+
+    #[test]
+    fn deferred_strokes_paint_what_strokes_one_by_one_paint() {
+        let mut c = Canvas2d::new(400, 300);
+        let long = |c: &mut Canvas2d, color: &str, offset: f64| {
+            c.set_stroke_style(color);
+            c.begin_path();
+            for i in 0..400 {
+                let x = f64::from(i);
+                c.line_to(x, offset + 60.0 * (x * 0.37).sin());
+            }
+            c.push(Call::Stroke);
+        };
+        c.set_line_width(5.0);
+        long(&mut c, "red", 90.0);
+        long(&mut c, "rgba(0, 0, 255, 0.5)", 95.0);
+        c.begin_path();
+        c.move_to(0.0, 0.0);
+        c.line_to(400.0, 250.0);
+        c.push(Call::Stroke);
+        c.save();
+        c.begin_path();
+        c.arc(200.0, 150.0, 90.0, 0.0, 7.0);
+        c.push(Call::Clip);
+        c.set_line_width(20.0);
+        long(&mut c, "green", 120.0);
+        c.restore();
+        c.scale(0.5, 2.0);
+        long(&mut c, "orange", 60.0);
+        c.set_fill_style("rgba(0, 0, 0, 0.5)");
+        c.push(Call::FillRect(100.0, 20.0, 300.0, 60.0));
+        long(&mut c, "purple", 70.0);
+        c.push(Call::ClearRect(150.0, 30.0, 40.0, 40.0));
+        long(&mut c, "black", 100.0);
+        for i in 0..2 * DEFER_STROKES + 5 {
+            c.set_line_width(1.0 + (i % 9) as f64);
+            long(&mut c, "rgba(40, 90, 10, 0.1)", (i % 130) as f64);
+        }
+
+        let mut together = Raster::new(c.width, c.height).unwrap();
+        together.run(&c.calls);
+        let mut one_by_one = Raster::new(c.width, c.height).unwrap();
+        for call in &c.calls {
+            one_by_one.apply(call);
+        }
+        assert!(together.pixmap().data() == one_by_one.pixmap().data());
+        assert_eq!(together.deferred.len(), 0);
+        let mut reordered = c.calls.clone();
+        let strokes: Vec<usize> = (0..reordered.len())
+            .filter(|&i| reordered[i] == Call::Stroke)
+            .collect();
+        reordered.remove(strokes[1]);
+        let mut without = Raster::new(c.width, c.height).unwrap();
+        without.run(&reordered);
+        assert!(together.pixmap().data() != without.pixmap().data());
     }
 
     #[test]

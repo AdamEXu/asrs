@@ -581,20 +581,23 @@ impl Path {
 
 /// `SkAutoConicToQuads::computeQuads`: the quads approximating a conic to within `tol`.
 pub fn conic_to_quads(pts: [P; 3], w: f32, tol: f32) -> Vec<[P; 3]> {
+    let mut out = Vec::new();
+    add_conic_quads(pts, w, tol, &mut out);
+    out
+}
+
+/// [`conic_to_quads`] appended to `out`.
+pub fn add_conic_quads(pts: [P; 3], w: f32, tol: f32, out: &mut Vec<[P; 3]>) {
     let conic = Conic {
         pts: pts.map(|p| pt(p.x, p.y)),
         w,
     };
     let mut start = pts[0];
-    conic
-        .to_quads(tol)
-        .into_iter()
-        .map(|[c, e]| {
-            let q = [start, P { x: c.x, y: c.y }, P { x: e.x, y: e.y }];
-            start = q[2];
-            q
-        })
-        .collect()
+    conic.subdivide(conic.quad_pow2(tol), &mut |[c, e]: [Pt; 2]| {
+        let q = [start, P { x: c.x, y: c.y }, P { x: e.x, y: e.y }];
+        start = q[2];
+        out.push(q);
+    });
 }
 
 fn midpoint(a: f32, b: f32) -> f32 {
@@ -803,9 +806,9 @@ impl Conic {
         ]
     }
 
-    fn subdivide(&self, level: u32, out: &mut Vec<[Pt; 2]>) {
+    fn subdivide(&self, level: u32, out: &mut impl FnMut([Pt; 2])) {
         if level == 0 {
-            out.push([self.pts[1], self.pts[2]]);
+            out([self.pts[1], self.pts[2]]);
             return;
         }
         let mut dst = self.chop();
@@ -836,7 +839,7 @@ impl Conic {
     fn to_quads(self, tol: f32) -> Vec<[Pt; 2]> {
         let pow2 = self.quad_pow2(tol);
         let mut out = Vec::with_capacity(1 << pow2);
-        self.subdivide(pow2, &mut out);
+        self.subdivide(pow2, &mut |quad| out.push(quad));
         out
     }
 }

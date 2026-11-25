@@ -131,6 +131,18 @@ fn load(root: &Path) -> Result<Vec<PublicLog>> {
     Ok(logs)
 }
 
+/// Every public log, from the cache, hashes verified.
+pub(crate) fn files(paths: &Paths) -> Result<Vec<PathBuf>> {
+    load(&paths.root)?
+        .iter()
+        .map(|log| {
+            let file = cache_dir(paths).join(&log.file);
+            verify(&file, log)?;
+            Ok(file)
+        })
+        .collect()
+}
+
 /// Each cached public log that names a merge pair, with its pair's id.
 pub(crate) fn merge_groups(paths: &Paths) -> Result<Vec<(PathBuf, String)>> {
     Ok(load(&paths.root)?

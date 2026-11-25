@@ -85,6 +85,11 @@ impl JsString {
         self.0.extend_from_slice(&s.0);
     }
 
+    /// Keeps the first `len` code units.
+    pub fn truncate(&mut self, len: usize) {
+        self.0.truncate(len);
+    }
+
     pub fn as_string(&self) -> Option<String> {
         String::from_utf16(&self.0).ok()
     }
@@ -184,8 +189,9 @@ impl JsString {
         if search.0.len() > len {
             return -1;
         }
+        let first = search.0[0];
         for i in pos..=(len - search.0.len()) {
-            if self.0[i..i + search.0.len()] == search.0[..] {
+            if self.0[i] == first && self.0[i..i + search.0.len()] == search.0[..] {
                 return i as i64;
             }
         }
@@ -562,6 +568,9 @@ impl fmt::Display for JsString {
 
 impl From<&str> for JsString {
     fn from(s: &str) -> Self {
+        if s.is_ascii() {
+            return JsString(s.bytes().map(u16::from).collect());
+        }
         JsString(s.encode_utf16().collect())
     }
 }

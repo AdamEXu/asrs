@@ -126,6 +126,7 @@ jobs:
         run: |
           cargo xtask layout
           cargo xtask harness
+          cargo xtask version
           cargo xtask gpui verify
           cargo xtask gpui features
           cargo xtask tables units --check

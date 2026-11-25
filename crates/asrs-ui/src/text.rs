@@ -51,6 +51,8 @@ struct RunKey {
     color: [u8; 3],
     fraction: Lu,
     scale: u32,
+    /// [`Text::fade`]'s ends, from the run's origin.
+    fade: Option<(Lu, Lu)>,
 }
 
 /// What an LCD image holds besides its glyphs.
@@ -235,6 +237,11 @@ impl TextSystem {
     ) {
         self.clock += 1;
         let Ink { font, scale, .. } = *ink;
+        let run_from = x.div_euclid(64) * 64;
+        let fade = ink
+            .fade
+            .filter(|(from, _)| x + fragment.width > *from)
+            .map(|(from, to)| (from - run_from, to - run_from));
         let fraction = x.rem_euclid(64);
         let x = x.div_euclid(64);
         let key = RunKey {
@@ -243,6 +250,7 @@ impl TextSystem {
             color: ink.color,
             fraction,
             scale: scale.to_bits(),
+            fade,
         };
         let backend = self.backend.as_mut();
         let WindowText {
@@ -299,7 +307,7 @@ impl TextSystem {
                     scale,
                     ink.color,
                 );
-                let placed = run.and_then(|run| gray_image(run, ink.color));
+                let placed = run.and_then(|run| gray_image(run, ink.color, fade));
                 run_bytes += placed
                     .as_ref()
                     .map_or(0, |(_, _, image)| image_bytes(image));
@@ -518,6 +526,7 @@ struct Ink<'a> {
     scale: f32,
     color: [u8; 3],
     alpha: u8,
+    fade: Option<(Lu, Lu)>,
     /// What the frame has painted so far, if the text may be LCD.
     lcd: Option<&'a Scene>,
     clip: Rect,
@@ -531,7 +540,7 @@ struct Drawn {
     clip: Option<Rect>,
 }
 
-fn gray_image(run: dom::RunImage, color: [u8; 3]) -> Option<Placed> {
+fn gray_image(run: dom::RunImage, color: [u8; 3], fade: Option<(Lu, Lu)>) -> Option<Placed> {
     let mut bgra = Vec::with_capacity(run.alpha.len() * 4);
     match &run.rgba {
         Some(rgba) => {
@@ -542,6 +551,14 @@ fn gray_image(run: dom::RunImage, color: [u8; 3]) -> Option<Placed> {
         None => {
             for &a in &run.alpha {
                 bgra.extend_from_slice(&[color[2], color[1], color[0], a]);
+            }
+        }
+    }
+    if let Some(fade) = fade {
+        for row in bgra.chunks_exact_mut(run.width.max(1) as usize * 4) {
+            for (col, pixel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+                let kept = fade_kept(fade, run.left + col as i32);
+                pixel[3] = (f32::from(pixel[3]) * kept + 0.5) as u8;
             }
         }
     }
@@ -556,6 +573,12 @@ fn lcd_image(mut run: dom::LcdImage) -> Option<Arc<RenderImage>> {
     }
     let buffer = RgbaImage::from_raw(run.width, run.height, run.rgba)?;
     Some(Arc::new(RenderImage::new(vec![Frame::new(buffer)])))
+}
+
+/// What a `mask-image` gradient keeps of a device column, from `from` on to `to`.
+fn fade_kept((from, to): (Lu, Lu), column: i32) -> f32 {
+    let at = column as f32 * 64.0 + 32.0;
+    ((to as f32 - at) / (to - from).max(1) as f32).clamp(0.0, 1.0)
 }
 
 /// Lays `text` out at device scale `scale`, in a content box `available` CSS px wide or at its
@@ -796,6 +819,7 @@ pub struct Text {
     content_width: Option<f64>,
     underline: bool,
     cut: Option<f64>,
+    fade: Option<(f64, f64)>,
     selected: Option<Rgba>,
     alpha: f32,
     grayscale: bool,
@@ -817,6 +841,7 @@ impl Text {
             content_width: None,
             underline: false,
             cut: None,
+            fade: None,
             selected: None,
             alpha: 1.0,
             grayscale: false,
@@ -887,6 +912,12 @@ impl Text {
     /// Draws only what fits in `room` CSS px, for a box the line's ellipsis follows or replaces.
     pub fn cut(mut self, room: f64) -> Self {
         self.cut = Some(room);
+        self
+    }
+
+    /// Fades out from the window's CSS px `from` to `to`, as a horizontal `mask-image` does.
+    pub fn fade(mut self, from: f64, to: f64) -> Self {
+        self.fade = Some((from, to));
         self
     }
 
@@ -1014,7 +1045,8 @@ impl Element for Text {
         for image in text.cache.evicted.drain(..) {
             let _ = window.drop_image(image);
         }
-        let may_be_lcd = !self.grayscale && system.may_be_lcd(window);
+        // Text behind a mask is grayscale.
+        let may_be_lcd = !self.grayscale && self.fade.is_none() && system.may_be_lcd(window);
         let faded = system.faded();
         let Prepaint { layout, origin } = prepaint;
         let mut selection = Vec::new();
@@ -1038,6 +1070,8 @@ impl Element for Text {
             origin: point(to_px(x), to_px(y)),
             size: size(to_px(w), to_px(h)),
         };
+        let device = |css: f64| dom::lu_round((css * f64::from(scale)) as f32);
+        let fade = self.fade.map(|(from, to)| (device(from), device(to)));
         let clip = (self.style.overflow != Overflow::Visible).then_some(ContentMask { bounds });
         let alpha = Some(self.alpha);
         window.with_content_mask(clip, |window| {
@@ -1054,6 +1088,7 @@ impl Element for Text {
                 scale,
                 color: self.color,
                 alpha: (self.alpha * faded * 255.0).round() as u8,
+                fade,
                 lcd: may_be_lcd.then(|| window.painted_scene()),
                 clip: device_rect(window.content_mask().bounds, scale),
             };
@@ -1078,14 +1113,19 @@ impl Element for Text {
             let [r, g, b] = self.color.map(|c| f32::from(c) / 255.0);
             window.with_element_opacity(alpha, |window| {
                 for s in underlines {
-                    let color = Rgba {
-                        r,
-                        g,
-                        b,
-                        a: s.coverage,
+                    let mut paint = |x: i32, width: i32, kept: f32| {
+                        let a = s.coverage * kept;
+                        let rect = bounds_of([x, s.y, width, s.height]);
+                        window.paint_quad(fill(rect, Rgba { r, g, b, a }));
                     };
-                    let rect = bounds_of([s.x, s.y, s.width, s.height]);
-                    window.paint_quad(fill(rect, color));
+                    let end = s.x + s.width;
+                    let solid = fade.map_or(end, |(from, _)| from.div_euclid(64).clamp(s.x, end));
+                    if solid > s.x {
+                        paint(s.x, solid - s.x, 1.0);
+                    }
+                    if let Some(fade) = fade {
+                        (solid..end).for_each(|column| paint(column, 1, fade_kept(fade, column)));
+                    }
                 }
             });
             for Drawn { x, y, image, clip } in images {
