@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U23): a 2D field popped out, whose window takes the field's aspect ratio without a lock; the camera menu locked to the robot, then a pan and a trackpad zoom, which the satellite's saved state holds; a second field tab with a rotated field opened after it. state.json at the end holds the windows' sizes after the ratio changed them",
+  "titleBar": true,
   "actions": [
     {
       "open": [

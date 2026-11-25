@@ -1,5 +1,6 @@
 {
   "about": "Interaction (#242, #239): a 2D field turned in quarter steps with a trajectory, a ghost, a swerve-free robot and arrows over it, each turn captured with the canvas compared; the field's source link geometry is compared, and not pressed",
+  "titleBar": true,
   "prefs": {
     "coordinateSystem": "wall-blue"
   },

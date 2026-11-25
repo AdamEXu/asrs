@@ -85,6 +85,13 @@ fn title_style() -> TextStyle {
     .expect("field 2d title style")
 }
 
+/// `ToPixelSnappedRect`: each edge on its own device pixel boundary.
+fn pixel_snapped([x, y, w, h]: [f64; 4], scale: f64) -> [f64; 4] {
+    let snap = |v: f64| (v * scale).round() / scale;
+    let (left, top) = (snap(x), snap(y));
+    [left, top, snap(x + w) - left, snap(y + h) - top]
+}
+
 fn source_style() -> TextStyle {
     let font = format!("14px {}", FONT_FAMILY.join(", "));
     TextStyle::from_css([("font", font.as_str()), ("white-space", "nowrap")])
@@ -850,12 +857,15 @@ impl<H: FrameHost> HubFrame<H> {
             ));
             if focus.visible {
                 let around = SOURCE_PADDING + LINK_OUTLINE_OFFSET;
-                let outlined = [
-                    r[0] - around,
-                    top - around,
-                    width + 2.0 * around,
-                    content + 2.0 * around,
-                ];
+                let outlined = pixel_snapped(
+                    [
+                        r[0] - around,
+                        top - around,
+                        width + 2.0 * around,
+                        content + 2.0 * around,
+                    ],
+                    f64::from(scale),
+                );
                 let radius = px(FOCUS_RING_RADIUS + LINK_OUTLINE_OFFSET as f32 + FOCUS_RING_WIDTH);
                 panel =
                     panel.child(local(outlined).child(focus::outline(appearance).rounded(radius)));
@@ -1086,6 +1096,13 @@ mod tests {
         assert_eq!(layout.select, [925.5, 483.0, 99.0, 24.0]);
         assert_eq!(layout.orientation, [862.5, 543.0, 100.0, 65.0]);
         assert_eq!(layout.size, [987.5, 543.0, 100.0, 65.0]);
+    }
+
+    /// The focused link of `focus-field-2d` in Electron on Linux, at 1x.
+    #[test]
+    fn the_ring_of_the_source_link_has_snapped_edges() {
+        let box_ = [994.453125, 480.5, 60.09375, 28.0];
+        assert_eq!(pixel_snapped(box_, 1.0), [994.0, 481.0, 61.0, 28.0]);
     }
 
     #[test]

@@ -1,0 +1,11 @@
+{
+  "electron": "39.2.7",
+  "chrome": "142.0.7444.235",
+  "platform": "linux",
+  "arch": "x64",
+  "osRelease": "7.2.15-1-omarchy",
+  "generator": "30a5a2ac5898aa94",
+  "file": "tints-linux.jsonl.zst",
+  "cases": 592,
+  "content": "dfc40d14fb389a83"
+}

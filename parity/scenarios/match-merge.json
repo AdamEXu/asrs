@@ -1,5 +1,6 @@
 {
   "about": "A match log with a Driver Station log added to it, which merges them under /Log0 and /Log1: the sidebar's groups, the line graph over both and the title. Both are public (`cargo xtask corpus fetch`)",
+  "titleBar": true,
   "actions": [
     {
       "open": [

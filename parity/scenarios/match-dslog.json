@@ -1,5 +1,6 @@
 {
   "about": "A Driver Station log with its events, public under the MIT license (`cargo xtask corpus fetch`): the DS layout's console, communication, power, CPU and joystick tabs over it",
+  "titleBar": true,
   "actions": [
     {
       "open": [

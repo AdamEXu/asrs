@@ -1,5 +1,6 @@
 {
   "about": "Interaction: the View and Tabs menus' items on the hub: zoom to the enabled range, sidebar and controls toggled off and on, next, previous and shifted tabs with the wrap at the ends, a new tab, a closed tab. Saved HubState and the timeline range are compared",
+  "titleBar": true,
   "actions": [
     {
       "open": [

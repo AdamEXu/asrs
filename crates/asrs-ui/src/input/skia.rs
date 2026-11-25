@@ -61,20 +61,48 @@ pub fn over(dst: &mut Pixmap, src: &Pixmap) {
 
 /// `PaintTextField`'s background, which it draws without antialiasing: a pixel is in when its
 /// centre is, with the straight edges rounded as `SkScan::FillRect` rounds them.
-pub fn fill_aliased_rrect(pixmap: &mut Pixmap, [x, y, w, h]: [f64; 4], radius: f64, rgba: u32) {
+pub fn fill_aliased_rrect(pixmap: &mut Pixmap, rect: [f64; 4], radius: f64, rgba: u32) {
+    blend_where(pixmap, rgba, |px, py| {
+        in_aliased_rrect(rect, radius, px, py)
+    });
+}
+
+/// Its border, which only a GPU antialiases all the same: a stroke along `rect`.
+pub fn stroke_aliased_rrect(
+    pixmap: &mut Pixmap,
+    [x, y, w, h]: [f64; 4],
+    radius: f64,
+    stroke: f64,
+    rgba: u32,
+) {
+    let grown = |by: f64| [x - by, y - by, w + 2.0 * by, h + 2.0 * by];
+    let half = stroke / 2.0;
+    blend_where(pixmap, rgba, |px, py| {
+        in_aliased_rrect(grown(half), radius + half, px, py)
+            && !in_aliased_rrect(grown(-half), (radius - half).max(0.0), px, py)
+    });
+}
+
+fn in_aliased_rrect([x, y, w, h]: [f64; 4], radius: f64, px: i64, py: i64) -> bool {
+    let round = |v: f64| (v + 0.5).floor() as i64;
+    if !(round(x)..round(x + w)).contains(&px) || !(round(y)..round(y + h)).contains(&py) {
+        return false;
+    }
+    let (cx, cy) = (px as f64 + 0.5, py as f64 + 0.5);
+    let dx = (x + radius - cx).max(cx - (x + w - radius)).max(0.0);
+    let dy = (y + radius - cy).max(cy - (y + h - radius)).max(0.0);
+    dx == 0.0 || dy == 0.0 || dx * dx + dy * dy <= radius * radius
+}
+
+fn blend_where(pixmap: &mut Pixmap, rgba: u32, inside: impl Fn(i64, i64) -> bool) {
     let alpha = rgba & 0xff;
     let rgb = [(rgba >> 24) & 0xff, (rgba >> 16) & 0xff, (rgba >> 8) & 0xff];
-    let round = |v: f64| (v + 0.5).floor() as i64;
-    let (left, top, right, bottom) = (round(x), round(y), round(x + w), round(y + h));
     let width = i64::from(pixmap.width());
     let height = i64::from(pixmap.height());
     let data = pixmap.data_mut();
-    for py in top.max(0)..bottom.min(height) {
-        for px in left.max(0)..right.min(width) {
-            let (cx, cy) = (px as f64 + 0.5, py as f64 + 0.5);
-            let dx = (x + radius - cx).max(cx - (x + w - radius)).max(0.0);
-            let dy = (y + radius - cy).max(cy - (y + h - radius)).max(0.0);
-            if dx > 0.0 && dy > 0.0 && dx * dx + dy * dy > radius * radius {
+    for py in 0..height {
+        for px in 0..width {
+            if !inside(px, py) {
                 continue;
             }
             let p = ((py * width + px) * 4) as usize;
@@ -84,6 +112,69 @@ pub fn fill_aliased_rrect(pixmap: &mut Pixmap, [x, y, w, h]: [f64; 4], radius: f
                 data[p + c] = (src + (u32::from(data[p + c]) * inverse + 127) / 255) as u8;
             }
             data[p + 3] = (alpha + (u32::from(data[p + 3]) * inverse + 127) / 255) as u8;
+        }
+    }
+}
+
+/// The path of a round rect with corner radii from the top left one clockwise.
+pub fn rrect_path([x, y, w, h]: [f64; 4], [tl, tr, br, bl]: [f64; 4]) -> String {
+    let (r, b) = (x + w, y + h);
+    format!(
+        "M{} {y} L{} {y} A{tr} {tr} 0 0 1 {r} {} L{r} {} A{br} {br} 0 0 1 {} {b} L{} {b} \
+         A{bl} {bl} 0 0 1 {x} {} L{x} {} A{tl} {tl} 0 0 1 {} {y} Z",
+        x + tl,
+        r - tr,
+        y + tr,
+        b - br,
+        r - br,
+        x + bl,
+        b - bl,
+        y + tl,
+        x + tl,
+    )
+}
+
+/// A box with a border of one colour and width, as Blink paints it on the CPU under
+/// `kBackgroundBleedClipLayer`: the border and, inside its inner edge, the background in a layer
+/// that the outer edge clips.
+pub fn bordered_box(
+    width: u32,
+    height: u32,
+    radii: [f64; 4],
+    border: f64,
+    border_color: u32,
+    background: u32,
+) -> Option<Pixmap> {
+    let (w, h) = (f64::from(width), f64::from(height));
+    let path = |rect: [f64; 4], radii: [f64; 4], rgba: u32| {
+        let d = rrect_path(rect, radii);
+        svg(
+            width,
+            height,
+            1.0,
+            &format!("<path d=\"{d}\" {}/>", paint_attrs("fill", rgba)),
+        )
+    };
+    let mut pixmap = svg(
+        width,
+        height,
+        1.0,
+        &rect(0.0, 0.0, w, h, 0.0, &paint_attrs("fill", border_color)),
+    )?;
+    let inner = [border, border, w - 2.0 * border, h - 2.0 * border];
+    let inner_radii = radii.map(|r| (r - border).max(0.0));
+    over(&mut pixmap, &path(inner, inner_radii, background)?);
+    clipped(&mut pixmap, &path([0.0, 0.0, w, h], radii, 0xffff_ffff)?);
+    Some(pixmap)
+}
+
+/// `pixmap` through an antialiased clip that covers what `clip` does.
+pub fn clipped(pixmap: &mut Pixmap, clip: &Pixmap) {
+    let (data, _) = pixmap.data_mut().as_chunks_mut::<4>();
+    let (clip, _) = clip.data().as_chunks::<4>();
+    for (p, c) in data.iter_mut().zip(clip) {
+        for v in p {
+            *v = ((u32::from(*v) * u32::from(c[3]) + 127) / 255) as u8;
         }
     }
 }
@@ -169,4 +260,34 @@ pub fn paint_with_app(
 pub fn device_size(bounds: Bounds<Pixels>, scale: f32) -> (u32, u32) {
     let s = |v: Pixels| (f32::from(v) * scale).round().max(0.0) as u32;
     (s(bounds.size.width), s(bounds.size.height))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The top left corner of `<input type="number">` in Electron on Linux, at 1x and 2x.
+    #[test]
+    fn a_field_border_is_aliased_as_cpu_skia_draws_it() {
+        let corner = |stroke: f64, radius: f64| {
+            let mut pixmap = Pixmap::new(24, 24).unwrap();
+            let i = stroke / 2.0;
+            let rect = [i, i, 24.0 - stroke, 24.0 - stroke];
+            stroke_aliased_rrect(&mut pixmap, rect, radius, stroke, 0x767676ff);
+            let cell = |x, y| match pixmap.pixel(x, y).unwrap().alpha() {
+                255 => '#',
+                _ => '.',
+            };
+            let row = |y| (0..6).map(|x| cell(x, y)).collect();
+            (0..5).map(row).collect::<Vec<String>>()
+        };
+        assert_eq!(
+            corner(1.0, 2.0),
+            [".#####", "#.....", "#.....", "#.....", "#....."]
+        );
+        assert_eq!(
+            corner(2.0, 4.0),
+            ["...###", ".#####", ".##...", "##....", "##...."]
+        );
+    }
 }

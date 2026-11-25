@@ -1,5 +1,6 @@
 {
   "about": "Selecting and copying cell text in the Table tab (#269): drags within a cell, across cells and rows, backwards, into the header, the side bar and the empty area beside the table; double and triple clicks, a word-wise drag, Shift+clicks; a press on the header, which keeps the selection, and one on an input, which takes it; a hidden tab, scrolling, which replaces the rows' text, Select All, the context menu's word and the scrolling of a drag past the edge. Copies are compared as clipboard text",
+  "titleBar": true,
   "actions": [
     {
       "open": [

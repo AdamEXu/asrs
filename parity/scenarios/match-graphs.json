@@ -1,5 +1,6 @@
 {
   "about": "A real match (AdvantageKit, Q21 of the 2025 Indiana Kokomo event): a line graph with numbers, stripes, a boolean graph and the robot mode over the whole log and zoomed to the enabled range, a table and a console at a selected time, statistics with errors against a reference over the enabled range, and its metadata. The log is public and not redistributable, so `cargo xtask corpus fetch` puts it in place",
+  "titleBar": true,
   "actions": [
     {
       "open": [

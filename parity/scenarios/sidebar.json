@@ -1,5 +1,6 @@
 {
   "about": "Interaction (#195): the sidebar over a log with long keys, conflicting types and one group, which shows its fields at the root: a hovered row, two fields selected with the modifier, one of them taken back, two dragged together into a source list, and the sidebar dragged to its narrowest and its widest. Then groups of the drive log opened and closed by their arrow and their label. Saved HubState is compared",
+  "titleBar": true,
   "actions": [
     {
       "open": [

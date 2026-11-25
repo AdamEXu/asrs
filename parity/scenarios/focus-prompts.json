@@ -1,5 +1,6 @@
 {
   "about": "Focus rings (#355) in active prompt windows: buttons, selects and the Help link reached with Tab, pressed, and after keys with and without Cmd or Ctrl, and the same windows inactive",
+  "titleBar": true,
   "actions": [
     {
       "open": [

@@ -6,6 +6,7 @@
     "src/app/logs.ts",
     "src/app/page.ts",
     "src/app/patches.ts",
+    "src/app/points.ts",
     "src/app/scenario.ts",
     "src/app/tap.ts",
     "src/app/tooltips.ts",

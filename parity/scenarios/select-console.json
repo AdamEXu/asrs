@@ -1,5 +1,6 @@
 {
   "about": "Selecting and copying text in the Console tab (#275): drags across rows, into the timestamps, which cannot be selected, and into the header; through line breaks, tabs, renditions, links and wrapped lines; double and triple clicks, scrolling, Select All, the filter, which takes the selection and then replaces the rows' text, and the context menu's word. Copies are compared as clipboard text",
+  "titleBar": true,
   "actions": [
     {
       "open": [

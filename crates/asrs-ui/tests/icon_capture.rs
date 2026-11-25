@@ -52,7 +52,7 @@ impl Render for Grid {
 }
 
 fn probes(scene: &str, scale: f64) -> Vec<Probe> {
-    vectors::load("ui/tints-macos")
+    vectors::load(&format!("ui/tints-{}", std::env::consts::OS))
         .expect("committed ui vectors")
         .into_iter()
         .filter(|r| {

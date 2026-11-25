@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U22): the beta welcome window, which a hub opens on itself while beta-2027.json does not say it was acknowledged. Checkboxes and the button hovered, pressed, clicked while disabled and driven by the keyboard; the button then closes it. beta-2027.json is compared byte for byte",
+  "titleBar": true,
   "userData": {
     "beta-2027.json": {
       "surveyStatus": false,
@@ -31,7 +32,8 @@
     {
       "mouse": "move",
       "x": 46,
-      "y": 220
+      "y": 220,
+      "on": "input"
     },
     {
       "capture": "hover",
@@ -43,7 +45,8 @@
     {
       "mouse": "down",
       "x": 46,
-      "y": 220
+      "y": 220,
+      "on": "input"
     },
     {
       "capture": "pressed"
@@ -51,7 +54,8 @@
     {
       "mouse": "up",
       "x": 46,
-      "y": 220
+      "y": 220,
+      "on": "input"
     },
     {
       "capture": "checked",
@@ -63,12 +67,14 @@
     {
       "mouse": "move",
       "x": 225,
-      "y": 445
+      "y": 445,
+      "on": "button"
     },
     {
       "mouse": "click",
       "x": 225,
-      "y": 445
+      "y": 445,
+      "on": "button"
     },
     {
       "capture": "disabled-click"
@@ -106,7 +112,8 @@
     {
       "mouse": "move",
       "x": 225,
-      "y": 445
+      "y": 445,
+      "on": "button"
     },
     {
       "wait": 400
@@ -117,7 +124,8 @@
     {
       "mouse": "down",
       "x": 225,
-      "y": 445
+      "y": 445,
+      "on": "button"
     },
     {
       "wait": 400
@@ -128,7 +136,8 @@
     {
       "mouse": "up",
       "x": 225,
-      "y": 445
+      "y": 445,
+      "on": "button"
     },
     {
       "prompt": null

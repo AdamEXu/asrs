@@ -1,5 +1,6 @@
 {
   "about": "The same real match on a 2D field (robot, ghost, vision and arrows in wall-blue coordinates), the swerve tab with measured and wanted module states and chassis speeds, and the joysticks, each at two times. The canvases are compared. The log is public and not redistributable, so `cargo xtask corpus fetch` puts it in place",
+  "titleBar": true,
   "prefs": {
     "coordinateSystem": "wall-blue"
   },

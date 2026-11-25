@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U23): a table popped out; its visible range reaches the hub's controller; a row hovered and clicked, trackpad scrolling, and a timestamp typed into the satellite's jump input, all through the hub's selection. The satellite has no close buttons",
+  "titleBar": true,
   "actions": [
     {
       "open": [

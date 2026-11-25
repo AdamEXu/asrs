@@ -380,12 +380,14 @@ fn classic(headless: &mut HeadlessCapture, scale: f32) {
             let layout = console.geometry_ref::<ConsoleLayout>();
             layout.expect("a layout").client()[0]
         });
+        let filter = page.rect("input.filter")[0];
         page.close();
-        w
+        [w, filter]
     };
     let overlay = width(headless, Style::Overlay);
     let next_to = width(headless, Style::Classic);
-    assert_eq!(overlay - next_to, 15.0, "the console's table");
+    assert_eq!(overlay[0] - next_to[0], 15.0, "the console's table");
+    assert_eq!(overlay[1] - next_to[1], 15.0, "its header");
     headless
         .context()
         .update(|cx| set_style(Style::Overlay, false, cx));
