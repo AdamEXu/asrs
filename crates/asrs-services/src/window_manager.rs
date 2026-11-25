@@ -265,19 +265,29 @@ impl WindowManager {
         self.focused
     }
 
-    /// A window's `focus` event. A focused hub moves to the front of [`Self::hubs`].
+    /// A window became the one [`Self::focused`] answers with, and had its `focus` event.
     pub fn focus(&mut self, id: WindowId) {
-        if self.kind(id).is_none() {
-            return;
+        self.became_key(id);
+        self.raised(id);
+    }
+
+    /// `window.isFocused()` turned true, which on macOS is apart from its `focus` event: it
+    /// follows the key window and the event the main one.
+    pub fn became_key(&mut self, id: WindowId) {
+        if self.kind(id).is_some() {
+            self.focused = Some(id);
         }
-        self.focused = Some(id);
+    }
+
+    /// A window's `focus` event. A focused hub moves to the front of [`Self::hubs`].
+    pub fn raised(&mut self, id: WindowId) {
         if let Some(i) = self.hubs.iter().position(|h| *h == id) {
             self.hubs.remove(i);
             self.hubs.insert(0, id);
         }
     }
 
-    /// A window's `blur` event.
+    /// `window.isFocused()` turned false.
     pub fn blur(&mut self, id: WindowId) {
         if self.focused == Some(id) {
             self.focused = None;

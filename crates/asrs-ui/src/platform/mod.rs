@@ -18,6 +18,7 @@ use mac as imp;
 use win as imp;
 
 pub mod dialog;
+pub mod displays;
 #[cfg(not(target_os = "linux"))]
 pub mod parent;
 pub mod power;
@@ -262,6 +263,25 @@ pub fn window_bounds(window: &Window) -> Option<(f64, f64, f64, f64)> {
 #[cfg(feature = "parity")]
 pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
     imp::window::titled_content_size(width, height)
+}
+
+/// The displays of the X11 screen that GPUI says is `width` logical px wide. `None` off X11.
+pub fn x11_displays(width: f64) -> Option<displays::Displays> {
+    #[cfg(target_os = "linux")]
+    return linux::x11::displays(width).ok();
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = width;
+        None
+    }
+}
+
+/// The height AppKit's standard title bar adds to a window's content.
+pub fn title_bar_height() -> f64 {
+    #[cfg(target_os = "macos")]
+    return mac::window::title_bar_height();
+    #[cfg(not(target_os = "macos"))]
+    0.0
 }
 
 pub struct NativeWindow(imp::window::NativeWindow);
