@@ -86,10 +86,12 @@ impl RenderThread {
         &self.adapter
     }
 
-    /// Latest wins: a frame still waiting is dropped in favour of this one.
+    /// Latest wins: a frame still waiting is dropped in favour of this one. It also cancels a
+    /// release the thread has not done yet.
     pub fn submit(&self, frame: Frame) {
         let mut state = self.shared.state.lock().expect("render state");
         state.pending = Some(frame);
+        state.release = false;
         self.shared.wake_thread.notify_one();
     }
 
