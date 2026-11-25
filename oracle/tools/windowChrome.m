@@ -93,31 +93,43 @@ static NSDictionary *chrome(NSWindow *w) {
   };
 }
 
-static void activate(NSWindow *self) {
-  SEL names[] = {@selector(isKeyWindow), @selector(isMainWindow), NSSelectorFromString(@"_hasActiveAppearance"),
-                 NSSelectorFromString(@"hasKeyAppearance"), NSSelectorFromString(@"hasMainAppearance"),
-                 NSSelectorFromString(@"_hasKeyAppearance"), NSSelectorFromString(@"_hasMainAppearance"),
-                 NSSelectorFromString(@"_hasActiveControls")};
-  for (int i = 0; i < 8; i++) {
-    Method m = class_getInstanceMethod([NSWindow class], names[i]);
-    if (m) method_setImplementation(m, imp_implementationWithBlock(^BOOL(id s) { return YES; }));
+static NSWindow *looks_active;
+
+static void answer_yes(Class class, SEL selector) {
+  Method method = class_getInstanceMethod(class, selector);
+  if (method == NULL) return;
+  BOOL (*theirs)(id, SEL) = (BOOL (*)(id, SEL))method_getImplementation(method);
+  BOOL (^ours)(id) = ^BOOL(id self) {
+    BOOL forced = looks_active != nil && (self == looks_active || self == NSApp);
+    return forced || theirs(self, selector);
+  };
+  method_setImplementation(method, imp_implementationWithBlock(ours));
+}
+
+static void look_active(NSWindow *window) {
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    for (NSString *name in @[ @"isKeyWindow", @"isMainWindow", @"hasKeyAppearance", @"hasMainAppearance",
+                              @"_hasActiveAppearance", @"_hasKeyAppearance", @"_hasMainAppearance", @"_hasActiveControls" ]) {
+      answer_yes([NSWindow class], NSSelectorFromString(name));
+    }
+    answer_yes([NSApplication class], @selector(isActive));
+  });
+  looks_active = window;
+  NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
+  for (NSString *name in @[ NSWindowDidBecomeKeyNotification, NSWindowDidBecomeMainNotification ]) {
+    [center postNotificationName:name object:window];
   }
-  Method m = class_getInstanceMethod([NSApplication class], @selector(isActive));
-  method_setImplementation(m, imp_implementationWithBlock(^BOOL(id s) { return YES; }));
 }
 
 static void capture(NSWindow *w, NSString *file) {
   if (!w.isSheet) {
-    [w setFrameOrigin:NSMakePoint(w.frame.origin.x, w.frame.origin.y)];
+    [w setFrameOrigin:NSMakePoint(3000, 100)];
     [w orderWindow:NSWindowBelow relativeTo:0];
     [w setFrameOrigin:NSMakePoint(3000, 100)];
   }
-  if ([file containsString:@"-active"]) {
-    activate(w);
-    [[NSNotificationCenter defaultCenter] postNotificationName:NSApplicationDidBecomeActiveNotification object:NSApp];
-    [[NSNotificationCenter defaultCenter] postNotificationName:NSWindowDidBecomeKeyNotification object:w];
-    [[NSNotificationCenter defaultCenter] postNotificationName:NSWindowDidBecomeMainNotification object:w];
-  }
+  looks_active = nil;
+  if ([file hasSuffix:@"-active.png"]) look_active(w);
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1500 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
     [NSTask launchedTaskWithLaunchPath:@"/usr/sbin/screencapture"
                              arguments:@[ @"-x", @"-o", [NSString stringWithFormat:@"-l%ld", (long)w.windowNumber], file ]];
