@@ -1,4 +1,5 @@
-mod gates;
+pub(crate) mod antialias;
+pub(crate) mod gates;
 mod plant;
 mod report;
 
@@ -14,7 +15,7 @@ use crate::app::{Live, Robot};
 use crate::oracle::Paths;
 use crate::{Result, app, cargo, gl, workspace_root};
 pub(crate) use gates::TIMELINE_TOLERANCE;
-use gates::{Capture, Dump, GlDump, Outcome, Patch, PlatformMask, Rect, RenderMode};
+use gates::{Capture, Dump, GlDump, Outcome, Patch, PlatformMask, Rect, RenderMode, TextInk};
 
 const USAGE: &str = r"usage: cargo xtask pixel <command>
 
@@ -40,6 +41,8 @@ with run.json and captures/<name>.{png,json} plus canvas and 3D dumps.
                   `app:<name>` come from the inputs/ the Electron driver wrote for that
                   scenario under target/parity/app/<upstream label> (default: the port label),
                   and the points of its mouse and wheel actions from where that driver sent them
+  modes <upstream>
+                  how Chromium antialiased each text box of a run, one line each
   check           the port's exit criteria: colour-patch and hub-empty at 1x and 2x, every
                   capture the scenario's window size times the scale, every patch exact
   selftest [<upstream variant dir>...]
@@ -55,9 +58,66 @@ pub fn run(args: &[String]) -> Result {
             run_port(&options).map(|_| ())
         }
         Some((cmd, [])) if cmd == "check" => check(),
+        Some((cmd, [dir])) if cmd == "modes" => modes(&resolve(dir, "app")),
         Some((cmd, rest)) if cmd == "selftest" => plant::selftest(rest),
         _ => Err(USAGE.to_owned()),
     }
+}
+
+fn modes(run: &Path) -> Result {
+    let subdirs = |dir: &Path| -> Result<Vec<PathBuf>> {
+        let entries = fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        let mut dirs: Vec<PathBuf> = entries
+            .filter_map(|e| e.ok().map(|e| e.path()))
+            .filter(|p| p.is_dir())
+            .collect();
+        dirs.sort();
+        Ok(dirs)
+    };
+    for scenario in subdirs(run)? {
+        for variant in subdirs(&scenario)? {
+            for name in capture_names(&variant)? {
+                let capture = load_capture(&variant, &name, false)?;
+                let record = read_json(&variant.join(format!("captures/{name}.json")))?;
+                let image = pixel::composite(&capture.image, [0; 3]);
+                let described = |mode: Option<antialias::Mode>| {
+                    mode.map_or("unclear".to_owned(), |m| format!("{m:?}"))
+                };
+                let label = format!(
+                    "{}/{}/{name}",
+                    scenario.file_name().unwrap_or_default().display(),
+                    variant.file_name().unwrap_or_default().display()
+                );
+                for text in list(&record, "texts") {
+                    let field = |key: &str| string(text, key).unwrap_or_default();
+                    let Some(color) = css_rgb(&field("color")) else {
+                        continue;
+                    };
+                    for rect in list(text, "rects").iter().filter_map(rect) {
+                        let mode = antialias::mode(&image, rect, capture.scale, color);
+                        let mode = described(mode);
+                        let shown: String = field("text").trim().chars().take(30).collect();
+                        println!(
+                            "{mode}\t{label}\t{}\t{}\t{shown:?}\t{:.0},{:.0}",
+                            field("parent"),
+                            field("color"),
+                            rect[0],
+                            rect[1]
+                        );
+                    }
+                }
+                for &rect in &capture.controls {
+                    let color = antialias::contrast(&image, rect, capture.scale);
+                    let mode = described(antialias::mode(&image, rect, capture.scale, color));
+                    println!(
+                        "{mode}\t{label}\tcontrol\t\t\t{:.0},{:.0}",
+                        rect[0], rect[1]
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 fn parity_dir() -> PathBuf {
@@ -306,6 +366,16 @@ pub(crate) fn edges_from_png(image: &Rgba) -> Vec<bool> {
         .collect()
 }
 
+/// The channels of a computed `color` that is opaque.
+fn css_rgb(css: &str) -> Option<[u8; 3]> {
+    let list = css.strip_prefix("rgb(")?.strip_suffix(')')?;
+    let channels: Vec<u8> = list
+        .split(',')
+        .map(|v| v.trim().parse().ok())
+        .collect::<Option<_>>()?;
+    channels.try_into().ok()
+}
+
 pub(crate) fn load_capture(variant: &Path, name: &str, port: bool) -> Result<Capture> {
     let captures = variant.join("captures");
     let record = read_json(&captures.join(format!("{name}.json")))?;
@@ -333,6 +403,20 @@ pub(crate) fn load_capture(variant: &Path, name: &str, port: bool) -> Result<Cap
     let texts = list(&record, "texts")
         .iter()
         .flat_map(|t| list(t, "rects").iter().filter_map(rect))
+        .collect();
+    let text_inks = list(&record, "texts")
+        .iter()
+        .filter_map(|t| Some((t, css_rgb(&string(t, "color")?)?)))
+        .flat_map(|(t, color)| {
+            let rects = list(t, "rects").iter().filter_map(rect);
+            rects.map(move |rect| TextInk { rect, color })
+        })
+        .collect();
+    const WITH_TEXT: [&str; 5] = ["text", "search", "number", "password", "select-one"];
+    let controls = list(&record, "controls")
+        .iter()
+        .filter(|c| string(c, "type").is_some_and(|t| WITH_TEXT.contains(&t.as_str())))
+        .filter_map(|c| rect(c.get("rect")?))
         .collect();
     let masks = list(&record, "masks")
         .iter()
@@ -419,6 +503,8 @@ pub(crate) fn load_capture(variant: &Path, name: &str, port: bool) -> Result<Cap
         normalized,
         probes,
         texts,
+        text_inks,
+        controls,
         masks,
         canvases,
         gl,

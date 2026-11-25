@@ -113,7 +113,7 @@ fn main() {
         let record = json::parse(line).unwrap();
         let name = text(&record, "scenario").unwrap();
         // Without the fields there is no source link.
-        let shown = assets || name != "traverse-fields";
+        let shown = assets || !matches!(&*name, "traverse-fields" | "traverse-field-settings");
         if shown && args.get(1).is_none_or(|only| *only == name) {
             scenarios.entry(name).or_default().push(record);
         }
