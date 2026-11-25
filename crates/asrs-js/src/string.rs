@@ -568,6 +568,9 @@ impl fmt::Display for JsString {
 
 impl From<&str> for JsString {
     fn from(s: &str) -> Self {
+        if s.is_ascii() {
+            return JsString(s.bytes().map(u16::from).collect());
+        }
         JsString(s.encode_utf16().collect())
     }
 }
