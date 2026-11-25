@@ -258,6 +258,7 @@ impl Hub {
                     HubInterval::SidebarTuning
                         | HubInterval::SaveState
                         | HubInterval::SaveTypeMemory
+                        | HubInterval::Source(_)
                 );
                 if quiet {
                     self.run_quietly(cx, |model, host| model.fire_interval(&interval, host));

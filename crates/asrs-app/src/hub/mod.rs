@@ -7,8 +7,8 @@
 //! [`asrs_live::LiveRuntime`]; main's RLOG socket is [`crate::live::RlogBridge`].
 //!
 //! Views read the model through [`Hub::model`] and observe the entity: it notifies after every
-//! task the page runs, but after its frames and its saving intervals only when what they show
-//! changed, and emits a [`HubEvent`] for each change a view or main reacts to.
+//! task the page runs, but after its frames and the intervals that rarely show anything new only
+//! when they did, and emits a [`HubEvent`] for each change a view or main reacts to.
 
 mod frames;
 mod host;
@@ -259,7 +259,10 @@ impl Hub {
         f: impl FnOnce(&mut HubModel, &mut dyn HubHost) -> R,
     ) -> R {
         let result = f(&mut self.model, &mut GpuiHost::new(&mut self.host, cx));
-        self.after_task(cx);
+        if self.after_task(cx) {
+            self.repaint.task();
+            cx.notify();
+        }
         result
     }
 
@@ -281,19 +284,25 @@ impl Hub {
         self.repaint.end_draw();
     }
 
-    fn after_task(&mut self, cx: &mut Context<'_, Self>) {
+    /// Publishes what the task changed. Returns whether it did.
+    fn after_task(&mut self, cx: &mut Context<'_, Self>) -> bool {
+        let mut changed = false;
         for (source, status) in self.model.take_status_changes() {
+            changed = true;
             cx.emit(HubEvent::SourceStatus { source, status });
         }
         if *self.model.title() != self.title {
             self.title = self.model.title().clone();
+            changed = true;
             cx.emit(HubEvent::Title);
         }
         if *self.model.loading() != self.loading {
             self.loading = self.model.loading().clone();
+            changed = true;
             cx.emit(HubEvent::Loading);
         }
         self.arm_timer(cx);
         self.arm_live_timer(cx);
+        changed
     }
 }

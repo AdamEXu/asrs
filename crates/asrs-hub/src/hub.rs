@@ -1361,12 +1361,14 @@ impl HubModel {
             }
             HubInterval::Source(uuid) => {
                 if let Some(index) = self.route(uuid) {
+                    let loading = self.loading_fields();
                     let active = self.active_fields();
                     let uuid = uuid.clone();
                     let result = self.with_source(index, &active, host, |source, cx| {
                         source.fire_interval(&uuid, cx)
                     });
                     uncaught("setInterval", result, host);
+                    self.frame_changed |= self.loading_fields() != loading;
                 }
             }
         }
