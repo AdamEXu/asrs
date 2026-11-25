@@ -24,6 +24,14 @@ instruction figures are medians over the runs; p95 over 5 runs is their maximum.
 
 const FRAME_BUDGET_MS: f64 = 16.6;
 
+/// From upstream's asset release `default-assets-v2`, in the asset cache.
+const ASSETS: [&str; 4] = [
+    "Field2d_2026FRCFieldV2",
+    "Field3d_2026FRCFieldV2",
+    "Robot_2026FRCKitBotV2",
+    "Joystick_XboxControllerBlueV3",
+];
+
 pub fn run(args: &[String]) -> Result {
     let rest = args.get(1..).unwrap_or_default();
     match args.first().map(String::as_str) {
@@ -328,6 +336,29 @@ fn row(file: &Path, upstream: &Series, port: &Series) -> String {
     format!("| {} |", cells.join(" | "))
 }
 
+/// The user data folder whose `userAssets` holds the release assets the scenes show.
+fn extract_assets(paths: &Paths) -> Result<PathBuf> {
+    let user_data = paths.root.join("target/perf/userData");
+    for name in ASSETS {
+        let dir = user_data.join("userAssets").join(name);
+        if dir.join("config.json").is_file() {
+            continue;
+        }
+        let zip = paths
+            .cache
+            .join(format!("asset-zips/default-assets-v2/{name}.zip"));
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        oracle::exec(
+            Command::new("unzip")
+                .args(["-o", "-q"])
+                .arg(&zip)
+                .arg("-d")
+                .arg(&dir),
+        )?;
+    }
+    Ok(user_data)
+}
+
 fn frames(args: &[String]) -> Result {
     let opts = options(args, &["--scene", "--log"])?;
     if !opts.positional.is_empty() {
@@ -346,6 +377,7 @@ fn frames(args: &[String]) -> Result {
     ])?;
     let exe = release_dir().join("examples/frame_bench");
     let paths = Paths::new()?;
+    let assets = extract_assets(&paths)?;
     let before = load_average();
     let mut scenes: Vec<(String, Vec<Json>)> = Vec::new();
     for _ in 0..opts.runs {
@@ -353,7 +385,9 @@ fn frames(args: &[String]) -> Result {
         command
             .args(&opts.forwarded)
             .arg("--cache")
-            .arg(&paths.cache);
+            .arg(&paths.cache)
+            .arg("--assets")
+            .arg(&assets);
         let output = command
             .stderr(std::process::Stdio::inherit())
             .output()

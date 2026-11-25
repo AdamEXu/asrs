@@ -52,6 +52,10 @@ tokio-tungstenite = { version = "=0.30.0", default-features = false, features = 
 [lints]
 workspace = true
 
+[[example]]
+name = "frame_bench"
+required-features = ["parity"]
+
 [[test]]
 name = "window_sizes"
 harness = false
