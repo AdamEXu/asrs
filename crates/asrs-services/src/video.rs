@@ -158,18 +158,8 @@ pub trait VideoHost {
     fn rm_recursive(&mut self, path: &str) -> Result<(), JsError>;
     /// `fs.mkdirSync(path, { recursive: true })`.
     fn mkdir_recursive(&mut self, path: &str) -> Result<(), JsError>;
-    /// `fs.promises.readFile(path)`.
-    fn read_file(&mut self, path: &str) -> Result<Vec<u8>, JsError>;
     /// `fs.readFileSync(path, {})`, as `jsonfile.readFileSync` calls it.
     fn read_file_sync(&mut self, path: &str) -> Result<Vec<u8>, JsError>;
-    /// `fs.promises.unlink(path)`.
-    fn unlink(&mut self, path: &str) -> Result<(), JsError>;
-    /// `fs.promises.rename(from, to)`.
-    fn rename(&mut self, from: &str, to: &str) -> Result<(), JsError>;
-    /// `fs.promises.chmod(path, mode)`.
-    fn chmod(&mut self, path: &str, mode: u32) -> Result<(), JsError>;
-    /// `crypto.createHash("sha256").update(data).digest("hex")`.
-    fn sha256_hex(&mut self, data: &[u8]) -> String;
     /// `Math.random()`.
     fn random(&mut self) -> f64;
     /// `clipboard.readText()`.
@@ -192,6 +182,8 @@ pub trait VideoHost {
     fn open_dialog(&mut self, options: &OpenDialog) -> Handle;
     /// `download(url, folder, { filename })` (the `download` npm package).
     fn download(&mut self, url: &str, folder: &str, filename: &str) -> Handle;
+    /// Runs [`install_ffmpeg`] where it holds nothing up.
+    fn install(&mut self, install: FfmpegInstall) -> Handle;
     /// `fetch(url, { method: "GET", signal: AbortSignal.timeout(timeout_ms), headers })`, with
     /// `headers` as the `[[name, value], ...]` array upstream passes.
     fn fetch(&mut self, url: &JsString, headers: &[(JsString, JsValue)], timeout_ms: f64)
@@ -206,6 +198,54 @@ pub trait VideoHost {
     fn log(&mut self, level: LogLevel, args: &[LogArg]);
     /// `dataCallback(data)`: main sends it to the hub window as `video-data`.
     fn send(&mut self, data: JsValue);
+}
+
+/// What [`install_ffmpeg`] does outside itself.
+pub trait InstallFiles {
+    /// `fs.promises.readFile(path)`.
+    fn read_file(&mut self, path: &str) -> Result<Vec<u8>, JsError>;
+    /// `fs.promises.unlink(path)`.
+    fn unlink(&mut self, path: &str) -> Result<(), JsError>;
+    /// `fs.promises.rename(from, to)`.
+    fn rename(&mut self, from: &str, to: &str) -> Result<(), JsError>;
+    /// `fs.promises.chmod(path, mode)`.
+    fn chmod(&mut self, path: &str, mode: u32) -> Result<(), JsError>;
+    /// `crypto.createHash("sha256").update(data).digest("hex")`.
+    fn sha256_hex(&mut self, data: &[u8]) -> String;
+    /// `console.warn`.
+    fn warn(&mut self, text: JsString);
+    /// Whether the app is quitting, after which no file may change.
+    fn cancelled(&mut self) -> bool;
+}
+
+/// A downloaded FFmpeg to verify and put in place.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FfmpegInstall {
+    pub download: String,
+    pub ffmpeg: String,
+    pub sha256: &'static str,
+}
+
+/// The end of `getFFmpegPath`, from the hash on; false where it throws. Upstream runs it in
+/// Electron's main process, which a page does not wait for.
+pub fn install_ffmpeg(install: &FfmpegInstall, files: &mut dyn InstallFiles) -> bool {
+    let Ok(data) = files.read_file(&install.download) else {
+        return false;
+    };
+    let hash = files.sha256_hex(&data);
+    drop(data);
+    if files.cancelled() {
+        return false;
+    }
+    if hash != install.sha256 {
+        files.warn(s("FFmpeg hash violation!"));
+        files.warn(s(&format!("\tFound: {hash}")));
+        files.warn(s(&format!("\tExpected: {}", install.sha256)));
+        let _ = files.unlink(&install.download);
+        return false;
+    }
+    files.rename(&install.download, &install.ffmpeg).is_ok()
+        && files.chmod(&install.ffmpeg, 0o755).is_ok()
 }
 
 /// The settled result of an earlier host request.
@@ -245,6 +285,8 @@ pub enum VideoEvent {
     },
     /// `download` resolved (the file is written) or rejected.
     DownloadFinished { download: Handle, ok: bool },
+    /// [`install_ffmpeg`] returned `ok`.
+    Installed { install: Handle, ok: bool },
     /// `fetch` resolved with a response, or rejected (`None`).
     FetchFinished {
         fetch: Handle,
@@ -453,6 +495,7 @@ enum Wait {
     LinuxBox { load: usize },
     DownloadBox { load: usize },
     Download { load: usize, sha: &'static str },
+    Install { load: usize },
     Conversion { load: usize },
     TimerSample { load: usize, frame: f64 },
     TimerGroup { group: usize, slot: usize },
@@ -710,6 +753,7 @@ impl VideoProcessor {
             VideoEvent::MessageBoxClosed { dialog, .. }
             | VideoEvent::OpenDialogClosed { dialog, .. } => *dialog,
             VideoEvent::DownloadFinished { download, .. } => *download,
+            VideoEvent::Installed { install, .. } => *install,
             VideoEvent::FetchFinished { fetch, .. } => *fetch,
             VideoEvent::MenuClick { menu, .. } | VideoEvent::MenuWillClose { menu } => *menu,
             VideoEvent::TimerFired { timer } => *timer,
@@ -776,6 +820,16 @@ impl VideoProcessor {
                     self.waits.remove(&handle);
                     if ok {
                         self.ffmpeg_downloaded(host, load, sha);
+                    } else {
+                        self.ffmpeg_failed(host, load);
+                    }
+                }
+            }
+            Wait::Install { load } => {
+                if let VideoEvent::Installed { ok, .. } = event {
+                    self.waits.remove(&handle);
+                    if ok {
+                        self.after_ffmpeg_path(host, load);
                     } else {
                         self.ffmpeg_failed(host, load);
                     }
@@ -944,35 +998,15 @@ impl VideoProcessor {
         self.waits.insert(handle, Wait::Download { load, sha });
     }
 
-    fn ffmpeg_downloaded(&mut self, host: &mut dyn VideoHost, load: usize, sha: &str) {
+    fn ffmpeg_downloaded(&mut self, host: &mut dyn VideoHost, load: usize, sha256: &'static str) {
         let user_data = s(&self.config.user_data);
-        let temp = self.style.join(&[&user_data, &s("ffmpeg-download")]);
-        let temp_path = temp.to_string_lossy();
-        let data = match host.read_file(&temp_path) {
-            Ok(data) => data,
-            Err(_) => return self.ffmpeg_failed(host, load),
-        };
-        let hash = host.sha256_hex(&data);
-        if hash != sha {
-            host.log(LogLevel::Warn, &[LogArg::Text(s("FFmpeg hash violation!"))]);
-            host.log(
-                LogLevel::Warn,
-                &[LogArg::Text(s(&format!("\tFound: {hash}")))],
-            );
-            host.log(
-                LogLevel::Warn,
-                &[LogArg::Text(s(&format!("\tExpected: {sha}")))],
-            );
-            let _ = host.unlink(&temp_path);
-            return self.ffmpeg_failed(host, load);
-        }
-        let ffmpeg_path = self.loads[load].ffmpeg_path.to_string_lossy();
-        if host.rename(&temp_path, &ffmpeg_path).is_err()
-            || host.chmod(&ffmpeg_path, 0o755).is_err()
-        {
-            return self.ffmpeg_failed(host, load);
-        }
-        self.after_ffmpeg_path(host, load);
+        let download = self.style.join(&[&user_data, &s("ffmpeg-download")]);
+        let handle = host.install(FfmpegInstall {
+            download: download.to_string_lossy(),
+            ffmpeg: self.loads[load].ffmpeg_path.to_string_lossy(),
+            sha256,
+        });
+        self.waits.insert(handle, Wait::Install { load });
     }
 
     fn ffmpeg_failed(&mut self, host: &mut dyn VideoHost, load: usize) {

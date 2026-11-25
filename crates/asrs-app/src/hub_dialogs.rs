@@ -55,12 +55,15 @@ pub fn show(message: &NamedMessage<HubToMain>, window: AnyWindowHandle, cx: &mut
                     Some(window),
                     cx,
                     save_dialog_options(&options),
-                    move |path, _| {
+                    move |path, cx| {
                         let Some(path) = path else { return };
-                        let path = path.to_string_lossy();
-                        if let Err(e) = hub_dialogs::write_console(&RealFs, &path, &text) {
-                            eprintln!("asrs: {path}: {}", e.message);
-                        }
+                        cx.background_spawn(async move {
+                            let path = path.to_string_lossy();
+                            if let Err(e) = hub_dialogs::write_console(&RealFs, &path, &text) {
+                                eprintln!("asrs: {path}: {}", e.message);
+                            }
+                        })
+                        .detach();
                     },
                 );
             });

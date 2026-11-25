@@ -3,10 +3,13 @@
 //! goes back to that window as `video-data`.
 
 mod children;
+mod install;
 mod net;
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
 
@@ -18,12 +21,11 @@ use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_ocr::{TimerError, TimerReader};
 use asrs_services::lifecycle::AppPaths;
 use asrs_services::video::{
-    Handle, LogArg, LogLevel, MessageBox, OpenDialog, VideoConfig, VideoEvent, VideoHost,
-    VideoProcessor,
+    FfmpegInstall, Handle, LogArg, LogLevel, MessageBox, OpenDialog, VideoConfig, VideoEvent,
+    VideoHost, VideoProcessor, install_ffmpeg,
 };
 use asrs_services::window_manager::Platform;
 use asrs_ui::gpui::{App, Global};
-use sha2::{Digest, Sha256};
 
 use crate::main_process::{MainProcess, process_arch, process_platform};
 use crate::menus::bridge;
@@ -33,6 +35,7 @@ use crate::windows::{
 };
 
 use children::Children;
+use install::Files;
 
 /// The video processor, its children, and the window each outstanding request belongs to.
 struct Videos {
@@ -50,6 +53,7 @@ struct Io {
     events: async_channel::Sender<VideoEvent>,
     timers: Option<TimerReader>,
     uncaught: async_channel::Sender<TimerError>,
+    quitting: Arc<AtomicBool>,
 }
 
 /// `VideoProcessor`'s module: it lives as long as the app.
@@ -66,6 +70,7 @@ pub fn init(paths: &AppPaths, cx: &mut App) {
             events,
             timers: None,
             uncaught,
+            quitting: Arc::default(),
         },
     });
     cx.spawn(async move |cx| {
@@ -122,6 +127,8 @@ pub fn hub_message(window: WindowId, message: &NamedMessage<HubToMain>, cx: &mut
 /// `VideoProcessor.cleanup()`, on quit.
 pub fn cleanup(cx: &mut App) {
     if cx.has_global::<Videos>() {
+        let io = &cx.global::<Videos>().io;
+        io.quitting.store(true, Ordering::SeqCst);
         with_processor(0, cx, |processor, host| processor.cleanup(host));
         cx.global_mut::<Videos>().io.timers = None;
     }
@@ -198,6 +205,7 @@ fn handle_of(event: &VideoEvent) -> Handle {
         VideoEvent::MessageBoxClosed { dialog, .. }
         | VideoEvent::OpenDialogClosed { dialog, .. } => *dialog,
         VideoEvent::DownloadFinished { download, .. } => *download,
+        VideoEvent::Installed { install, .. } => *install,
         VideoEvent::FetchFinished { fetch, .. } => *fetch,
         VideoEvent::MenuClick { menu, .. } | VideoEvent::MenuWillClose { menu } => *menu,
         VideoEvent::TimerFired { timer } => *timer,
@@ -265,39 +273,8 @@ impl VideoHost for Host<'_> {
         std::fs::create_dir_all(path).map_err(|e| io_error(&e))
     }
 
-    fn read_file(&mut self, path: &str) -> Result<Vec<u8>, JsError> {
-        std::fs::read(path).map_err(|e| io_error(&e))
-    }
-
     fn read_file_sync(&mut self, path: &str) -> Result<Vec<u8>, JsError> {
         std::fs::read(path).map_err(|e| io_error(&e))
-    }
-
-    fn unlink(&mut self, path: &str) -> Result<(), JsError> {
-        std::fs::remove_file(path).map_err(|e| io_error(&e))
-    }
-
-    fn rename(&mut self, from: &str, to: &str) -> Result<(), JsError> {
-        std::fs::rename(from, to).map_err(|e| io_error(&e))
-    }
-
-    fn chmod(&mut self, path: &str, mode: u32) -> Result<(), JsError> {
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode))
-                .map_err(|e| io_error(&e))
-        }
-        #[cfg(not(unix))]
-        {
-            let _ = mode;
-            std::fs::metadata(path).map(drop).map_err(|e| io_error(&e))
-        }
-    }
-
-    fn sha256_hex(&mut self, data: &[u8]) -> String {
-        let digest = Sha256::digest(data);
-        digest.iter().map(|byte| format!("{byte:02x}")).collect()
     }
 
     fn random(&mut self) -> f64 {
@@ -412,6 +389,20 @@ impl VideoHost for Host<'_> {
             let _ = events.try_send(VideoEvent::DownloadFinished {
                 download: handle,
                 ok: done.is_ok(),
+            });
+        });
+        handle
+    }
+
+    fn install(&mut self, install: FfmpegInstall) -> Handle {
+        let handle = self.handle();
+        let events = self.sender();
+        let mut files = Files(self.io().quitting.clone());
+        thread::spawn(move || {
+            let ok = install_ffmpeg(&install, &mut files);
+            let _ = events.try_send(VideoEvent::Installed {
+                install: handle,
+                ok,
             });
         });
         handle

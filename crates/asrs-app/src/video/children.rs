@@ -16,14 +16,21 @@ const EXIT_POLL: Duration = Duration::from_millis(10);
 const KILL_WAIT: Duration = Duration::from_millis(200);
 const CHUNK: usize = 64 * 1024;
 
-type Shared = Arc<Mutex<Child>>;
+enum State {
+    Starting { killed: bool },
+    Running(Child),
+    Failed,
+}
+
+type Shared = Arc<Mutex<State>>;
 
 #[derive(Default)]
 pub struct Children(HashMap<Handle, Shared>);
 
 impl Children {
     /// `spawn(command, args, { cwd })`, with a pipe for each of the child's streams. A child that
-    /// does not start reports it as events, as Node does.
+    /// does not start reports it as events, as Node does. It starts on its own thread: Windows
+    /// returns from `CreateProcess` when the antivirus has scanned the program.
     pub fn spawn(
         &mut self,
         process: Handle,
@@ -32,56 +39,15 @@ impl Children {
         cwd: Option<&str>,
         emit: impl Fn(VideoEvent) + Clone + Send + 'static,
     ) {
-        match start(command, args, cwd) {
-            Ok(mut child) => {
-                // The stdin pipe stays open in the child's handle until the child exits.
-                let stdout = child.stdout.take();
-                let stderr = child.stderr.take();
-                let child = Arc::new(Mutex::new(child));
-                self.0.insert(process, child.clone());
-                let readers = [
-                    stdout.map(|pipe| {
-                        let emit = emit.clone();
-                        pump(pipe, move |data| emit(VideoEvent::Stdout { process, data }))
-                    }),
-                    stderr.map(|pipe| {
-                        let emit = emit.clone();
-                        pump(pipe, move |data| emit(VideoEvent::Stderr { process, data }))
-                    }),
-                ];
-                thread::spawn(move || {
-                    let (code, signal) = wait(&child);
-                    emit(VideoEvent::Exit {
-                        process,
-                        code,
-                        signal: signal.clone(),
-                    });
-                    for reader in readers.into_iter().flatten() {
-                        let _ = reader.join();
-                    }
-                    emit(VideoEvent::Close {
-                        process,
-                        code,
-                        signal,
-                    });
-                });
-            }
-            Err(error) => {
-                let (code, errno) = errno(&error);
-                emit(VideoEvent::SpawnError {
-                    process,
-                    code: code.to_owned(),
-                    errno,
-                    syscall: format!("spawn {command}"),
-                    path: command.to_owned(),
-                });
-                emit(VideoEvent::Close {
-                    process,
-                    code: Some(errno),
-                    signal: None,
-                });
-            }
-        }
+        let child = Arc::new(Mutex::new(State::Starting { killed: false }));
+        self.0.insert(process, child.clone());
+        let command = command.to_owned();
+        let args: Vec<String> = args.iter().map(JsString::to_string_lossy).collect();
+        let cwd = cwd.map(str::to_owned);
+        thread::spawn(move || {
+            let started = start(&command, &args, cwd.as_deref());
+            run(process, &command, &child, started, emit);
+        });
     }
 
     /// `child.kill()`, but with SIGKILL where Node sends SIGTERM: ffmpeg takes seconds to act on
@@ -91,12 +57,22 @@ impl Children {
         let Some(child) = self.0.get(&process) else {
             return false;
         };
-        let mut child = lock(child);
-        if !matches!(child.try_wait(), Ok(None)) || child.kill().is_err() {
-            return false;
+        match &mut *lock(child) {
+            State::Starting { killed } => *killed = true,
+            State::Running(child) => {
+                if !matches!(child.try_wait(), Ok(None)) || child.kill().is_err() {
+                    return false;
+                }
+            }
+            State::Failed => return false,
         }
         let killed = Instant::now();
-        while matches!(child.try_wait(), Ok(None)) && killed.elapsed() < KILL_WAIT {
+        while killed.elapsed() < KILL_WAIT {
+            match &mut *lock(child) {
+                State::Starting { .. } => {}
+                State::Running(child) if matches!(child.try_wait(), Ok(None)) => {}
+                _ => break,
+            }
             thread::sleep(Duration::from_millis(1));
         }
         true
@@ -108,11 +84,75 @@ impl Children {
     }
 }
 
-fn lock(child: &Shared) -> std::sync::MutexGuard<'_, Child> {
+fn lock(child: &Shared) -> std::sync::MutexGuard<'_, State> {
     child.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-fn start(command: &str, args: &[JsString], cwd: Option<&str>) -> io::Result<Child> {
+/// Reports a started child's events until it closes.
+fn run(
+    process: Handle,
+    command: &str,
+    shared: &Shared,
+    started: io::Result<Child>,
+    emit: impl Fn(VideoEvent) + Clone + Send + 'static,
+) {
+    let mut child = match started {
+        Ok(child) => child,
+        Err(error) => {
+            *lock(shared) = State::Failed;
+            let (code, errno) = errno(&error);
+            emit(VideoEvent::SpawnError {
+                process,
+                code: code.to_owned(),
+                errno,
+                syscall: format!("spawn {command}"),
+                path: command.to_owned(),
+            });
+            emit(VideoEvent::Close {
+                process,
+                code: Some(errno),
+                signal: None,
+            });
+            return;
+        }
+    };
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    {
+        let mut state = lock(shared);
+        if matches!(*state, State::Starting { killed: true }) {
+            let _ = child.kill();
+        }
+        // The stdin pipe stays open in the child's handle until the child exits.
+        *state = State::Running(child);
+    }
+    let readers = [
+        stdout.map(|pipe| {
+            let emit = emit.clone();
+            pump(pipe, move |data| emit(VideoEvent::Stdout { process, data }))
+        }),
+        stderr.map(|pipe| {
+            let emit = emit.clone();
+            pump(pipe, move |data| emit(VideoEvent::Stderr { process, data }))
+        }),
+    ];
+    let (code, signal) = wait(shared);
+    emit(VideoEvent::Exit {
+        process,
+        code,
+        signal: signal.clone(),
+    });
+    for reader in readers.into_iter().flatten() {
+        let _ = reader.join();
+    }
+    emit(VideoEvent::Close {
+        process,
+        code,
+        signal,
+    });
+}
+
+fn start(command: &str, args: &[String], cwd: Option<&str>) -> io::Result<Child> {
     // A program relative to `cwd` is found there on every platform.
     let relative = command
         .strip_prefix("./")
@@ -123,7 +163,7 @@ fn start(command: &str, args: &[JsString], cwd: Option<&str>) -> io::Result<Chil
     };
     let mut command = Command::new(program);
     command
-        .args(args.iter().map(|arg| arg.to_string_lossy()))
+        .args(args)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -174,10 +214,12 @@ fn pump(
 /// Polls, so that a kill can take the child between two looks.
 fn wait(child: &Shared) -> (Option<i32>, Option<String>) {
     loop {
-        match lock(child).try_wait() {
-            Ok(Some(status)) => return (status.code(), signal(status)),
-            Ok(None) => {}
-            Err(_) => return (None, None),
+        if let State::Running(child) = &mut *lock(child) {
+            match child.try_wait() {
+                Ok(Some(status)) => return (status.code(), signal(status)),
+                Ok(None) => {}
+                Err(_) => return (None, None),
+            }
         }
         thread::sleep(EXIT_POLL);
     }
@@ -299,6 +341,9 @@ mod tests {
         children.spawn(1, "/bin/sleep", &[JsString::from("60")], None, move |e| {
             let _ = send.send(e);
         });
+        while matches!(*lock(&children.0[&1]), State::Starting { .. }) {
+            thread::sleep(Duration::from_millis(1));
+        }
         assert!(children.kill(1));
         let events: Vec<VideoEvent> = receive.into_iter().collect();
         assert!(matches!(
@@ -311,6 +356,43 @@ mod tests {
         ));
         assert!(!children.kill(1));
         children.closed(1);
+        assert!(!children.kill(1));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_child_killed_as_it_starts_is_killed_once_started() {
+        let (send, receive) = mpsc::channel();
+        let emit = move |event| {
+            let _ = send.send(event);
+        };
+        let shared = Arc::new(Mutex::new(State::Starting { killed: false }));
+        let mut children = Children::default();
+        children.0.insert(1, shared.clone());
+        assert!(children.kill(1));
+        let started = start("/bin/sleep", &["60".to_owned()], None);
+        run(1, "/bin/sleep", &shared, started, emit);
+        let signals: Vec<bool> = receive
+            .into_iter()
+            .map(|event| match event {
+                VideoEvent::Exit { signal, .. } | VideoEvent::Close { signal, .. } => {
+                    signal.as_deref() == Some("SIGKILL")
+                }
+                other => panic!("{other:?}"),
+            })
+            .collect();
+        assert_eq!(signals, [true, true]);
+        assert!(!children.kill(1));
+    }
+
+    #[test]
+    fn a_child_that_did_not_start_cannot_be_killed() {
+        let (send, receive) = mpsc::channel();
+        let mut children = Children::default();
+        children.spawn(1, "asrs-no-such-program", &[], None, move |event| {
+            let _ = send.send(event);
+        });
+        assert_eq!(receive.into_iter().count(), 2);
         assert!(!children.kill(1));
     }
 }
