@@ -876,7 +876,8 @@ impl Variant<'_> {
         if let Some(public) = spec.strip_prefix("public:") {
             let cache = std::env::var_os("ASRS_CACHE")
                 .ok_or_else(|| format!("{spec} needs ASRS_CACHE, which xtask sets"))?;
-            let file = Path::new(&cache).join("public-logs").join(public);
+            let mut file = Path::new(&cache).join("public-logs");
+            file.extend(public.split('/'));
             return match file.is_file() {
                 true => Ok(file.to_string_lossy().into_owned()),
                 false => Err(format!(
