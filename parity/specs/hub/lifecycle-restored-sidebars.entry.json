@@ -1,0 +1,2067 @@
+{
+  "entry": "hubSession",
+  "inputs": [
+    "logs/match.csv"
+  ],
+  "fixture": {
+    "seed": 4242,
+    "steps": [
+      {
+        "main": "open-files",
+        "data": {
+          "files": [
+            "logs/match.csv"
+          ],
+          "merge": false
+        }
+      },
+      {
+        "advance": 300
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 220,
+            "expanded": [
+              "/Drive"
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "saved",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "saved"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 220,
+            "expanded": [
+              "/Drive"
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "same-again",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "same-again"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "expanded": [
+              "/Drive"
+            ],
+            "width": 230,
+            "pinned": [
+              "/Drive"
+            ],
+            "collapsed": false
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "extra-members",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "extra-members"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "expanded": [
+              "/Drive"
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "no-width",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "no-width"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "no-width-toggled-1"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "no-width-toggled-2"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 240
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "no-expanded",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "no-expanded"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "no-expanded-toggled-1"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {},
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "empty",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "empty"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": null,
+            "expanded": null
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "null-members",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "null-members"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "null-members-toggled-1"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "null-members-toggled-2"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": 5,
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "number",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "number"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": "abc",
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "string",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "string"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": [
+            220,
+            [
+              "/Drive"
+            ]
+          ],
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "array",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "array"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": true,
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "bool",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "bool"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 250,
+            "expanded": "/Dr\ud83d\ude00ive"
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "expanded-string",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "expanded-string"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 251,
+            "expanded": [
+              5,
+              "/Drive",
+              null,
+              "/Drive",
+              5,
+              [
+                1
+              ],
+              {
+                "a": 1
+              },
+              [
+                1
+              ],
+              true,
+              -0.0,
+              0,
+              ""
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "expanded-mixed",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "expanded-mixed"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 251,
+            "expanded": [
+              5,
+              "/Drive",
+              null,
+              "/Drive",
+              5,
+              [
+                1
+              ],
+              {
+                "a": 1
+              },
+              [
+                1
+              ],
+              true,
+              -0.0,
+              0,
+              ""
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "expanded-mixed-again",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "expanded-mixed-again"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 252,
+            "expanded": [
+              1,
+              "1",
+              true,
+              null
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "expanded-primitives",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "expanded-primitives"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 253,
+            "expanded": 5
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "expanded-number",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "expanded-number"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 254,
+            "expanded": {
+              "0": "/Drive"
+            }
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "expanded-object",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "expanded-object"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 255,
+            "expanded": false
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "expanded-bool",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "expanded-bool"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": "250",
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "width-string",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-string"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-string-toggled-1"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-string-toggled-2"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": "0x100",
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "width-hex",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-hex"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-hex-toggled-1"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": "",
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "width-empty",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-empty"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-empty-toggled-1"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-empty-toggled-2"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": "abc",
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "width-text",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-text"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-text-toggled-1"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": "250px",
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "width-unit",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-unit"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": true,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "width-bool",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-bool"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-bool-toggled-1"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-bool-toggled-2"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": [
+              220
+            ],
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "width-array",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-array"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-array-toggled-1"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-array-toggled-2"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": [
+              220,
+              1
+            ],
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "width-pair",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-pair"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-pair-toggled-1"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": {
+              "px": 220
+            },
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "width-object",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-object"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-object-toggled-1"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-object-toggled-2"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 0,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "width-zero",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-zero"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-zero-toggled-1"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-zero-toggled-2"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": -200,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "width-negative",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-negative"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-negative-toggled-1"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-negative-toggled-2"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 1000000000.0,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "width-huge",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-huge"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-huge-toggled-1"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 180.5,
+            "expanded": []
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "width-fraction",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-fraction"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "width-fraction-toggled-1"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "no-sidebar",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "no-sidebar"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": null,
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "null-sidebar",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "null-sidebar"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 260,
+            "expanded": [
+              "/DriverStation"
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "no-tabs"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 261,
+            "expanded": []
+          },
+          "tabs": null
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "null-tabs"
+      },
+      {
+        "main": "restore-state",
+        "data": null
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "null-state"
+      },
+      {
+        "main": "restore-state"
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "no-state"
+      },
+      {
+        "main": "restore-state",
+        "data": 5
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "number-state"
+      },
+      {
+        "main": "restore-state",
+        "data": "abc"
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "string-state"
+      },
+      {
+        "main": "restore-state",
+        "data": [
+          {
+            "sidebar": {
+              "width": 1
+            }
+          }
+        ]
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "array-state"
+      },
+      {
+        "main": "restore-state",
+        "data": {
+          "sidebar": {
+            "width": 280,
+            "expanded": [
+              "/Drive"
+            ]
+          },
+          "tabs": {
+            "selected": 1,
+            "tabs": [
+              {
+                "type": 0,
+                "title": "",
+                "controller": null,
+                "controllerUUID": "doc",
+                "renderer": "",
+                "controlsHeight": 0
+              },
+              {
+                "type": 4,
+                "title": "recovered",
+                "controller": [
+                  "/Drive/Velocity"
+                ],
+                "controllerUUID": "table",
+                "renderer": null,
+                "controlsHeight": 0
+              }
+            ]
+          }
+        }
+      },
+      {
+        "advance": 60
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "recovered"
+      },
+      {
+        "main": "toggle-sidebar"
+      },
+      {
+        "capture": [
+          "state",
+          {
+            "kind": "eval",
+            "expr": "[document.documentElement.style.getPropertyValue('--side-bar-width'), document.documentElement.style.getPropertyValue('--show-side-bar')]"
+          }
+        ],
+        "label": "recovered-toggled-1"
+      }
+    ],
+    "ignoreMain": [
+      "save-state",
+      "update-touch-bar-slider",
+      "save-type-memory"
+    ]
+  }
+}

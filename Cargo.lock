@@ -491,6 +491,7 @@ dependencies = [
  "asrs-log",
  "asrs-parity",
  "futures-util",
+ "idna",
  "tokio",
  "tokio-tungstenite",
  "url",
@@ -4459,7 +4460,7 @@ dependencies = [
  "icu_collections 1.4.0",
  "icu_locid",
  "icu_locid_transform",
- "icu_normalizer 1.4.3",
+ "icu_normalizer",
  "icu_properties 1.4.3",
  "icu_provider 1.4.0",
  "smallvec",
@@ -4575,7 +4576,7 @@ checksum = "accb85c5b2e76f8dade22978b3795ae1e550198c6cfc7e915144e17cd6e2ab56"
 dependencies = [
  "displaydoc",
  "icu_collections 1.4.0",
- "icu_normalizer_data 1.4.1",
+ "icu_normalizer_data",
  "icu_properties 1.4.3",
  "icu_provider 1.4.0",
  "smallvec",
@@ -4586,30 +4587,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "icu_normalizer"
-version = "2.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "404a3b8c486f205c87fe7f23ab6894d84a4ad76d6e4671ae1981ba7def87c599"
-dependencies = [
- "icu_collections 2.4.0",
- "icu_normalizer_data 2.4.0",
- "icu_properties 2.4.0",
- "icu_provider 2.4.0",
- "smallvec",
- "zerovec 0.11.9",
-]
-
-[[package]]
 name = "icu_normalizer_data"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3744fecc0df9ce19999cdaf1f9f3a48c253431ce1d67ef499128fe9d0b607ab"
-
-[[package]]
-name = "icu_normalizer_data"
-version = "2.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "20f0088bfb7441f7a37fa0c9e20cb1e9cba1cac6b9ce8cd2a6dc44294f8e8cbc"
 
 [[package]]
 name = "icu_properties"
@@ -4734,12 +4715,12 @@ dependencies = [
 
 [[package]]
 name = "idna_adapter"
-version = "1.2.2"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb68373c0d6620ef8105e855e7745e18b0d00d3bdb07fb532e434244cdb9a714"
+checksum = "daca1df1c957320b2cf139ac61e7bd64fed304c5040df000a745aa1de3b4ef71"
 dependencies = [
- "icu_normalizer 2.4.0",
- "icu_properties 2.4.0",
+ "icu_normalizer",
+ "icu_properties 1.4.3",
 ]
 
 [[package]]

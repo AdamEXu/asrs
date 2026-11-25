@@ -15,7 +15,7 @@ use asrs_model::tab_controller::{Command, TabController};
 
 use crate::cx::TabCx;
 use crate::form::{NumberInput, Select, SelectOption};
-use crate::list_cx::{self, SourceListCx, js_error, source_state, with_env};
+use crate::list_cx::{self, SourceListCx, js_error, with_env};
 
 /// `WIDTH` and `HEIGHT`, in the order of upstream's `forEach` (`index` 0 and 1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -194,8 +194,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for PointsController {
             return Ok(());
         };
         if let Some(sources) = state.get("sources") {
-            let items = source_state(sources)?;
-            with_env(cx, |env| self.source_list.set_state(env, items)).map_err(js_error)?;
+            list_cx::set_source_state(&mut self.source_list, cx, sources)?;
         }
         for (key, dimension) in [("width", Dimension::Width), ("height", Dimension::Height)] {
             if let Some(n) = state.get(key).and_then(JsValue::as_f64) {
@@ -251,7 +250,7 @@ impl<Cx: SourceListCx + ?Sized> TabController<Cx> for PointsController {
         let uuid = uuid.as_deref();
 
         let mut sets: Vec<PointSet> = Vec::new();
-        let sources = self.source_list.displayed_state(&log);
+        let sources = self.source_list.drawn_state(&log).map_err(js_error)?;
         let mut i = 0;
         while i < sources.len() {
             let source = &sources[i];

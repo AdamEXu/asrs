@@ -119,7 +119,7 @@
   "platform": "win32",
   "arch": "x64",
   "osRelease": "10.0.26300",
-  "generator": "7d1da2c3260ca575",
+  "generator": "91aad945528b7ad0",
   "lut": {
     "file": "lut-windows.bin",
     "content": "126da49e80e8c6fd"
@@ -177,6 +177,30 @@
     {
       "scene": "transforms-2x",
       "content": "61e6a6d2dbfa4e90"
+    },
+    {
+      "scene": "floatmatrix-1x",
+      "content": "131919a588fc74eb"
+    },
+    {
+      "scene": "floatmatrix-2x",
+      "content": "20caf9476150fb09"
+    },
+    {
+      "scene": "quarterturns-1x",
+      "content": "ea5f98dd468c08ac"
+    },
+    {
+      "scene": "quarterturns-2x",
+      "content": "ab943100a2a3f0e8"
+    },
+    {
+      "scene": "gradientedges-light-1x",
+      "content": "71cdd74b2b9db13f"
+    },
+    {
+      "scene": "gradientedges-light-2x",
+      "content": "793d3ac952157f3b"
     },
     {
       "scene": "dom-text-light@1x",

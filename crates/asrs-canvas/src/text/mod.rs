@@ -238,14 +238,20 @@ pub(crate) fn relax(v: f32) -> f32 {
     (v * 1024.0 + 0.5).floor() / 1024.0
 }
 
+/// `FontDescription::EffectiveFontSize`: Blink floors a font's zoomed size to 1/100 px.
+pub(crate) fn effective_size(zoomed: f32) -> f32 {
+    (zoomed * 100.0).floor() / 100.0
+}
+
 /// Blink's `LayoutUnit::FromFloatRound`.
 fn layout_round(v: f32) -> f32 {
     (v * 64.0).round() / 64.0
 }
 
 /// Blink's em-height ascent and descent for canvas text: the typo extents (or, without them, the
-/// rounded ascent and descent) scaled to the font size, ascent rounded to 1/64.
+/// rounded ascent and descent) scaled to the font's `EffectiveFontSize`, ascent rounded to 1/64.
 pub fn normalized_typo(metrics: &FontMetrics, size: f32) -> (f32, f32) {
+    let size = effective_size(size);
     let normalize = |ascent: f32, height: f32| {
         if height <= 0.0 || ascent < 0.0 || ascent > height {
             return None;
@@ -294,5 +300,20 @@ mod tests {
         assert_eq!(baseline_offset(&sf, 12.0, "alphabetic"), 0.0);
         let no_typo = FontMetrics { typo: None, ..sf };
         assert_eq!(normalized_typo(&no_typo, 10.0), (8.0, 2.0));
+    }
+
+    /// The button numbers of the `joysticks` scenario at 2x, whose second row Chromium draws at
+    /// device y 352.48.
+    #[test]
+    fn baselines_use_the_effective_size() {
+        let arial = FontMetrics {
+            ascent: 27.0,
+            descent: 6.0,
+            line_gap: 1.0,
+            typo: Some((1491.0, 431.0)),
+        };
+        assert_eq!(normalized_typo(&arial, 29.65), (23.0, 6.65625));
+        assert_eq!(normalized_typo(&arial, 29.659_092), (23.0, 6.65625));
+        assert_eq!(baseline_offset(&arial, 29.659_092, "middle"), 8.171875);
     }
 }

@@ -2,12 +2,16 @@ use std::sync::Arc;
 
 use asrs_js::string::JsString;
 use asrs_log::log::{
-    LogField, LogValue, LogValueSet, LogValueSetAny, LogValues, LoggableType, SerializedLogField,
-    StructuredType,
+    LogField, LogValue, LogValueSet, LogValueSetAny, LoggableType, StructuredType,
 };
 use asrs_parity::{Response, Utf16String, Value};
 
 use crate::functions;
+
+#[path = "log_dump.rs"]
+mod log_dump;
+
+pub use log_dump::*;
 
 const TYPES: [LoggableType; 8] = [
     LoggableType::Raw,
@@ -67,14 +71,6 @@ pub fn structured_type(v: &Value) -> Result<StructuredType, String> {
     }
 }
 
-pub fn structured_type_value(t: &StructuredType) -> Value {
-    match t {
-        StructuredType::Null => Value::Null,
-        StructuredType::Undefined => Value::Undefined,
-        StructuredType::Named(s) => string_value(s),
-    }
-}
-
 pub fn array<T>(v: &Value, item: impl Fn(&Value) -> Result<T, String>) -> Result<Vec<T>, String> {
     v.as_array()
         .ok_or_else(|| format!("expected an array, got {}", v.kind()))?
@@ -105,54 +101,6 @@ fn put(field: &mut LogField, ty: LoggableType, timestamp: f64, v: &Value) -> Res
     Ok(())
 }
 
-pub fn string_value(s: &JsString) -> Value {
-    Value::String(Utf16String::from_units(s.units().to_vec()))
-}
-
-pub trait ToValue {
-    fn to_value(&self) -> Value;
-}
-
-impl ToValue for Arc<[u8]> {
-    fn to_value(&self) -> Value {
-        Value::Bytes(self.to_vec())
-    }
-}
-
-impl ToValue for bool {
-    fn to_value(&self) -> Value {
-        Value::Bool(*self)
-    }
-}
-
-impl ToValue for f64 {
-    fn to_value(&self) -> Value {
-        Value::number(*self)
-    }
-}
-
-impl ToValue for JsString {
-    fn to_value(&self) -> Value {
-        string_value(self)
-    }
-}
-
-impl ToValue for () {
-    fn to_value(&self) -> Value {
-        Value::Undefined
-    }
-}
-
-impl<T: ToValue> ToValue for Vec<T> {
-    fn to_value(&self) -> Value {
-        Value::Array(self.iter().map(ToValue::to_value).collect())
-    }
-}
-
-pub fn numbers(xs: &[f64]) -> Value {
-    Value::Array(xs.iter().map(|&x| Value::number(x)).collect())
-}
-
 pub fn set_value<T: ToValue>(set: &LogValueSet<T>) -> Value {
     Value::object([
         ("timestamps", numbers(&set.timestamps)),
@@ -174,48 +122,6 @@ pub fn any_set_value(set: &LogValueSetAny) -> Value {
         LogValueSetAny::StringArray(s) => set_value(s),
         LogValueSetAny::Empty(s) => set_value(s),
     }
-}
-
-fn column_value<T: ToValue + LogValue>(values: &LogValues) -> Value {
-    Value::Array(
-        values
-            .as_slice::<T>()
-            .unwrap_or_default()
-            .iter()
-            .map(ToValue::to_value)
-            .collect(),
-    )
-}
-
-fn values_value(values: &LogValues) -> Value {
-    match values {
-        LogValues::Raw(_) => column_value::<Arc<[u8]>>(values),
-        LogValues::Boolean(_) => column_value::<bool>(values),
-        LogValues::Number(_) => column_value::<f64>(values),
-        LogValues::String(_) => column_value::<JsString>(values),
-        LogValues::BooleanArray(_) => column_value::<Vec<bool>>(values),
-        LogValues::NumberArray(_) => column_value::<Vec<f64>>(values),
-        LogValues::StringArray(_) => column_value::<Vec<JsString>>(values),
-        LogValues::Empty(_) => column_value::<()>(values),
-    }
-}
-
-pub fn optional_string(s: &Option<JsString>) -> Value {
-    s.as_ref().map_or(Value::Null, string_value)
-}
-
-/// `LogField.toSerialized()` as the CVE-1 object upstream produces.
-pub fn serialized_value(s: &SerializedLogField) -> Value {
-    Value::object([
-        ("type", Value::number(f64::from(s.get_type() as u8))),
-        ("timestamps", numbers(&s.timestamps)),
-        ("values", values_value(&s.values)),
-        ("structuredType", structured_type_value(&s.structured_type)),
-        ("wpilibType", optional_string(&s.wpilib_type)),
-        ("metadataString", string_value(&s.metadata_string)),
-        ("stripingReference", Value::Bool(s.striping_reference)),
-        ("typeWarning", Value::Bool(s.type_warning)),
-    ])
 }
 
 fn typed_get<T: LogValue + ToValue>(

@@ -5,7 +5,7 @@ use icu_properties::props::EmojiPresentation;
 #[cfg(any(target_os = "linux", windows))]
 use icu_properties::props::Script;
 
-use super::FontSpec;
+use super::{FontSpec, effective_size};
 
 /// The clusters of `text`, which starts at UTF-16 offset `from`, each with whether Blink's
 /// `FontFallbackPriority` makes it emoji presentation: an `Emoji_Presentation` base, or a
@@ -111,10 +111,10 @@ pub(crate) fn round(v: f32) -> f32 {
     (v + 0.5).floor()
 }
 
-/// `FontDescription::EffectiveFontSize`: Blink floors a font's zoomed size to 1/100 px.
+/// `spec` at its `FontDescription::EffectiveFontSize`.
 pub(crate) fn effective(spec: &FontSpec, zoom: f32) -> FontSpec {
     let zoomed = spec.size * zoom;
-    let floored = (zoomed * 100.0).floor() / 100.0;
+    let floored = effective_size(zoomed);
     if floored == zoomed {
         return *spec;
     }

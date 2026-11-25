@@ -27,11 +27,10 @@ use asrs_hub::sidebar::{
 use asrs_js::number;
 use asrs_js::string::JsString;
 use asrs_js::time::{Clock, SetRng};
-use asrs_js::value::{JsValue, ToJs};
+use asrs_js::value::JsValue;
 use asrs_live::{Thrown, TunedValue};
 use asrs_log::log::{Log, LoggableType, RawValue};
 use asrs_log::realm::JsRealm;
-use asrs_model::hub_state::SidebarState;
 use asrs_model::selection::Selection;
 use asrs_model::selection_impl::SelectionImpl;
 use asrs_parity::cve1::Value;
@@ -1297,10 +1296,11 @@ fn replay(
     // queues the "show" emit on the first frame.
     if let Some(state) = fixture.get("state") {
         let data = js_json::to_js(&json_to_cve(state)).map_err(|e| format!("state: {e}"))?;
-        if let Some(sidebar_state) = data.get("sidebar").and_then(SidebarState::from_js) {
+        if let Some(sidebar_state) = data.get("sidebar") {
             let outcome = runner
                 .sidebar
-                .restore_state(&mut senv!(runner), &sidebar_state);
+                .restore_state(&mut senv!(runner), sidebar_state)
+                .map_err(|e| format!("{e:?}"))?;
             runner
                 .emitted
                 .extend(exception_emit("main restore-state", outcome));
@@ -1404,12 +1404,11 @@ fn replay(
                 "restore-state" => {
                     let data_js =
                         js_json::to_js(&data).map_err(|e| format!("{}: {e}", where_()))?;
-                    if let Some(sidebar_state) =
-                        data_js.get("sidebar").and_then(SidebarState::from_js)
-                    {
+                    if let Some(sidebar_state) = data_js.get("sidebar") {
                         let outcome = runner
                             .sidebar
-                            .restore_state(&mut senv!(runner), &sidebar_state);
+                            .restore_state(&mut senv!(runner), sidebar_state)
+                            .map_err(|e| format!("{e:?}"))?;
                         runner.outcome(outcome);
                     }
                 }
@@ -1508,7 +1507,7 @@ fn replay(
                             .to_string_lossy();
                         let value = match expr.as_str() {
                             "window.sidebar.saveState()" => {
-                                js_json::from_js(&runner.sidebar.save_state().to_js())
+                                js_json::from_js(&runner.sidebar.save_state())
                             }
                             "[...window.sidebar.getActiveFields()]" => Value::Array(
                                 runner

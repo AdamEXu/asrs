@@ -1,8 +1,11 @@
-//! What `rlogMain` needs from Node's `net`: `createConnection`, `write`, `destroy` and
-//! `setTimeout`, with the socket's own rules for them: writes while connecting are held and
-//! go out on connect, a refused connection reports `Error` then `Close`, `Close` reports
-//! once, and the `setTimeout` idle timer reports `Timeout` once per `set_timeout` call while
-//! connecting, reads and writes count as activity.
+//! What `rlogMain` needs from Node's `net`: `createConnection`, `write` and `destroy`, with the
+//! socket's own rules for them: writes while connecting are held and go out on connect, a refused
+//! connection reports `Error` then `Close`, and `Close` reports once. The `setTimeout` idle timer
+//! is [`super::RlogMain`]'s: Node runs it on the main process's event loop with every other timer.
+
+use asrs_js::number;
+
+use crate::thrown::Thrown;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TcpId(pub u32);
@@ -18,23 +21,32 @@ pub enum RlogNetEvent {
     Error(TcpId),
     /// `'close'`: dropped by the peer, destroyed locally, or ended after an error.
     Close(TcpId),
-    /// `'timeout'`: the `set_timeout` idle timer fired once after `ms` without activity.
-    Timeout(TcpId),
+}
+
+/// Node's `validatePort` on a number: anything else than an integer from 0 to 65535 throws before
+/// a socket exists.
+pub fn socket_port(port: f64) -> Result<u16, Thrown> {
+    if (0.0..=65535.0).contains(&port) && port.fract() == 0.0 {
+        return Ok(port as u16);
+    }
+    Err(Thrown::error(
+        "RangeError [ERR_SOCKET_BAD_PORT]",
+        format!(
+            "Port should be >= 0 and < 65536. Received type number ({}).",
+            number::to_string(port)
+        ),
+    ))
 }
 
 /// Node `net.Socket`, reduced to what `main.ts` uses.
 pub trait RlogTransport {
-    /// `net.createConnection({host, port})`: the socket starts connecting.
-    fn tcp_connect(&mut self, host: &str, port: f64) -> TcpId;
+    /// `net.createConnection({host, port})`: the socket starts connecting, or Node throws on the
+    /// port.
+    fn tcp_connect(&mut self, host: &str, port: f64) -> Result<TcpId, Thrown>;
 
     /// `socket.write(data)`: buffered until connect, then written.
     fn tcp_write(&mut self, id: TcpId, data: &[u8]);
 
     /// `socket.destroy()`: closes immediately and reports `Close` once.
     fn tcp_destroy(&mut self, id: TcpId);
-
-    /// `socket.setTimeout(ms, callback)`: after `ms` without connecting, reads or writes the
-    /// socket reports `Timeout`; any activity re-arms it. The callback is a `once` listener,
-    /// so only the first fire after this call is delivered.
-    fn tcp_set_timeout(&mut self, id: TcpId, ms: f64);
 }

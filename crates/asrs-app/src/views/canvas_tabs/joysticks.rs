@@ -15,9 +15,10 @@ use asrs_tabs::cx::TabCx;
 use asrs_tabs::joysticks_renderer::{JoysticksDom, JoysticksRenderer};
 use asrs_tabs::list_cx::SourceListCx;
 use asrs_ui::canvas_view::{CanvasMetrics, CanvasState, canvas_view};
+use asrs_ui::focus;
 use asrs_ui::gpui::{
-    AnyElement, App, AppContext, Context, Entity, IntoElement, ParentElement, Styled, Window, div,
-    px,
+    AnyElement, App, AppContext, Context, Entity, InteractiveElement, IntoElement, ParentElement,
+    Styled, Window, div, px,
 };
 use asrs_ui::input::style::{CONTROL_FONT, device_border};
 use asrs_ui::parity::probed;
@@ -26,7 +27,7 @@ use asrs_ui::theme::{Appearance, FONT_FAMILY};
 use asrs_ui::tooltip::titled;
 
 use super::super::field_image::{self, FieldImage};
-use super::super::frame::{FrameHost, HubFrame};
+use super::super::frame::{FrameHost, HubFrame, SETTINGS_SECTION};
 use super::settings::Control;
 use super::{displayed, local, lu, with_renderer};
 
@@ -313,13 +314,19 @@ impl<H: FrameHost> HubFrame<H> {
             select_extent: [device(ascent + chrome), device(descent + chrome)],
         };
         let cells = selector_layout(controls, &metrics);
-        let mut table = div().absolute().left_0().top_0().size_full();
+        let place = focus::place(("joystick-selector", key), window, cx);
+        let mut table = focus::section(div(), SETTINGS_SECTION, &place)
+            .absolute()
+            .left_0()
+            .top_0()
+            .size_full();
         for (i, cell) in cells.into_iter().enumerate() {
+            let place = focus::place((JOYSTICK_PLACES[i], key), window, cx);
             let [x, y] = cell.label;
             table = table
                 .child(probed(
                     "table.joystick-selector td",
-                    local(cell.rect, controls),
+                    local(cell.rect, controls).track_focus(&place),
                 ))
                 .child(
                     div()
@@ -351,6 +358,15 @@ impl<H: FrameHost> HubFrame<H> {
 /// `PopupInternalPaddingStart`, `PopupInternalPaddingEnd` with the arrow box, and the 1 px
 /// borders around a menu list's widest option.
 const SELECT_CHROME: f64 = 4.0 + 1.0 + 15.0 + 2.0;
+
+const JOYSTICK_PLACES: [&str; ROWS * COLUMNS] = [
+    "joystick-0",
+    "joystick-1",
+    "joystick-2",
+    "joystick-3",
+    "joystick-4",
+    "joystick-5",
+];
 
 #[cfg(test)]
 mod tests {

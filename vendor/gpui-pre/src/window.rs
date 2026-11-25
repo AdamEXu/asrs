@@ -1062,6 +1062,7 @@ pub(crate) struct Frame {
     #[cfg(any(feature = "inspector", debug_assertions))]
     pub(crate) inspector_hitboxes: FxHashMap<HitboxId, crate::InspectorElementId>,
     pub(crate) tab_stops: TabStopMap,
+    pub(crate) focus_bounds: FxHashMap<FocusId, Bounds<Pixels>>,
 }
 
 #[derive(Clone, Default)]
@@ -1121,6 +1122,7 @@ impl Frame {
             #[cfg(any(feature = "inspector", debug_assertions))]
             inspector_hitboxes: FxHashMap::default(),
             tab_stops: TabStopMap::default(),
+            focus_bounds: FxHashMap::default(),
         }
     }
 
@@ -1137,6 +1139,7 @@ impl Frame {
         self.window_control_hitboxes.clear();
         self.deferred_draws.clear();
         self.tab_stops.clear();
+        self.focus_bounds.clear();
         self.focus = None;
 
         #[cfg(any(test, feature = "test-support"))]
@@ -2733,6 +2736,23 @@ impl Window {
         if let Some(handle) = self.rendered_frame.tab_stops.prev(self.focus.as_ref()) {
             self.focus(&handle, cx)
         }
+    }
+
+    /// The focus handles of the rendered frame in tab order, tab stops or not. Copies of one
+    /// handle differ in [`FocusHandle::tab_stop`].
+    pub fn tab_order(&self) -> Vec<FocusHandle> {
+        self.rendered_frame.tab_stops.handles()
+    }
+
+    /// The bounds of the element that tracks `handle` in the rendered frame.
+    pub fn focus_bounds(&self, handle: &FocusHandle) -> Option<Bounds<Pixels>> {
+        self.rendered_frame.focus_bounds.get(&handle.id).copied()
+    }
+
+    /// Makes `bounds` the bounds of `handle`, where the element that tracks it is only a part of
+    /// what has the focus. Called while the frame is prepainted.
+    pub fn set_focus_bounds(&mut self, handle: &FocusHandle, bounds: Bounds<Pixels>) {
+        self.next_frame.focus_bounds.insert(handle.id, bounds);
     }
 
     /// Accessor for the text system.

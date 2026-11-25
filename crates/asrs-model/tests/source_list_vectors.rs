@@ -68,8 +68,7 @@ use asrs_model::source_list::{
     SourceList, SourceListDom, SourceListError, TypePrompt, configs,
 };
 use asrs_model::source_list_config::{
-    SourceListConfig, SourceListItemState, SourceListOptionValueConfig, SourceListTypeMemory,
-    SourceListTypeMemoryEntry,
+    SourceListConfig, SourceListItemState, SourceListOptionValueConfig,
 };
 use asrs_model::tab_type::TabType;
 use asrs_parity::Value;
@@ -334,7 +333,7 @@ fn root_class(config: &str, title: &str) -> Result<&'static str, String> {
 struct Harness {
     log: Log,
     realm: JsRealm,
-    memory: SourceListTypeMemory,
+    memory: JsValue,
     dom: ScriptedDom,
     lists: Vec<Slot>,
     pending_errors: VecDeque<String>,
@@ -391,16 +390,12 @@ fn index(v: &JsValue) -> Result<usize, String> {
     Ok(x as usize)
 }
 
-fn item_state(v: &JsValue) -> Result<SourceListItemState, String> {
-    SourceListItemState::from_js(v).ok_or_else(|| format!("not an item state: {v:?}"))
-}
-
 fn states(v: &JsValue) -> Result<Vec<SourceListItemState>, String> {
-    v.as_array()
+    Ok(v.as_array()
         .ok_or("expected an array of item states")?
         .iter()
-        .map(item_state)
-        .collect()
+        .map(SourceListItemState::restored)
+        .collect())
 }
 
 fn rect(v: &JsValue) -> Result<Rect, String> {
@@ -494,7 +489,7 @@ fn item_dump(view: &ItemView) -> JsValue {
             out.push(r.symbol_path.to_js());
             out.push(r.color.to_js());
             out.push(r.type_name.to_js());
-            out.push(r.log_key.to_js());
+            out.push(r.key_text.to_js());
             out.push(if r.available { "" } else { "line-through" }.to_js());
             out.push(r.log_key.to_js());
             out.push(r.hide_icon().to_js());
@@ -523,7 +518,10 @@ fn list_dump(list: &SourceList, log: &Log) -> JsValue {
     let mut o = JsObject::new();
     o.insert("title", list.title().to_js());
     o.insert("state", list.state().to_js());
-    o.insert("displayed", list.displayed_state(log).to_js());
+    o.insert(
+        "displayed",
+        list.displayed_state(log).expect("modeled items").to_js(),
+    );
     o.insert("stopped", list.is_stopped().to_js());
     let hand = if list.hand_icon_shown() {
         ["0.15", "opacity 1s ease-in 1s"]
@@ -560,10 +558,6 @@ fn list_dump(list: &SourceList, log: &Log) -> JsValue {
     JsValue::Object(o)
 }
 
-fn memory_js(memory: &SourceListTypeMemory) -> JsValue {
-    memory.to_js()
-}
-
 fn split_pair(lists: &mut [Slot], a: usize, b: usize) -> (&mut SourceList, &mut SourceList) {
     if a < b {
         let (lo, hi) = lists.split_at_mut(b);
@@ -585,7 +579,7 @@ impl Harness {
         Ok(Harness {
             log: Log::new(true),
             realm: JsRealm::new(Box::new(NoRandom)),
-            memory: JsObject::new(),
+            memory: JsValue::Object(JsObject::new()),
             dom: ScriptedDom {
                 reads: ScriptedReads::from_records(&ours)?,
                 roots: Vec::new(),
@@ -724,9 +718,8 @@ impl Harness {
                 Ok(())
             }
             "setState" => {
-                let states = states(at(args, 1))?;
                 let (mut env, lists) = self.env(dark);
-                lists[id].list.set_state(&mut env, states)
+                lists[id].list.restore(&mut env, at(args, 1))
             }
             "clear" => {
                 self.lists[id].list.clear();
@@ -824,14 +817,13 @@ impl Harness {
                 Ok(())
             }
             "mouseMove" => {
-                if let Some(start) = self.lists[id].list.mouse_move(
-                    &mut self.dom,
-                    num(at(args, 1))?,
-                    num(at(args, 2))?,
-                ) {
-                    self.pending_drag = Some((id, start));
-                }
-                Ok(())
+                let (x, y) = (num(at(args, 1))?, num(at(args, 2))?);
+                let start = self.lists[id].list.mouse_move(&mut self.dom, x, y);
+                start.map(|start| {
+                    if let Some(start) = start {
+                        self.pending_drag = Some((id, start));
+                    }
+                })
             }
             "contextMenu" => {
                 self.pending_prompt = self.lists[id].list.context_menu(
@@ -848,7 +840,7 @@ impl Harness {
                 Ok(())
             }
             "typeResponse" => {
-                let state = item_state(at(args, 1))?;
+                let state = SourceListItemState::restored(at(args, 1));
                 let (mut env, lists) = self.env(dark);
                 lists[id].list.type_response(&mut env, state)
             }
@@ -861,10 +853,7 @@ impl Harness {
                 let (mut env, lists) = self.env(dark);
                 lists[id].list.name_click(&mut env, i, now)
             }
-            "remove" => {
-                self.lists[id].list.remove(index(at(args, 1))?);
-                Ok(())
-            }
+            "remove" => self.lists[id].list.remove(index(at(args, 1))?),
             "clearClick" => {
                 self.pending_clear = Some(self.lists[id].list.request_clear(&mut self.dom));
                 Ok(())
@@ -954,14 +943,12 @@ impl Harness {
             return self.apply_log(&ops);
         }
         if record.field("slTypeMemory").is_some() {
-            let value = js(record, "slTypeMemory")?;
-            self.memory = SourceListTypeMemoryEntry::memory_from_js(&value)
-                .ok_or("slTypeMemory does not parse")?;
+            self.memory = js(record, "slTypeMemory")?;
             return Ok(());
         }
         if record.field("slMemory").is_some() {
             let expected = js_json::from_js(&js(record, "slMemory")?).encode();
-            let actual = encode(&memory_js(&self.memory));
+            let actual = encode(&self.memory);
             if expected != actual {
                 return Err(format!("type memory\n oracle {expected}\n port   {actual}"));
             }
@@ -980,7 +967,7 @@ impl Harness {
                 .pending_prompt
                 .take()
                 .ok_or("the oracle prompted for a type, the port did not")?;
-            let state = item_state(get(&data, "state"))?;
+            let state = SourceListItemState::restored(get(&data, "state"));
             let config = SourceListConfig::from_js(get(&data, "config")).ok_or("prompt config")?;
             if prompt.uuid != text(get(&data, "uuid"))?
                 || prompt.state != state
