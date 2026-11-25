@@ -1472,11 +1472,11 @@ impl HubModel {
         ) || selection.get_current_live_time().is_some()
     }
 
-    /// Whether the displayed tab's renderer left something to draw.
+    /// Whether the displayed tab left something to draw.
     pub(crate) fn needs_draw(&mut self) -> bool {
         let tab = self.tabs.selected_index();
         tab.and_then(|index| self.tabs.tab_mut(index))
-            .is_some_and(|tab| tab.renderer.needs_draw())
+            .is_some_and(|tab| tab.renderer.needs_draw() || tab.controller.needs_draw())
     }
 
     /// Whether the page's frames, or an interval since they last ran, changed what it shows on

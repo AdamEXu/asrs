@@ -70,6 +70,11 @@ pub trait TabController<Cx: ?Sized>: AsAny {
     /// `controller.UUID`, which `Tabs` owns because a restore may set it to any value.
     fn command(&mut self, cx: &mut Cx, uuid: &JsValue) -> Result<Command, JsError>;
 
+    /// Whether the last `command` changed a control on its own. See [`TabRenderer::needs_draw`].
+    fn needs_draw(&self) -> bool {
+        false
+    }
+
     /// The controller's `SourceList`s in construction order.
     fn source_lists(&self) -> Vec<&SourceList> {
         Vec::new()

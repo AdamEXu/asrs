@@ -1542,7 +1542,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 if let Some(content) = self.host.slot(FrameSlot::ControlsContent, window, cx) {
                     controls = controls.child(content);
                 }
-                self.layout_source_lists(rect, width, scale, cx);
+                self.layout_source_lists(rect, width, scale, window, cx);
                 controls = controls.children(self.source_lists(rect, appearance, window, cx));
                 if let Some(settings) = self.field_2d_controls(rect, appearance, scale, window, cx)
                 {

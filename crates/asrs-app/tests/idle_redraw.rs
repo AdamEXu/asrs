@@ -16,14 +16,18 @@ use asrs_app::main_process::{self, MainProcess, SatelliteConfig};
 use asrs_app::satellite::Satellite;
 use asrs_app::windows::{self, WindowId, Windows};
 use asrs_js::ops;
+use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
 use asrs_model::messages::{MainToHub, NamedMessage};
 use asrs_model::selection::Selection;
+use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
+use asrs_tabs::documentation::DocumentationRenderer;
 use asrs_ui::gpui::{
-    AnyWindowHandle, AppContext, Entity, MouseMoveEvent, PlatformInput, TestAppContext,
-    WindowVisibility, point, px,
+    AnyWindowHandle, AppContext, Entity, MouseMoveEvent, PlatformInput, ScrollDelta, ScrollEvent,
+    TestAppContext, WindowVisibility, point, px,
 };
+use asrs_ui::scroll::{Style, set_style};
 
 const HOME: &str = "ASRS_IDLE_REDRAW_HOME";
 const UUID: &str = "idle-redraw";
@@ -51,7 +55,25 @@ in_the_app! {
     an_idle_page_is_not_drawn, idle;
     a_playing_log_is_drawn_every_frame, playing;
     what_changes_is_drawn, changes;
+    a_source_list_scrolls_to_its_end, source_list;
     a_hidden_hub_draws_its_satellite_only_for_changes, hidden;
+}
+
+#[test]
+fn a_documentation_page_is_drawn_for_a_hash_it_is_still_to_get() {
+    let mut renderer = DocumentationRenderer::new();
+    let tab: &mut dyn TabRenderer<()> = &mut renderer;
+    tab.restore_state(&mut (), &JsValue::string("#/installation"))
+        .expect("a state");
+    tab.render(&mut (), &JsValue::Null).expect("a render");
+    assert!(!tab.needs_draw());
+    let frame = renderer.frame().clone();
+    frame.borrow_mut().load(JsString::from("#/"));
+    let tab: &mut dyn TabRenderer<()> = &mut renderer;
+    tab.render(&mut (), &JsValue::Null).expect("a render");
+    assert!(tab.needs_draw());
+    assert!(frame.borrow_mut().take_assignment().is_some());
+    assert!(!tab.needs_draw());
 }
 
 fn run_in_a_fresh_home(test: &str) {
@@ -364,6 +386,68 @@ mod body {
         }
         assert_ne!(shown[0], shown[1]);
         page.assert_idle("after the pointer");
+    }
+
+    pub fn source_list() {
+        let mut page = Page::start();
+        page.cx.update(|cx| set_style(Style::Fluent, false, cx));
+        page.select(TabType::LineGraph);
+        let sources = (0..40).map(|i| {
+            ops::object([
+                ("type", JsValue::string("stepped")),
+                ("logKey", JsValue::string(&format!("/Field{i:02}"))),
+                ("logType", JsValue::string("Number")),
+                ("visible", JsValue::Bool(true)),
+                (
+                    "options",
+                    ops::object([
+                        ("color", JsValue::string("#2b66a2")),
+                        ("size", JsValue::string("normal")),
+                    ]),
+                ),
+            ])
+        });
+        let conversion = || ops::object([("autoTarget", JsValue::Null), ("preset", JsValue::Null)]);
+        let state = ops::object([
+            ("leftSources", JsValue::Array(sources.collect())),
+            ("rightSources", JsValue::Array(Vec::new())),
+            ("discreteSources", JsValue::Array(Vec::new())),
+            ("leftLockedRange", JsValue::Null),
+            ("rightLockedRange", JsValue::Null),
+            ("leftUnitConversion", conversion()),
+            ("rightUnitConversion", conversion()),
+            ("leftFilter", JsValue::Number(0.0)),
+            ("rightFilter", JsValue::Number(0.0)),
+        ]);
+        let hub = page.hub.clone();
+        page.cx.update(|cx| {
+            hub.update(cx, |hub, cx| {
+                hub.update(cx, |model, _| {
+                    let (tabs, page) = model.tabs_mut();
+                    let index = tabs.selected_index().expect("a selected tab");
+                    let tab = tabs.tab_mut(index).expect("the tab");
+                    tab.controller.restore_state(page, &state).expect("a state");
+                })
+            })
+        });
+        page.assert_idle("before");
+
+        let window = page.window;
+        page.cx
+            .update_window(window, |_, window, cx| {
+                let height = f32::from(window.viewport_size().height);
+                let event = ScrollEvent {
+                    position: point(px(380.0), px(height - 100.0)),
+                    delta: ScrollDelta::Lines(point(0.0, -1.0)),
+                    ..ScrollEvent::default()
+                };
+                window.dispatch_event(PlatformInput::Scroll(event), cx)
+            })
+            .expect("the window is open");
+        page.cx.run_until_parked();
+        let [hub, _] = page.drawn_in(40);
+        assert!((11..=24).contains(&hub), "a smooth scroll: {hub}");
+        page.assert_idle("after a smooth scroll");
     }
 
     pub fn hidden() {

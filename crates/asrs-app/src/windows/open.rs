@@ -167,6 +167,9 @@ fn track<V: Render>(
             }
         })
         .detach();
+        // GPUI draws nothing for this itself, and what the pages draw follows it.
+        cx.observe_window_appearance(window, |_, window, _| window.refresh())
+            .detach();
         let focus = focus_events(window, cx, move |_, focused, _, cx| {
             if focused {
                 cx.global_mut::<Windows>().manager.raised(id);
