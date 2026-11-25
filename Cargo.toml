@@ -21,6 +21,7 @@ gpui-pre-platform = { version = "=0.3.12", default-features = false }
 [patch.crates-io]
 gpui-pre = { path = "vendor/gpui-pre" }
 gpui-pre-scheduler = { path = "vendor/gpui-pre-scheduler" }
+gpui-pre-windows = { path = "vendor/gpui-pre-windows" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

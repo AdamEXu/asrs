@@ -12,14 +12,14 @@ use crate::{Result, workspace_root};
 const USAGE: &str = "usage: cargo xtask gpui <command>
 
 commands:
-  verify          vendor/gpui-pre and vendor/gpui-pre-scheduler equal the crates.io
-                  archives plus their patches in patches/ (gpui-pre's examples/ is not
-                  vendored)
+  verify          vendor/gpui-pre, vendor/gpui-pre-scheduler and vendor/gpui-pre-windows
+                  equal the crates.io archives plus their patches in patches/ (gpui-pre's
+                  examples/ is not vendored)
   vendor <crate> <dir>
-                  write the crates.io archive of gpui-pre or gpui-pre-scheduler plus its
-                  patch to <dir>, which must not exist (cargo cannot load the workspace
-                  without the vendored crates, so a new vendor tree is generated
-                  elsewhere and moved into place)
+                  write the crates.io archive of a vendored crate plus its patch to <dir>,
+                  which must not exist (cargo cannot load the workspace without the
+                  vendored crates, so a new vendor tree is generated elsewhere and moved
+                  into place)
   features        no GPUI test-support in a normal build; present with `parity`
   release-audit   build asrs-app in release with and without `parity` and check that
                   test-support code reaches the artifacts only with it
@@ -40,6 +40,12 @@ const VENDORED: &[Vendored] = &[
         version: "0.3.12",
         sha256: "29db89613527079737f53752eab27fb65c9a7dd94979256c65a0e590c9fd34d8",
         not_vendored: &["examples/"],
+    },
+    Vendored {
+        name: "gpui-pre-windows",
+        version: "0.3.12",
+        sha256: "7201762420222d5b5ce5bdf0056996199212a3349bfb2457a3a0238c688681f3",
+        not_vendored: &[],
     },
     Vendored {
         name: "gpui-pre-scheduler",

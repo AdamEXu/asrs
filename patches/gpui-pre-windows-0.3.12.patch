@@ -1,0 +1,459 @@
+diff --git a/src/directx_atlas.rs b/src/directx_atlas.rs
+--- a/src/directx_atlas.rs
++++ b/src/directx_atlas.rs
+@@ -1,3 +1,4 @@
++// Modified by asrs: see patches/gpui-pre-windows-0.3.12.patch in the asrs repository.
+ use etagere::BucketedAtlasAllocator;
+ use parking_lot::Mutex;
+ use windows::Win32::Graphics::{
+@@ -171,7 +172,7 @@
+             width: DevicePixels(16384),
+             height: DevicePixels(16384),
+         };
+-        let size = min_size.min(&MAX_ATLAS_SIZE).max(&DEFAULT_ATLAS_SIZE);
++        let size = atlas_texture_size(min_size.min(&MAX_ATLAS_SIZE), DEFAULT_ATLAS_SIZE);
+         let pixel_format;
+         let bind_flag;
+         let bytes_per_pixel;
+@@ -328,6 +329,22 @@
+     }
+ }
+ 
++// A tile over the default size gets a texture of its own when the padding would not hold a second
++// one like it. Smaller tiles, such as long text runs, share the padded texture. The spare texel
++// keeps the sampler, which wraps, off the tile's opposite edge as the padding did.
++fn atlas_texture_size(tile: Size<DevicePixels>, default: Size<DevicePixels>) -> Size<DevicePixels> {
++    let padded = tile.max(&default);
++    let holds_two = tile.width.0 * 2 <= default.width.0 || tile.height.0 * 2 <= default.height.0;
++    if padded == default || holds_two {
++        padded
++    } else {
++        Size {
++            width: padded.width.min(tile.width + DevicePixels(1)),
++            height: padded.height.min(tile.height + DevicePixels(1)),
++        }
++    }
++}
++
+ fn device_size_to_etagere(size: Size<DevicePixels>) -> etagere::Size {
+     etagere::Size::new(size.width.into(), size.height.into())
+ }
+@@ -416,5 +433,104 @@
+ 
+         let tile_b = insert_tile(&atlas, big_key_b, big);
+         assert_eq!(tile_b.texture_id, keeper_tile.texture_id);
++    }
++
++    fn size_of(width: i32, height: i32) -> Size<DevicePixels> {
++        Size {
++            width: DevicePixels(width),
++            height: DevicePixels(height),
++        }
++    }
++
++    fn texture_size(atlas: &DirectXAtlas, id: AtlasTextureId) -> Option<(u32, u32)> {
++        let lock = atlas.0.lock();
++        let texture = lock.backend.texture(id)?;
++        let mut desc = D3D11_TEXTURE2D_DESC::default();
++        unsafe { texture.texture.GetDesc(&mut desc) };
++        Some((desc.Width, desc.Height))
++    }
++
++    #[test]
++    fn test_atlas_texture_size() {
++        let default = size_of(1024, 1024);
++        for (tile, expected) in [
++            ((1, 1), (1024, 1024)),
++            ((1024, 1024), (1024, 1024)),
++            ((1600, 20), (1600, 1024)),
++            ((1600, 512), (1600, 1024)),
++            ((1600, 513), (1600, 514)),
++            ((1600, 692), (1600, 693)),
++            ((1025, 1024), (1025, 1024)),
++            ((1601, 1303), (1601, 1303)),
++            ((512, 1200), (1024, 1200)),
++            ((513, 1200), (514, 1200)),
++        ] {
++            assert_eq!(
++                atlas_texture_size(size_of(tile.0, tile.1), default),
++                size_of(expected.0, expected.1),
++            );
++        }
++    }
++
++    #[test]
++    fn test_oversized_tiles_get_a_fitting_texture() {
++        let Some(atlas) = create_atlas() else {
++            return;
++        };
++        let tiles = [
++            ((1601, 513), (1601, 514)),
++            ((1600, 692), (1600, 693)),
++            ((519, 1201), (520, 1201)),
++            ((1601, 1303), (1601, 1303)),
++        ];
++        for (ix, ((width, height), expected)) in tiles.into_iter().enumerate() {
++            let key = make_image_key(ix);
++            let tile = insert_tile(&atlas, key.clone(), size_of(width, height));
++            assert_eq!(tile.bounds.origin, Point::default());
++            assert_eq!(texture_size(&atlas, tile.texture_id), Some(expected));
++            atlas.remove(&key);
++            assert_eq!(texture_size(&atlas, tile.texture_id), None);
++        }
+     }
++
++    #[test]
++    fn test_oversized_texture_is_recycled_beside_small_tiles() {
++        let Some(atlas) = create_atlas() else {
++            return;
++        };
++        let canvas = size_of(1600, 692);
++        let first = insert_tile(&atlas, make_image_key(0), canvas);
++        let small = insert_tile(&atlas, make_image_key(1), size_of(64, 64));
++        assert_ne!(first.texture_id, small.texture_id);
++        assert_eq!(texture_size(&atlas, small.texture_id), Some((1024, 1024)));
++
++        for frame in 2..10 {
++            let next = insert_tile(&atlas, make_image_key(frame), canvas);
++            let previous = if frame == 2 { 0 } else { frame - 1 };
++            atlas.remove(&make_image_key(previous));
++            let lock = atlas.0.lock();
++            let textures = &lock.backend.polychrome_textures;
++            assert!(textures.textures.len() <= 3);
++            assert_eq!(textures.textures.iter().flatten().count(), 2);
++            drop(lock);
++            assert_eq!(texture_size(&atlas, next.texture_id), Some((1600, 693)));
++        }
++        let again = insert_tile(&atlas, make_image_key(10), size_of(64, 64));
++        assert_eq!(again.texture_id, small.texture_id);
++    }
++
++    #[test]
++    fn test_wide_tiles_share_a_padded_texture() {
++        let Some(atlas) = create_atlas() else {
++            return;
++        };
++        let run = size_of(1600, 400);
++        let mut previous = insert_tile(&atlas, make_image_key(0), run);
++        let texture_id = previous.texture_id;
++        for frame in 1..8 {
++            previous = insert_tile(&atlas, make_image_key(frame), run);
++            atlas.remove(&make_image_key(frame - 1));
++            assert_eq!(previous.texture_id, texture_id);
++        }
++    }
+ }
+diff --git a/src/directx_renderer.rs b/src/directx_renderer.rs
+--- a/src/directx_renderer.rs
++++ b/src/directx_renderer.rs
+@@ -1,3 +1,4 @@
++// Modified by asrs: see patches/gpui-pre-windows-0.3.12.patch in the asrs repository.
+ use std::{
+     slice,
+     sync::{Arc, OnceLock},
+@@ -73,14 +74,19 @@
+     render_target: Option<ID3D11Texture2D>,
+     render_target_view: Option<ID3D11RenderTargetView>,
+ 
+-    // Path intermediate textures (with MSAA)
++    // Created by the first scene with paths at the current size
++    path_textures: Option<PathTextures>,
++
++    // Cached viewport
++    viewport: D3D11_VIEWPORT,
++}
++
++// Path intermediate textures (with MSAA)
++struct PathTextures {
+     path_intermediate_texture: ID3D11Texture2D,
+     path_intermediate_srv: Option<ID3D11ShaderResourceView>,
+     path_intermediate_msaa_texture: ID3D11Texture2D,
+     path_intermediate_msaa_view: Option<ID3D11RenderTargetView>,
+-
+-    // Cached viewport
+-    viewport: D3D11_VIEWPORT,
+ }
+ 
+ struct DirectXRenderPipelines {
+@@ -356,6 +362,11 @@
+             _ => [0.0f32; 4],
+         })?;
+         self.upload_scene_buffers(scene)?;
++        if !scene.paths.is_empty() {
++            let devices = self.devices.as_ref().context("devices missing")?;
++            let resources = self.resources.as_mut().context("resources missing")?;
++            resources.create_path_textures(devices)?;
++        }
+ 
+         let annotation = self
+             .devices
+@@ -497,6 +508,7 @@
+         let resources = self.resources.as_mut().context("resources missing")?;
+         resources.render_target.take();
+         resources.render_target_view.take();
++        resources.path_textures.take();
+ 
+         // Resizing the swap chain requires a call to the underlying DXGI adapter, which can return the device removed error.
+         // The app might have moved to a monitor that's attached to a different graphics device.
+@@ -619,15 +631,19 @@
+ 
+         let devices = self.devices.as_ref().context("devices missing")?;
+         let resources = self.resources.as_ref().context("resources missing")?;
++        let path_textures = resources
++            .path_textures
++            .as_ref()
++            .context("path textures missing")?;
+         // Clear intermediate MSAA texture
+         unsafe {
+             devices.device_context.ClearRenderTargetView(
+-                resources.path_intermediate_msaa_view.as_ref().unwrap(),
++                path_textures.path_intermediate_msaa_view.as_ref().unwrap(),
+                 &[0.0; 4],
+             );
+             // Set intermediate MSAA texture as render target
+             devices.device_context.OMSetRenderTargets(
+-                Some(slice::from_ref(&resources.path_intermediate_msaa_view)),
++                Some(slice::from_ref(&path_textures.path_intermediate_msaa_view)),
+                 None,
+             );
+         }
+@@ -660,9 +676,9 @@
+         // Resolve MSAA to non-MSAA intermediate texture
+         unsafe {
+             devices.device_context.ResolveSubresource(
+-                &resources.path_intermediate_texture,
++                &path_textures.path_intermediate_texture,
+                 0,
+-                &resources.path_intermediate_msaa_texture,
++                &path_textures.path_intermediate_msaa_texture,
+                 0,
+                 RENDER_TARGET_FORMAT,
+             );
+@@ -704,6 +720,10 @@
+ 
+         let devices = self.devices.as_ref().context("devices missing")?;
+         let resources = self.resources.as_ref().context("resources missing")?;
++        let path_textures = resources
++            .path_textures
++            .as_ref()
++            .context("path textures missing")?;
+         self.pipelines.path_sprite_pipeline.update_buffer(
+             &devices.device,
+             &devices.device_context,
+@@ -713,7 +733,7 @@
+         // Draw the sprites with the path texture
+         self.pipelines.path_sprite_pipeline.draw_with_texture(
+             &devices.device_context,
+-            slice::from_ref(&resources.path_intermediate_srv),
++            slice::from_ref(&path_textures.path_intermediate_srv),
+             slice::from_ref(&self.globals.sampler),
+             sprites.len() as u32,
+         )
+@@ -889,27 +909,36 @@
+             )?
+         };
+ 
+-        let (
+-            render_target,
+-            render_target_view,
+-            path_intermediate_texture,
+-            path_intermediate_srv,
+-            path_intermediate_msaa_texture,
+-            path_intermediate_msaa_view,
+-            viewport,
+-        ) = create_resources(devices, &swap_chain, width, height)?;
++        let (render_target, render_target_view, viewport) =
++            create_resources(devices, &swap_chain, width, height)?;
+         set_rasterizer_state(&devices.device, &devices.device_context)?;
+ 
+         Ok(Self {
+             swap_chain,
+             render_target: Some(render_target),
+             render_target_view,
++            path_textures: None,
++            viewport,
++        })
++    }
++
++    fn create_path_textures(&mut self, devices: &DirectXRendererDevices) -> Result<()> {
++        if self.path_textures.is_some() {
++            return Ok(());
++        }
++        let width = self.viewport.Width as u32;
++        let height = self.viewport.Height as u32;
++        let (path_intermediate_texture, path_intermediate_srv) =
++            create_path_intermediate_texture(&devices.device, width, height)?;
++        let (path_intermediate_msaa_texture, path_intermediate_msaa_view) =
++            create_path_intermediate_msaa_texture_and_view(&devices.device, width, height)?;
++        self.path_textures = Some(PathTextures {
+             path_intermediate_texture,
++            path_intermediate_srv,
+             path_intermediate_msaa_texture,
+             path_intermediate_msaa_view,
+-            path_intermediate_srv,
+-            viewport,
+-        })
++        });
++        Ok(())
+     }
+ 
+     #[inline]
+@@ -919,21 +948,11 @@
+         width: u32,
+         height: u32,
+     ) -> Result<()> {
+-        let (
+-            render_target,
+-            render_target_view,
+-            path_intermediate_texture,
+-            path_intermediate_srv,
+-            path_intermediate_msaa_texture,
+-            path_intermediate_msaa_view,
+-            viewport,
+-        ) = create_resources(devices, &self.swap_chain, width, height)?;
++        let (render_target, render_target_view, viewport) =
++            create_resources(devices, &self.swap_chain, width, height)?;
+         self.render_target = Some(render_target);
+         self.render_target_view = render_target_view;
+-        self.path_intermediate_texture = path_intermediate_texture;
+-        self.path_intermediate_msaa_texture = path_intermediate_msaa_texture;
+-        self.path_intermediate_msaa_view = path_intermediate_msaa_view;
+-        self.path_intermediate_srv = path_intermediate_srv;
++        self.path_textures = None;
+         self.viewport = viewport;
+         Ok(())
+     }
+@@ -1361,18 +1380,10 @@
+ ) -> Result<(
+     ID3D11Texture2D,
+     Option<ID3D11RenderTargetView>,
+-    ID3D11Texture2D,
+-    Option<ID3D11ShaderResourceView>,
+-    ID3D11Texture2D,
+-    Option<ID3D11RenderTargetView>,
+     D3D11_VIEWPORT,
+ )> {
+     let (render_target, render_target_view) =
+         create_render_target_and_its_view(swap_chain, &devices.device)?;
+-    let (path_intermediate_texture, path_intermediate_srv) =
+-        create_path_intermediate_texture(&devices.device, width, height)?;
+-    let (path_intermediate_msaa_texture, path_intermediate_msaa_view) =
+-        create_path_intermediate_msaa_texture_and_view(&devices.device, width, height)?;
+     let viewport = D3D11_VIEWPORT {
+         TopLeftX: 0.0,
+         TopLeftY: 0.0,
+@@ -1381,15 +1392,7 @@
+         MinDepth: 0.0,
+         MaxDepth: 1.0,
+     };
+-    Ok((
+-        render_target,
+-        render_target_view,
+-        path_intermediate_texture,
+-        path_intermediate_srv,
+-        path_intermediate_msaa_texture,
+-        path_intermediate_msaa_view,
+-        viewport,
+-    ))
++    Ok((render_target, render_target_view, viewport))
+ }
+ 
+ #[inline]
+@@ -2054,5 +2057,97 @@
+             (number >> 16) & 0xFFFF,
+             number & 0xFFFF
+         ))
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use windows::Win32::Foundation::HMODULE;
++
++    fn create_devices() -> Option<DirectXRendererDevices> {
++        let dxgi_factory: IDXGIFactory6 =
++            unsafe { CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0)) }.ok()?;
++        let adapter: IDXGIAdapter1 = unsafe { dxgi_factory.EnumWarpAdapter() }.ok()?;
++        let mut device = None;
++        let mut device_context = None;
++        unsafe {
++            D3D11CreateDevice(
++                None,
++                D3D_DRIVER_TYPE_WARP,
++                HMODULE::default(),
++                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
++                None,
++                D3D11_SDK_VERSION,
++                Some(&mut device),
++                None,
++                Some(&mut device_context),
++            )
++        }
++        .ok()?;
++        let devices = DirectXDevices {
++            adapter,
++            dxgi_factory,
++            device: device?,
++            device_context: device_context?,
++        };
++        DirectXRendererDevices::new(&devices, false).ok()
++    }
++
++    fn describe(texture: &ID3D11Texture2D) -> (u32, u32, u32) {
++        let mut desc = D3D11_TEXTURE2D_DESC::default();
++        unsafe { texture.GetDesc(&mut desc) };
++        (desc.Width, desc.Height, desc.SampleDesc.Count)
++    }
++
++    #[test]
++    fn test_path_textures_are_created_on_demand_at_the_current_size() {
++        let Some(devices) = create_devices() else {
++            return;
++        };
++        let mut resources =
++            DirectXResources::new(&devices, 64, 32, HWND::default(), false).expect("resources");
++        assert!(resources.path_textures.is_none());
++
++        for (width, height) in [(64, 32), (200, 100)] {
++            if width != 64 {
++                resources.render_target.take();
++                resources.render_target_view.take();
++                unsafe {
++                    devices.device_context.ClearState();
++                    devices.device_context.Flush();
++                    resources.swap_chain.ResizeBuffers(
++                        BUFFER_COUNT as u32,
++                        width,
++                        height,
++                        RENDER_TARGET_FORMAT,
++                        DXGI_SWAP_CHAIN_FLAG(0),
++                    )
++                }
++                .expect("resized buffers");
++                resources
++                    .recreate_resources(&devices, width, height)
++                    .expect("recreated resources");
++                assert!(resources.path_textures.is_none());
++            }
++            resources
++                .create_path_textures(&devices)
++                .expect("path textures");
++            let textures = resources.path_textures.as_ref().expect("path textures");
++            let intermediate = textures.path_intermediate_texture.clone();
++            assert_eq!(describe(&intermediate), (width, height, 1));
++            assert_eq!(
++                describe(&textures.path_intermediate_msaa_texture),
++                (width, height, PATH_MULTISAMPLE_COUNT),
++            );
++            assert!(textures.path_intermediate_srv.is_some());
++            assert!(textures.path_intermediate_msaa_view.is_some());
++
++            resources
++                .create_path_textures(&devices)
++                .expect("path textures");
++            let textures = resources.path_textures.as_ref().expect("path textures");
++            assert_eq!(textures.path_intermediate_texture, intermediate);
++        }
+     }
+ }
