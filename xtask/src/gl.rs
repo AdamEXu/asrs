@@ -19,6 +19,7 @@ pub(crate) fn default_mode() -> Result<&'static str> {
     match std::env::var(VARIABLE) {
         Ok(mode) if !mode.is_empty() => parse(&mode).map_err(|e| format!("{VARIABLE}: {e}")),
         _ if cfg!(target_os = "macos") => Ok("native"),
+        _ if cfg!(windows) => Ok("d3d11-warp"),
         _ => Ok("swiftshader"),
     }
 }
@@ -33,13 +34,49 @@ pub(crate) fn electron_switches(mode: &str) -> &'static [&'static str] {
     }
 }
 
-/// Has the port's Vulkan device load the SwiftShader that Electron's WebGL runs on. Two different
-/// software rasterizers do not agree at edges, so a machine without it is refused.
+const ADAPTER_VARIABLE: &str = "ASRS_FIELD3D_ADAPTER";
+
+/// The adapter a parity build of the port must use beside a reference of this mode, and the start
+/// of its name.
+pub(crate) fn port_adapter(mode: &str) -> Option<(&'static str, &'static str)> {
+    match mode {
+        "swiftshader" => Some(("swiftshader", "SwiftShader Device")),
+        "d3d11-warp" => Some(("warp", "Microsoft Basic Render Driver")),
+        _ => None,
+    }
+}
+
+/// Has the port render on the rasterizer Electron's WebGL runs on, for SwiftShader the one in the
+/// Electron dist. Two different software rasterizers do not agree at edges, so the port refuses
+/// any other adapter.
 pub(crate) fn pair_port(paths: &Paths, mode: &str, command: &mut Command) -> Result {
-    if cfg!(target_os = "linux") && mode == "swiftshader" {
+    command.env_remove(ADAPTER_VARIABLE);
+    if let Some((adapter, _)) = port_adapter(mode) {
+        command.env(ADAPTER_VARIABLE, adapter);
+    }
+    if mode == "swiftshader" {
+        if cfg!(windows) {
+            return Err(
+                "on Windows the port pairs with d3d11-warp: the Vulkan loader ignores \
+                 VK_ICD_FILENAMES in the hosts' elevated sessions"
+                    .to_owned(),
+            );
+        }
         command.env("VK_ICD_FILENAMES", swiftshader_icd(paths)?);
     }
     Ok(())
+}
+
+/// What `pair_port` sets, for the host manifest.
+pub(crate) fn port_environment(mode: &str) -> Vec<String> {
+    let mut variables = Vec::new();
+    if let Some((adapter, _)) = port_adapter(mode) {
+        variables.push(format!("{ADAPTER_VARIABLE}={adapter}"));
+    }
+    if mode == "swiftshader" {
+        variables.push("VK_ICD_FILENAMES=<electron dist>/vk_swiftshader_icd.json".to_owned());
+    }
+    variables
 }
 
 fn swiftshader_icd(paths: &Paths) -> Result<PathBuf> {
@@ -72,5 +109,12 @@ mod tests {
         }
         assert!(parse("swiftshader").is_ok());
         assert!(parse("lavapipe").is_err());
+    }
+
+    #[test]
+    fn every_software_mode_pins_the_ports_adapter() {
+        for mode in MODES {
+            assert_eq!(port_adapter(mode).is_some(), mode != "native");
+        }
     }
 }

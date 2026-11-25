@@ -14,7 +14,7 @@ name = "asrs"
 path = "src/main.rs"
 
 [features]
-parity = ["asrs-ui/parity"]
+parity = ["asrs-field3d/parity", "asrs-ui/parity"]
 
 [dependencies]
 asrs-canvas = { path = "../asrs-canvas" }
