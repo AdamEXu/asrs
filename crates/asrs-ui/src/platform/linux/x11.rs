@@ -306,7 +306,11 @@ pub fn displays(width: f64) -> Result<Displays> {
 }
 
 /// `BuildDisplaysFromXRandRInfo`.
-fn displays_of<C: ConnectionExt>(connection: &C, root: u32, scale: f64) -> Result<Displays> {
+fn displays_of<C: x11rb::connection::RequestConnection>(
+    connection: &C,
+    root: u32,
+    scale: f64,
+) -> Result<Displays> {
     let resources = connection
         .randr_get_screen_resources_current(root)?
         .reply()?;
