@@ -114,6 +114,8 @@ impl Backdrop {
             match primitive {
                 Primitive::Quad(quad) => self.quad(quad),
                 Primitive::PolychromeSprite(sprite) if sprite.opacity <= 0.0 => {}
+                Primitive::MonochromeSprite(sprite) if sprite.color.is_transparent() => {}
+                Primitive::SubpixelSprite(sprite) if sprite.color.is_transparent() => {}
                 Primitive::Shadow(shadow) => {
                     let reach = ScaledPixels(shadow.blur_radius.0 * 3.0);
                     let bounds = shadow.bounds.dilate(reach);
