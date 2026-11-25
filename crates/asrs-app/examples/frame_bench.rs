@@ -5,12 +5,14 @@
 //!   executor has one thread, so it is an upper bound.
 //! - `imageP95`: the same frame, then the 3D render thread's answer, then Metal drawing the scene
 //!   and reading the image back.
+//! - `pixels`: a hash of the images, which an optimization must not change.
 //! - `cpu`: CPU time per frame over the whole process and the first pass.
 //!
 //! `frame_bench --cache <dir> [--assets <userData dir>] [--log <file>] [--scene <name>]...`
 
 #![allow(clippy::disallowed_methods)]
 
+use std::hash::{DefaultHasher, Hasher};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -390,11 +392,12 @@ impl Page<'_> {
         }
     }
 
-    fn image(&mut self) {
+    fn image(&mut self) -> Vec<u8> {
         self.headless
             .context()
             .capture_screenshot(self.window.into())
-            .expect("image");
+            .expect("image")
+            .into_raw()
     }
 }
 
@@ -485,22 +488,25 @@ fn run(page: &mut Page<'_>, spec: &SceneSpec, expanded: &str) -> String {
     }
     let cpu = (cpu_seconds() - cpu) * 1e3 / FRAMES as f64;
     let mut images = Vec::with_capacity(IMAGE_FRAMES);
+    let mut pixels = DefaultHasher::new();
     for _ in 0..IMAGE_FRAMES {
         let start = Instant::now();
         advance(page);
         page.frame();
         page.wait_rendered();
-        page.image();
+        let image = page.image();
         images.push(ms(start));
+        pixels.write(&image);
     }
     format!(
-        r#"{{"scene":"{}","p50":{:.3},"p95":{:.3},"max":{:.3},"cpu":{cpu:.3},"imageP95":{:.3},"memoryMb":{:.1}}}"#,
+        r#"{{"scene":"{}","p50":{:.3},"p95":{:.3},"max":{:.3},"cpu":{cpu:.3},"imageP95":{:.3},"memoryMb":{:.1},"pixels":"{:016x}"}}"#,
         spec.name,
         percentile(&times, 0.5),
         percentile(&times, 0.95),
         percentile(&times, 1.0),
         percentile(&images, 0.95),
         memory_mb(),
+        pixels.finish(),
     )
 }
 
