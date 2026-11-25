@@ -55,6 +55,8 @@ pub struct StatisticsRenderer {
     rest: Option<usize>,
     errors: Vec<JsError>,
     rendered_in_frames: bool,
+    /// Whether the last frame changed the table or the chart.
+    changed: bool,
 }
 
 impl StatisticsRenderer {
@@ -71,6 +73,7 @@ impl StatisticsRenderer {
             rest: None,
             errors: Vec::new(),
             rendered_in_frames: true,
+            changed: false,
         }
     }
 
@@ -138,6 +141,12 @@ impl StatisticsRenderer {
         self.histogram.as_ref().map_or(0, Histogram::callbacks)
     }
 
+    /// What tells one drawing of the table and the chart from another.
+    fn drawing(&self) -> (u64, Option<u64>, Option<f64>) {
+        let chart = self.histogram.as_ref().map(Histogram::revision);
+        (self.table.builds(), chart, self.histogram_left)
+    }
+
     /// `render(command)` in the theme `dark`.
     pub fn render_command(
         &mut self,
@@ -203,17 +212,26 @@ impl<Cx: StatisticsCx + ?Sized> TabRenderer<Cx> for StatisticsRenderer {
             return Err(JsError::type_error("not a statistics command"));
         };
         let dark = cx.tab_dark();
-        if self.rendered_in_frames {
-            return self.frame(command, dark);
-        }
-        if !self.histogram().is_some_and(Histogram::is_attached) {
-            return Ok(());
-        }
-        self.render_command(command, dark)
+        let before = self.drawing();
+        let result = if self.rendered_in_frames {
+            self.frame(command, dark)
+        } else if !self.histogram().is_some_and(Histogram::is_attached) {
+            Ok(())
+        } else {
+            self.render_command(command, dark)
+        };
+        self.changed = self.drawing() != before;
+        result
     }
 
     fn animation_frame(&mut self, _cx: &mut Cx) -> Vec<JsError> {
+        let before = self.drawing();
         self.frame_rest();
+        self.changed |= self.drawing() != before;
         std::mem::take(&mut self.errors)
+    }
+
+    fn needs_draw(&self) -> bool {
+        self.callbacks() > 0 || self.changed
     }
 }

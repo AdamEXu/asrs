@@ -7,7 +7,8 @@
 //! [`asrs_live::LiveRuntime`]; main's RLOG socket is [`crate::live::RlogBridge`].
 //!
 //! Views read the model through [`Hub::model`] and observe the entity: it notifies after every
-//! task the page runs and emits a [`HubEvent`] for each change a view or main reacts to.
+//! task the page runs, but after its frames and its saving intervals only when what they show
+//! changed, and emits a [`HubEvent`] for each change a view or main reacts to.
 
 mod frames;
 mod host;
@@ -25,6 +26,7 @@ use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_ui::gpui::{App, BackgroundExecutor, Context, EventEmitter, Window};
 
+use crate::repaint::Repaint;
 use host::{GpuiHost, HostState};
 
 pub(crate) use host::interval;
@@ -131,6 +133,8 @@ pub struct Hub {
     host: HostState,
     title: JsString,
     loading: LoadingGlow,
+    repaint: Repaint,
+    moving: bool,
 }
 
 impl EventEmitter<HubEvent> for Hub {}
@@ -157,8 +161,12 @@ impl Hub {
             loading: model.loading().clone(),
             model,
             host,
+            repaint: Repaint::default(),
+            moving: true,
         };
+        hub.repaint.changed();
         hub.after_task(cx);
+        cx.notify();
         hub
     }
 
@@ -238,9 +246,34 @@ impl Hub {
         cx: &mut Context<'_, Self>,
         f: impl FnOnce(&mut HubModel, &mut dyn HubHost) -> R,
     ) -> R {
+        let result = self.run_quietly(cx, f);
+        self.repaint.task();
+        cx.notify();
+        result
+    }
+
+    /// The body of a task that shows nothing new unless the model says so.
+    fn run_quietly<R>(
+        &mut self,
+        cx: &mut Context<'_, Self>,
+        f: impl FnOnce(&mut HubModel, &mut dyn HubHost) -> R,
+    ) -> R {
         let result = f(&mut self.model, &mut GpuiHost::new(&mut self.host, cx));
         self.after_task(cx);
         result
+    }
+
+    /// Whether the last frame showed something new, so the satellites it updated do too.
+    pub fn moving(&self) -> bool {
+        self.moving
+    }
+
+    pub(crate) fn begin_draw(&mut self) {
+        self.repaint.begin_draw();
+    }
+
+    pub(crate) fn end_draw(&mut self) {
+        self.repaint.end_draw();
     }
 
     fn after_task(&mut self, cx: &mut Context<'_, Self>) {
@@ -257,6 +290,5 @@ impl Hub {
         }
         self.arm_timer(cx);
         self.arm_live_timer(cx);
-        cx.notify();
     }
 }

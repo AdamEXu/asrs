@@ -160,10 +160,10 @@ impl Hub {
                 return;
             }
         }
-        self.run_frame(now, cx);
+        self.run_frame(now, true, cx);
     }
 
-    fn run_frame(&mut self, now: Instant, cx: &mut Context<'_, Self>) {
+    fn run_frame(&mut self, now: Instant, drawn: bool, cx: &mut Context<'_, Self>) {
         self.host.frames.last = now;
         self.host.frames.running = true;
         self.frame(cx);
@@ -171,16 +171,36 @@ impl Hub {
         if self.host.frame_requested() {
             self.host.frames.schedule(cx);
         }
+        let changed = self.model.take_frame_changed();
+        self.moving = changed || self.repaint.settling();
+        let Some(window) = self.host.frames.window else {
+            cx.notify();
+            return;
+        };
+        let this = cx.weak_entity();
+        // After the frame's other callbacks: what they invalidate is drawn in this frame.
+        cx.defer(move |cx| {
+            let dirty = window.update(cx, |_, window, _| window.is_dirty());
+            let changed = changed || drawn && dirty.unwrap_or(false);
+            let _ = this.update(cx, |hub, cx| {
+                if hub.repaint.frame(changed) {
+                    cx.notify();
+                }
+            });
+        });
     }
 
     fn timer_frame(&mut self, cx: &mut Context<'_, Self>) {
         let now = cx.background_executor().now();
         self.host.frames.timer = None;
-        self.run_frame(now, cx);
+        self.run_frame(now, false, cx);
     }
 
     fn window_visibility(&mut self, visible: bool, cx: &mut Context<'_, Self>) {
         let waiting = self.host.frame_requested();
+        if visible {
+            self.repaint.changed();
+        }
         let frames = &mut self.host.frames;
         frames.hidden = !visible;
         frames.starved = false;

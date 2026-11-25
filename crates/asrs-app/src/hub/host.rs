@@ -218,7 +218,8 @@ impl<'a, 'b> GpuiHost<'a, 'b> {
 impl Hub {
     pub(super) fn frame(&mut self, cx: &mut Context<'_, Self>) {
         for frame in std::mem::take(&mut self.host.frame_callbacks) {
-            self.task(cx, |model, host| model.animation_frame(&frame, host));
+            self.host.begin_task();
+            self.run_quietly(cx, |model, host| model.animation_frame(&frame, host));
         }
     }
 
@@ -252,7 +253,17 @@ impl Hub {
         match timers.remove(&id) {
             Some(PageTimer::Interval(interval)) => {
                 timers.insert(id, PageTimer::Interval(interval.clone()));
-                self.run(cx, |model, host| model.fire_interval(&interval, host));
+                let quiet = matches!(
+                    interval,
+                    HubInterval::SidebarTuning
+                        | HubInterval::SaveState
+                        | HubInterval::SaveTypeMemory
+                );
+                if quiet {
+                    self.run_quietly(cx, |model, host| model.fire_interval(&interval, host));
+                } else {
+                    self.run(cx, |model, host| model.fire_interval(&interval, host));
+                }
             }
             Some(PageTimer::Timeout(timeout)) => {
                 self.run(cx, |model, host| model.run_timeout(timeout, host));

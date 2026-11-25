@@ -487,6 +487,14 @@ impl FrameHost for HubEntityHost {
         self.hub.read(cx).model()
     }
 
+    fn begin_draw(&mut self, cx: &mut App) {
+        self.hub.update(cx, |hub, _| hub.begin_draw());
+    }
+
+    fn end_draw(&mut self, _: &Window, cx: &mut App) {
+        self.hub.update(cx, |hub, _| hub.end_draw());
+    }
+
     fn input<R>(&mut self, cx: &mut App, f: impl FnOnce(&mut HubModel) -> R) -> R {
         self.hub
             .update(cx, |hub, cx| hub.update(cx, |model, _| f(model)))

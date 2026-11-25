@@ -1215,4 +1215,8 @@ impl<C: TabCx + ?Sized> TabRenderer<C> for LineGraphRenderer {
             }
         }
     }
+
+    fn needs_draw(&self) -> bool {
+        self.dom.borrow().painted.is_some() || !self.help_timers.is_empty()
+    }
 }

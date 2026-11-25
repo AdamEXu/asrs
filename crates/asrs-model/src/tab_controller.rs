@@ -116,6 +116,12 @@ pub trait TabRenderer<Cx: ?Sized>: AsAny {
         Vec::new()
     }
 
+    /// Whether the last `render` or `animation_frame` left something the host has not drawn, apart
+    /// from what follows from the page's input, messages and time. The host draws those itself.
+    fn needs_draw(&self) -> bool {
+        false
+    }
+
     /// `TableRenderer.UUID`. `Tabs` reads it only on Table tabs.
     fn renderer_uuid(&self) -> Option<&JsString> {
         None

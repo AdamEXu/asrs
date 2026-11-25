@@ -91,6 +91,8 @@ pub struct Field3dTab {
     inputs: Rc<Cell<CanvasInputs>>,
     preferences: Option<Arc<Preferences>>,
     frame: Option<Frame>,
+    /// Whether the last `render` changed the DOM.
+    dom_changed: bool,
 }
 
 impl Field3dTab {
@@ -100,6 +102,7 @@ impl Field3dTab {
             inputs: Rc::default(),
             preferences: None,
             frame: None,
+            dom_changed: false,
         }
     }
 
@@ -157,14 +160,21 @@ impl TabRenderer<HubPage> for Field3dTab {
     fn render(&mut self, cx: &mut HubPage, command: &dyn TabCommand) -> Result<(), JsError> {
         let command = Field3dRendererCommand::from_js(&command.to_js())?;
         let env = self.env(cx);
+        let before = self.renderer.dom().clone();
         self.renderer.dom_mut().run_timers(env.performance_now);
-        self.renderer.render(&command, &env)?;
+        let result = self.renderer.render(&command, &env);
+        self.dom_changed = *self.renderer.dom() != before;
+        result?;
         if let Some(implementation) = self.renderer.implementation_mut()
             && !implementation.take_renders().is_empty()
         {
             self.frame = Some(implementation.build_frame());
         }
         Ok(())
+    }
+
+    fn needs_draw(&self) -> bool {
+        self.frame.is_some() || self.dom_changed
     }
 
     fn set_3d_camera(&mut self, _: &mut HubPage, index: f64) {

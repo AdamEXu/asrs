@@ -163,6 +163,10 @@ name = "hidden_hub"
 required-features = ["parity"]
 
 [[test]]
+name = "idle_redraw"
+required-features = ["parity"]
+
+[[test]]
 name = "live_sources"
 required-features = ["parity"]
 
