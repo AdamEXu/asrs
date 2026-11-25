@@ -17,10 +17,6 @@ struct FatLineOut {
     @location(0) uv: vec2<f32>,
 };
 
-fn fast_normalize2(v: vec2<f32>) -> vec2<f32> {
-    return v * inverseSqrt(dot(v, v));
-}
-
 fn trim_segment(start: vec4<f32>, end: vec4<f32>) -> vec4<f32> {
     let a = frame.projection[2][2];
     let b = frame.projection[3][2];
@@ -52,7 +48,7 @@ fn vs_fat_line(v: FatLineIn) -> FatLineOut {
     let ndc_end = clip_end.xyz / clip_end.w;
     var dir = ndc_end.xy - ndc_start.xy;
     dir.x *= aspect;
-    dir = fast_normalize2(dir);
+    dir = gl_normalize2(dir);
     var offset = vec2<f32>(dir.y, -dir.x);
     dir.x /= aspect;
     offset.x /= aspect;
