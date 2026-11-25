@@ -191,6 +191,8 @@ pub struct Scenario {
     pub user_assets: Vec<(String, Seed)>,
     /// Whether connections go to the scenario's robot.
     pub robot: bool,
+    /// Whether scrollbars take space: `scrollbars` is `classic`.
+    pub classic_scrollbars: bool,
     pub actions: Vec<Action>,
 }
 
@@ -234,7 +236,7 @@ pub fn default_window() -> (f64, f64) {
     (options.width, options.height)
 }
 
-const TOP_KEYS: [&str; 12] = [
+const TOP_KEYS: [&str; 13] = [
     "page",
     "window",
     "scales",
@@ -243,6 +245,7 @@ const TOP_KEYS: [&str; 12] = [
     "prefs",
     "userData",
     "robot",
+    "scrollbars",
     "platforms",
     "titleBar",
     "actions",
@@ -583,6 +586,10 @@ impl Scenario {
                 .unwrap_or_else(|| JsValue::Object(Default::default())),
             user_assets,
             robot: root.get("robot").is_some(),
+            classic_scrollbars: root
+                .get("scrollbars")
+                .and_then(JsValue::as_str)
+                .is_some_and(|style| style.to_string_lossy() == "classic"),
             actions,
         })
     }

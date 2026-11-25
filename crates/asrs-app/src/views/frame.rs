@@ -17,7 +17,7 @@ use asrs_hub::tabs::{TabDragData, TitleElement};
 use asrs_hub::timeline::{ScrollTarget, Timeline, TimelineFrame};
 use asrs_js::string::JsString;
 use asrs_model::messages::{HubToMain, NamedMessage};
-use asrs_model::scroll_sensor::{ScrollSensor, Wheel};
+use asrs_model::scroll_sensor::{SIZE_PX, ScrollSensor, Wheel};
 use asrs_model::selection_impl::{ControlButton, KeyTarget};
 use asrs_model::source_list::Rect;
 use asrs_ui::button::IconButton;
@@ -53,6 +53,7 @@ use super::field3d::{Field3dViews, key_code};
 use super::line_graph::LineGraphViews;
 use super::metadata::MetadataView;
 use super::page_text::PageSelection;
+use super::scrollers::{Area, Scrollers};
 use super::source_list::{self, ListsGeometry};
 use super::statistics::StatisticsViews;
 use super::tab_bar::{self, TabBarGeometry};
@@ -100,6 +101,12 @@ pub trait FrameHost: 'static {
     fn send_main_message(&mut self, message: NamedMessage<HubToMain>, cx: &mut App);
     /// The layout the hub model's `HubView` answers source list reads from.
     fn source_list_geometry(&self) -> ListsGeometry;
+    /// A key's smooth scroll of `div.side-bar`.
+    fn side_bar_smooth(&mut self, _by: f64, _cx: &mut App) {}
+    /// `div.side-bar`'s client size and largest scroll offsets.
+    fn side_bar_range(&self, _cx: &App) -> Option<[[f64; 2]; 2]> {
+        None
+    }
     /// Scrolls `div.side-bar` to what has the focus in it, at this client y and height.
     fn scroll_side_bar(&mut self, _focused: [f64; 2]) {}
     /// The sidebar field whose label a touch just started on, by flat index.
@@ -215,11 +222,11 @@ enum ViewerSection {
 }
 
 /// The elements of the frame that Tab goes on from after a press on them.
-struct Places {
+pub(super) struct Places {
     title_bar: FocusHandle,
     title_bar_menu: FocusHandle,
     side_bar_handle: FocusHandle,
-    side_bar: FocusHandle,
+    pub(super) side_bar: FocusHandle,
     viewer: FocusHandle,
     tab_bar: FocusHandle,
     tab_bar_scroll: FocusHandle,
@@ -272,8 +279,8 @@ pub struct HubFrame<H: FrameHost> {
     opened: f64,
     viewport: Option<(f64, f64)>,
     /// The focus while no element has it, which is `body`'s in a page.
-    body: FocusHandle,
-    places: Places,
+    pub(super) body: FocusHandle,
+    pub(super) places: Places,
     traversal: Traversal,
     /// What [`Tabs::bar_builds`](asrs_hub::tabs::Tabs::bar_builds) was when the frame drew.
     bar_builds: u64,
@@ -300,6 +307,7 @@ pub struct HubFrame<H: FrameHost> {
     pub(super) metadata: MetadataView,
     pub(super) video: VideoViews,
     pub(super) text: PageSelection,
+    pub(super) scrollers: Scrollers,
 }
 
 /// The timeline overlay's view of one pointer position: the client x relative to the overlay
@@ -400,6 +408,11 @@ fn place(rect: [f64; 4], origin: (f64, f64)) -> asrs_ui::gpui::Div {
         .h(px(rect[3] as f32))
 }
 
+/// The size and the largest offsets of a `ScrollSensor`'s overlay.
+pub(super) fn overlay_range(client: [f64; 2]) -> [[f64; 2]; 2] {
+    [client, client.map(|size| (SIZE_PX - size).max(0.0))]
+}
+
 impl<H: FrameHost> HubFrame<H> {
     pub fn new(host: H, cx: &App) -> Self {
         let geometry = host.geometry();
@@ -436,6 +449,7 @@ impl<H: FrameHost> HubFrame<H> {
             metadata: MetadataView::default(),
             video: VideoViews::default(),
             text: PageSelection::default(),
+            scrollers: Scrollers::default(),
         }
     }
 
@@ -820,6 +834,27 @@ impl<H: FrameHost> HubFrame<H> {
         cx.notify();
     }
 
+    pub(super) fn tab_bar_smooth(&mut self, by: [f64; 2], cx: &mut Context<'_, Self>) {
+        let now = self.host.frame_time(cx);
+        self.host.input(cx, |hub| {
+            hub.tabs_mut().0.tab_bar_sensor_mut().scroll_by(by, now);
+        });
+    }
+
+    pub(super) fn tab_bar_range(&self) -> Option<[[f64; 2]; 2]> {
+        let bar = self.geometry.tab_bar().borrow().bar;
+        Some(overlay_range([bar[2], bar[3]]))
+    }
+
+    pub(super) fn timeline_smooth(&mut self, by: [f64; 2], cx: &mut Context<'_, Self>) {
+        let now = self.host.frame_time(cx);
+        self.timeline_sensor.scroll_by(by, now);
+    }
+
+    pub(super) fn timeline_range(&self) -> Option<[[f64; 2]; 2]> {
+        self.timeline_rect.map(|[_, _, w, h]| overlay_range([w, h]))
+    }
+
     fn timeline_mouse_down(&mut self, event: &MouseDownEvent, cx: &mut Context<'_, Self>) {
         let x = mouse_client(f32::from(event.position.x));
         let y = mouse_client(f32::from(event.position.y));
@@ -1093,6 +1128,7 @@ impl<H: FrameHost> HubFrame<H> {
         };
         div()
             .id("timeline-scroll")
+            .capture_any_mouse_down(cx.listener(|frame, _, _, _| frame.press_area(&Area::Timeline)))
             .size_full()
             .child(
                 div()
@@ -1144,6 +1180,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
         self.line_graph_timers(cx);
         self.field3d_frame(window, cx);
         self.text_frame(window, cx);
+        self.scrollers_frame();
         if show_fps {
             window.request_animation_frame();
         }
@@ -1278,7 +1315,10 @@ impl<H: FrameHost> Render for HubFrame<H> {
                                 return;
                             }
                             frame.traversal.pressed();
-                            frame.text_mouse_down(event, window, cx);
+                            frame.press_outside();
+                            if !frame.on_scrollbar(event.position) {
+                                frame.text_mouse_down(event, window, cx);
+                            }
                         });
                     }
                 });
@@ -1291,11 +1331,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
             .track_focus(&self.body)
             .capture_key_down(cx.listener(Self::key_down))
             .capture_key_up(cx.listener(Self::key_up))
-            .on_key_down(|_, window, cx| {
-                if window.default_prevented() {
-                    cx.stop_propagation();
-                }
-            })
+            .on_key_down(cx.listener(Self::scroll_key))
             .relative()
             .size_full()
             .on_action(cx.listener(|frame, _: &selection::Copy, _, cx| frame.copy_text(cx)))
@@ -1351,7 +1387,11 @@ impl<H: FrameHost> Render for HubFrame<H> {
         }
         if let Some(rect) = layout.rect(FrameElement::SideBar) {
             self.geometry.0.borrow_mut().side_bar = rect;
-            let side_bar = place(rect, (0.0, 0.0)).overflow_hidden();
+            let side_bar = place(rect, (0.0, 0.0))
+                .capture_any_mouse_down(
+                    cx.listener(|frame, _, _, _| frame.press_area(&Area::SideBar)),
+                )
+                .overflow_hidden();
             let mut side_bar =
                 focus::section(side_bar, Section::SideBar as isize, &self.places.side_bar);
             if let Some(content) = self.host.slot(FrameSlot::SideBar, window, cx) {
@@ -1410,6 +1450,9 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 viewer = viewer.child(
                     overlay
                         .id("tab-bar-scroll")
+                        .capture_any_mouse_down(
+                            cx.listener(|frame, _, _, _| frame.press_area(&Area::TabBar)),
+                        )
                         .on_any_mouse_down(cx.listener(|frame, event: &MouseDownEvent, _, cx| {
                             frame.tab_bar_mouse_down(event, cx)
                         }))
