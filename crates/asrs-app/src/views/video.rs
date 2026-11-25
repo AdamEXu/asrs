@@ -11,6 +11,7 @@ use asrs_hub::hub::{HubModel, HubPage};
 use asrs_js::math;
 use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
+use asrs_model::layout_unit::{border, centred, device, percent, snap, zoomed};
 use asrs_model::selection_impl::KeyTarget;
 use asrs_tabs::form::RangeInput;
 use asrs_tabs::video::{Buttons, VideoController};
@@ -224,32 +225,6 @@ impl Control {
     }
 }
 
-/// A length in LayoutUnits, truncated as `LayoutUnit(float)` truncates.
-fn lu(v: f64) -> f64 {
-    math::trunc(v * 64.0) / 64.0
-}
-
-/// `percent` of `v` as `MinimumValueForLength` resolves it, in single precision.
-fn percent(v: f64, percent: f64) -> f64 {
-    lu(f64::from((v * percent / 100.0) as f32))
-}
-
-/// The device px of a laid out CSS length, which is a whole number of LayoutUnits (1/64 device px)
-/// but for the division by the scale.
-fn device(v: f64, scale: f64) -> f64 {
-    math::floor(v * scale * 64.0 + 0.5) / 64.0
-}
-
-/// `v` on the device pixel grid, in CSS px.
-fn snap(v: f64, scale: f64) -> f64 {
-    math::floor(device(v, scale) + 0.5) / scale
-}
-
-/// The width of a 1 px border, in CSS px: Blink floors it to whole device px, at least one.
-fn border(scale: f64) -> f64 {
-    math::max2(math::floor(scale), 1.0) / scale
-}
-
 /// Where the controls sit in `div.controls-content`, in client coordinates.
 #[derive(Clone, Debug, PartialEq)]
 struct ControlsLayout {
@@ -270,8 +245,7 @@ impl ControlsLayout {
         let [x, y, w, h] = controls.map(|v| device(v, scale));
         let space = device(space, scale);
         let [button, inset, timeline_left, slider_height] =
-            [BUTTON, TIMELINE_INSET, TIMELINE_LEFT, SLIDER_HEIGHT]
-                .map(|v| lu(f64::from((v * scale) as f32)));
+            [BUTTON, TIMELINE_INSET, TIMELINE_LEFT, SLIDER_HEIGHT].map(|v| zoomed(v, scale));
         let css = |rect: [f64; 4]| rect.map(|v| v / scale);
 
         let source_width = percent(w, 30.0);
@@ -293,9 +267,9 @@ impl ControlsLayout {
             math::max2(half - 2.0 * inset, 0.0),
         ];
         let line = button * transport as f64 + space * (transport as f64 - 1.0);
-        let first = sync + lu(math::max2(sync_width - line, 0.0) / 2.0);
+        let first = sync + centred(sync_width, line);
         ControlsLayout {
-            source: css([x, y, source_width + border(scale) * scale, h]),
+            source: css([x, y, source_width + border(1.0, scale), h]),
             sources,
             lock: css([sync + inset, y + middle, button, button]),
             timeline: css(timeline),
@@ -855,7 +829,7 @@ impl<H: FrameHost> HubFrame<H> {
                 .h(px((snap(y + h) - top) as f32))
         };
         let border_color = appearance.pick(0xdddddd, 0x000000);
-        let border = border(f64::from(scale));
+        let border = border(1.0, f64::from(scale)) / f64::from(scale);
         let [sx, sy, sw, sh] = layout.source;
         let mut root = div()
             .absolute()

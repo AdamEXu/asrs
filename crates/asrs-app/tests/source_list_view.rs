@@ -142,7 +142,7 @@ fn point_at(
             .find(|t| t.tab_type() == Some(TabType::LineGraph))
             .expect("line graph tab");
         let source = tab.controller().source_lists()[list];
-        let root = controller_roots(TabType::LineGraph, CONTROLS)[list];
+        let root = controller_roots(TabType::LineGraph, CONTROLS, 1.0)[list];
         let layout = ListLayout::new(root, source.items(), 0.0);
         let count = source.items().len();
         let y = if anchor < count {
