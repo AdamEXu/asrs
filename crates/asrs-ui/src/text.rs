@@ -40,6 +40,14 @@ struct RunKey {
     color: [u8; 3],
     fraction: Lu,
     scale: u32,
+    /// [`Text::fade`]'s ends, from the run's origin.
+    fade: Option<(Lu, Lu)>,
+}
+
+#[derive(Clone, Copy)]
+struct Ink {
+    color: [u8; 3],
+    fade: Option<(Lu, Lu)>,
 }
 
 struct Run {
@@ -138,7 +146,7 @@ impl TextSystem {
         fragment: &dom::Fragment,
         fraction: Lu,
         scale: f32,
-        color: [u8; 3],
+        Ink { color, fade }: Ink,
     ) -> Option<(i32, i32, Arc<RenderImage>)> {
         self.clock += 1;
         let clock = self.clock;
@@ -148,6 +156,7 @@ impl TextSystem {
             color,
             fraction,
             scale: scale.to_bits(),
+            fade,
         };
         let (cache, stats) = self.windows.entry(window).or_default();
         if let Some(run) = cache.runs.get_mut(&key) {
@@ -176,6 +185,14 @@ impl TextSystem {
                     }
                 }
             }
+            if let Some(fade) = fade {
+                for row in bgra.chunks_exact_mut(run.width.max(1) as usize * 4) {
+                    for (col, pixel) in row.as_chunks_mut::<4>().0.iter_mut().enumerate() {
+                        let kept = faded(fade, run.left + col as i32);
+                        pixel[3] = (f32::from(pixel[3]) * kept + 0.5) as u8;
+                    }
+                }
+            }
             let buffer = RgbaImage::from_raw(run.width, run.height, bgra)?;
             Some((
                 run.left,
@@ -201,6 +218,12 @@ impl TextSystem {
         self.evict(window);
         image
     }
+}
+
+/// What a `mask-image` gradient keeps of a device column, from `from` on to `to`.
+fn faded((from, to): (Lu, Lu), column: i32) -> f32 {
+    let at = column as f32 * 64.0 + 32.0;
+    ((to as f32 - at) / (to - from).max(1) as f32).clamp(0.0, 1.0)
 }
 
 /// Lays `text` out at device scale `scale`, in a content box `available` CSS px wide or at its
@@ -362,6 +385,7 @@ pub struct Text {
     content_width: Option<f64>,
     underline: bool,
     cut: Option<f64>,
+    fade: Option<(f64, f64)>,
     selected: Option<Rgba>,
     gpui: StyleRefinement,
     /// Each width the measure function returned, snapped as GPUI will snap the box, with the
@@ -381,6 +405,7 @@ impl Text {
             content_width: None,
             underline: false,
             cut: None,
+            fade: None,
             selected: None,
             gpui: StyleRefinement::default(),
             measured: Rc::default(),
@@ -437,6 +462,12 @@ impl Text {
     /// Draws only what fits in `room` CSS px, for a box the line's ellipsis follows or replaces.
     pub fn cut(mut self, room: f64) -> Self {
         self.cut = Some(room);
+        self
+    }
+
+    /// Fades out from the window's CSS px `from` to `to`, as a horizontal `mask-image` does.
+    pub fn fade(mut self, from: f64, to: f64) -> Self {
+        self.fade = Some((from, to));
         self
     }
 
@@ -575,6 +606,8 @@ impl Element for Text {
                 }
             }
         }
+        let device = |css: f64| dom::lu_round((css * f64::from(scale)) as f32);
+        let fade = self.fade.map(|(from, to)| (device(from), device(to)));
         let mut images = Vec::new();
         let mut underlines = Vec::new();
         for line in &layout.lines {
@@ -582,13 +615,20 @@ impl Element for Text {
             let first = images.len();
             for fragment in &line.fragments {
                 let x = origin.0 + fragment.x;
+                let run_from = x.div_euclid(64) * 64;
+                let fade = fade
+                    .filter(|(from, _)| x + fragment.width > *from)
+                    .map(|(from, to)| (from - run_from, to - run_from));
                 if let Some((left, top, image)) = system.run(
                     window_id,
                     &self.style.font,
                     fragment,
                     x.rem_euclid(64),
                     scale,
-                    self.color,
+                    Ink {
+                        color: self.color,
+                        fade,
+                    },
                 ) {
                     images.push((x.div_euclid(64) + left, baseline + top, image));
                 }
@@ -617,17 +657,22 @@ impl Element for Text {
             }
             let [r, g, b] = self.color.map(|c| f32::from(c) / 255.0);
             for s in underlines {
-                let rect = Bounds {
-                    origin: point(to_px(s.x), to_px(s.y)),
-                    size: size(to_px(s.width), to_px(s.height)),
+                let mut paint = |x: i32, width: i32, kept: f32| {
+                    let rect = Bounds {
+                        origin: point(to_px(x), to_px(s.y)),
+                        size: size(to_px(width), to_px(s.height)),
+                    };
+                    let a = s.coverage * kept;
+                    window.paint_quad(fill(rect, Rgba { r, g, b, a }));
                 };
-                let color = Rgba {
-                    r,
-                    g,
-                    b,
-                    a: s.coverage,
-                };
-                window.paint_quad(fill(rect, color));
+                let end = s.x + s.width;
+                let solid = fade.map_or(end, |(from, _)| from.div_euclid(64).clamp(s.x, end));
+                if solid > s.x {
+                    paint(s.x, solid - s.x, 1.0);
+                }
+                if let Some(fade) = fade {
+                    (solid..end).for_each(|column| paint(column, 1, faded(fade, column)));
+                }
             }
             for (x, y, image) in images {
                 let s = image.size(0);
