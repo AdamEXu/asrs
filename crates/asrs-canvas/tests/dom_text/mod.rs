@@ -141,7 +141,7 @@ fn draw(
 /// Redraws the `dom-text` scenes of `dir` with the port's masks, in the antialiasing mode the
 /// scene records per text box, and holds them to the reference. A box the reference draws in LCD
 /// is one the backend has LCD masks for, and the other way round.
-pub fn check_redraw(backend: &mut dyn TextBackend, dir: &str, max_channel: Option<u8>) {
+pub fn check_redraw(backend: &mut dyn TextBackend, dir: &str, max_channel: u8) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../parity/vectors/canvas");
     let lut = MaskGammaLut::embedded().unwrap();
     let lcd_lut = LcdGammaLut::embedded().unwrap();
@@ -231,9 +231,7 @@ pub fn check_redraw(backend: &mut dyn TextBackend, dir: &str, max_channel: Optio
         );
         let gate = if scale == 1 { 0.2 } else { 0.003 };
         assert!(percent <= gate, "{name}: {percent:.4} %");
-        if let Some(limit) = max_channel {
-            assert!(max <= limit, "{name}: max channel {max}");
-        }
+        assert!(max <= max_channel, "{name}: max channel {max}");
     }
 }
 

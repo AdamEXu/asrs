@@ -16,7 +16,7 @@ use asrs_hub::hub::{HubModel, HubPage};
 use asrs_js::math;
 use asrs_js::string::JsString;
 use asrs_js::value::JsValue;
-use asrs_model::scroll_sensor::WheelScroll;
+use asrs_model::scroll_sensor::{Wheel, WheelScroll};
 use asrs_model::source_list::Rect;
 use asrs_model::tab_controller::TabRenderer;
 use asrs_model::tab_type::TabType;
@@ -29,7 +29,7 @@ use asrs_ui::focus::{self, ScrollAxis};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Context, Div, Entity, FocusHandle, Focusable, InteractiveElement,
     IntoElement, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent,
-    SharedString, Styled, Subscription, Window, div, px, rgb,
+    SharedString, Styled, Subscription, Window, div, point, px, rgb,
 };
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, TextField};
 use asrs_ui::parity::probed;
@@ -48,6 +48,8 @@ use super::number::FormNumber;
 use super::page_text::{
     Owner, PageText, PlacedBlock, Selected, beside_table, device, unselectable,
 };
+use super::scrollers::{Area, smooth};
+use asrs_ui::scroll::{self, Extent};
 
 const FIRST_COLUMN_MIN: f64 = 97.0;
 const COLUMN_MIN: f64 = 175.0;
@@ -588,6 +590,7 @@ impl<H: FrameHost> HubFrame<H> {
         {
             let mut dom = dom.borrow_mut();
             let layout = &mut dom.layout;
+            layout.scrollbar = scroll::style(cx).reserved();
             layout.container = Rect {
                 x,
                 y,
@@ -637,6 +640,9 @@ impl<H: FrameHost> HubFrame<H> {
         root = root.child(self.table_body(
             &view, &dom, jump, rect, appearance, grid, selected, window, cx,
         ));
+        if let Some(extent) = self.table_extent(cx) {
+            root = root.child(self.area_bars(Area::Table(shown.key.clone()), extent, cx));
+        }
         let dom = dom.borrow();
         if let (false, Some(left)) = (dom.drag_highlight_hidden, dom.drag_highlight_left) {
             root = root.child(
@@ -950,6 +956,11 @@ impl<H: FrameHost> HubFrame<H> {
                 grid.place([button_at[0], button_at[1], BUTTON, BUTTON]),
             ));
 
+        let area = self
+            .table
+            .shown
+            .as_ref()
+            .map(|s| Area::Table(s.key.clone()));
         div()
             .id("data-table-container")
             .track_focus(&container_place)
@@ -963,6 +974,11 @@ impl<H: FrameHost> HubFrame<H> {
                     frame.table_mouse_down(event, cx)
                 }),
             )
+            .capture_any_mouse_down(cx.listener(move |frame, _, _, _| {
+                if let Some(area) = &area {
+                    frame.press_area(area);
+                }
+            }))
             .on_scroll(
                 cx.listener(|frame, event: &ScrollEvent, _, cx| frame.table_wheel(event, cx)),
             )
@@ -1012,13 +1028,22 @@ impl<H: FrameHost> HubFrame<H> {
             let mut dom = renderer.dom().borrow_mut();
             let layout = &mut dom.layout;
             let button = left + width - CLOSE_RIGHT - BUTTON - layout.container.x;
-            let visible = layout.container.width;
+            let [visible, _] = layout.client();
             let by = focus::reveal(ScrollAxis::Horizontal, visible, [button, BUTTON]);
             if by != 0.0 {
                 let [x, y] = layout.scroll();
                 layout.scroll_to([x + by, y]);
             }
         });
+    }
+
+    /// The table whose header holds the focused element.
+    pub(super) fn focused_table(&self, focused: &FocusHandle) -> Option<JsString> {
+        let mut deletes = self.table.deletes.iter();
+        let shown = self.table.shown.as_ref()?;
+        deletes
+            .any(|(delete, _)| delete == focused)
+            .then(|| shown.key.clone())
     }
 
     fn jump_field(
@@ -1171,6 +1196,7 @@ impl<H: FrameHost> HubFrame<H> {
         let covered = self.table_covered(&shown, x, y, cx);
         let on_root = shown.contains(x, y) && !covered;
         let over = on_root
+            && !self.on_scrollbar(point(px(x as f32), px(y as f32)))
             && self
                 .table_input(cx, |renderer, _| {
                     renderer.dom().borrow_mut().layout.body_contains(x, y)
@@ -1295,12 +1321,54 @@ impl<H: FrameHost> HubFrame<H> {
     }
 
     fn table_wheel(&mut self, event: &ScrollEvent, cx: &mut Context<'_, Self>) {
+        let Some(shown) = &self.table.shown else {
+            return;
+        };
+        let [_, _, width, height] = shown.container;
+        self.table_scroll(wheel_of(event), [width, height], cx);
+    }
+
+    /// A smooth scroll by a key or a scrollbar.
+    pub(super) fn table_smooth(&mut self, by: [f64; 2], cx: &mut Context<'_, Self>) {
+        self.table_scroll(smooth(by), [f64::INFINITY; 2], cx);
+    }
+
+    pub(super) fn table_scroll_to(&mut self, to: [f64; 2], cx: &mut Context<'_, Self>) {
+        let Some(shown) = self.table.shown.clone() else {
+            return;
+        };
+        if let Some(tab) = self.table.tabs.get_mut(&shown.key) {
+            tab.wheel.stop();
+        }
+        self.table_input(cx, |renderer, _| {
+            renderer.dom().borrow_mut().layout.set_wheel_offset(to);
+        });
+        cx.notify();
+    }
+
+    pub(super) fn table_range(&self, key: &JsString, cx: &App) -> Option<[[f64; 2]; 2]> {
+        let shown = self.table.shown.as_ref().filter(|s| s.key == *key);
+        let (_, renderer) = shown.and_then(|_| displayed(self.host().hub(cx)))?;
+        let layout = &renderer.dom().borrow().layout;
+        Some([layout.client(), layout.scroll_range()])
+    }
+
+    fn table_extent(&self, cx: &App) -> Option<Extent> {
+        let (_, renderer) = displayed(self.host().hub(cx))?;
+        let mut dom = renderer.dom().borrow_mut();
+        Some(Extent {
+            content: dom.layout.content(),
+            offset: dom.layout.scroll(),
+            axes: [true; 2],
+            dark: false,
+        })
+    }
+
+    fn table_scroll(&mut self, wheel: Wheel, client: [f64; 2], cx: &mut Context<'_, Self>) {
         let Some(shown) = self.table.shown.clone() else {
             return;
         };
         let now = self.host().frame_time(cx);
-        let wheel = wheel_of(event);
-        let [_, _, width, height] = shown.container;
         let Some(mut state) = self
             .table
             .tabs
@@ -1313,7 +1381,7 @@ impl<H: FrameHost> HubFrame<H> {
             let mut dom = renderer.dom().borrow_mut();
             let offset = dom.layout.wheel_offset();
             let max = dom.layout.scroll_range();
-            if let Some(to) = state.wheel(wheel, now, offset, max, [width, height]) {
+            if let Some(to) = state.wheel(wheel, now, offset, max, client) {
                 dom.layout.set_wheel_offset(to);
             }
         });

@@ -89,6 +89,16 @@ harness = false
 required-features = ["parity"]
 
 [[test]]
+name = "scroll_vectors"
+harness = false
+required-features = ["parity"]
+
+[[test]]
+name = "hub_scroll"
+harness = false
+required-features = ["parity"]
+
+[[test]]
 name = "hub_wheel"
 harness = false
 required-features = ["parity"]

@@ -48,7 +48,7 @@ impl LicensesPage {
     }
 
     fn laid_out(&mut self, window: &Window) -> Rc<LicensesLayout> {
-        let (width, scale) = (page::device_width(window), window.scale_factor());
+        let (width, scale) = (self.scroll.width(window), window.scale_factor());
         match &self.layout {
             Some((w, s, layout)) if (*w, *s) == (width, scale) => layout.clone(),
             _ => {
@@ -129,7 +129,10 @@ impl ScrolledPage for LicensesPage {
 
 impl Render for LicensesPage {
     fn render(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) -> impl IntoElement {
-        let layout = self.laid_out(window);
+        let mut layout = self.laid_out(window);
+        if self.scroll.reserve(layout.height, window, cx) {
+            layout = self.laid_out(window);
+        }
         self.scroll.lay_out(layout.height, window, cx);
         text::autoscroll(self, window, cx);
         let doc = LicensesText(layout.clone());

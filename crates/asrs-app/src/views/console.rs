@@ -20,7 +20,7 @@ use asrs_ui::focus;
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, Context, Div, Entity, InteractiveElement, IntoElement,
     KeyDownEvent, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, Styled,
-    Subscription, Window, div, px, rgb, rgba,
+    Subscription, Window, div, point, px, rgb, rgba,
 };
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, PlainText, TextField};
 use asrs_ui::parity::probed;
@@ -41,6 +41,8 @@ use super::number::FormNumber;
 use super::page_text::{
     Owner, PageText, PlacedBlock, Selected, beside_table, device, unselectable,
 };
+use super::scrollers::Area;
+use asrs_ui::scroll;
 
 const JUMP_INPUT: [f64; 4] = [4.0, 4.5, 64.0, 21.0];
 const JUMP_BUTTON_LEFT: f64 = 70.0;
@@ -590,6 +592,7 @@ impl<H: FrameHost> HubFrame<H> {
         let scrolling = layout.animate(now);
         let (_, renderer) = displayed(self.host().hub(cx))?;
         let view = renderer.view();
+        layout.set_scrollbar(scroll::style(cx).reserved());
         layout.sync(rect, scale, &view.rows);
         let top = layout.scroll_top() - HEADER_HEIGHT;
         let visible = layout.rows_between(top, top + rect[3]);
@@ -636,6 +639,7 @@ impl<H: FrameHost> HubFrame<H> {
                 shown, &view, visible, &layout, appearance, grid, selected, window, cx,
             ))
             .children(recorded)
+            .child(self.area_bars(Area::Console(shown.key), layout.extent(), cx))
             .child(self.console_header(shown, &view, appearance, blurred, grid, window, cx));
         let drag_hidden = displayed(self.host().hub(cx))
             .is_none_or(|(_, r)| r.dom().borrow().drag_highlight_hidden);
@@ -679,6 +683,9 @@ impl<H: FrameHost> HubFrame<H> {
         div()
             .id("console-table-container")
             .track_focus(&place)
+            .capture_any_mouse_down(
+                cx.listener(move |frame, _, _, _| frame.press_area(&Area::Console(shown.key))),
+            )
             .absolute()
             .left_0()
             .top_0()
@@ -1149,7 +1156,8 @@ impl<H: FrameHost> HubFrame<H> {
         let Some(shown) = self.console.shown else {
             return;
         };
-        let row = if self.console_covered() {
+        let on_bar = self.on_scrollbar(point(px(x as f32), px(y as f32)));
+        let row = if self.console_covered() || on_bar {
             None
         } else {
             self.console_row_at(shown, x, y)
@@ -1198,6 +1206,25 @@ impl<H: FrameHost> HubFrame<H> {
         }
         self.console_input(cx, |renderer, page| renderer.row_click(page, row));
         cx.notify();
+    }
+
+    pub(super) fn console_smooth(&mut self, key: usize, by: f64, cx: &mut Context<'_, Self>) {
+        let now = self.host().frame_time(cx);
+        if let Some(tab) = self.console.tabs.get(&key) {
+            tab.layout.scroll_smooth(by, now);
+        }
+    }
+
+    pub(super) fn console_scroll_to(&mut self, key: usize, to: f64, _: &mut Context<'_, Self>) {
+        if let Some(tab) = self.console.tabs.get(&key) {
+            tab.layout.drag_to(to);
+        }
+    }
+
+    pub(super) fn console_range(&self, key: usize) -> Option<[[f64; 2]; 2]> {
+        let shown = self.console.shown.filter(|s| s.key == key)?;
+        let layout = &self.console.tabs.get(&shown.key)?.layout;
+        Some([layout.client(), [0.0, layout.max_scroll()]])
     }
 
     fn console_wheel(&mut self, event: &ScrollEvent, cx: &mut Context<'_, Self>) {

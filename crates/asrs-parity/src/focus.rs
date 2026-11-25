@@ -21,12 +21,6 @@ fn nothing(upstream: &Json) -> bool {
 
 /// What differs between upstream's record and the port's.
 pub fn difference(upstream: &Json, port: &Json) -> Option<String> {
-    difference_beside(upstream, port, 0.0)
-}
-
-/// The same with the left and right edges up to `scrollbar` off, which is the width of one that
-/// takes space from upstream's layout and not from the port's.
-pub fn difference_beside(upstream: &Json, port: &Json, scrollbar: f64) -> Option<String> {
     if nothing(upstream) || *port == Json::Null {
         let same = nothing(upstream) && *port == Json::Null;
         return (!same).then(|| format!("{upstream:?} upstream, {port:?} on the port"));
@@ -34,8 +28,8 @@ pub fn difference_beside(upstream: &Json, port: &Json, scrollbar: f64) -> Option
     let (Some(theirs), Some(ours)) = (rect(upstream), rect(port)) else {
         return Some(format!("no box in {upstream:?} or {port:?}"));
     };
-    let close = [(0, scrollbar), (1, 0.0)].into_iter().all(|(axis, more)| {
-        let near = |t: f64, o: f64| (t - o).abs() <= TOLERANCE + more;
+    let close = (0..2).all(|axis| {
+        let near = |t: f64, o: f64| (t - o).abs() <= TOLERANCE;
         let (t, o) = (theirs[axis], ours[axis]);
         let (t_size, o_size) = (theirs[axis + 2], ours[axis + 2]);
         near(t, o) && (near(t_size, o_size) || near(t + t_size, o + o_size))

@@ -44,8 +44,9 @@ commands:
 
 Gates against the CPU canvas: pixel scenes at most 0.2 % pixelmatch (YIQ 0.1) and no blob over
 64 px; text scenes 0 % and max channel delta 24. Every scene: pixelmatch distance to the GPU
-canvas at most Chromium's own CPU-to-GPU distance. Where that canvas is software (gpuFeatureStatus of
-info.json) the distance is reported and not enforced.";
+canvas at most Chromium's own CPU-to-GPU distance. Off macOS, where that canvas is software
+(gpuFeatureStatus of info.json) and equals the CPU canvas byte for byte, the distance is reported and
+not enforced.";
 
 const ELECTRON_FLAGS: &[&str] = &["--force-color-profile=srgb", "--lang=en-US"];
 pub(crate) const DOM_SCALES: [&str; 2] = ["1", "2"];
@@ -325,6 +326,8 @@ fn dom_files(dir: &Path) -> Result<Vec<(String, Vec<u8>)>> {
             continue;
         };
         let captured = read_json(&dir.join(&name))?;
+        let scale = captured.get("scale");
+        let scale = scale.ok_or_else(|| format!("{name}: no scale"))?;
         let rows = captured.get("rows").and_then(Json::as_array);
         let rows = rows
             .ok_or_else(|| format!("{name}: no rows"))?
@@ -344,10 +347,7 @@ fn dom_files(dir: &Path) -> Result<Vec<(String, Vec<u8>)>> {
             .collect::<Result<Vec<_>>>()?;
         let pinned = Json::object([
             ("scene", Json::string(scene)),
-            (
-                "scale",
-                captured.get("scale").cloned().unwrap_or(Json::Null),
-            ),
+            ("scale", scale.clone()),
             ("rows", Json::Array(rows)),
         ]);
         let image = oracle::read(&dir.join(format!("{scene}.png")))?;
@@ -784,11 +784,11 @@ enum GpuRule {
 
 /// `disabled_software` is what Chromium says where there is no GPU process (the Linux hosts) and
 /// `unavailable_software` where it finds no usable adapter (the Windows hosts).
-fn gpu_rule(status: &Json) -> Result<GpuRule> {
+fn gpu_rule(platform: &str, status: &Json) -> Result<GpuRule> {
     let canvas = status.get("2d_canvas").and_then(Json::as_str);
     let canvas = canvas.ok_or("gpuFeatureStatus has no 2d_canvas")?;
     Ok(match canvas.to_string_lossy().as_str() {
-        "disabled_software" | "unavailable_software" => GpuRule::Reported,
+        "disabled_software" | "unavailable_software" if platform != "darwin" => GpuRule::Reported,
         _ => GpuRule::Enforced,
     })
 }
@@ -796,8 +796,10 @@ fn gpu_rule(status: &Json) -> Result<GpuRule> {
 fn reference_gpu_rule(reference: &Path) -> Result<GpuRule> {
     let path = reference.join("info.json");
     let info = read_json(&path)?;
+    let platform = info.get("platform").and_then(Json::as_str);
+    let platform = platform.ok_or_else(|| format!("{}: no platform", path.display()))?;
     let status = info.get("gpuFeatureStatus").unwrap_or(&Json::Null);
-    gpu_rule(status).map_err(|e| format!("{}: {e}", path.display()))
+    gpu_rule(&platform.to_string_lossy(), status).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 fn gpu_distance(port_gpu: &Stats, cpu_gpu: &Stats) -> Option<String> {
@@ -887,6 +889,11 @@ pub(crate) fn diff(reference: &Path, port: &Path, wanted: &[String]) -> Result {
                 ]));
                 continue;
             }
+        };
+        let rule = if cpu_gpu.exact_mismatch == 0 {
+            rule
+        } else {
+            GpuRule::Enforced
         };
         let failures = gate(&scene, rule, &port_cpu.stats, &port_gpu, &cpu_gpu);
         let distance = gpu_distance(&port_gpu, &cpu_gpu).filter(|_| rule == GpuRule::Reported);
@@ -1214,13 +1221,20 @@ mod tests {
     #[test]
     fn the_gpu_rule_binds_on_hardware_canvases() {
         for hardware in ["enabled", "enabled_on", "enabled_force", "enabled_readback"] {
-            assert_eq!(gpu_rule(&status(hardware)).unwrap(), GpuRule::Enforced);
+            let rule = gpu_rule("linux", &status(hardware)).unwrap();
+            assert_eq!(rule, GpuRule::Enforced);
         }
         for software in ["disabled_software", "unavailable_software"] {
-            assert_eq!(gpu_rule(&status(software)).unwrap(), GpuRule::Reported);
+            let rule = |platform| gpu_rule(platform, &status(software)).unwrap();
+            assert_eq!(rule("linux"), GpuRule::Reported);
+            assert_eq!(rule("win32"), GpuRule::Reported);
+            assert_eq!(rule("darwin"), GpuRule::Enforced);
         }
-        assert_eq!(gpu_rule(&status("anything")).unwrap(), GpuRule::Enforced);
-        assert!(gpu_rule(&Json::Null).is_err());
+        let unknown = gpu_rule("linux", &status("anything")).unwrap();
+        assert_eq!(unknown, GpuRule::Enforced);
+        assert!(gpu_rule("linux", &Json::Null).is_err());
+        let number = Json::object([("2d_canvas", Json::Bool(false))]);
+        assert!(gpu_rule("linux", &number).is_err());
     }
 
     #[test]
@@ -1234,15 +1248,21 @@ mod tests {
             let manifest = read_json(&root.join(format!("{os}.json"))).unwrap();
             let host = manifest.get("host").unwrap();
             let status = host.get("chromiumRasterizer").unwrap().get("featureStatus");
-            assert_eq!(gpu_rule(status.unwrap()).unwrap(), rule, "{os}");
+            let platform = manifest.get("platform").unwrap().as_str().unwrap();
+            let found = gpu_rule(&platform.to_string_lossy(), status.unwrap());
+            assert_eq!(found.unwrap(), rule, "{os}");
         }
     }
 
-    /// A scene whose GPU canvas equals its CPU canvas, and a port `off` pixels from both.
-    fn diff_scene(name: &str, canvas: &str, off: usize) -> (Result, Json) {
+    /// A scene whose GPU canvas is `gpu_off` pixels from its CPU canvas, and a port `off` pixels
+    /// from the latter.
+    fn diff_scene(name: &str, canvas: &str, gpu_off: usize, off: usize) -> (Result, Json) {
         let dir = std::env::temp_dir().join(format!("asrs-canvas-{name}-{}", std::process::id()));
         let (reference, port) = (dir.join("ref-dir"), dir.join("port"));
-        let info = Json::object([("gpuFeatureStatus", status(canvas))]);
+        let info = Json::object([
+            ("platform", Json::string("linux")),
+            ("gpuFeatureStatus", status(canvas)),
+        ]);
         write(&reference.join("info.json"), info.to_compact().as_bytes()).unwrap();
         let scene = r#"{"gate":"pixel","background":[255,255,255]}"#;
         write(&reference.join("scenes/s.json"), scene.as_bytes()).unwrap();
@@ -1254,7 +1274,11 @@ mod tests {
             data: vec![255; 40000],
         };
         pixel::write_png(&reference.join("ref/s.cpu.png"), &image).unwrap();
+        for i in 0..gpu_off {
+            image.data[i * 8..i * 8 + 3].fill(0);
+        }
         pixel::write_png(&reference.join("ref/s.gpu.png"), &image).unwrap();
+        image.data.fill(255);
         for i in 0..off {
             image.data[i * 8..i * 8 + 3].fill(0);
         }
@@ -1268,14 +1292,14 @@ mod tests {
     #[test]
     fn a_port_further_from_the_gpu_canvas_fails_only_where_that_is_hardware() {
         let row = |report: &Json, key: &str| report.as_array().unwrap()[0].get(key).cloned();
-        let (enforced, report) = diff_scene("hardware", "enabled", 10);
+        let (enforced, report) = diff_scene("hardware", "enabled", 0, 10);
         assert!(enforced.is_err());
         assert_eq!(row(&report, "gpuRuleEnforced"), Some(Json::Bool(true)));
         let failures = row(&report, "failures").unwrap();
         let failure = failures.as_array().unwrap()[0].as_str().unwrap();
         assert!(failure.to_string_lossy().contains("from the GPU canvas"));
 
-        let (reported, report) = diff_scene("software", "unavailable_software", 10);
+        let (reported, report) = diff_scene("software", "unavailable_software", 0, 10);
         assert!(reported.is_ok());
         assert_eq!(row(&report, "gpuRuleEnforced"), Some(Json::Bool(false)));
         let distance = row(&report, "gpuDistance").unwrap();
@@ -1287,16 +1311,32 @@ mod tests {
                 .contains("0.100 %")
         );
 
-        let (cpu_gate, _) = diff_scene("software-cpu", "unavailable_software", 30);
+        let (cpu_gate, _) = diff_scene("software-cpu", "unavailable_software", 0, 30);
         assert!(cpu_gate.is_err());
-        assert!(diff_scene("exact", "enabled", 0).0.is_ok());
+        assert!(diff_scene("exact", "enabled", 0, 0).0.is_ok());
+    }
+
+    #[test]
+    fn the_rule_binds_where_a_software_gpu_canvas_is_not_the_cpu_canvas() {
+        let (result, report) = diff_scene("software-differs", "disabled_software", 1, 10);
+        assert!(result.is_err());
+        let row = &report.as_array().unwrap()[0];
+        assert_eq!(row.get("gpuRuleEnforced"), Some(&Json::Bool(true)));
+        assert!(
+            diff_scene("software-within", "disabled_software", 10, 10)
+                .0
+                .is_ok()
+        );
     }
 
     #[test]
     fn a_reference_without_a_feature_status_is_refused() {
         let dir = std::env::temp_dir().join(format!("asrs-canvas-none-{}", std::process::id()));
-        write(&dir.join("info.json"), b"{}").unwrap();
-        assert!(reference_gpu_rule(&dir).is_err());
+        let software = br#"{"gpuFeatureStatus":{"2d_canvas":"disabled_software"}}"#;
+        for info in [&b"{}"[..], br#"{"platform":"linux"}"#, software] {
+            write(&dir.join("info.json"), info).unwrap();
+            assert!(reference_gpu_rule(&dir).is_err());
+        }
         fs::remove_dir_all(&dir).unwrap();
         assert!(reference_gpu_rule(&dir).is_err());
     }
