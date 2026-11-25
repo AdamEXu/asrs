@@ -227,7 +227,8 @@ fn main() {
     page.model(|model| {
         let mut log = model.page().shared_log().borrow_mut();
         for i in 0..200 {
-            log.put_number(&JsString::from(KEY), f64::from(i) / 10.0, f64::from(i));
+            log.put_number(&JsString::from(KEY), f64::from(i) / 10.0, f64::from(i))
+                .unwrap();
         }
     });
     let fields = JsValue::Array(vec![JsValue::string(KEY)]);

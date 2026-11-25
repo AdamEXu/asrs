@@ -11,8 +11,10 @@ fn key(s: &str) -> JsString {
 fn snapshot_shares_columns_and_is_isolated_from_later_writes() {
     let mut log = Log::default();
     for i in 0..1000 {
-        log.put_number(&key("/a"), f64::from(i), f64::from(i));
-        log.put_number_array(&key("/b"), f64::from(i), vec![f64::from(i), 1.0]);
+        log.put_number(&key("/a"), f64::from(i), f64::from(i))
+            .unwrap();
+        log.put_number_array(&key("/b"), f64::from(i), vec![f64::from(i), 1.0])
+            .unwrap();
     }
     let snapshot = log.clone();
     let (Some(field), Some(shared)) = (log.get_field(&key("/a")), snapshot.get_field(&key("/a")))
@@ -24,7 +26,7 @@ fn snapshot_shares_columns_and_is_isolated_from_later_writes() {
         shared.get_timestamps()
     ));
 
-    log.put_number(&key("/a"), 5000.0, -1.0);
+    log.put_number(&key("/a"), 5000.0, -1.0).unwrap();
     log.delete_field(&key("/b"));
     let worker = thread::spawn(move || {
         (

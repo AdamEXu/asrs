@@ -1,0 +1,203 @@
+{
+ "protocol": "phoenix",
+ "seed": 205,
+ "latencyMs": 1,
+ "endMs": 2600,
+ "client": {
+  "source": "phoenix",
+  "address": "127.0.0.1",
+  "tabs": [
+   "Phoenix6/TalonFX-1/Position",
+   "Phoenix6/TalonFX-1/Voltage",
+   "Phoenix6/TalonFX-1/Duty",
+   "Phoenix6/TalonFX-1/MotorType",
+   "Phoenix6/TalonFX-1/toString",
+   "Phoenix6/TalonFX-1/__proto__",
+   "Phoenix6/TalonFX-1/constructor",
+   "Phoenix6/TalonFX-1/__defineGetter__",
+   "Phoenix6/TalonFX-1/valueOf"
+  ]
+ },
+ "server": {
+  "startUs": 9000000,
+  "points": 12,
+  "stepUs": 10000,
+  "devices": [
+   {
+    "device": {
+     "CANbus": "rio",
+     "CANivoreDevName": "",
+     "ID": 1,
+     "Model": "Talon FX",
+     "Name": "Talon FX (Device ID 1)",
+     "IsPROApplication": true
+    },
+    "signals": [
+     {
+      "Id": 1,
+      "Name": "Position",
+      "Summary": "s",
+      "Units": "V"
+     },
+     {
+      "Id": 2,
+      "Name": "Voltage",
+      "Summary": "s",
+      "Units": "V"
+     },
+     {
+      "Id": 3,
+      "Name": "Duty",
+      "Summary": "s",
+      "Units": "V"
+     },
+     {
+      "Id": 4,
+      "Name": "MotorType",
+      "Summary": "s",
+      "Units": "V"
+     },
+     {
+      "Id": 5,
+      "Name": "toString",
+      "Summary": "s",
+      "Units": "V"
+     },
+     {
+      "Id": 6,
+      "Name": "__proto__",
+      "Summary": "s",
+      "Units": "V"
+     },
+     {
+      "Id": 7,
+      "Name": "constructor",
+      "Summary": "s",
+      "Units": "V"
+     },
+     {
+      "Id": 8,
+      "Name": "__defineGetter__",
+      "Summary": "s",
+      "Units": "V"
+     },
+     {
+      "Id": 9,
+      "Name": "valueOf",
+      "Summary": "s",
+      "Units": "V"
+     }
+    ],
+    "values": {
+     "1": [
+      0.5,
+      "abc",
+      "5",
+      true,
+      false,
+      null,
+      [
+       1,
+       2
+      ],
+      [],
+      {
+       "a": 1
+      },
+      {},
+      "5",
+      5
+     ],
+     "2": [
+      "x",
+      "x",
+      "x",
+      null,
+      1,
+      1,
+      "x"
+     ],
+     "3": [
+      [
+       1,
+       1,
+       1
+      ],
+      {
+       "b": [
+        null,
+        true
+       ]
+      },
+      7,
+      2,
+      "",
+      0
+     ],
+     "4": [
+      0,
+      "0",
+      "name",
+      null,
+      "zzz",
+      [
+       1
+      ],
+      {},
+      true,
+      1
+     ],
+     "5": [
+      "name",
+      "length",
+      "zzz",
+      "name",
+      0,
+      null
+     ],
+     "6": [
+      "__proto__",
+      "zzz",
+      0,
+      "__proto__"
+     ],
+     "7": [
+      "name",
+      "length",
+      "zzz"
+     ],
+     "8": [
+      "name",
+      "length",
+      "nope"
+     ],
+     "9": [
+      "length",
+      "arguments",
+      "name"
+     ]
+    }
+   }
+  ]
+ },
+ "steps": [
+  {
+   "t": 0,
+   "client": [
+    "connect"
+   ]
+  },
+  {
+   "t": 900,
+   "client": [
+    "dump"
+   ]
+  },
+  {
+   "t": 2000,
+   "client": [
+    "dump"
+   ]
+  }
+ ]
+}

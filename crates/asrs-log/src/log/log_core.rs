@@ -5,8 +5,9 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use asrs_js::json;
+use asrs_js::ops;
 use asrs_js::sort::array_sort;
-use asrs_js::string::JsString;
+use asrs_js::string::{JsError, JsString};
 use asrs_js::value::{JsObject, JsValue};
 use indexmap::IndexSet;
 
@@ -19,7 +20,7 @@ use super::log_writers::{FieldUnitCache, LogError, QueuedStructure};
 use super::photon_struct_decoder::PhotonStructDecoder;
 use super::proto_decoder::{ProtoDecoder, SerializedProtoDecoder};
 use super::struct_decoder::{SerializedStructDecoder, StructDecoder};
-use crate::realm::JsRealm;
+use crate::realm::{JsRealm, ObjectPrototype};
 use crate::util::lower_bound;
 
 const DEFAULT_TIMESTAMP_RANGE: [f64; 2] = [0.0, 10.0];
@@ -248,6 +249,25 @@ pub(super) fn child_key_js(key: &JsString, child: &JsString) -> JsString {
     out
 }
 
+fn not_a_function(method: &str) -> LogError {
+    LogError::Thrown(JsError::type_error(format!(
+        "this.fields[key].{method} is not a function"
+    )))
+}
+
+fn put_method(ty: LoggableType) -> &'static str {
+    match ty {
+        LoggableType::Raw => "putRaw",
+        LoggableType::Boolean => "putBoolean",
+        LoggableType::Number => "putNumber",
+        LoggableType::String => "putString",
+        LoggableType::BooleanArray => "putBooleanArray",
+        LoggableType::NumberArray => "putNumberArray",
+        LoggableType::StringArray => "putStringArray",
+        LoggableType::Empty => "put",
+    }
+}
+
 fn ends_with_ascii(units: &[u16], suffix: &str) -> bool {
     units.len() >= suffix.len()
         && suffix
@@ -303,14 +323,21 @@ impl Log {
         self.fields.get_key(key).is_some()
     }
 
-    fn field_mut_existing(&mut self, key: &JsString) -> &mut LogField {
+    /// `key in this.fields`.
+    fn key_in_fields(&self, key: &JsString) -> bool {
+        self.has_field(key) || ops::is_object_prototype_member(key)
+    }
+
+    /// `this.fields[key].<method>(...)`, which throws when `key` is an inherited name
+    /// (`this.fields["toString"]` is a function without LogField's methods).
+    fn field_to_call(&mut self, key: &JsString, method: &str) -> Result<&mut LogField, LogError> {
         self.fields
             .get_units_mut(key.units())
-            .expect("the field was created before this write")
+            .ok_or_else(|| not_a_function(method))
     }
 
     pub fn create_blank_field(&mut self, key: &JsString, ty: LoggableType) {
-        if self.has_field(key) {
+        if self.has_field(key) || ops::is_object_prototype_member(key) {
             return;
         }
         self.fields.insert(key.clone(), LogField::new(ty));
@@ -346,6 +373,9 @@ impl Log {
 
     pub fn delete_field(&mut self, key: &JsString) {
         if self.fields.remove_key(key).is_none() {
+            if ops::is_object_prototype_member(key) {
+                self.changed_fields.shift_remove(key);
+            }
             return;
         }
         self.field_unit_cache.remove(key);
@@ -482,6 +512,14 @@ impl Log {
         self.fields.get_key(key).map(LogField::get_type)
     }
 
+    /// `getType` for a key that comes straight from a file: an inherited name throws.
+    pub fn try_get_type(&self, key: &JsString) -> Result<Option<LoggableType>, LogError> {
+        match self.get_type(key) {
+            None if ops::is_object_prototype_member(key) => Err(not_a_function("getType")),
+            ty => Ok(ty),
+        }
+    }
+
     pub fn get_striping_reference(&self, key: &JsString) -> bool {
         self.fields
             .get_key(key)
@@ -500,10 +538,20 @@ impl Log {
         self.structured_type(key).as_named()
     }
 
+    /// `this.fields[key].<property> = value` for an inherited `key`: the property lands on the
+    /// function (or on `Object.prototype`), and the key still counts as changed.
+    fn assign_inherited(&mut self, key: &JsString) {
+        if ops::is_object_prototype_member(key) {
+            self.changed_fields.insert(key.clone());
+        }
+    }
+
     pub fn set_structured_type(&mut self, key: &JsString, ty: impl Into<StructuredType>) {
         if let Some(field) = self.fields.get_units_mut(key.units()) {
             field.structured_type = ty.into();
             self.changed_fields.insert(key.clone());
+        } else {
+            self.assign_inherited(key);
         }
     }
 
@@ -515,6 +563,8 @@ impl Log {
         if let Some(field) = self.fields.get_units_mut(key.units()) {
             field.wpilib_type = Some(ty);
             self.changed_fields.insert(key.clone());
+        } else {
+            self.assign_inherited(key);
         }
     }
 
@@ -531,6 +581,8 @@ impl Log {
             field.metadata_string = metadata;
             self.changed_fields.insert(key.clone());
             self.field_unit_cache.remove(key);
+        } else {
+            self.assign_inherited(key);
         }
     }
 
@@ -658,12 +710,25 @@ impl Log {
     }
 
     /// Organizes the fields under `prefix` into a tree split on the key separators.
+    ///
+    /// Upstream's `children` maps are plain objects, so `table in position.children` also finds
+    /// `Object.prototype`'s members. A key that ends at one never reaches the tree, a deeper one
+    /// throws, and one that ends at `__proto__` assigns `Object.prototype.fullKey`, which
+    /// `prototype` keeps for later calls in the realm.
     pub fn get_field_tree(
         &self,
         include_generated: bool,
         prefix: &JsString,
-    ) -> JsObject<LogFieldTree> {
-        let mut root = JsObject::new();
+        prototype: &mut ObjectPrototype,
+    ) -> Result<JsObject<LogFieldTree>, JsError> {
+        enum Position<'a> {
+            Node(&'a mut LogFieldTree),
+            Prototype,
+            Function,
+            FullKey,
+        }
+        let slash = u16::from(b'/');
+        let mut root = LogFieldTree::default();
         for key in self.fields.keys() {
             if !key.units().starts_with(prefix.units()) {
                 continue;
@@ -672,20 +737,53 @@ impl Log {
                 continue;
             }
             let key = JsString::from_units(key.units()[prefix.len()..].to_vec());
-            let slash = u16::from(b'/');
             let skip = usize::from(key.units().first() == Some(&slash));
-            let tables: Vec<JsString> =
-                split_log_key(&JsString::from_units(key.units()[skip..].to_vec()))
-                    .into_iter()
-                    .filter(|table| !table.is_empty())
-                    .collect();
-            if let Some(node) = tree_node(&mut root, &tables)
-                && (node.full_key.is_none() || key.units().last() != Some(&slash))
-            {
-                node.full_key = Some(key);
+            let tables = split_log_key(&JsString::from_units(key.units()[skip..].to_vec()));
+            let mut position = Position::Node(&mut root);
+            for table in tables {
+                if table.is_empty() {
+                    continue;
+                }
+                let Position::Node(node) = position else {
+                    return Err(JsError::type_error(format!(
+                        "Cannot use 'in' operator to search for '{}' in undefined",
+                        table.to_string_lossy()
+                    )));
+                };
+                let children = &mut node.children;
+                position = if children.get_key(&table).is_some() {
+                    Position::Node(existing_child(children, &table))
+                } else if prototype.full_key.is_some() && table == JsString::from("fullKey") {
+                    Position::FullKey
+                } else if ops::is_object_prototype_member(&table) {
+                    match table == JsString::from("__proto__") {
+                        true => Position::Prototype,
+                        false => Position::Function,
+                    }
+                } else {
+                    children.insert(table.clone(), LogFieldTree::default());
+                    Position::Node(existing_child(children, &table))
+                };
+            }
+            let ends_with_slash = key.units().last() == Some(&slash);
+            match position {
+                Position::Node(node) => {
+                    if node.full_key.is_none() || !ends_with_slash {
+                        node.full_key = Some(key);
+                    }
+                }
+                Position::Prototype if !ends_with_slash => prototype.full_key = Some(key),
+                Position::FullKey if !ends_with_slash => {
+                    let text = prototype.full_key.as_ref().map(JsString::to_string_lossy);
+                    return Err(JsError::type_error(format!(
+                        "Cannot create property 'fullKey' on string '{}'",
+                        text.unwrap_or_default()
+                    )));
+                }
+                Position::Prototype | Position::Function | Position::FullKey => {}
             }
         }
-        root
+        Ok(std::mem::take(&mut root.children))
     }
 
     /// `getRange`. Upstream accepts a `startOffset` here but never forwards it.
@@ -697,6 +795,23 @@ impl Log {
         uuid: Option<&str>,
     ) -> Option<LogValueSetAny> {
         Some(self.fields.get_key(key)?.get_range(start, end, uuid, None))
+    }
+
+    /// [`Log::get_range`] for a field whose column holds values of other types than declared.
+    pub fn get_foreign_range(
+        &self,
+        key: &JsString,
+        start: f64,
+        end: f64,
+    ) -> Option<LogValueSet<JsValue>> {
+        let field = self
+            .fields
+            .get_key(key)
+            .filter(|field| field.is_foreign())?;
+        match field.get_range(start, end, None, None) {
+            LogValueSetAny::Foreign(_, set) => Some(set),
+            _ => None,
+        }
     }
 
     /// The typed getters. `getRaw` does not forward `startOffset` upstream, so a Raw read
@@ -797,14 +912,21 @@ impl Log {
     }
 
     /// The shared shape of the scalar writers: register, write, and count the timestamp only
-    /// when the field really holds `T`.
-    fn put_value<T: LogValue>(&mut self, key: &JsString, timestamp: f64, value: T) {
+    /// when the field really holds `T`. The only error is the TypeError of an inherited key.
+    fn put_value<T: LogValue>(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        value: T,
+    ) -> Result<(), LogError> {
         self.create_blank_field(key, T::TYPE);
-        self.field_mut_existing(key).put(timestamp, value);
+        self.field_to_call(key, put_method(T::TYPE))?
+            .put(timestamp, value);
         self.changed_fields.insert(key.clone());
         if self.get_type(key) == Some(T::TYPE) {
             self.process_timestamp(key, timestamp);
         }
+        Ok(())
     }
 
     /// Writes a Raw value. A `.schema/struct:` or `.schema/photonstruct:` key also registers the
@@ -816,7 +938,7 @@ impl Log {
         value: impl Into<RawValue>,
     ) -> Result<(), LogError> {
         let value = value.into();
-        self.put_value(key, timestamp, value.clone());
+        self.put_value(key, timestamp, value.clone())?;
         let Some(schema_type) = get_schema_type(key) else {
             return Ok(());
         };
@@ -836,53 +958,107 @@ impl Log {
         Ok(())
     }
 
-    pub fn put_boolean(&mut self, key: &JsString, timestamp: f64, value: bool) {
-        self.put_value(key, timestamp, value);
+    pub fn put_boolean(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        value: bool,
+    ) -> Result<(), LogError> {
+        self.put_value(key, timestamp, value)
     }
 
-    pub fn put_number(&mut self, key: &JsString, timestamp: f64, value: f64) {
-        self.put_value(key, timestamp, value);
+    pub fn put_number(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        value: f64,
+    ) -> Result<(), LogError> {
+        self.put_value(key, timestamp, value)
     }
 
-    /// A typed writer given `null` (`putNumber(key, timestamp, null)`): `putData` drops the
-    /// value, but the field is still registered, a mismatched type still warns and the
-    /// timestamp still counts.
-    pub fn put_null(&mut self, key: &JsString, timestamp: f64, ty: LoggableType) {
-        self.create_blank_field(key, ty);
-        let field = self.field_mut_existing(key);
-        if field.get_type() != ty {
-            field.type_warning = true;
-        }
-        self.changed_fields.insert(key.clone());
-        if self.get_type(key) == Some(ty) {
-            self.process_timestamp(key, timestamp);
+    /// `putBoolean`, `putNumber` or `putString` (by `ty`) given a value upstream does not check.
+    /// A value of the declared type is an ordinary write. `null` writes no sample but still
+    /// registers the field, warns on a mismatched type and counts the timestamp. Anything else
+    /// is stored as it is, which turns the column into [`LogValues::Foreign`].
+    ///
+    /// [`LogValues::Foreign`]: super::LogValues::Foreign
+    pub fn put_untyped(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        ty: LoggableType,
+        value: JsValue,
+    ) -> Result<(), LogError> {
+        match (ty, value) {
+            (LoggableType::Boolean, JsValue::Bool(b)) => self.put_boolean(key, timestamp, b),
+            (LoggableType::Number, JsValue::Number(x)) => self.put_number(key, timestamp, x),
+            (LoggableType::String, JsValue::String(ref s)) => {
+                self.put_string(key, timestamp, s.clone())
+            }
+            (_, value) => {
+                self.create_blank_field(key, ty);
+                let structured_type = (ty == LoggableType::String
+                    && ends_with_ascii(key.units(), TYPE_KEY_SUFFIX))
+                .then(|| StructuredType::from_js(&value));
+                self.field_to_call(key, put_method(ty))?
+                    .put_foreign(timestamp, ty, value);
+                self.changed_fields.insert(key.clone());
+                if self.get_type(key) == Some(ty) {
+                    self.process_timestamp(key, timestamp);
+                }
+                if let Some(structured_type) = structured_type {
+                    self.set_type_parent(key, timestamp, structured_type);
+                }
+                Ok(())
+            }
         }
     }
 
     /// Writes a String value; a `.../.type` key also types its parent as an Empty field.
-    pub fn put_string(&mut self, key: &JsString, timestamp: f64, value: JsString) {
-        self.put_value(key, timestamp, value.clone());
-        let units = key.units();
-        if ends_with_ascii(units, TYPE_KEY_SUFFIX) {
-            let parent_key =
-                JsString::from_units(units[..units.len() - TYPE_KEY_SUFFIX.len()].to_vec());
-            self.create_blank_field(&parent_key, LoggableType::Empty);
-            self.changed_fields.insert(parent_key.clone());
-            self.process_timestamp(&parent_key, timestamp);
-            self.set_structured_type(&parent_key, Some(value));
+    pub fn put_string(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        value: JsString,
+    ) -> Result<(), LogError> {
+        self.put_value(key, timestamp, value.clone())?;
+        if ends_with_ascii(key.units(), TYPE_KEY_SUFFIX) {
+            self.set_type_parent(key, timestamp, Some(value).into());
         }
+        Ok(())
     }
 
-    fn put_array<T: LogValue>(&mut self, key: &JsString, timestamp: f64, value: Vec<T>)
+    fn set_type_parent(
+        &mut self,
+        type_key: &JsString,
+        timestamp: f64,
+        structured_type: StructuredType,
+    ) {
+        let units = type_key.units();
+        let parent_key =
+            JsString::from_units(units[..units.len() - TYPE_KEY_SUFFIX.len()].to_vec());
+        self.create_blank_field(&parent_key, LoggableType::Empty);
+        self.changed_fields.insert(parent_key.clone());
+        self.process_timestamp(&parent_key, timestamp);
+        self.set_structured_type(&parent_key, structured_type);
+    }
+
+    fn put_array<T: LogValue>(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        value: Vec<T>,
+    ) -> Result<(), LogError>
     where
         Vec<T>: LogValue,
     {
         let ty = <Vec<T> as LogValue>::TYPE;
         self.create_blank_field(key, ty);
-        self.field_mut_existing(key).put(timestamp, value.clone());
+        self.field_to_call(key, put_method(ty))?
+            .put(timestamp, value.clone());
         self.changed_fields.insert(key.clone());
         if self.get_type(key) != Some(ty) {
-            return;
+            return Ok(());
         }
         self.process_timestamp(key, timestamp);
         self.set_generated_parent(key);
@@ -890,7 +1066,7 @@ impl Log {
         let length_key = child_key(key, "length");
         self.create_blank_field(&length_key, LoggableType::Number);
         self.process_timestamp(&length_key, timestamp);
-        self.field_mut_existing(&length_key)
+        self.field_to_call(&length_key, "putNumber")?
             .put_number(timestamp, value.len() as f64);
         self.changed_fields.insert(length_key);
 
@@ -900,21 +1076,38 @@ impl Log {
                 self.process_timestamp(&item_key, timestamp);
             }
             self.create_blank_field(&item_key, T::TYPE);
-            self.field_mut_existing(&item_key).put(timestamp, item);
+            self.field_to_call(&item_key, put_method(T::TYPE))?
+                .put(timestamp, item);
             self.changed_fields.insert(item_key);
         }
+        Ok(())
     }
 
-    pub fn put_boolean_array(&mut self, key: &JsString, timestamp: f64, value: Vec<bool>) {
-        self.put_array(key, timestamp, value);
+    pub fn put_boolean_array(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        value: Vec<bool>,
+    ) -> Result<(), LogError> {
+        self.put_array(key, timestamp, value)
     }
 
-    pub fn put_number_array(&mut self, key: &JsString, timestamp: f64, value: Vec<f64>) {
-        self.put_array(key, timestamp, value);
+    pub fn put_number_array(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        value: Vec<f64>,
+    ) -> Result<(), LogError> {
+        self.put_array(key, timestamp, value)
     }
 
-    pub fn put_string_array(&mut self, key: &JsString, timestamp: f64, value: Vec<JsString>) {
-        self.put_array(key, timestamp, value);
+    pub fn put_string_array(
+        &mut self,
+        key: &JsString,
+        timestamp: f64,
+        value: Vec<JsString>,
+    ) -> Result<(), LogError> {
+        self.put_array(key, timestamp, value)
     }
 
     /// Flattens a decoded value into the children of `key`. Primitives and byte arrays are only
@@ -979,17 +1172,17 @@ impl Log {
                 UnknownPut::Skip => {}
                 UnknownPut::Bool(b) => {
                     if allow_write {
-                        self.put_boolean(&key, timestamp, b);
+                        self.put_boolean(&key, timestamp, b)?;
                     }
                 }
                 UnknownPut::Number(x) => {
                     if allow_write {
-                        self.put_number(&key, timestamp, x);
+                        self.put_number(&key, timestamp, x)?;
                     }
                 }
                 UnknownPut::Text(s) => {
                     if allow_write {
-                        self.put_string(&key, timestamp, s.clone());
+                        self.put_string(&key, timestamp, s.clone())?;
                     }
                 }
                 UnknownPut::Raw(bytes) => {
@@ -998,7 +1191,7 @@ impl Log {
                     }
                 }
                 UnknownPut::Items(items) => {
-                    let existing_type = self.get_type(&key);
+                    let existing_type = self.try_get_type(&key)?;
                     let uniform = |type_name: &str, array_type: LoggableType| {
                         if items.is_empty() {
                             existing_type == Some(array_type)
@@ -1008,21 +1201,21 @@ impl Log {
                     };
                     if allow_write && uniform("boolean", LoggableType::BooleanArray) {
                         let values = items.iter().filter_map(V::as_bool).collect();
-                        self.put_boolean_array(&key, timestamp, values);
+                        self.put_boolean_array(&key, timestamp, values)?;
                     } else if allow_write && uniform("number", LoggableType::NumberArray) {
                         let values = items.iter().filter_map(V::as_f64).collect();
-                        self.put_number_array(&key, timestamp, values);
+                        self.put_number_array(&key, timestamp, values)?;
                     } else if allow_write && uniform("string", LoggableType::StringArray) {
                         let values = items
                             .iter()
                             .filter_map(|item| item.as_text().cloned())
                             .collect();
-                        self.put_string_array(&key, timestamp, values);
+                        self.put_string_array(&key, timestamp, values)?;
                     } else {
                         let length_key = child_key(&key, "length");
                         self.create_blank_field(&length_key, LoggableType::Number);
                         self.process_timestamp(&length_key, timestamp);
-                        self.field_mut_existing(&length_key)
+                        self.field_to_call(&length_key, "putNumber")?
                             .put_number(timestamp, items.len() as f64);
                         open.push((key, Children::Items(items.iter().enumerate()), depth + 1));
                     }
@@ -1031,7 +1224,7 @@ impl Log {
                     open.push((key, Children::Entries(entries), depth + 1))
                 }
                 UnknownPut::Ext(kind, data) => {
-                    self.put_number(&child_key(&key, "type"), timestamp, f64::from(kind));
+                    self.put_number(&child_key(&key, "type"), timestamp, f64::from(kind))?;
                     self.put_raw(&child_key(&key, "data"), timestamp, Arc::<[u8]>::from(data))?;
                 }
             }
@@ -1040,15 +1233,15 @@ impl Log {
     }
 
     /// Writes a JSON string and its decoded children; text that does not parse writes only the
-    /// string. The only error is [`LogError::StackOverflow`]: JSON values hold no bytes, so
-    /// they never reach `putRaw`.
+    /// string. The only errors are [`LogError::StackOverflow`] and an inherited key's
+    /// [`LogError::Thrown`]: JSON values hold no bytes, so they never reach `putRaw`.
     pub fn put_json(
         &mut self,
         key: &JsString,
         timestamp: f64,
         value: JsString,
     ) -> Result<(), LogError> {
-        self.put_string(key, timestamp, value.clone());
+        self.put_string(key, timestamp, value.clone())?;
         if self.get_type(key) != Some(LoggableType::String) {
             return Ok(());
         }
@@ -1069,13 +1262,13 @@ impl Log {
         timestamp: f64,
         translation: [f64; 2],
         rotation: f64,
-    ) {
+    ) -> Result<(), LogError> {
         let translation_key = child_key(key, "translation");
         let rotation_key = child_key(key, "rotation");
-        self.put_number(&child_key(&translation_key, "x"), timestamp, translation[0]);
-        self.put_number(&child_key(&translation_key, "y"), timestamp, translation[1]);
-        self.put_number(&child_key(&rotation_key, "value"), timestamp, rotation);
-        if !self.has_field(key) {
+        self.put_number(&child_key(&translation_key, "x"), timestamp, translation[0])?;
+        self.put_number(&child_key(&translation_key, "y"), timestamp, translation[1])?;
+        self.put_number(&child_key(&rotation_key, "value"), timestamp, rotation)?;
+        if !self.key_in_fields(key) {
             self.create_blank_field(key, LoggableType::Empty);
             self.set_structured_type(key, Some(JsString::from("Pose2d")));
             self.set_generated_parent(key);
@@ -1091,6 +1284,7 @@ impl Log {
             self.set_structured_type(&rotation_key, Some(JsString::from("Rotation2d")));
             self.process_timestamp(&rotation_key, timestamp);
         }
+        Ok(())
     }
 
     /// Writes translations as `i/x` and `i/y` children under a "Translation2d[]" parent.
@@ -1099,8 +1293,8 @@ impl Log {
         key: &JsString,
         timestamp: f64,
         translations: &[[f64; 2]],
-    ) {
-        if !self.has_field(key) {
+    ) -> Result<(), LogError> {
+        if !self.key_in_fields(key) {
             self.create_blank_field(key, LoggableType::Empty);
             self.set_structured_type(key, Some(JsString::from("Translation2d[]")));
             self.set_generated_parent(key);
@@ -1110,7 +1304,7 @@ impl Log {
             &child_key(key, "length"),
             timestamp,
             translations.len() as f64,
-        );
+        )?;
         for (i, translation) in translations.iter().enumerate() {
             let item_key = child_key(key, &format!("{i}"));
             if !self.has_field(&item_key) {
@@ -1118,9 +1312,10 @@ impl Log {
                 self.set_structured_type(&item_key, Some(JsString::from("Translation2d")));
                 self.process_timestamp(&item_key, timestamp);
             }
-            self.put_number(&child_key(&item_key, "x"), timestamp, translation[0]);
-            self.put_number(&child_key(&item_key, "y"), timestamp, translation[1]);
+            self.put_number(&child_key(&item_key, "x"), timestamp, translation[0])?;
+            self.put_number(&child_key(&item_key, "y"), timestamp, translation[1])?;
         }
+        Ok(())
     }
 
     pub fn to_serialized(&self) -> SerializedLog {
@@ -1161,26 +1356,11 @@ impl Log {
     }
 }
 
-fn tree_node<'a>(
-    root: &'a mut JsObject<LogFieldTree>,
-    tables: &[JsString],
-) -> Option<&'a mut LogFieldTree> {
-    let (first, rest) = tables.split_first()?;
-    let mut node = child_node(root, first);
-    for table in rest {
-        node = child_node(&mut node.children, table);
-    }
-    Some(node)
-}
-
-fn child_node<'a>(
+fn existing_child<'a>(
     children: &'a mut JsObject<LogFieldTree>,
     table: &JsString,
 ) -> &'a mut LogFieldTree {
-    if children.get_key(table).is_none() {
-        children.insert(table.clone(), LogFieldTree::default());
-    }
     children
         .get_units_mut(table.units())
-        .expect("the child was just inserted")
+        .expect("the caller checked or inserted it")
 }

@@ -1,8 +1,9 @@
 //! `shared/log/LogUtil.ts`.
 
-use asrs_js::json::quote_into;
+use asrs_js::json::{self, quote_into};
 use asrs_js::number;
 use asrs_js::string::JsString;
+use asrs_js::value::JsValue;
 
 use super::fuse::Fuse;
 use super::log_value_sets::RawValue;
@@ -93,6 +94,37 @@ impl LogValueText for RawValue {
     }
 }
 
+fn push_foreign(value: &JsValue, out: &mut String) {
+    match json::stringify(value) {
+        Ok(Some(text)) => out.push_str(&text),
+        // A template or `join` prints what `JSON.stringify(undefined)` returns.
+        _ => out.push_str("undefined"),
+    }
+}
+
+impl LogValueText for JsValue {
+    fn log_value_text(&self) -> String {
+        let mut out = String::new();
+        match self {
+            JsValue::Array(items) => {
+                out.push('[');
+                for (i, item) in items.iter().take(ARRAY_TEXT_SIZE_LIMIT).enumerate() {
+                    if i > 0 {
+                        out.push_str(", ");
+                    }
+                    push_foreign(item, &mut out);
+                }
+                if items.len() > ARRAY_TEXT_SIZE_LIMIT {
+                    out.push_str(", \"...\"");
+                }
+                out.push(']');
+            }
+            other => push_foreign(other, &mut out),
+        }
+        out
+    }
+}
+
 /// An `Empty` field's samples are `null`.
 impl LogValueText for () {
     fn log_value_text(&self) -> String {
@@ -119,6 +151,7 @@ pub fn get_log_value_text_at(set: &LogValueSetAny, index: usize) -> Option<Strin
         LogValueSetAny::NumberArray(s) => at(s, index),
         LogValueSetAny::StringArray(s) => at(s, index),
         LogValueSetAny::Empty(s) => at(s, index),
+        LogValueSetAny::Foreign(_, s) => at(s, index),
     }
 }
 
@@ -135,6 +168,15 @@ pub fn get_value_at<T: LogValue>(
     }
     let set = log.get::<T>(key, timestamp, timestamp, uuid, None)?;
     if !set.timestamps.first().is_some_and(|&t| t <= timestamp) {
+        return None;
+    }
+    set.values.into_iter().next()
+}
+
+/// [`get_value_at`] as stored, for a field whose column is foreign.
+pub fn get_foreign_at(log: &Log, key: &JsString, timestamp: f64) -> Option<JsValue> {
+    let set = log.get_foreign_range(key, timestamp, timestamp)?;
+    if set.timestamps.first()? > &timestamp {
         return None;
     }
     set.values.into_iter().next()

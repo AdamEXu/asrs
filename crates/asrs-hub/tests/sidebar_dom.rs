@@ -765,12 +765,28 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
         let array = |i: usize| args[i].as_array().ok_or_else(|| err("array argument"));
         let log = &mut *log.borrow_mut();
         match method.as_str() {
-            "putBoolean" => log.put_boolean(&key(0)?, number(&args[1])?, truthy(&args[2])),
-            "putNumber" => log.put_number(&key(0)?, number(&args[1])?, number(&args[2])?),
-            "putString" => log.put_string(&key(0)?, number(&args[1])?, js_string(&args[2])?),
+            "putBoolean" | "putNumber" | "putString" => {
+                let ty = match method.as_str() {
+                    "putBoolean" => LoggableType::Boolean,
+                    "putNumber" => LoggableType::Number,
+                    _ => LoggableType::String,
+                };
+                let value = js_json::to_js(&args[2])?;
+                log.put_untyped(&key(0)?, number(&args[1])?, ty, value)
+                    .unwrap();
+            }
+            "putPhotonStruct" => {
+                let Value::Bytes(bytes) = &args[2] else {
+                    return Err(err("putPhotonStruct value is bytes"));
+                };
+                let value = RawValue::from(bytes.as_slice());
+                log.put_photon_struct(&key(0)?, number(&args[1])?, value, &js_string(&args[3])?)
+                    .unwrap();
+            }
             "putBooleanArray" => {
                 let values = array(2)?.iter().map(truthy).collect();
                 log.put_boolean_array(&key(0)?, number(&args[1])?, values)
+                    .unwrap()
             }
             "putNumberArray" => {
                 let values = array(2)?
@@ -778,6 +794,7 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
                     .map(number)
                     .collect::<Result<Vec<f64>, String>>()?;
                 log.put_number_array(&key(0)?, number(&args[1])?, values)
+                    .unwrap()
             }
             "putStringArray" => {
                 let values = array(2)?
@@ -785,6 +802,7 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
                     .map(js_string)
                     .collect::<Result<Vec<JsString>, String>>()?;
                 log.put_string_array(&key(0)?, number(&args[1])?, values)
+                    .unwrap()
             }
             "putJSON" => log
                 .put_json(&key(0)?, number(&args[1])?, js_string(&args[2])?)
@@ -821,7 +839,8 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
                 else {
                     return Err(err("putPose translation is [x, y]"));
                 };
-                log.put_pose(&key(0)?, number(&args[1])?, [*tx, *ty], *r);
+                log.put_pose(&key(0)?, number(&args[1])?, [*tx, *ty], *r)
+                    .unwrap();
             }
             "setStructuredType" => {
                 let value = match &args[1] {
@@ -844,16 +863,14 @@ fn run_log_step(log: &Rc<RefCell<Log>>, calls: &[Value]) -> Result<(), String> {
 }
 
 fn exception_emit(where_: &str, outcome: EventOutcome) -> Option<Emit> {
-    let error = match outcome {
-        EventOutcome::Ok => return None,
-        EventOutcome::MergedFilenameMissing => {
-            "TypeError: Cannot read properties of undefined (reading 'replace')"
-        }
+    let EventOutcome::Threw(error) = outcome else {
+        return None;
     };
+    let error = format!("{}: {}", error.name, error.message);
     Some(Emit {
         values: vec![
             ("exception", cve_string(&js(where_))),
-            ("error", cve_string(&js(error))),
+            ("error", cve_string(&js(&error))),
         ],
     })
 }
@@ -897,6 +914,7 @@ struct Runner<'a> {
     tuning_due: f64,
     last_frame: f64,
     frame_period: f64,
+    loop_dead: bool,
     show_pending: bool,
 }
 
@@ -960,7 +978,12 @@ impl Runner<'_> {
             } else if frame_at <= end {
                 self.now = frame_at;
                 self.last_frame = frame_at;
-                self.sidebar.periodic(&mut senv!(self));
+                if !self.loop_dead {
+                    let outcome = self.sidebar.periodic(&mut senv!(self));
+                    self.loop_dead = outcome != EventOutcome::Ok;
+                    self.emitted
+                        .extend(exception_emit("requestAnimationFrame", outcome));
+                }
                 if self.show_pending {
                     self.show_pending = false;
                     self.emitted.push(Emit {
@@ -1289,6 +1312,7 @@ fn replay(
         tuning_due: start + TUNING_INTERVAL_MS,
         last_frame: start,
         frame_period,
+        loop_dead: false,
         show_pending: true,
     };
 
@@ -1409,7 +1433,9 @@ fn replay(
                             .sidebar
                             .restore_state(&mut senv!(runner), sidebar_state)
                             .map_err(|e| format!("{e:?}"))?;
-                        runner.outcome(outcome);
+                        runner
+                            .emitted
+                            .extend(exception_emit("unhandledRejection", outcome));
                     }
                 }
                 other => return Err(format!("{}: main message {other} is not modeled", where_())),
