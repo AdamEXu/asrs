@@ -2,7 +2,7 @@
 //! `putMsgpack`) with their retry queues, `getUnit` and `mergeWith`.
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use asrs_js::json;
 use asrs_js::math;
@@ -408,7 +408,7 @@ impl Log {
         let serialized = source.to_serialized();
 
         for (key, mut field) in serialized.fields {
-            field.timestamps = Arc::new(field.timestamps.iter().map(|t| t + offset).collect());
+            field.shift_timestamps(offset);
             let target_key = apply_key_prefix(prefix, &key);
             if !prefix.is_empty() && target_key == *prefix {
                 continue;

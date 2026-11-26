@@ -85,6 +85,28 @@ impl SerializedLogField {
     pub fn get_type(&self) -> LoggableType {
         self.values.loggable_type()
     }
+
+    /// `timestamps.map(|t| t + offset)`, keeping the shared column when every sum is
+    /// bit-identical. The measured bits matter because addition can flip `-0.0` or quiet a NaN.
+    /// The scan avoids `all`: its per-element early exit blocks vectorization on the reuse path.
+    #[inline]
+    pub fn shift_timestamps(&mut self, offset: f64) {
+        let Some((first, rest)) = self.timestamps.split_first() else {
+            return;
+        };
+        if (*first + offset).to_bits() != first.to_bits() {
+            self.timestamps = Arc::new(self.timestamps.iter().map(|t| t + offset).collect());
+            return;
+        }
+        let mut unchanged = true;
+        for t in rest {
+            unchanged &= (*t + offset).to_bits() == t.to_bits();
+        }
+        if unchanged {
+            return;
+        }
+        self.timestamps = Arc::new(self.timestamps.iter().map(|t| t + offset).collect());
+    }
 }
 
 impl Clone for LogField {
