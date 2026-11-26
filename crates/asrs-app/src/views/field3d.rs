@@ -332,7 +332,8 @@ pub struct Field3dViews {
     tabs: HashMap<usize, TabView>,
     shown: Option<Shown>,
     thread: Option<Result<RenderThread, String>>,
-    /// Whether the thread was told to free its targets and got no frame since.
+    /// Whether the thread was told to free its targets and got neither a frame nor the tab back
+    /// since.
     released: bool,
     in_flight: Option<InFlight>,
     queued: Option<(usize, Frame)>,
