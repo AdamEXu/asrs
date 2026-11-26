@@ -963,6 +963,8 @@ struct SlowClock {
 }
 
 const SLOW_READS: usize = 200_000;
+const SLOW_PUBLISH_MS: u64 = 30;
+const PROGRESS_WINDOW_MS: u64 = SLOW_PUBLISH_MS + 5;
 
 impl Clock for SlowClock {
     fn now(&self) -> f64 {
@@ -973,7 +975,7 @@ impl Clock for SlowClock {
             dispatcher
                 .scheduler()
                 .clock()
-                .advance(Duration::from_millis(30));
+                .advance(Duration::from_millis(SLOW_PUBLISH_MS));
         }
         self.clock.now()
     }
@@ -1005,7 +1007,8 @@ fn a_publisher_slower_than_its_period_leaves_the_page_responsive() {
     slow.set(true);
     for i in 0..5 {
         let before = reads.get();
-        page.cx.advance_clock(Duration::from_millis(25));
+        page.cx
+            .advance_clock(Duration::from_millis(PROGRESS_WINDOW_MS));
         page.cx.run_until_parked();
         assert!(reads.get() > before, "the publisher runs");
         assert!(
