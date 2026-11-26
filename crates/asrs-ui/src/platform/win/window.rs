@@ -32,10 +32,19 @@ pub fn titled_frame(scale: f64) -> (f64, f64) {
     let dpi = (f64::from(USER_DEFAULT_SCREEN_DPI) * scale).round() as u32;
     // SAFETY: `rect` outlives the call.
     let _ = unsafe {
-        AdjustWindowRectExForDpi(&mut rect, WS_OVERLAPPEDWINDOW, false, WINDOW_EX_STYLE(0), dpi)
+        AdjustWindowRectExForDpi(
+            &mut rect,
+            WS_OVERLAPPEDWINDOW,
+            false,
+            WINDOW_EX_STYLE(0),
+            dpi,
+        )
     };
     let device = |v: i32| f64::from(v) / scale;
-    (device(rect.right - rect.left), device(rect.bottom - rect.top))
+    (
+        device(rect.right - rect.left),
+        device(rect.bottom - rect.top),
+    )
 }
 
 pub fn native(window: &Window) -> Option<NativeWindow> {
