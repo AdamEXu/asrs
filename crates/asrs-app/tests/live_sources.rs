@@ -672,8 +672,7 @@ fn method<'a>(messages: &'a [Json], name: &str) -> Vec<&'a Json> {
         .collect()
 }
 
-/// `(topic or publisher uid, type index, value)` of each value the client sent.
-fn sent_values(seen: &[ClientEvent]) -> Vec<(f64, f64, Unpacked)> {
+fn sent_samples(seen: &[ClientEvent]) -> Vec<(f64, f64, f64, Unpacked)> {
     let mut out = Vec::new();
     for event in seen {
         let ClientEvent::WsSend {
@@ -687,14 +686,47 @@ fn sent_values(seen: &[ClientEvent]) -> Vec<(f64, f64, Unpacked)> {
             let Unpacked::Arr(items) = item else {
                 continue;
             };
-            if let [Unpacked::Number(id), _, Unpacked::Number(ty), value] = items.as_slice()
+            if let [
+                Unpacked::Number(id),
+                Unpacked::Number(timestamp),
+                Unpacked::Number(ty),
+                value,
+            ] = items.as_slice()
                 && *id >= 0.0
             {
-                out.push((*id, *ty, value.clone()));
+                out.push((*id, *timestamp, *ty, value.clone()));
             }
         }
     }
     out
+}
+
+/// `(topic or publisher uid, type index, value)` of each value the client sent.
+fn sent_values(seen: &[ClientEvent]) -> Vec<(f64, f64, Unpacked)> {
+    sent_samples(seen)
+        .into_iter()
+        .map(|(id, _, ty, value)| (id, ty, value))
+        .collect()
+}
+
+fn sent_timestamps(seen: &[ClientEvent]) -> Vec<f64> {
+    sent_samples(seen)
+        .into_iter()
+        .map(|(_, timestamp, _, _)| timestamp)
+        .collect()
+}
+
+fn set_selected_time(time: f64) -> JsValue {
+    JsValue::Object(
+        vec![
+            ("uuid", JsValue::string("uuid")),
+            ("name", JsValue::string("setSelectedTime")),
+            ("args", JsValue::Array(vec![JsValue::Number(time)])),
+        ]
+        .into_iter()
+        .map(|(key, value)| (js(key), value))
+        .collect(),
+    )
 }
 
 #[test]
@@ -964,7 +996,6 @@ struct SlowClock {
 
 const SLOW_READS: usize = 200_000;
 const SLOW_PUBLISH_MS: u64 = 30;
-const PROGRESS_WINDOW_MS: u64 = SLOW_PUBLISH_MS + 5;
 
 impl Clock for SlowClock {
     fn now(&self) -> f64 {
@@ -996,6 +1027,7 @@ fn a_publisher_slower_than_its_period_leaves_the_page_responsive() {
     });
     page.preferences(|_| {});
     page.open_log("nt.csv", NT_CSV);
+    page.table(&["NT:/Data/x"]);
     page.send(MainToHub::StartPublish, JsValue::Bool(true));
     page.drive_until("the publisher to connect", |page| {
         page.title().contains("(Publishing)")
@@ -1003,12 +1035,34 @@ fn a_publisher_slower_than_its_period_leaves_the_page_responsive() {
     page.drive_until("the first values", |_| {
         !sent_values(&server.take_seen()).is_empty()
     });
-    page.advance(200);
+    let start = Instant::now();
+    let mut steps = 0;
+    let mut selected = 0.0;
+    loop {
+        page.cx.run_until_parked();
+        if sent_timestamps(&server.take_seen())
+            .iter()
+            .any(|timestamp| *timestamp != 0.0)
+        {
+            break;
+        }
+        assert!(
+            start.elapsed() < TIMEOUT,
+            "timed out waiting for the clock to sync"
+        );
+        if !page.read(|hub| hub.wait_for_live(STEP * 2)) {
+            steps += 1;
+            if steps % 3 == 0 {
+                selected = 1.0 - selected;
+                page.send(MainToHub::CallSelectionSetter, set_selected_time(selected));
+            }
+            page.advance(STEP.as_millis() as u64);
+        }
+    }
     slow.set(true);
     for i in 0..5 {
         let before = reads.get();
-        page.cx
-            .advance_clock(Duration::from_millis(PROGRESS_WINDOW_MS));
+        page.cx.advance_clock(Duration::from_millis(25));
         page.cx.run_until_parked();
         assert!(reads.get() > before, "the publisher runs");
         assert!(
