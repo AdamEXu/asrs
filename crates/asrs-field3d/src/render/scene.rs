@@ -1,7 +1,9 @@
 // Ported from three.js r168 (MIT, Copyright 2010-2024 three.js authors). See THIRD_PARTY_NOTICES.md.
 
-use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
+
+use super::spool::{self, Spooled};
 
 use asrs_js::math;
 
@@ -26,8 +28,16 @@ fn next_material_id() -> u64 {
 #[derive(Debug)]
 pub struct Geometry {
     key: u64,
-    pub geometry: Arc<BufferGeometry>,
+    stored: Mutex<Stored>,
+    groups: Vec<Group>,
     bounding_sphere: Sphere,
+    spool_claimed: AtomicBool,
+}
+
+#[derive(Debug)]
+enum Stored {
+    Memory(Arc<BufferGeometry>),
+    Spooled(Box<Spooled>),
 }
 
 impl Geometry {
@@ -40,9 +50,61 @@ impl Geometry {
             .unwrap_or_else(|| geometry.new_bounding_sphere());
         Arc::new(Geometry {
             key: next_resource_id(),
-            geometry,
+            groups: geometry.groups.clone(),
+            stored: Mutex::new(Stored::Memory(geometry)),
             bounding_sphere,
+            spool_claimed: AtomicBool::new(false),
         })
+    }
+
+    /// The geometry, read back from its spool file once it went there.
+    pub fn data(&self) -> Arc<BufferGeometry> {
+        let stored = self.stored.lock().expect("geometry");
+        match &*stored {
+            Stored::Memory(geometry) => geometry.clone(),
+            Stored::Spooled(spooled) => match spooled.read() {
+                Ok(geometry) => Arc::new(geometry),
+                Err(e) => {
+                    eprintln!("asrs: reading back a 3D model: {e}");
+                    Arc::new(BufferGeometry::new())
+                }
+            },
+        }
+    }
+
+    /// Whether the arrays are in memory rather than in a spool file.
+    pub fn is_in_memory(&self) -> bool {
+        self.in_memory().is_some()
+    }
+
+    pub fn groups(&self) -> &[Group] {
+        &self.groups
+    }
+
+    /// Moves the arrays to a spool file soon, if they are large enough to be worth it.
+    pub fn spool_later(self: &Arc<Self>) {
+        spool::spool_later(self);
+    }
+
+    pub(super) fn in_memory(&self) -> Option<Arc<BufferGeometry>> {
+        match &*self.stored.lock().expect("geometry") {
+            Stored::Memory(geometry) => Some(geometry.clone()),
+            Stored::Spooled(_) => None,
+        }
+    }
+
+    pub(super) fn claim_spool(&self, min_bytes: usize) -> bool {
+        let large = self
+            .in_memory()
+            .is_some_and(|g| spool::size(&g) >= min_bytes);
+        large && !self.spool_claimed.swap(true, Ordering::Relaxed)
+    }
+
+    pub(super) fn replace_with_spooled(&self, data: &Arc<BufferGeometry>, spooled: Spooled) {
+        let mut stored = self.stored.lock().expect("geometry");
+        if matches!(&*stored, Stored::Memory(g) if Arc::ptr_eq(g, data)) {
+            *stored = Stored::Spooled(Box::new(spooled));
+        }
     }
 
     pub fn key(&self) -> u64 {
@@ -334,8 +396,7 @@ impl Mesh {
             Materials::Single(material) => vec![(material, None)],
             Materials::Array(materials) => self
                 .geometry
-                .geometry
-                .groups
+                .groups()
                 .iter()
                 .filter_map(|group| {
                     materials

@@ -753,6 +753,15 @@ impl Renderer {
         });
     }
 
+    /// Frees the models' and textures' GPU copies, which the next frame uploads again.
+    pub fn release_models(&mut self) {
+        self.geometries.clear();
+        self.line_geometries.clear();
+        self.textures.clear();
+        self.instance_buffer = None;
+        let _ = self.device.poll(wgpu::PollType::Poll);
+    }
+
     /// Frees what the next frame makes again at no visible cost: the render targets, the readback
     /// buffer and the shadow maps.
     pub fn release_targets(&mut self) {
@@ -934,7 +943,7 @@ impl Renderer {
 
     fn sync_geometry(
         &mut self,
-        geometry: &Geometry,
+        geometry: &Arc<Geometry>,
         primitives: Primitives,
         used: &mut HashSet<(u64, Primitives)>,
     ) {
@@ -948,6 +957,7 @@ impl Renderer {
             );
             self.uploaded += gpu.size();
             self.geometries.insert(key, gpu);
+            geometry.spool_later();
             if self.uploaded >= UPLOAD_BATCH {
                 self.uploaded = 0;
                 self.queue.submit([]);
@@ -1933,7 +1943,7 @@ fn upload_geometry(
     geometry: &Geometry,
     provoking_last: Option<Primitives>,
 ) -> GpuGeometry {
-    let g = &geometry.geometry;
+    let g = geometry.data();
     let position = g.attribute("position");
     let count = position.map_or(0, BufferAttribute::count);
     let init = |contents: &[u8], usage: wgpu::BufferUsages| {

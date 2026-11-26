@@ -338,8 +338,9 @@ fn fat_lines_take_the_viewport_size_as_resolution() {
 fn grid_helper_matches_three() {
     let grid = Line::grid_helper(3.6576, 6.0, Color::hex(8947848.0), Color::hex(4473924.0));
     assert!(grid.segments && grid.material.vertex_colors);
-    let positions = grid.geometry.geometry.attribute("position").unwrap();
-    let colors = grid.geometry.geometry.attribute("color").unwrap();
+    let data = grid.geometry.data();
+    let positions = data.attribute("position").unwrap();
+    let colors = data.attribute("color").unwrap();
     assert_eq!((positions.count(), colors.count()), (28, 28));
     let half = 3.6576f64 / 2.0;
     assert_eq!(positions.get_component(0, 0), (-half as f32) as f64);
@@ -356,7 +357,7 @@ fn material_arrays_draw_one_group_per_visible_material() {
     let mut scene = Scene::new();
     let root = scene.root;
     let geometry = Geometry::new(primitives::box_geometry(1.0, 1.0, 1.0, 1.0, 1.0, 1.0));
-    let groups = geometry.geometry.groups.clone();
+    let groups = geometry.groups().to_vec();
     assert_eq!(groups.len(), 6);
     let opaque = Arc::new(PhongMaterial::new());
     let hidden = Arc::new(PhongMaterial {

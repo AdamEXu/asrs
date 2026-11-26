@@ -463,20 +463,73 @@ fn released_targets_come_back_with_the_same_pixels() {
     };
     let before = present();
     assert!(thread.holds_targets());
+    thread.release_after(Duration::ZERO);
+    for _ in 0..1000 {
+        if !thread.holds_targets() && !thread.holds_models() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(!thread.holds_targets() && !thread.holds_models());
+    assert_eq!(before, present());
     thread.release_after(Duration::from_secs(3600));
     assert_eq!(before, present());
     assert!(thread.holds_targets());
     thread.release_after(Duration::from_secs(3600));
     thread.cancel_release();
-    thread.release_after(Duration::ZERO);
-    for _ in 0..1000 {
-        if !thread.holds_targets() {
+}
+
+fn sphere() -> BufferGeometry {
+    primitives::sphere_geometry(
+        1.5,
+        128.0,
+        128.0,
+        0.0,
+        std::f64::consts::TAU,
+        0.0,
+        std::f64::consts::PI,
+    )
+}
+
+#[test]
+fn an_uploaded_model_leaves_memory_and_draws_the_same_from_its_spool() {
+    let Some(mut renderer) = renderer() else {
+        return;
+    };
+    let geometry = Geometry::new(sphere());
+    let small = Geometry::new(primitives::box_geometry(1.0, 1.0, 1.0, 1.0, 1.0, 1.0));
+    let mut scene = Scene::new();
+    let root = scene.root;
+    scene.add_hemisphere_light(root, Color::hex(16777215.0), Color::hex(4473924.0), 2.0);
+    scene.add_mesh(
+        root,
+        Mesh::new(geometry.clone(), Arc::new(PhongMaterial::new())),
+    );
+    let small_id = scene.add_mesh(
+        root,
+        Mesh::new(small.clone(), Arc::new(PhongMaterial::new())),
+    );
+    scene.graph.object_mut(small_id).position = Vector3::new(2.0, 0.0, 0.0);
+    let (_, mut camera) = scene_with_box_at(0.0);
+    let options = FrameOptions::new(f64::from(W), f64::from(H), 1.0, true);
+    let frame = build_frame(&mut scene, &mut camera, options);
+    let mut before = Vec::new();
+    renderer.render(&frame, &mut before).expect("rendered");
+    for _ in 0..2000 {
+        if !geometry.is_in_memory() {
             break;
         }
         std::thread::sleep(Duration::from_millis(10));
     }
-    assert!(!thread.holds_targets());
-    assert_eq!(before, present());
+    assert!(!geometry.is_in_memory());
+    assert!(small.is_in_memory());
+    assert_eq!(*geometry.data(), sphere());
+    let mut after = Vec::new();
+    Renderer::new()
+        .expect("a second device")
+        .render(&frame, &mut after)
+        .expect("rendered");
+    assert_eq!(before, after);
 }
 
 #[test]

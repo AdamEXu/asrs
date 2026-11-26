@@ -14,6 +14,7 @@ mod gl_clip;
 mod gpu;
 mod mixed;
 mod scene;
+mod spool;
 mod thread;
 
 pub use edges::edge_mask;

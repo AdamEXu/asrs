@@ -208,9 +208,7 @@ fn field_nodes(scene: &mut Scene, root: ObjectId) -> Result<Vec<Value>> {
                         mesh.receive_shadow,
                         Value::Array(vec![
                             num(geometry_ranks[&mesh.geometry.key()] as f64),
-                            Value::string(&fnv1a64(
-                                &geometry_tree(&mesh.geometry.geometry).encode(),
-                            )),
+                            Value::string(&fnv1a64(&geometry_tree(&mesh.geometry.data()).encode())),
                         ]),
                         phong(m, material_ranks[&m.id]),
                     )
@@ -225,7 +223,7 @@ fn field_nodes(scene: &mut Scene, root: ObjectId) -> Result<Vec<Value>> {
                     false,
                     Value::Array(vec![
                         num(geometry_ranks[&line.geometry.key()] as f64),
-                        Value::string(&fnv1a64(&geometry_tree(&line.geometry.geometry).encode())),
+                        Value::string(&fnv1a64(&geometry_tree(&line.geometry.data()).encode())),
                     ]),
                     line_basic(&line.material, material_ranks[&line.material.id]),
                 ),

@@ -477,8 +477,8 @@ mod body {
         page.select(TabType::Field3d);
         page.settle();
         let frame = page.frame.clone();
-        let targets = |page: &Page| page.cx.read(|cx| frame.read(cx).field3d_holds_targets());
-        let wait = |page: &mut Page, expected: Option<bool>, what: &str| {
+        let targets = |page: &Page| page.cx.read(|cx| frame.read(cx).field3d_holds());
+        let wait = |page: &mut Page, expected: Option<(bool, bool)>, what: &str| {
             let deadline = std::time::Instant::now() + RELEASE_GRACE * 3;
             while std::time::Instant::now() < deadline {
                 page.frames(2);
@@ -493,7 +493,7 @@ mod body {
             eprintln!("skipping: no 3D renderer");
             return;
         }
-        wait(&mut page, Some(true), "shown");
+        wait(&mut page, Some((true, true)), "shown");
         page.message(MainToHub::MoveTab, JsValue::Number(-1.0));
         page.frames(2);
         page.message(MainToHub::MoveTab, JsValue::Number(1.0));
@@ -502,11 +502,15 @@ mod body {
             page.frames(2);
             std::thread::sleep(Duration::from_millis(10));
         }
-        assert_eq!(targets(&page), Some(true), "back within the grace period");
+        assert_eq!(
+            targets(&page),
+            Some((true, true)),
+            "back within the grace period"
+        );
         page.message(MainToHub::MoveTab, JsValue::Number(-1.0));
         page.frames(2);
-        assert_eq!(targets(&page), Some(true), "just left");
-        wait(&mut page, Some(false), "left for a while");
+        assert_eq!(targets(&page), Some((true, true)), "just left");
+        wait(&mut page, Some((false, false)), "left for a while");
         page.message(MainToHub::MoveTab, JsValue::Number(1.0));
         page.settle();
         page.message(MainToHub::CloseTab, JsValue::Bool(true));
