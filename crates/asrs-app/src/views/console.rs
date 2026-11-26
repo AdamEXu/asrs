@@ -422,7 +422,9 @@ impl Rows<'_> {
             .map_or(0, |(s, _)| s.colors.background);
         let mut layer = layer;
         for (_, _, rect) in selection.iter().filter(|(_, piece, _)| piece.is_none()) {
-            layer = layer.child(self.grid.place(*rect).bg(rgba(selected)));
+            layer = layer.child(text::selection_background(
+                self.grid.place(*rect).bg(rgba(selected)),
+            ));
         }
         let mut behind = selection.iter().filter(|(_, piece, _)| piece.is_some());
         let mut behind_next = behind.next();
@@ -467,7 +469,8 @@ impl Rows<'_> {
             }
             if let Some(rect) = selected_rect {
                 let color = blend(selected >> 8) << 8 | selected & 0xff;
-                layer = layer.child(self.grid.place(rect).bg(rgba(color)));
+                let highlight = self.grid.place(rect).bg(rgba(color));
+                layer = layer.child(text::selection_background(highlight));
             }
             // Underlines take the colour of the box that has the decoration, outside the highlight.
             let decoration = if *link {

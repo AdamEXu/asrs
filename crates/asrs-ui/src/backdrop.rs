@@ -74,7 +74,7 @@ struct Known {
 pub struct Backdrop {
     seen: usize,
     known: Vec<Known>,
-    own: Vec<Range<usize>>,
+    own: Vec<(Range<usize>, bool)>,
     items: Vec<Item>,
     bands: Vec<Vec<u32>>,
 }
@@ -113,28 +113,30 @@ impl Backdrop {
         self.known.push(Known { range, fill });
     }
 
-    /// Marks what the scene paints from `start` on as an element's own background, until
-    /// [`Backdrop::own_until`] with the returned mark.
-    pub fn own_from(&mut self, start: usize) -> usize {
-        self.own.push(start..usize::MAX);
+    /// Marks what the scene paints from `start` on as an element's own background or, if not
+    /// `own`, as not one even inside such a mark, until [`Backdrop::own_until`] with the returned
+    /// mark.
+    pub fn own_from(&mut self, start: usize, own: bool) -> usize {
+        self.own.push((start..usize::MAX, own));
         self.own.len() - 1
     }
 
     pub fn own_until(&mut self, mark: usize, end: usize) {
-        if let Some(range) = self.own.get_mut(mark) {
+        if let Some((range, _)) = self.own.get_mut(mark) {
             range.end = end;
         }
     }
 
     fn is_own(&self, at: usize) -> bool {
-        self.own.iter().any(|range| range.contains(&at))
+        let innermost = self.own.iter().rev().find(|(range, _)| range.contains(&at));
+        innermost.is_some_and(|&(_, own)| own)
     }
 
     fn take(&mut self, scene: &Scene, range: Range<usize>) {
         let mut at = range.start;
         while at < range.end {
             let next = (self.own.iter())
-                .flat_map(|own| [own.start, own.end])
+                .flat_map(|(own, _)| [own.start, own.end])
                 .filter(|&bound| bound > at)
                 .fold(range.end, usize::min);
             let own = self.is_own(at);
@@ -586,10 +588,10 @@ mod tests {
         let mut scene = Scene::default();
         let mut backdrop = Backdrop::default();
         scene.insert_primitive(page());
-        let mark = backdrop.own_from(scene.len());
+        let mark = backdrop.own_from(scene.len(), true);
         scene.insert_primitive(quad([90, 100, 130, 130], rgb(0xaaaaaa)));
         backdrop.own_until(mark, scene.len());
-        let open = backdrop.own_from(scene.len());
+        let open = backdrop.own_from(scene.len(), true);
         scene.insert_primitive(quad([500, 100, 600, 130], rgb(0x3399ff)));
         backdrop.read(&scene);
         let inside = [100, 110, 120, 124];
@@ -604,6 +606,15 @@ mod tests {
             backdrop.regions(later, true),
             Some(vec![(later, [0x33, 0x99, 0xff])])
         );
+        let outer = backdrop.own_from(scene.len(), true);
+        let inner = backdrop.own_from(scene.len(), false);
+        scene.insert_primitive(quad([700, 100, 800, 130], rgb(0x3399ff)));
+        backdrop.own_until(inner, scene.len());
+        backdrop.own_until(outer, scene.len());
+        backdrop.read(&scene);
+        let selected = [710, 110, 760, 124];
+        assert_eq!(backdrop.regions(selected, true), None);
+        assert!(backdrop.regions(selected, false).is_some());
         backdrop.own_until(open, scene.len());
         scene.insert_primitive(quad([0, 100, 1000, 130], rgba(0xffffff80)));
         backdrop.read(&scene);

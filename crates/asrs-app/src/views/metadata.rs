@@ -233,9 +233,8 @@ fn table_element(
         }
     }
     let container = [x, y, rect[2], px(placed.height)];
-    let scrolls = px(placed.height) > height;
     let layer = layer.child(probed(".metadata-table-container", grid.place(container)));
-    opaque_background(scrolls, layer).into_any_element()
+    opaque_background(false, layer).into_any_element()
 }
 
 impl<H: FrameHost> HubFrame<H> {

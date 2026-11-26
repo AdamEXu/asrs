@@ -203,7 +203,7 @@ impl TextSystem {
                     own = true;
                     composited |= always;
                 }
-                Layer::Page | Layer::Faded(_) => {}
+                Layer::Page | Layer::Faded(_) | Layer::Selection => {}
             }
         }
         if own && composited {
@@ -454,19 +454,21 @@ enum Layer {
     Faded(f32),
     /// An [`opaque_background`], `true` where it is composited at any scale.
     Own(bool),
+    /// A [`selection_background`].
+    Selection,
 }
 
 impl Layer {
     fn opacity(self) -> f32 {
         match self {
             Layer::Faded(opacity) => opacity,
-            Layer::Page | Layer::Always | Layer::Scroller | Layer::Own(_) => 1.0,
+            Layer::Page | Layer::Always | Layer::Scroller | Layer::Own(_) | Layer::Selection => 1.0,
         }
     }
 
     fn grayscale(self, scale: f32) -> bool {
         match self {
-            Layer::Page | Layer::Faded(_) | Layer::Own(_) => false,
+            Layer::Page | Layer::Faded(_) | Layer::Own(_) | Layer::Selection => false,
             Layer::Always => true,
             Layer::Scroller => scale >= PREFER_COMPOSITING,
         }
@@ -507,6 +509,15 @@ pub fn scroller(overflows: bool, child: impl IntoElement) -> TextLayer {
 pub fn opaque_background(composited: bool, child: impl IntoElement) -> TextLayer {
     TextLayer {
         layer: Layer::Own(composited),
+        child: child.into_any_element(),
+    }
+}
+
+/// A text selection's highlight: Chromium paints it with the text, not as a background, so text
+/// on it is not over an [`opaque_background`].
+pub fn selection_background(child: impl IntoElement) -> TextLayer {
+    TextLayer {
+        layer: Layer::Selection,
         child: child.into_any_element(),
     }
 }
@@ -574,13 +585,12 @@ impl Element for TextLayer {
         let system = cx.default_global::<TextSystem>();
         system.layers.push(self.layer);
         let start = window.painted_scene().len();
-        let own = matches!(self.layer, Layer::Own(_))
-            .then(|| {
-                system
-                    .backdrop(window)
-                    .map(|backdrop| backdrop.own_from(start))
-            })
-            .flatten();
+        let own = match self.layer {
+            Layer::Own(_) => Some(true),
+            Layer::Selection => Some(false),
+            _ => None,
+        };
+        let own = own.and_then(|own| Some(system.backdrop(window)?.own_from(start, own)));
         let opacity = matches!(self.layer, Layer::Faded(_)).then(|| self.layer.opacity());
         window.with_element_opacity(opacity, |window| self.child.paint(window, cx));
         let system = cx.default_global::<TextSystem>();
