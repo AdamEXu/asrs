@@ -215,7 +215,7 @@ pub fn warp_cursor(x: f64, y: f64) {
 pub fn foreground_window() -> Option<u32> {
     // SAFETY: no preconditions.
     let hwnd = unsafe { GetForegroundWindow() };
-    (!hwnd.is_invalid()).then(|| hwnd.0 as usize as u32)
+    (!hwnd.is_invalid()).then_some(hwnd.0 as usize as u32)
 }
 
 pub fn cursor_location() -> (f64, f64) {
