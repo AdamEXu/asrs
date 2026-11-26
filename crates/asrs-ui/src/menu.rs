@@ -373,7 +373,7 @@ impl MenuView {
         let options = WindowOptions {
             window_bounds: Some(WindowBounds::Windowed(bounds)),
             titlebar: None,
-            focus: true,
+            focus: !cfg!(windows),
             show: true,
             kind,
             window_background: WindowBackgroundAppearance::Transparent,
@@ -1015,6 +1015,30 @@ impl Render for MenuView {
             .child(body)
             .children(submenu)
     }
+}
+
+/// The focus stays in the window the menu popped up for, as it does under Chromium's menus, so
+/// its keys go to the menu.
+#[cfg(any(target_os = "linux", windows))]
+pub(crate) fn intercept_keys(view: &Entity<MenuView>, cx: &mut App) -> Subscription {
+    let view = view.downgrade();
+    cx.intercept_keystrokes(move |event, window, cx| {
+        let Some(view) = view.upgrade() else {
+            return;
+        };
+        let view = view.read(cx);
+        if view.owns_window(window.window_handle(), cx) {
+            return;
+        }
+        if let Some(menu) = view.innermost_window(cx) {
+            let keystroke = event.keystroke.clone();
+            cx.defer(move |cx| {
+                menu.update(cx, |_, window, cx| window.dispatch_keystroke(keystroke, cx))
+                    .ok();
+            });
+        }
+        cx.stop_propagation();
+    })
 }
 
 /// A window's contents, in which a press closes the menu open for the window and does nothing

@@ -11,7 +11,7 @@
 
 #[cfg(windows)]
 mod desktop {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
     use std::io::{BufRead, BufReader, Write as _};
     use std::net::{TcpListener, TcpStream};
     use std::path::{Path, PathBuf};
@@ -36,7 +36,7 @@ mod desktop {
     use asrs_services::windows::WindowSystem;
     use asrs_ui::gpui::{
         AnyWindowHandle, App, AppContext, AsyncApp, Context, Entity, InteractiveElement,
-        IntoElement, Render, ScrollEvent, Styled, Window, div, px, size,
+        IntoElement, MouseButton, Render, ScrollEvent, Styled, Window, div, px, size,
     };
     use asrs_ui::platform::probe::{self, MouseAction, WheelSample};
     use asrs_ui::platform::{
@@ -57,6 +57,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "App", submenu: [{ label: "Item" }] }]));
   const parent = new BrowserWindow({ x: 60, y: 420, width: 1100, height: 650 });
   let win = null;
+  let blurs = 0;
   out("ready " + process.versions.electron);
   readline.createInterface({ input: socket }).on("line", async (line) => {
     const request = JSON.parse(line);
@@ -101,6 +102,20 @@ app.whenReady().then(() => {
       win.focus();
       await wait(600);
       out("focused");
+    } else if (request.op === "select") {
+      win = new BrowserWindow({ x: 300, y: 300, width: 400, height: 300, show: false });
+      win.setMenu(null);
+      blurs = 0;
+      win.on("blur", () => blurs++);
+      win.once("ready-to-show", () => win.show());
+      const page = "<body style='margin:0'><select style='position:absolute;left:20px;top:20px;width:200px;height:22px'><option>A</option><option>B</option><option>C</option></select>";
+      await win.loadURL("data:text/html," + encodeURIComponent(page));
+      await wait(900);
+      win.focus();
+      await wait(600);
+      out("select " + JSON.stringify([id(win)]));
+    } else if (request.op === "blurs") {
+      out("blurs " + JSON.stringify([blurs]));
     } else if (request.op === "close") {
       win.destroy();
       await wait(300);
@@ -210,13 +225,18 @@ app.whenReady().then(() => {
     #[derive(Default)]
     struct Blank {
         wheel: WheelLog,
+        presses: Rc<Cell<usize>>,
     }
 
     impl Render for Blank {
         fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
             let wheel = self.wheel.clone();
+            let presses = self.presses.clone();
             div()
                 .size_full()
+                .on_mouse_down(MouseButton::Left, move |_, _, _| {
+                    presses.set(presses.get() + 1);
+                })
                 .on_scroll(move |event: &ScrollEvent, _, _| {
                     let delta = platform::wheel_delta(event);
                     wheel
@@ -1016,8 +1036,41 @@ app.whenReady().then(() => {
         .expect("window");
     }
 
-    /// The drawn select list: below its control, with keys, and closed by a press outside.
-    async fn lists(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
+    /// Whether Electron's window keeps the activation, and is never blurred, while its select's
+    /// list is open.
+    async fn electron_list(cx: &mut AsyncApp, electron: &Electron) -> (bool, usize) {
+        let opened = electron.numbers(cx, r#"{"op":"select"}"#, "select ").await;
+        let number = opened[0] as u32;
+        let [_, client] = probe::rects(number).expect("rects");
+        click(
+            cx,
+            (f64::from(client[0]) + 120.0, f64::from(client[1]) + 31.0),
+        )
+        .await;
+        sleep(cx, 1000).await;
+        let kept = probe::foreground_window() == Some(number);
+        let blurs = electron.numbers(cx, r#"{"op":"blurs"}"#, "blurs ").await;
+        probe::post_keys(&[ESCAPE]);
+        sleep(cx, 400).await;
+        electron.request(cx, r#"{"op":"close"}"#, "closed").await;
+        (kept, blurs[0] as usize)
+    }
+
+    /// The drawn select list: below its control, with keys, closed by a press outside, which the
+    /// window still gets, and the window keeping the activation while it is open, as Electron's
+    /// does.
+    async fn lists(
+        cx: &mut AsyncApp,
+        electron: &Electron,
+        report: &mut Report,
+        (hub, view): (WindowId, &Entity<Blank>),
+    ) {
+        let (electron_kept, electron_blurs) = electron_list(cx, electron).await;
+        report.check(
+            "select list: Electron's window keeps the activation",
+            electron_kept && electron_blurs == 0,
+            format!("foreground {electron_kept}, {electron_blurs} blur events"),
+        );
         let handle = handle_of(cx, hub);
         with_window(cx, handle, |w| w.activate_window());
         sleep(cx, 800).await;
@@ -1041,6 +1094,13 @@ app.whenReady().then(() => {
             let list = windows.into_iter().find(|w| *w != handle);
             let open = cx.update(|cx| cx.windows().len()) == others + 1;
             report.check(&format!("select list, {name}: opens"), open, "");
+            let active = with_window(cx, handle, |w| w.is_window_active());
+            let kept = probe::foreground_window() == Some(number);
+            report.check(
+                &format!("select list, {name}: the window keeps the activation"),
+                active && kept,
+                format!("active {active}, foreground {kept}"),
+            );
             if let Some(list) = list.filter(|_| others == 1) {
                 let bounds = with_window(cx, list, |w| platform::window_bounds(w));
                 let placed =
@@ -1055,12 +1115,21 @@ app.whenReady().then(() => {
                 probe::post_keys(&[*key]);
                 sleep(cx, 400).await;
             }
+            let presses = cx.update(|cx| view.read(cx).presses.get());
             if keys.is_empty() {
                 click(cx, (x + 700.0, y + 500.0)).await;
             }
             sleep(cx, 1000).await;
             let got = chosen.take();
             let left = cx.update(|cx| cx.windows().len());
+            if keys.is_empty() {
+                let pressed = cx.update(|cx| view.read(cx).presses.get()) - presses;
+                report.check(
+                    "select list, a press outside: the window gets it too",
+                    pressed == 1,
+                    format!("{pressed} presses"),
+                );
+            }
             report.check(
                 &format!("select list, {name}"),
                 got == [want] && left == others,
@@ -1229,14 +1298,13 @@ app.whenReady().then(() => {
                 let version = electron.reply(cx, "ready ").await;
                 let mut report = Report::default();
                 report.check("Electron is upstream's", version == "39.2.7", &version);
-                let hub = cx
+                let (hub, hub_view) = cx
                     .update(|cx| windows::open_hub(cx, None, blank))
-                    .expect("hub")
-                    .0;
+                    .expect("hub");
                 sleep(cx, 1500).await;
                 captions(cx, &electron, &mut report).await;
                 menus(cx, &mut report, hub).await;
-                lists(cx, &mut report, hub).await;
+                lists(cx, &electron, &mut report, (hub, &hub_view)).await;
                 accelerators(cx, &mut report, hub).await;
                 wheel(cx, &electron, &mut report).await;
                 aspects(cx, &electron, &mut report).await;

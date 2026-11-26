@@ -214,7 +214,7 @@ fn show(
                 })
                 .ok();
         }
-        let keys = intercept_keys(&view, cx);
+        let keys = crate::menu::intercept_keys(&view, cx);
         let parent_closed = cx.on_window_closed(move |_, closed| {
             if closed == parent.window_id() {
                 close_open_popup();
@@ -230,29 +230,6 @@ fn show(
             _parent_closed: parent_closed,
         }));
     });
-}
-
-/// The focus stays in the window the menu popped up for, as it does under Chromium's menus, so
-/// its keys go to the menu.
-fn intercept_keys(view: &gpui_kit::Entity<MenuView>, cx: &mut App) -> Subscription {
-    let view = view.downgrade();
-    cx.intercept_keystrokes(move |event, window, cx| {
-        let Some(view) = view.upgrade() else {
-            return;
-        };
-        let view = view.read(cx);
-        if view.owns_window(handle_of(window), cx) {
-            return;
-        }
-        if let Some(menu) = view.innermost_window(cx) {
-            let keystroke = event.keystroke.clone();
-            cx.defer(move |cx| {
-                menu.update(cx, |_, window, cx| window.dispatch_keystroke(keystroke, cx))
-                    .ok();
-            });
-        }
-        cx.stop_propagation();
-    })
 }
 
 fn close_open_popup() {
