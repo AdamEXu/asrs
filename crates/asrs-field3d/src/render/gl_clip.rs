@@ -177,6 +177,7 @@ pub(super) fn open(
 }
 
 /// The Vulkan loader's version, with its patch number (`vkEnumerateInstanceVersion`).
+#[cfg(target_os = "linux")]
 pub(super) fn loader_version() -> Option<u32> {
     let entry = unsafe { ash::Entry::load() }.ok()?;
     unsafe { entry.try_enumerate_instance_version() }.ok()?
