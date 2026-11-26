@@ -24,7 +24,7 @@ pub fn titled_content_size(width: f64, height: f64, scale: f64) -> (f64, f64) {
 }
 
 /// How much larger a titled, resizable window's bounds are than its content on a display at
-/// `scale`, in its px.
+/// `scale`: Windows' frame, which Electron leaves out in whole logical px.
 pub fn titled_frame(scale: f64) -> (f64, f64) {
     use windows::Win32::UI::HiDpi::AdjustWindowRectExForDpi;
     use windows::Win32::UI::WindowsAndMessaging::{WINDOW_EX_STYLE, WS_OVERLAPPEDWINDOW};
@@ -40,10 +40,10 @@ pub fn titled_frame(scale: f64) -> (f64, f64) {
             dpi,
         )
     };
-    let device = |v: i32| f64::from(v) / scale;
+    let logical = |v: i32| (f64::from(v) / scale).floor();
     (
-        device(rect.right - rect.left),
-        device(rect.bottom - rect.top),
+        logical(rect.right - rect.left),
+        logical(rect.bottom - rect.top),
     )
 }
 
