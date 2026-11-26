@@ -919,9 +919,21 @@ impl<H: FrameHost> HubFrame<H> {
         self.field3d_present(hidden, waker, window, cx);
     }
 
-    /// With the last 3D tab gone, so are the render thread and its device, off the UI thread.
+    /// With the last 3D tab gone, so are the render thread and its device, off the UI thread,
+    /// unless the device has to stay: then only its large resources go.
     fn field3d_close(&mut self, cx: &mut Context<'_, Self>) {
         let views = self.field3d();
+        if asrs_field3d::render::keep_device() {
+            views.queued = None;
+            views.in_flight = None;
+            if !views.released
+                && let Some(Ok(thread)) = &views.thread
+            {
+                views.released = true;
+                thread.release_after(Duration::ZERO);
+            }
+            return;
+        }
         views.queued = None;
         views.in_flight = None;
         views.wake = None;

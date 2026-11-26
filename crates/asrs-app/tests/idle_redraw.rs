@@ -514,7 +514,12 @@ mod body {
         page.message(MainToHub::MoveTab, JsValue::Number(1.0));
         page.settle();
         page.message(MainToHub::CloseTab, JsValue::Bool(true));
-        wait(&mut page, None, "closed");
+        let closed = if asrs_field3d::render::keep_device() {
+            Some(false)
+        } else {
+            None
+        };
+        wait(&mut page, closed, "closed");
     }
 
     pub fn hidden() {
