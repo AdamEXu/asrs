@@ -241,16 +241,27 @@ app.whenReady().then(() => {
     struct Blank {
         wheel: WheelLog,
         presses: Rc<Cell<usize>>,
+        replacement_enabled: Rc<Cell<bool>>,
+        replacement: Rc<RefCell<Vec<Option<usize>>>>,
     }
 
     impl Render for Blank {
         fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
             let wheel = self.wheel.clone();
             let presses = self.presses.clone();
+            let replacement_enabled = self.replacement_enabled.clone();
+            let replacement = self.replacement.clone();
             div()
                 .size_full()
-                .on_mouse_down(MouseButton::Left, move |_, _, _| {
+                .on_mouse_down(MouseButton::Left, move |event, window, cx| {
                     presses.set(presses.get() + 1);
+                    let [x, y] = [event.position.x, event.position.y].map(|v| f32::from(v));
+                    if replacement_enabled.get()
+                        && (400.0..600.0).contains(&x)
+                        && (120.0..142.0).contains(&y)
+                    {
+                        open_list_now(window, cx, [400.0, 120.0, 200.0, 22.0], &replacement);
+                    }
                 })
                 .on_scroll(move |event: &ScrollEvent, _, _| {
                     let delta = platform::wheel_delta(event);
@@ -1022,30 +1033,42 @@ app.whenReady().then(() => {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    fn open_list(
-        cx: &mut AsyncApp,
-        handle: AnyWindowHandle,
-        chosen: &Rc<RefCell<Vec<Option<usize>>>>,
-    ) {
+    fn list_menu() -> SelectMenu {
         let items = (0..30).map(|i| SelectMenuItem {
             label: format!("Option {i}"),
             kind: SelectMenuItemKind::Option,
             enabled: true,
             tool_tip: String::new(),
         });
-        let menu = SelectMenu {
+        SelectMenu {
             items: items.collect(),
             font_size: 13.0,
             selected: Some(10),
             right_aligned: false,
-        };
+        }
+    }
+
+    fn open_list_now(
+        window: &mut Window,
+        cx: &mut App,
+        at: [f64; 4],
+        chosen: &Rc<RefCell<Vec<Option<usize>>>>,
+    ) {
         let sink = chosen.clone();
+        platform::select_popup(window, cx, list_menu(), at, move |row, _| {
+            sink.borrow_mut().push(row);
+        });
+    }
+
+    fn open_list(
+        cx: &mut AsyncApp,
+        handle: AnyWindowHandle,
+        chosen: &Rc<RefCell<Vec<Option<usize>>>>,
+    ) {
+        let chosen = chosen.clone();
         cx.update(|cx| {
             handle.update(cx, |_, window, cx| {
-                let at = [100.0, 120.0, 200.0, 22.0];
-                platform::select_popup(window, cx, menu, at, move |row, _| {
-                    sink.borrow_mut().push(row);
-                });
+                open_list_now(window, cx, [100.0, 120.0, 200.0, 22.0], &chosen);
             })
         })
         .expect("window");
@@ -1093,7 +1116,7 @@ app.whenReady().then(() => {
         let number = with_window(cx, handle, |w| probe::window_number(w)).expect("window id");
         let [_, client] = probe::rects(number).expect("rects");
         let (x, y) = (f64::from(client[0]), f64::from(client[1]));
-        let chosen: Rc<RefCell<Vec<Option<usize>>>> = Rc::default();
+        let chosen = cx.update(|cx| view.read(cx).replacement.clone());
         for (name, keys, want) in [
             ("keys choose an option", &[DOWN, DOWN, RETURN][..], Some(12)),
             (
@@ -1151,6 +1174,27 @@ app.whenReady().then(() => {
                 format!("{got:?}, {left} windows left of {others}"),
             );
         }
+        cx.update(|cx| view.update(cx, |view, _| view.replacement_enabled.set(true)));
+        open_list(cx, handle, &chosen);
+        sleep(cx, 1500).await;
+        click(cx, (x + 410.0, y + 131.0)).await;
+        sleep(cx, 1000).await;
+        cx.update(|cx| view.update(cx, |view, _| view.replacement_enabled.set(false)));
+        let left = cx.update(|cx| cx.windows().len());
+        report.check(
+            "select list, a press on another select leaves the new list open",
+            left == others + 1,
+            format!("{left} windows left of {}", others + 1),
+        );
+        probe::post_keys(&[ESCAPE]);
+        sleep(cx, 1000).await;
+        let got = chosen.take();
+        let left = cx.update(|cx| cx.windows().len());
+        report.check(
+            "select list, a press on another select cancels the replaced list",
+            got == [None, None] && left == others,
+            format!("{got:?}, {left} windows left of {others}"),
+        );
         let rect = Rect {
             x: 2200.0,
             y: 200.0,
