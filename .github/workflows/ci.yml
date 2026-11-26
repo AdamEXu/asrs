@@ -100,12 +100,18 @@ jobs:
             libxrandr-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
             libfontconfig-dev libfreetype-dev \
             libvulkan-dev mesa-vulkan-drivers libgtk-3-dev libwebkit2gtk-4.1-dev
+      # ubuntu-latest moves between images, and a loader built against a newer glibc fails to load
+      # on an older one, so the key names the image the loader was built on.
+      - name: Identify the runner image
+        id: image
+        if: runner.os == 'Linux'
+        run: . /etc/os-release && echo "id=$ID-$VERSION_ID-$(uname -m)" >> "$GITHUB_OUTPUT"
       - name: Cache the fixed Vulkan loader
         if: runner.os == 'Linux'
         uses: actions/cache@v4
         with:
           path: ~/.cache/asrs-vulkan-loader
-          key: vulkan-loader-${{ env.VULKAN_LOADER_VERSION }}-${{ matrix.os }}-${{ hashFiles('.github/scripts/install-vulkan-loader.sh') }}
+          key: vulkan-loader-${{ env.VULKAN_LOADER_VERSION }}-${{ steps.image.outputs.id }}-${{ hashFiles('.github/scripts/install-vulkan-loader.sh') }}
       - name: Install the fixed Vulkan loader
         if: runner.os == 'Linux'
         run: |
@@ -194,23 +200,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            cmake curl ca-certificates pkg-config libx11-dev libx11-xcb-dev libxcb1-dev \
-            libxrandr-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
-            libfontconfig-dev libfreetype-dev \
+            pkg-config libx11-dev libx11-xcb-dev libxcb1-dev libxkbcommon-dev \
+            libxkbcommon-x11-dev libwayland-dev libfontconfig-dev libfreetype-dev \
             libvulkan-dev mesa-vulkan-drivers libgtk-3-dev libwebkit2gtk-4.1-dev \
             squashfs-tools xvfb xauth x11-utils desktop-file-utils libglib2.0-bin \
             shared-mime-info xdg-utils fonts-dejavu-core
-      - name: Cache the fixed Vulkan loader
-        if: runner.os == 'Linux'
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/asrs-vulkan-loader
-          key: vulkan-loader-${{ env.VULKAN_LOADER_VERSION }}-${{ matrix.package_os }}-${{ hashFiles('.github/scripts/install-vulkan-loader.sh') }}
-      - name: Install the fixed Vulkan loader
-        if: runner.os == 'Linux'
-        run: |
-          .github/scripts/install-vulkan-loader.sh "$HOME/.cache/asrs-vulkan-loader"
-          echo "LD_LIBRARY_PATH=$HOME/.cache/asrs-vulkan-loader/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
         with:
