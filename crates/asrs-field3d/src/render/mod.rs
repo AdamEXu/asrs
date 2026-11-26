@@ -36,3 +36,38 @@ pub fn swap_red_blue(pixels: &mut [u8]) {
         p.swap(0, 2);
     }
 }
+
+/// Whether the 3D device has to live as long as the app. Vulkan loaders before 1.4.345 can
+/// crash when one device is destroyed while another thread walks the device list, which GPUI's
+/// own device does on every swapchain change (KhronosGroup/Vulkan-Loader@5ee27b30).
+pub fn keep_device() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        static KEEP: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+        *KEEP.get_or_init(|| loader_needs_device_kept(gl_clip::loader_version()))
+    }
+    #[cfg(not(target_os = "linux"))]
+    false
+}
+
+/// Whether a Vulkan loader of `version` (`vkEnumerateInstanceVersion`) has the bug.
+pub fn loader_needs_device_kept(version: Option<u32>) -> bool {
+    const FIXED: u32 = (1 << 22) | (4 << 12) | 345;
+    version.is_some_and(|v| v < FIXED)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::loader_needs_device_kept;
+
+    #[test]
+    fn loaders_before_1_4_345_keep_the_device() {
+        let version = |minor: u32, patch: u32| Some((1 << 22) | (minor << 12) | patch);
+        assert!(loader_needs_device_kept(version(3, 204)));
+        assert!(loader_needs_device_kept(version(3, 275)));
+        assert!(loader_needs_device_kept(version(4, 344)));
+        assert!(!loader_needs_device_kept(version(4, 345)));
+        assert!(!loader_needs_device_kept(version(4, 363)));
+        assert!(!loader_needs_device_kept(None));
+    }
+}

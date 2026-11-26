@@ -175,3 +175,10 @@ pub(super) fn open(
     // SAFETY: `open` was made from this adapter with the features of `desc`.
     unsafe { adapter.create_device_from_hal::<vulkan::Api>(open, desc) }.ok()
 }
+
+/// The Vulkan loader's version, with its patch number (`vkEnumerateInstanceVersion`).
+#[cfg(target_os = "linux")]
+pub(super) fn loader_version() -> Option<u32> {
+    let entry = unsafe { ash::Entry::load() }.ok()?;
+    unsafe { entry.try_enumerate_instance_version() }.ok()?
+}
