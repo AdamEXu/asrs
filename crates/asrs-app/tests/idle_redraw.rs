@@ -16,6 +16,7 @@ use std::time::Duration;
 use asrs_app::hub::{Hub, HubEvent};
 use asrs_app::main_process::{self, MainProcess, SatelliteConfig};
 use asrs_app::satellite::Satellite;
+use asrs_app::views::field3d::RELEASE_GRACE;
 use asrs_app::views::frame::HubFrame;
 use asrs_app::views::hub_host::HubEntityHost;
 use asrs_app::windows::{self, WindowId, Windows};
@@ -478,7 +479,8 @@ mod body {
         let frame = page.frame.clone();
         let targets = |page: &Page| page.cx.read(|cx| frame.read(cx).field3d_holds_targets());
         let wait = |page: &mut Page, expected: Option<bool>, what: &str| {
-            for _ in 0..200 {
+            let deadline = std::time::Instant::now() + RELEASE_GRACE * 3;
+            while std::time::Instant::now() < deadline {
                 page.frames(2);
                 if targets(page) == expected {
                     return;
@@ -493,7 +495,18 @@ mod body {
         }
         wait(&mut page, Some(true), "shown");
         page.message(MainToHub::MoveTab, JsValue::Number(-1.0));
-        wait(&mut page, Some(false), "left");
+        page.frames(2);
+        page.message(MainToHub::MoveTab, JsValue::Number(1.0));
+        let back = std::time::Instant::now();
+        while back.elapsed() < RELEASE_GRACE + Duration::from_secs(1) {
+            page.frames(2);
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(targets(&page), Some(true), "back within the grace period");
+        page.message(MainToHub::MoveTab, JsValue::Number(-1.0));
+        page.frames(2);
+        assert_eq!(targets(&page), Some(true), "just left");
+        wait(&mut page, Some(false), "left for a while");
         page.message(MainToHub::MoveTab, JsValue::Number(1.0));
         page.settle();
         page.message(MainToHub::CloseTab, JsValue::Bool(true));

@@ -463,7 +463,12 @@ fn released_targets_come_back_with_the_same_pixels() {
     };
     let before = present();
     assert!(thread.holds_targets());
-    thread.release_targets();
+    thread.release_after(Duration::from_secs(3600));
+    assert_eq!(before, present());
+    assert!(thread.holds_targets());
+    thread.release_after(Duration::from_secs(3600));
+    thread.cancel_release();
+    thread.release_after(Duration::ZERO);
     for _ in 0..1000 {
         if !thread.holds_targets() {
             break;

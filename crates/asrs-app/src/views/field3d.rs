@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 
 use asrs_canvas::Canvas2d;
 use asrs_field3d::camera_controls::{ElementRect, PointerInput, WheelInput};
@@ -68,6 +69,9 @@ const TITLE_HEIGHT: f64 = 20.0;
 const FIELD_INPUT_HEIGHT: f64 = 40.0;
 const SELECT_HEIGHT: f64 = 24.0;
 const MOUSE_POINTER_ID: i32 = 1;
+/// How long a 3D view stays hidden before its render targets go, so that switching tabs costs
+/// nothing.
+pub const RELEASE_GRACE: Duration = Duration::from_secs(10);
 
 /// The directory holding upstream's `www`, which `TextureLoader` URLs (`../www/...`) resolve
 /// against.
@@ -329,7 +333,8 @@ pub struct Field3dViews {
     tabs: HashMap<usize, TabView>,
     shown: Option<Shown>,
     thread: Option<Result<RenderThread, String>>,
-    /// Whether the thread was told to free its targets and got no frame since.
+    /// Whether the thread was told to free its targets and got neither a frame nor the tab back
+    /// since.
     released: bool,
     in_flight: Option<InFlight>,
     queued: Option<(usize, Frame)>,
@@ -980,7 +985,10 @@ impl<H: FrameHost> HubFrame<H> {
         }
         if hidden && !views.released && views.in_flight.is_none() {
             views.released = true;
-            thread.release_targets();
+            thread.release_after(RELEASE_GRACE);
+        } else if !hidden && views.released {
+            views.released = false;
+            thread.cancel_release();
         }
     }
 
