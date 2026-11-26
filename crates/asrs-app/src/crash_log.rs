@@ -2,9 +2,10 @@
 //! shows them. Upstream has no counterpart.
 //!
 //! A panic in the hook aborts, and the panicking thread may hold any lock, so the file is written
-//! by a thread of its own that the hook waits for only so long.
+//! by a thread of its own that the hook waits for only so long. Looking up symbols can outlast
+//! that wait, so an entry has the frames' addresses, and their names follow once they are found.
 
-use std::backtrace::Backtrace;
+use backtrace::Backtrace;
 use std::cell::Cell;
 use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
@@ -29,6 +30,7 @@ const WRITE_WAIT: Duration = Duration::from_secs(3);
 
 static PANICS: AtomicUsize = AtomicUsize::new(0);
 static WRITING: Mutex<()> = Mutex::new(());
+static RESOLVING: Mutex<()> = Mutex::new(());
 
 thread_local! {
     static WRITER: Cell<bool> = const { Cell::new(false) };
@@ -83,16 +85,16 @@ impl CrashLog {
         let _ = write!(text, ":\n{}\n", without_contents(message));
         // Without symbols, a frame's address is found by its distance to this function.
         let _ = writeln!(text, "CrashLog::new at {:p}", CrashLog::new as *const ());
+        // Capturing waits for a writer that is looking up symbols.
+        let backtrace = match RESOLVING.try_lock() {
+            Ok(_free) => Some(Backtrace::new_unresolved()),
+            Err(_) => None,
+        };
         let entry = Entry {
             dir: self.dir.clone(),
             home: self.home.clone(),
             text,
-            // Capturing waits for a writer that is looking up symbols.
-            backtrace: if WRITING.try_lock().is_ok() {
-                Backtrace::force_capture()
-            } else {
-                Backtrace::disabled()
-            },
+            backtrace,
         };
         let (written, done) = mpsc::channel();
         let writer = thread::Builder::new()
@@ -122,38 +124,84 @@ fn aborts(info: &PanicHookInfo<'_>) -> bool {
     )
 }
 
+/// Waits for the entry, then for its symbols.
 fn wait(done: &Receiver<bool>) -> bool {
-    let first = done.recv_timeout(WRITE_WAIT).unwrap_or(false);
-    let _ = done.recv_timeout(WRITE_WAIT);
-    first
+    let written = done.recv_timeout(WRITE_WAIT).unwrap_or(false);
+    if written {
+        let _ = done.recv_timeout(WRITE_WAIT);
+    }
+    written
 }
 
 struct Entry {
     dir: PathBuf,
     home: Option<String>,
     text: String,
-    backtrace: Backtrace,
+    backtrace: Option<Backtrace>,
 }
 
 impl Entry {
-    /// Reports the panic, then, once its symbols are found, the backtrace.
     fn write(self, written: &Sender<bool>) {
         let _ = WRITER.try_with(|writer| writer.set(true));
-        let _one = WRITING.lock().unwrap_or_else(PoisonError::into_inner);
         let home = self.home.as_deref();
+        let one = WRITING.lock().unwrap_or_else(PoisonError::into_inner);
         let file = open(&self.dir).and_then(|mut file| {
             file.write_all(without_home(&self.text, home).as_bytes())?;
+            if let Some(backtrace) = &self.backtrace {
+                file.write_all(bounded(&addresses(backtrace), MAX_BACKTRACE).as_bytes())?;
+            }
+            file.write_all(b"\n")?;
             file.sync_all()?;
             Ok(file)
         });
+        drop(one);
         let _ = written.send(file.is_ok());
-        let Ok(mut file) = file else { return };
-        let backtrace = without_home(&format!("{:#}", self.backtrace), home);
-        let _ = file.write_all(bounded(&backtrace, MAX_BACKTRACE).as_bytes());
-        let _ = file.write_all(b"\n\n");
-        let _ = file.sync_all();
-        let _ = written.send(true);
+        let (Ok(mut file), Some(mut backtrace)) = (file, self.backtrace) else {
+            return;
+        };
+        let resolving = RESOLVING.lock().unwrap_or_else(PoisonError::into_inner);
+        backtrace.resolve();
+        drop(resolving);
+        let symbols = symbols(&backtrace);
+        if symbols.is_empty() {
+            return;
+        }
+        let symbols = without_home(&format!("symbols:\n{symbols}"), home);
+        let _one = WRITING.lock().unwrap_or_else(PoisonError::into_inner);
+        let _ = file.write_all(bounded(&symbols, MAX_BACKTRACE).as_bytes());
+        let _ = file.write_all(b"\n");
+        let _ = written.send(file.sync_all().is_ok());
     }
+}
+
+/// Each frame's address and, where the platform tells, its module's: with the module's symbols, a
+/// frame is found by its offset in the module.
+fn addresses(backtrace: &Backtrace) -> String {
+    let mut text = String::new();
+    for (index, frame) in backtrace.frames().iter().enumerate() {
+        let ip = frame.ip() as usize;
+        let _ = write!(text, "{index:4}: {ip:#x}");
+        if let Some(base) = frame.module_base_address().map(|base| base as usize) {
+            let _ = write!(text, " = {base:#x} + {:#x}", ip.wrapping_sub(base));
+        }
+        text.push('\n');
+    }
+    text
+}
+
+/// The frames that have names, with their addresses: another panic's entry can come between.
+fn symbols(backtrace: &Backtrace) -> String {
+    let mut text = String::new();
+    for (index, frame) in backtrace.frames().iter().enumerate() {
+        for symbol in frame.symbols() {
+            let Some(name) = symbol.name() else { continue };
+            let _ = writeln!(text, "{index:4}: {:#x} {name:#}", frame.ip() as usize);
+            if let (Some(file), Some(line)) = (symbol.filename(), symbol.lineno()) {
+                let _ = writeln!(text, "      at {}:{line}", file.display());
+            }
+        }
+    }
+    text
 }
 
 fn open(dir: &Path) -> io::Result<File> {
