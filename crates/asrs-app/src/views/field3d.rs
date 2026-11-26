@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
+use std::time::Duration;
 
 use asrs_canvas::Canvas2d;
 use asrs_field3d::camera_controls::{ElementRect, PointerInput, WheelInput};
@@ -68,6 +69,9 @@ const TITLE_HEIGHT: f64 = 20.0;
 const FIELD_INPUT_HEIGHT: f64 = 40.0;
 const SELECT_HEIGHT: f64 = 24.0;
 const MOUSE_POINTER_ID: i32 = 1;
+/// How long a 3D view stays hidden before its render targets go, so that switching tabs costs
+/// nothing.
+pub const RELEASE_GRACE: Duration = Duration::from_secs(10);
 
 /// The directory holding upstream's `www`, which `TextureLoader` URLs (`../www/...`) resolve
 /// against.
@@ -279,6 +283,7 @@ impl Spinner {
 #[derive(Default)]
 struct TabView {
     presenter: FramePresenter,
+    #[cfg(feature = "parity")]
     presented: Option<Frame>,
     inputs: Rc<Cell<CanvasInputs>>,
     loads: Vec<Load>,
@@ -317,12 +322,21 @@ impl Shown {
     }
 }
 
+struct InFlight {
+    key: usize,
+    #[cfg(feature = "parity")]
+    frame: Frame,
+}
+
 #[derive(Default)]
 pub struct Field3dViews {
     tabs: HashMap<usize, TabView>,
     shown: Option<Shown>,
     thread: Option<Result<RenderThread, String>>,
-    in_flight: Option<(usize, Frame)>,
+    /// Whether the thread was told to free its targets and got neither a frame nor the tab back
+    /// since.
+    released: bool,
+    in_flight: Option<InFlight>,
     queued: Option<(usize, Frame)>,
     wake: Option<(async_channel::Sender<()>, Task<()>)>,
 }
@@ -770,6 +784,14 @@ impl<H: FrameHost> HubFrame<H> {
         self.field3d.busy()
     }
 
+    /// Whether the 3D render thread holds render targets; `None` without one.
+    pub fn field3d_holds_targets(&self) -> Option<bool> {
+        match &self.field3d.thread {
+            Some(Ok(thread)) => Some(thread.holds_targets()),
+            _ => None,
+        }
+    }
+
     fn wake_sender(&mut self, cx: &mut Context<'_, Self>) -> async_channel::Sender<()> {
         if let Some((sender, _)) = &self.field3d.wake {
             return sender.clone();
@@ -800,8 +822,10 @@ impl<H: FrameHost> HubFrame<H> {
             keep
         });
         if tabs.is_empty() {
+            self.field3d_close(cx);
             return;
         }
+        let hidden = displayed(self.host().hub(cx)).is_none();
         let now = self.host().frame_time(cx);
         let root = www_root(cx);
         let waker = self.wake_sender(cx);
@@ -893,11 +917,24 @@ impl<H: FrameHost> HubFrame<H> {
                 self.field3d.queued = Some((key, frame));
             }
         }
-        self.field3d_present(waker, window, cx);
+        self.field3d_present(hidden, waker, window, cx);
+    }
+
+    /// With the last 3D tab gone, so are the render thread and its device, off the UI thread.
+    fn field3d_close(&mut self, cx: &mut Context<'_, Self>) {
+        let views = self.field3d();
+        views.queued = None;
+        views.in_flight = None;
+        views.wake = None;
+        views.released = false;
+        if let Some(Ok(thread)) = views.thread.take() {
+            cx.background_spawn(async move { drop(thread) }).detach();
+        }
     }
 
     fn field3d_present(
         &mut self,
+        hidden: bool,
         waker: async_channel::Sender<()>,
         window: &mut Window,
         cx: &mut Context<'_, Self>,
@@ -925,18 +962,33 @@ impl<H: FrameHost> HubFrame<H> {
             return;
         };
         if let Some(rendered) = thread.take()
-            && let Some((key, frame)) = views.in_flight.take()
-            && let Some(view) = views.tabs.get_mut(&key)
+            && let Some(flight) = views.in_flight.take()
+            && let Some(view) = views.tabs.get_mut(&flight.key)
         {
             view.presenter
                 .present_bgra(rendered.width, rendered.height, rendered.bgra, window, cx);
-            view.presented = Some(frame);
+            #[cfg(feature = "parity")]
+            {
+                view.presented = Some(flight.frame);
+            }
         }
         if views.in_flight.is_none()
             && let Some((key, frame)) = views.queued.take()
         {
-            thread.submit(frame.clone());
-            views.in_flight = Some((key, frame));
+            views.in_flight = Some(InFlight {
+                key,
+                #[cfg(feature = "parity")]
+                frame: frame.clone(),
+            });
+            views.released = false;
+            thread.submit(frame);
+        }
+        if hidden && !views.released && views.in_flight.is_none() {
+            views.released = true;
+            thread.release_after(RELEASE_GRACE);
+        } else if !hidden && views.released {
+            views.released = false;
+            thread.cancel_release();
         }
     }
 

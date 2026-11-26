@@ -398,7 +398,7 @@ fn load_job_matches_direct_load_and_converts_for_the_renderer() {
     assert_eq!(material.side, Side::Double);
     assert!(material.vertex_colors && mesh.cast_shadow && !mesh.receive_shadow);
     let (rendered, source) = (&mesh.geometry.geometry, &background[0][0].geometry);
-    assert!(rendered.index == source.index && rendered.attributes().eq(source.attributes()));
+    assert!(Arc::ptr_eq(rendered, source));
 
     config.path = JsString::from("/nonexistent/model.glb");
     let failed =

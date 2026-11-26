@@ -1,6 +1,6 @@
 use std::sync::{Arc, Condvar, Mutex, mpsc};
 use std::thread::JoinHandle;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use super::frame::Frame;
 use super::gpu::{RenderError, Renderer, Timings};
@@ -22,6 +22,8 @@ struct State {
     pending: Option<Frame>,
     latest: Option<RenderedFrame>,
     pool: Vec<Vec<u8>>,
+    release_at: Option<Instant>,
+    holds_targets: bool,
     shutdown: bool,
     failure: Option<String>,
 }
@@ -84,10 +86,12 @@ impl RenderThread {
         &self.adapter
     }
 
-    /// Latest wins: a frame still waiting is dropped in favour of this one.
+    /// Latest wins: a frame still waiting is dropped in favour of this one. It also cancels a
+    /// release the thread has not done yet.
     pub fn submit(&self, frame: Frame) {
         let mut state = self.shared.state.lock().expect("render state");
         state.pending = Some(frame);
+        state.release_at = None;
         self.shared.wake_thread.notify_one();
     }
 
@@ -116,6 +120,27 @@ impl RenderThread {
             .expect("render state")
             .failure
             .clone()
+    }
+
+    /// Once no frame came for `delay`, frees the render targets, the shadow maps and the pooled
+    /// pixel buffers. The next frame makes them again.
+    pub fn release_after(&self, delay: Duration) {
+        let mut state = self.shared.state.lock().expect("render state");
+        state.release_at = Some(Instant::now() + delay);
+        self.shared.wake_thread.notify_one();
+    }
+
+    pub fn cancel_release(&self) {
+        self.shared.state.lock().expect("render state").release_at = None;
+    }
+
+    /// Whether the last frame's targets are still there.
+    pub fn holds_targets(&self) -> bool {
+        self.shared
+            .state
+            .lock()
+            .expect("render state")
+            .holds_targets
     }
 
     pub fn recycle(&self, buffer: Vec<u8>) {
@@ -153,9 +178,28 @@ fn run(shared: &Shared, renderer: &mut Renderer, waker: &dyn Fn()) {
                         renderer.lose_device();
                     }
                     let buffer = state.pool.pop().unwrap_or_default();
+                    state.holds_targets = true;
                     break (frame, buffer);
                 }
-                state = shared.wake_thread.wait(state).expect("render state");
+                match state.release_at {
+                    Some(at) if at <= Instant::now() => {
+                        state.release_at = None;
+                        state.pool = Vec::new();
+                        drop(state);
+                        renderer.release_targets();
+                        state = shared.state.lock().expect("render state");
+                        state.holds_targets = renderer.holds_targets();
+                    }
+                    Some(at) => {
+                        let wait = at.saturating_duration_since(Instant::now());
+                        state = shared
+                            .wake_thread
+                            .wait_timeout(state, wait)
+                            .expect("render state")
+                            .0;
+                    }
+                    None => state = shared.wake_thread.wait(state).expect("render state"),
+                }
             }
         };
         let start = Instant::now();

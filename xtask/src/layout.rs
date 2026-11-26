@@ -14,6 +14,7 @@ const UNSAFE_ROOTS: &[&str] = &[
     "asrs-libm-lgpl/src/lib.rs",
     "asrs-webview/src/parent.rs",
     "asrs-field3d/src/render/gl_clip.rs",
+    "asrs-field3d/tests/load_memory.rs",
 ];
 
 struct Rule {

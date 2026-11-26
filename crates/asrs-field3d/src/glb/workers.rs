@@ -13,7 +13,7 @@ use asrs_model::assets::{self, Config3dField, Config3dRobot};
 use asrs_model::preferences::Field3dMode;
 
 use super::loader::{GltfError, GltfScene, load_gltf};
-use super::optimize::{OptimizeError, OptimizedMesh, optimize_geometries};
+use super::optimize::{OptimizeError, OptimizedMesh, optimize};
 use super::{ObjectKind, SceneObject, object_by_name};
 use crate::three::{Color, Quaternion, Vector3};
 
@@ -107,14 +107,28 @@ fn model_urls(path: &JsString, extra: usize) -> Vec<JsString> {
     urls
 }
 
-/// `Promise.all(urls.map(gltfLoader.loadAsync))`.
-fn load_all(urls: &[JsString], fetch: &Fetch<'_>) -> Result<Vec<GltfScene>, LoadError> {
-    urls.iter()
-        .map(|url| {
-            let bytes = fetch(url).ok_or_else(|| LoadError::Fetch(url.clone()))?;
-            Ok(load_gltf(&bytes, url, fetch)?)
-        })
-        .collect()
+/// `Promise.all(urls.map(gltfLoader.loadAsync))` and then `work` on each scene in order, keeping
+/// one scene at a time. A file that does not load still comes before an error in `work`.
+fn for_each_scene(
+    urls: &[JsString],
+    fetch: &Fetch<'_>,
+    mut work: impl FnMut(usize, &mut GltfScene) -> Result<(), OptimizeError>,
+) -> Result<(), LoadError> {
+    let load = |url: &JsString| -> Result<GltfScene, LoadError> {
+        let bytes = fetch(url).ok_or_else(|| LoadError::Fetch(url.clone()))?;
+        Ok(load_gltf(&bytes, url, fetch)?)
+    };
+    let mut failed = None;
+    for (index, url) in urls.iter().enumerate() {
+        let mut scene = load(url)?;
+        if failed.is_none() {
+            failed = work(index, &mut scene).err();
+        }
+    }
+    match failed {
+        Some(error) => Err(error.into()),
+        None => Ok(()),
+    }
 }
 
 pub(crate) fn three_quaternion(rotations: &[assets::Config3dRotation]) -> Quaternion {
@@ -136,14 +150,14 @@ pub fn load_robot(
     options: &LoadOptions,
     fetch: &Fetch<'_>,
 ) -> Result<Vec<Vec<OptimizedMesh>>, LoadError> {
-    let mut scenes = load_all(&model_urls(&config.path, config.components.len()), fetch)?;
+    let urls = model_urls(&config.path, config.components.len());
     let specular = Color::from_array(options.material_specular);
     let mut meshes = Vec::new();
-    for (index, scene) in scenes.iter_mut().enumerate() {
+    for_each_scene(&urls, fetch, |index, scene| {
         if index == 0 {
             place(scene, &config.rotations, config.position);
         }
-        let optimized = optimize_geometries(
+        let optimized = optimize(
             &mut scene.graph,
             scene.scene,
             options.mode,
@@ -152,12 +166,14 @@ pub fn load_robot(
             !config.disable_simplification,
             is_ftc,
             None,
+            true,
         )?;
         let mut scene_meshes = Vec::new();
         scene_meshes.extend(optimized.normal.into_iter().next());
         scene_meshes.extend(optimized.transparent.into_iter().next());
         meshes.push(scene_meshes);
-    }
+        Ok(())
+    })?;
     Ok(meshes)
 }
 
@@ -168,11 +184,11 @@ pub fn load_field(
     options: &LoadOptions,
     fetch: &Fetch<'_>,
 ) -> Result<LoadedField, LoadError> {
-    let mut scenes = load_all(&model_urls(&config.path, config.game_pieces.len()), fetch)?;
+    let urls = model_urls(&config.path, config.game_pieces.len());
     let specular = Color::from_array(options.material_specular);
     let mut result = LoadedField::default();
     let mut pieces: JsObject<OptimizedMesh> = JsObject::new();
-    for (index, scene) in scenes.iter_mut().enumerate() {
+    for_each_scene(&urls, fetch, |index, scene| {
         if index == 0 {
             let graph = &mut scene.graph;
             let staged = graph.create("", SceneObject::new(JsString::new(), ObjectKind::Group));
@@ -193,7 +209,7 @@ pub fn load_field(
             let o = graph.object_mut(staged);
             o.set_rotation_from_quaternion(&three_quaternion(&config.rotations));
             o.position = Vector3::new(config.position[0], config.position[1], config.position[2]);
-            let staged_meshes = optimize_geometries(
+            let staged_meshes = optimize(
                 graph,
                 staged,
                 options.mode,
@@ -202,6 +218,8 @@ pub fn load_field(
                 false,
                 config.is_ftc,
                 None,
+                // A staged object may be the scene root, which is optimized again below.
+                false,
             )?;
             result
                 .staged_pieces
@@ -214,7 +232,7 @@ pub fn load_field(
                 .extend(staged_meshes.carpet.into_iter().next());
 
             place(scene, &config.rotations, config.position);
-            let field = optimize_geometries(
+            let field = optimize(
                 &mut scene.graph,
                 scene.scene,
                 options.mode,
@@ -223,6 +241,7 @@ pub fn load_field(
                 true,
                 config.is_ftc,
                 Some(1.0),
+                true,
             )?;
             result.field.extend(field.normal);
             result.field.extend(field.transparent);
@@ -230,7 +249,7 @@ pub fn load_field(
         } else {
             let piece = &config.game_pieces[index - 1];
             place(scene, &piece.rotations, piece.position);
-            let meshes = optimize_geometries(
+            let meshes = optimize(
                 &mut scene.graph,
                 scene.scene,
                 options.mode,
@@ -239,12 +258,14 @@ pub fn load_field(
                 false,
                 config.is_ftc,
                 None,
+                true,
             )?;
             if let Some(mesh) = meshes.normal.into_iter().next() {
                 pieces.insert(piece.name.clone(), mesh);
             }
         }
-    }
+        Ok(())
+    })?;
     result.pieces = pieces.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
     Ok(result)
 }

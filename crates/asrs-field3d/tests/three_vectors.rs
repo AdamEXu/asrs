@@ -331,7 +331,7 @@ fn check_merge(record: &Record) -> Result<()> {
         .map(build)
         .collect::<Result<Vec<_>>>()?;
     let use_groups = matches!(record.field("useGroups"), Some(Json::Bool(true)));
-    let merged = merge_geometries(&geometries, use_groups).ok();
+    let merged = merge_geometries(geometries, use_groups).ok();
     compare_geometry(record, merged.as_ref())
 }
 

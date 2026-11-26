@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -22,6 +23,20 @@ const MAX_HEMI: usize = 4;
 const MAX_POINT: usize = 8;
 const MAX_SPOT: usize = 8;
 const MAX_SPOT_SHADOWS: usize = 4;
+/// Staging memory that may pile up during uploads before the GPU has to take it over.
+const UPLOAD_BATCH: u64 = 16 << 20;
+/// Buffers without an attribute read every vertex from here: zeros, then an opaque white colour.
+const CONSTANTS: [u8; 20] = {
+    let mut bytes = [0; 20];
+    let mut i = 16;
+    while i < bytes.len() {
+        bytes[i] = 255;
+        i += 1;
+    }
+    bytes
+};
+const CONSTANT_ZERO: std::ops::Range<u64> = 0..16;
+const CONSTANT_WHITE: std::ops::Range<u64> = 16..20;
 
 /// `LineSegmentsGeometry`'s instanced quad: two cap rows around the segment's two ends.
 const LINE_QUAD_POSITIONS: [f32; 24] = [
@@ -140,6 +155,7 @@ struct PipeKey {
     depth_write: bool,
     instanced: bool,
     float_color: bool,
+    absent: Absent,
     aux: bool,
     samples: u32,
     strip_index_format: Option<wgpu::IndexFormat>,
@@ -160,15 +176,48 @@ enum Primitives {
     LineStrip,
 }
 
+/// The attributes a geometry lacks, whose vertices all read [`CONSTANTS`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+struct Absent {
+    normal: bool,
+    color: bool,
+    uv: bool,
+}
+
 struct GpuGeometry {
     position: wgpu::Buffer,
-    normal: wgpu::Buffer,
-    color: wgpu::Buffer,
+    normal: Option<wgpu::Buffer>,
+    color: Option<wgpu::Buffer>,
     float_color: bool,
-    uv: wgpu::Buffer,
+    uv: Option<wgpu::Buffer>,
     index: Option<(wgpu::Buffer, wgpu::IndexFormat, u32)>,
     vertex_count: u32,
     color_components: u32,
+}
+
+impl GpuGeometry {
+    fn absent(&self) -> Absent {
+        Absent {
+            normal: self.normal.is_none(),
+            color: self.color.is_none(),
+            uv: self.uv.is_none(),
+        }
+    }
+
+    fn size(&self) -> u64 {
+        let index = self.index.as_ref().map(|(buffer, ..)| buffer);
+        [
+            Some(&self.position),
+            self.normal.as_ref(),
+            self.color.as_ref(),
+            self.uv.as_ref(),
+            index,
+        ]
+        .into_iter()
+        .flatten()
+        .map(wgpu::Buffer::size)
+        .sum()
+    }
 }
 
 struct LineQuad {
@@ -250,6 +299,8 @@ pub struct Renderer {
     blank_texture: wgpu::BindGroup,
     instance_buffer: Option<wgpu::Buffer>,
     line_quad: LineQuad,
+    constants: wgpu::Buffer,
+    uploaded: u64,
     geometries: HashMap<(u64, Primitives), GpuGeometry>,
     line_geometries: HashMap<u64, (wgpu::Buffer, u32)>,
     textures: HashMap<u64, GpuTexture>,
@@ -412,6 +463,7 @@ impl Renderer {
             ),
             index: init(bytemuck::cast_slice(&quad_index), wgpu::BufferUsages::INDEX),
         };
+        let constants = init(&CONSTANTS, wgpu::BufferUsages::VERTEX);
         Ok(Renderer {
             device,
             queue,
@@ -436,6 +488,8 @@ impl Renderer {
             blank_texture,
             instance_buffer: None,
             line_quad,
+            constants,
+            uploaded: 0,
             geometries: HashMap::new(),
             line_geometries: HashMap::new(),
             textures: HashMap::new(),
@@ -502,15 +556,16 @@ impl Renderer {
                     instance(24, &SEGMENT),
                 ]
             } else {
+                let stride = |absent: bool, stride| if absent { 0 } else { stride };
                 let mut buffers = vec![
                     vertex(12, &POSITION),
-                    vertex(12, &NORMAL),
+                    vertex(stride(key.absent.normal, 12), &NORMAL),
                     if key.float_color {
                         vertex(16, &COLOR_F32)
                     } else {
-                        vertex(4, &COLOR_U8)
+                        vertex(stride(key.absent.color, 4), &COLOR_U8)
                     },
-                    vertex(8, &UV),
+                    vertex(stride(key.absent.uv, 8), &UV),
                 ];
                 if key.instanced {
                     buffers.push(instance(64, &INSTANCE));
@@ -648,6 +703,8 @@ impl Renderer {
         })
     }
 
+    /// The multisampled attachments are not `TRANSIENT_ATTACHMENT`: Metal's memoryless storage
+    /// cannot spill, and with 30 million triangles an M1 Pro drew wrong pixels without an error.
     fn ensure_targets(&mut self, width: u32, height: u32, samples: u32) {
         if let Some(t) = &self.targets
             && t.width == width
@@ -696,19 +753,47 @@ impl Renderer {
         });
     }
 
+    /// Frees what the next frame makes again at no visible cost: the render targets, the readback
+    /// buffer and the shadow maps.
+    pub fn release_targets(&mut self) {
+        self.targets = None;
+        self.release_shadow_maps();
+        let _ = self.device.poll(wgpu::PollType::Poll);
+    }
+
+    /// The bytes of the vertex and index buffers.
+    pub fn geometry_size(&self) -> u64 {
+        self.geometries.values().map(GpuGeometry::size).sum()
+    }
+
+    /// The memory the backend's allocator has reserved, where wgpu has one (DX12 and Vulkan).
+    pub fn reserved_memory(&self) -> Option<u64> {
+        let report = self.device.generate_allocator_report()?;
+        Some(report.total_reserved_bytes)
+    }
+
+    /// Whether the renderer holds render targets or shadow maps.
+    pub fn holds_targets(&self) -> bool {
+        self.targets.is_some() || self.shadow_maps.is_some()
+    }
+
+    fn release_shadow_maps(&mut self) {
+        if self.shadow_maps.take().is_some() {
+            self.frame_group = make_frame_group(
+                &self.device,
+                &self.frame_layout,
+                &self.frame_buffer,
+                &self.blank_shadow_maps,
+                &self.shadow_sampler,
+            );
+        }
+    }
+
     /// Shadow maps share one size, as upstream's 2048 x 2048 for every spot light; a frame whose
     /// lights disagree uses the first light's size for all.
     fn ensure_shadow_maps(&mut self, frame: &Frame) {
         let Some(first) = frame.shadows.first() else {
-            if self.shadow_maps.take().is_some() {
-                self.frame_group = make_frame_group(
-                    &self.device,
-                    &self.frame_layout,
-                    &self.frame_buffer,
-                    &self.blank_shadow_maps,
-                    &self.shadow_sampler,
-                );
-            }
+            self.release_shadow_maps();
             return;
         };
         let size = first.map_size.map(|v| v.max(1));
@@ -861,7 +946,13 @@ impl Renderer {
                 geometry,
                 self.provoking_last.then_some(primitives),
             );
+            self.uploaded += gpu.size();
             self.geometries.insert(key, gpu);
+            if self.uploaded >= UPLOAD_BATCH {
+                self.uploaded = 0;
+                self.queue.submit([]);
+                let _ = self.device.poll(wgpu::PollType::wait_indefinitely());
+            }
         }
     }
 
@@ -984,7 +1075,7 @@ impl Renderer {
 
     fn pipe_key(&self, draw: &Draw, pass: Pass, samples: u32) -> PipeKey {
         let kind = &draw.kind;
-        let (program, instanced, float_color) = match kind {
+        let (program, instanced, geometry) = match kind {
             DrawKind::Mesh {
                 geometry,
                 instances,
@@ -996,9 +1087,9 @@ impl Renderer {
                     Program::Phong
                 },
                 instances.is_some(),
-                self.geometries[&(geometry.key(), Primitives::Triangles)].float_color,
+                Some(&self.geometries[&(geometry.key(), Primitives::Triangles)]),
             ),
-            DrawKind::FatLine { .. } => (Program::FatLine, false, false),
+            DrawKind::FatLine { .. } => (Program::FatLine, false, None),
             DrawKind::Line {
                 geometry, segments, ..
             } => (
@@ -1008,7 +1099,7 @@ impl Renderer {
                     Program::LineStrip
                 },
                 false,
-                self.geometries[&(geometry.key(), line_primitives(*segments))].float_color,
+                Some(&self.geometries[&(geometry.key(), line_primitives(*segments))]),
             ),
         };
         let is_line = matches!(program, Program::Lines | Program::LineStrip);
@@ -1029,7 +1120,8 @@ impl Renderer {
             depth_test: shadow || kind.depth_test(),
             depth_write: shadow || kind.depth_write(),
             instanced,
-            float_color,
+            float_color: geometry.is_some_and(|g| g.float_color),
+            absent: geometry.map(GpuGeometry::absent).unwrap_or_default(),
             aux: matches!(pass, Pass::Aux | Pass::AuxSamples),
             samples: match pass {
                 Pass::Color | Pass::AuxSamples => samples,
@@ -1097,14 +1189,14 @@ impl Renderer {
                         );
                         instance_count = matrices.len() as u32;
                     }
-                    draw_geometry(&mut pass, geometry, *group, instance_count);
+                    draw_geometry(&mut pass, geometry, &self.constants, *group, instance_count);
                 }
                 DrawKind::Line {
                     geometry, segments, ..
                 } => {
                     pass.set_bind_group(2, &self.blank_texture, &[]);
                     let key = (geometry.key(), line_primitives(*segments));
-                    draw_geometry(&mut pass, &self.geometries[&key], None, 1);
+                    draw_geometry(&mut pass, &self.geometries[&key], &self.constants, None, 1);
                 }
                 DrawKind::FatLine { geometry, .. } => {
                     let (segments, count) = &self.line_geometries[&geometry.key()];
@@ -1668,13 +1760,23 @@ fn draw_range(group: Option<Group>, count: u32) -> Option<std::ops::Range<u32>> 
 fn draw_geometry(
     pass: &mut wgpu::RenderPass<'_>,
     geometry: &GpuGeometry,
+    constants: &wgpu::Buffer,
     group: Option<Group>,
     instance_count: u32,
 ) {
     pass.set_vertex_buffer(0, geometry.position.slice(..));
-    pass.set_vertex_buffer(1, geometry.normal.slice(..));
-    pass.set_vertex_buffer(2, geometry.color.slice(..));
-    pass.set_vertex_buffer(3, geometry.uv.slice(..));
+    let optional = [
+        (1, &geometry.normal, CONSTANT_ZERO),
+        (2, &geometry.color, CONSTANT_WHITE),
+        (3, &geometry.uv, CONSTANT_ZERO),
+    ];
+    for (slot, buffer, constant) in optional {
+        let slice = match buffer {
+            Some(buffer) => buffer.slice(..),
+            None => constants.slice(constant),
+        };
+        pass.set_vertex_buffer(slot, slice);
+    }
     match &geometry.index {
         Some((buffer, format, count)) => {
             if let Some(range) = draw_range(group, *count) {
@@ -1776,16 +1878,21 @@ fn draw_uniform(draw: &Draw, geometries: &HashMap<(u64, Primitives), GpuGeometry
     u
 }
 
-fn attribute_f32(attribute: Option<&BufferAttribute>, size: usize, count: usize) -> Vec<f32> {
+fn attribute_f32(a: &BufferAttribute, size: usize, count: usize) -> Cow<'_, [f32]> {
+    if let ArrayData::Float32(values) = &a.array
+        && a.item_size == size
+        && !a.normalized
+        && values.len() == count * size
+    {
+        return Cow::Borrowed(values);
+    }
     let mut out = vec![0.0f32; count * size];
-    if let Some(a) = attribute {
-        for i in 0..count.min(a.count()) {
-            for c in 0..size.min(a.item_size) {
-                out[i * size + c] = a.get_component(i, c) as f32;
-            }
+    for i in 0..count.min(a.count()) {
+        for c in 0..size.min(a.item_size) {
+            out[i * size + c] = a.get_component(i, c) as f32;
         }
     }
-    out
+    Cow::Owned(out)
 }
 
 fn line_primitives(segments: bool) -> Primitives {
@@ -1842,9 +1949,14 @@ fn upload_geometry(
         })
     };
     let vertex = wgpu::BufferUsages::VERTEX;
-    let positions = attribute_f32(position, 3, count);
-    let normals = attribute_f32(g.attribute("normal"), 3, count);
-    let uvs = attribute_f32(g.attribute("uv"), 2, count);
+    let floats = |attribute: &BufferAttribute, size| {
+        let values = attribute_f32(attribute, size, count);
+        init(bytemuck::cast_slice(&values), vertex)
+    };
+    let position = match position {
+        Some(position) => floats(position, 3),
+        None => init(&[], vertex),
+    };
     let color_attribute = g.attribute("color");
     let color_components = color_attribute.map_or(3, |a| a.item_size as u32);
     let (color, float_color) = match color_attribute {
@@ -1860,18 +1972,18 @@ fn upload_geometry(
                     bytes[i * 4 + c] = values[i * item_size + c];
                 }
             }
-            (init(&bytes, vertex), false)
+            (Some(init(&bytes, vertex)), false)
         }
         Some(a) => {
-            let mut values = attribute_f32(Some(a), 4, count);
+            let mut values = attribute_f32(a, 4, count).into_owned();
             if a.item_size < 4 {
                 for i in 0..count {
                     values[i * 4 + 3] = 1.0;
                 }
             }
-            (init(bytemuck::cast_slice(&values), vertex), true)
+            (Some(init(bytemuck::cast_slice(&values), vertex)), true)
         }
-        None => (init(&vec![255u8; count.max(1) * 4], vertex), false),
+        None => (None, false),
     };
     let index = if let Some(primitives) = provoking_last {
         let indices: Vec<u32> = match &g.index {
@@ -1891,9 +2003,9 @@ fn upload_geometry(
             let usage = wgpu::BufferUsages::INDEX;
             match &index.array {
                 ArrayData::Uint16(v) => {
-                    let mut v = v.clone();
+                    let mut v = Cow::Borrowed(v);
                     if v.len() % 2 == 1 {
-                        v.push(0);
+                        v.to_mut().push(0);
                     }
                     (
                         init(bytemuck::cast_slice(&v), usage),
@@ -1901,6 +2013,11 @@ fn upload_geometry(
                         index.array.len() as u32,
                     )
                 }
+                ArrayData::Uint32(v) => (
+                    init(bytemuck::cast_slice(v), usage),
+                    wgpu::IndexFormat::Uint32,
+                    v.len() as u32,
+                ),
                 other => {
                     let v: Vec<u32> = (0..other.len()).map(|i| other.get(i) as u32).collect();
                     (
@@ -1913,11 +2030,11 @@ fn upload_geometry(
         })
     };
     GpuGeometry {
-        position: init(bytemuck::cast_slice(&positions), vertex),
-        normal: init(bytemuck::cast_slice(&normals), vertex),
+        position,
+        normal: g.attribute("normal").map(|a| floats(a, 3)),
         color,
         float_color,
-        uv: init(bytemuck::cast_slice(&uvs), vertex),
+        uv: g.attribute("uv").map(|a| floats(a, 2)),
         index,
         vertex_count: count as u32,
         color_components,
