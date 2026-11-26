@@ -17,7 +17,7 @@ pub fn native(window: &Window) -> Option<NativeWindow> {
     ns_window(window).map(NativeWindow)
 }
 
-pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
+pub fn titled_content_size(width: f64, height: f64, _scale: f64) -> (f64, f64) {
     let Some(mtm) = MainThreadMarker::new() else {
         return (width, height);
     };
@@ -32,7 +32,7 @@ pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
 
 pub fn title_bar_height() -> f64 {
     const FRAME: f64 = 1000.0;
-    FRAME - titled_content_size(FRAME, FRAME).1
+    FRAME - titled_content_size(FRAME, FRAME, 1.0).1
 }
 
 /// GPUI's own background is black, which the title bar's material lets through before macOS 26.

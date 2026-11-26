@@ -165,7 +165,7 @@ pub(super) mod window {
     use gpui_kit::Window;
 
     #[cfg(feature = "parity")]
-    pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
+    pub fn titled_content_size(width: f64, height: f64, _scale: f64) -> (f64, f64) {
         (width, height)
     }
 
@@ -412,7 +412,7 @@ pub(super) mod probe {
         None
     }
 
-    pub fn framed_window() -> Option<(f64, f64)> {
+    pub fn framed_window(_scale: f64) -> Option<(f64, f64)> {
         None
     }
 

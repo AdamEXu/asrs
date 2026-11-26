@@ -281,11 +281,11 @@ pub fn window_bounds(window: &Window) -> Option<(f64, f64, f64, f64)> {
     imp::window::bounds(window)
 }
 
-/// The content size a frame of `width` by `height` leaves in a window with a standard title bar,
-/// for windows no platform window stands behind.
+/// The content size a frame of `width` by `height` leaves in a window with a standard title bar
+/// on a display at `scale`, for windows no platform window stands behind.
 #[cfg(feature = "parity")]
-pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
-    imp::window::titled_content_size(width, height)
+pub fn titled_content_size(width: f64, height: f64, scale: f64) -> (f64, f64) {
+    imp::window::titled_content_size(width, height, scale)
 }
 
 /// What Electron sets on every macOS window's frame and GPUI does not.

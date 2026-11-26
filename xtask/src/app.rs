@@ -366,6 +366,7 @@ fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path)
         tooltips,
     } = variant;
     let gl_switch = scenario.gl.then_some(*gl);
+    let _display = DisplayAt::scale(paths, *scale)?;
     let robot = Robot::start(paths, &scenario.file)?;
     let live = Live::start(paths, &scenario.file)?;
     let mut command = Command::new(paths.electron()?);
@@ -413,6 +414,63 @@ fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path)
         ));
     }
     Ok(())
+}
+
+/// The Windows display at a variant's scale while it runs: there `--force-device-scale-factor`
+/// on a display at another scale gives framed windows sizes no display of that scale gives.
+struct DisplayAt {
+    script: PathBuf,
+    restore: Option<u32>,
+}
+
+impl DisplayAt {
+    fn scale(paths: &Paths, scale: u32) -> Result<Self> {
+        let mut display = DisplayAt {
+            script: paths.root.join("xtask/hosts/windows/display-scale.ps1"),
+            restore: None,
+        };
+        if cfg!(windows) {
+            let was = display.percent(None)?;
+            if was != scale * 100 {
+                display.percent(Some(scale * 100))?;
+                display.restore = Some(was);
+            }
+        }
+        Ok(display)
+    }
+
+    fn percent(&self, set: Option<u32>) -> Result<u32> {
+        let mut command = Command::new("powershell");
+        command
+            .args(["-NoProfile", "-ExecutionPolicy", "Bypass", "-File"])
+            .arg(&self.script);
+        if let Some(percent) = set {
+            command.args(["-Percent".to_owned(), percent.to_string()]);
+        }
+        let output = command
+            .output()
+            .map_err(|e| format!("{}: {e}", self.script.display()))?;
+        let text = String::from_utf8_lossy(&output.stdout);
+        match text.trim().parse() {
+            Ok(percent) if output.status.success() => Ok(percent),
+            _ => Err(format!(
+                "{}: {} {}",
+                self.script.display(),
+                text.trim(),
+                String::from_utf8_lossy(&output.stderr).trim()
+            )),
+        }
+    }
+}
+
+impl Drop for DisplayAt {
+    fn drop(&mut self) {
+        if let Some(percent) = self.restore
+            && let Err(e) = self.percent(Some(percent))
+        {
+            eprintln!("{e}");
+        }
+    }
 }
 
 /// The scrollbar style, whatever the user's preference and devices are.
