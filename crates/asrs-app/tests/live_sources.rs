@@ -995,7 +995,6 @@ struct SlowClock {
 }
 
 const SLOW_READS: usize = 200_000;
-const SLOW_PUBLISH_MS: u64 = 30;
 
 impl Clock for SlowClock {
     fn now(&self) -> f64 {
@@ -1006,7 +1005,7 @@ impl Clock for SlowClock {
             dispatcher
                 .scheduler()
                 .clock()
-                .advance(Duration::from_millis(SLOW_PUBLISH_MS));
+                .advance(Duration::from_millis(30));
         }
         self.clock.now()
     }
