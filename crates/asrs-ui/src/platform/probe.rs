@@ -468,6 +468,23 @@ pub fn screen_image(x: i32, y: i32, width: i32, height: i32) -> Option<WindowIma
     imp::probe::screen_image(x, y, width, height)
 }
 
+/// A visible top-level window: its handle, its and its client area's rects as [`rects`] gives
+/// them, and its `GWL_STYLE` and `GWL_EXSTYLE`.
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TopLevel {
+    pub number: u32,
+    pub rects: [[i32; 4]; 2],
+    pub style: u32,
+    pub ex_style: u32,
+}
+
+/// The visible top-level windows of a process, frontmost first.
+#[cfg(windows)]
+pub fn top_levels(process: u32) -> Vec<TopLevel> {
+    imp::probe::top_levels(process)
+}
+
 /// Electron's `minimize`, `maximize`, `unmaximize` or `restore` of the window with this handle.
 #[cfg(windows)]
 pub fn show_window(number: u32, state: &str) {

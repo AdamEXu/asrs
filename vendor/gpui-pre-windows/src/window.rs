@@ -1,3 +1,4 @@
+// Modified by asrs: see patches/gpui-pre-windows-0.3.12.patch in the asrs repository.
 #![deny(unsafe_op_in_unsafe_fn)]
 
 use std::{
@@ -492,7 +493,7 @@ impl WindowsWindow {
         );
 
         let (mut dwexstyle, dwstyle) = if params.kind == WindowKind::PopUp {
-            (WS_EX_TOOLWINDOW | WS_EX_TOPMOST, WINDOW_STYLE(0x0))
+            (WS_EX_TOOLWINDOW | WS_EX_TOPMOST, WS_POPUP)
         } else {
             let mut dwstyle = WS_SYSMENU;
 

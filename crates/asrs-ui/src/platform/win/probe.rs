@@ -13,16 +13,16 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     MOUSEEVENTF_MOVE, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput, VIRTUAL_KEY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    FindWindowW, GWL_EXSTYLE, GetCursorPos, GetMenuItemCount, GetMenuItemInfoW, GetWindowLongPtrW,
+    EnumWindows, FindWindowW, GWL_EXSTYLE, GWL_STYLE, GetCursorPos, GetMenuItemCount, GetMenuItemInfoW, GetWindowLongPtrW,
     HMENU, IsWindowVisible, MENUITEMINFOW, MFS_CHECKED, MFS_DISABLED, MFT_SEPARATOR, MIIM_BITMAP,
     MIIM_FTYPE, MIIM_ID, MIIM_STATE, MIIM_STRING, MIIM_SUBMENU, MINMAXINFO, SW_MAXIMIZE,
-    SW_MINIMIZE, SW_RESTORE, SendMessageW, SetCursorPos, ShowWindow, USER_DEFAULT_SCREEN_DPI,
+    GetWindowThreadProcessId, SW_MINIMIZE, SW_RESTORE, SendMessageW, SetCursorPos, ShowWindow, USER_DEFAULT_SCREEN_DPI,
     WM_DPICHANGED, WM_GETMINMAXINFO, WM_SIZING, WS_EX_TOPMOST,
 };
-use windows::core::{PWSTR, w};
+use windows::core::{BOOL, PWSTR, w};
 
 pub use super::super::fallback::probe::*;
-use super::super::probe::{Frame, MouseAction, SizeHints, WheelSample, WindowImage};
+use super::super::probe::{Frame, MouseAction, SizeHints, TopLevel, WheelSample, WindowImage};
 use super::super::{PopupEntry, PopupItem, PopupMenu};
 use super::menu::NativeMenu;
 use super::window::{client_rect, window_rect};
@@ -97,6 +97,43 @@ pub fn rects(number: u32) -> Option<[[i32; 4]; 2]> {
     let array = |r: RECT| [r.left, r.top, r.right, r.bottom];
     let hwnd = handle(number);
     Some([array(window_rect(hwnd)?), array(client_rect(hwnd)?)])
+}
+
+pub fn top_levels(process: u32) -> Vec<TopLevel> {
+    unsafe extern "system" fn each(hwnd: HWND, found: LPARAM) -> BOOL {
+        // SAFETY: `found` is the vector `top_levels` passes, alive for the whole enumeration.
+        let found = unsafe { &mut *(found.0 as *mut Vec<HWND>) };
+        found.push(hwnd);
+        BOOL(1)
+    }
+    let mut all: Vec<HWND> = Vec::new();
+    // SAFETY: the callback only pushes onto `all`, which outlives the call.
+    let _ = unsafe { EnumWindows(Some(each), LPARAM(&raw mut all as isize)) };
+    all.into_iter()
+        .filter(|hwnd| {
+            let mut owner = 0;
+            // SAFETY: `owner` outlives the call.
+            unsafe { GetWindowThreadProcessId(*hwnd, Some(&mut owner)) };
+            // SAFETY: no preconditions.
+            owner == process && unsafe { IsWindowVisible(*hwnd) }.as_bool()
+        })
+        .filter_map(|hwnd| {
+            let number = hwnd.0 as usize as u32;
+            // SAFETY: a closed window reads as 0.
+            let (style, ex_style) = unsafe {
+                (
+                    GetWindowLongPtrW(hwnd, GWL_STYLE) as u32,
+                    GetWindowLongPtrW(hwnd, GWL_EXSTYLE) as u32,
+                )
+            };
+            Some(TopLevel {
+                number,
+                rects: rects(number)?,
+                style,
+                ex_style,
+            })
+        })
+        .collect()
 }
 
 pub fn sizing(number: u32, edge: u32, [left, top, right, bottom]: [i32; 4]) -> [i32; 4] {
