@@ -4,10 +4,16 @@
 //! size, bounds, track sizes, `WS_EX_TOPMOST` and DWM backdrop of every window `main.ts` opens,
 //! satellites' aspect ratios in a live resize, `isVisible()`, wheel deltas as Chromium's DOM
 //! events carry them, native menus driven by real pointer and key events, tooltips beside
-//! Electron's, and the hub's own window against the capture scenario mode makes of it.
+//! Electron's, touch and pen beside Chromium's, and the hub's own window against the capture
+//! scenario mode makes of it.
 //!
 //! Needs the logged-in desktop at scale 1 and the oracle's Electron (`ASRS_ELECTRON` or
 //! `cargo xtask oracle setup`); skipped under `ASRS_CI=1` and off Windows. It moves the pointer.
+//! `ASRS_DESKTOP_ONLY=touch` runs the touch and pen checks alone.
+
+#[cfg(windows)]
+#[path = "windows_desktop/touch.rs"]
+mod touch;
 
 #[cfg(windows)]
 mod desktop {
@@ -131,6 +137,18 @@ app.whenReady().then(() => {
       win.focus();
       await wait(600);
       out("tooltip " + JSON.stringify([id(win), ...Object.values(win.getContentBounds())]));
+    } else if (request.op === "touch") {
+      win = new BrowserWindow({ x: 1300, y: 300, width: 700, height: 420, useContentSize: true, show: false });
+      win.setMenu(null);
+      win.once("ready-to-show", () => win.show());
+      await win.loadURL("data:text/html," + encodeURIComponent(request.page));
+      await wait(900);
+      win.focus();
+      await wait(600);
+      const bounds = win.getContentBounds();
+      out("touch " + JSON.stringify([id(win), bounds.x, bounds.y]));
+    } else if (request.op === "touchstate") {
+      out("touchstate " + JSON.stringify(await win.webContents.executeJavaScript("window.state()")));
     } else if (request.op === "close") {
       win.destroy();
       await wait(300);
@@ -154,7 +172,7 @@ app.whenReady().then(() => {
         package.join("dist").join(rel.trim())
     }
 
-    struct Electron {
+    pub(crate) struct Electron {
         child: RefCell<Child>,
         socket: RefCell<TcpStream>,
         lines: mpsc::Receiver<String>,
@@ -208,12 +226,22 @@ app.whenReady().then(() => {
             panic!("Electron did not answer {prefix:?}");
         }
 
-        async fn request(&self, cx: &mut AsyncApp, request: &str, prefix: &str) -> String {
+        pub(crate) async fn request(
+            &self,
+            cx: &mut AsyncApp,
+            request: &str,
+            prefix: &str,
+        ) -> String {
             writeln!(self.socket.borrow_mut(), "{request}").expect("request");
             self.reply(cx, prefix).await
         }
 
-        async fn numbers(&self, cx: &mut AsyncApp, request: &str, prefix: &str) -> Vec<f64> {
+        pub(crate) async fn numbers(
+            &self,
+            cx: &mut AsyncApp,
+            request: &str,
+            prefix: &str,
+        ) -> Vec<f64> {
             let reply = self.request(cx, request, prefix).await;
             let values = json::parse(&reply).expect("json");
             let values = values.as_array().expect("array").iter();
@@ -229,7 +257,7 @@ app.whenReady().then(() => {
         }
     }
 
-    async fn sleep(cx: &mut AsyncApp, ms: u64) {
+    pub(crate) async fn sleep(cx: &mut AsyncApp, ms: u64) {
         cx.background_executor()
             .timer(Duration::from_millis(ms))
             .await;
@@ -273,13 +301,13 @@ app.whenReady().then(() => {
     }
 
     #[derive(Default)]
-    struct Report {
+    pub(crate) struct Report {
         failed: Vec<String>,
         passed: usize,
     }
 
     impl Report {
-        fn check(&mut self, name: &str, ok: bool, detail: impl std::fmt::Display) {
+        pub(crate) fn check(&mut self, name: &str, ok: bool, detail: impl std::fmt::Display) {
             println!("{} {name}: {detail}", if ok { "PASS" } else { "FAIL" });
             if ok {
                 self.passed += 1;
@@ -293,7 +321,7 @@ app.whenReady().then(() => {
         cx.new(|_| Blank::default())
     }
 
-    fn with_window<R>(
+    pub(crate) fn with_window<R>(
         cx: &mut AsyncApp,
         handle: AnyWindowHandle,
         f: impl FnOnce(&mut Window) -> R,
@@ -302,7 +330,7 @@ app.whenReady().then(() => {
             .expect("window")
     }
 
-    fn handle_of(cx: &mut AsyncApp, id: WindowId) -> AnyWindowHandle {
+    pub(crate) fn handle_of(cx: &mut AsyncApp, id: WindowId) -> AnyWindowHandle {
         cx.update(|cx| Windows::handle(cx, id)).expect("handle")
     }
 
@@ -1409,7 +1437,7 @@ app.whenReady().then(() => {
     }
 
     /// What main sends the hub of a first launch in the light theme.
-    fn fresh_boot(user_data: &Path) -> Vec<NamedMessage<MainToHub>> {
+    pub(crate) fn fresh_boot(user_data: &Path) -> Vec<NamedMessage<MainToHub>> {
         std::fs::create_dir_all(user_data).expect("userData");
         std::fs::write(user_data.join("prefs.json"), r#"{"theme":"light"}"#).expect("prefs.json");
         let path = |path: &Path| path.to_str().expect("path").to_owned();
@@ -1521,21 +1549,27 @@ app.whenReady().then(() => {
                 let version = electron.reply(cx, "ready ").await;
                 let mut report = Report::default();
                 report.check("Electron is upstream's", version == "39.2.7", &version);
-                let (hub, hub_view) = cx
-                    .update(|cx| windows::open_hub(cx, None, blank))
-                    .expect("hub");
-                sleep(cx, 1500).await;
-                captions(cx, &electron, &mut report).await;
-                menus(cx, &mut report, hub).await;
-                lists(cx, &electron, &mut report, (hub, &hub_view)).await;
-                accelerators(cx, &mut report, hub).await;
-                wheel(cx, &electron, &mut report).await;
-                aspects(cx, &electron, &mut report).await;
-                sizes(cx, &electron, &mut report, hub).await;
-                states(cx, &electron, &mut report).await;
-                tooltips(cx, &electron, &mut report).await;
+                let only_touch = std::env::var("ASRS_DESKTOP_ONLY").as_deref() == Ok("touch");
+                if !only_touch {
+                    let (hub, hub_view) = cx
+                        .update(|cx| windows::open_hub(cx, None, blank))
+                        .expect("hub");
+                    sleep(cx, 1500).await;
+                    captions(cx, &electron, &mut report).await;
+                    menus(cx, &mut report, hub).await;
+                    lists(cx, &electron, &mut report, (hub, &hub_view)).await;
+                    accelerators(cx, &mut report, hub).await;
+                    wheel(cx, &electron, &mut report).await;
+                    aspects(cx, &electron, &mut report).await;
+                    sizes(cx, &electron, &mut report, hub).await;
+                    states(cx, &electron, &mut report).await;
+                    tooltips(cx, &electron, &mut report).await;
+                }
+                crate::touch::run(cx, &electron, &mut report).await;
                 drop(electron);
-                own_window(cx, &mut report).await;
+                if !only_touch {
+                    own_window(cx, &mut report).await;
+                }
                 println!(
                     "windows desktop: {} passed, {} failed {:?}",
                     report.passed,

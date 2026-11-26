@@ -1229,6 +1229,7 @@ impl<H: FrameHost> HubFrame<H> {
         };
         div()
             .id("timeline-scroll")
+            .children(platform::touch_pan_region())
             .capture_any_mouse_down(cx.listener(|frame, _, _, _| frame.press_area(&Area::Timeline)))
             .size_full()
             .child(
@@ -1499,7 +1500,8 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 .capture_any_mouse_down(
                     cx.listener(|frame, _, _, _| frame.press_area(&Area::SideBar)),
                 )
-                .overflow_hidden();
+                .overflow_hidden()
+                .children(platform::touch_pan_region());
             let mut side_bar =
                 focus::section(side_bar, Section::SideBar as isize, &self.places.side_bar);
             if let Some(content) = self.host.slot(FrameSlot::SideBar, window, cx) {
@@ -1558,6 +1560,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 viewer = viewer.child(
                     overlay
                         .id("tab-bar-scroll")
+                        .children(platform::touch_pan_region())
                         .capture_any_mouse_down(
                             cx.listener(|frame, _, _, _| frame.press_area(&Area::TabBar)),
                         )
@@ -1671,6 +1674,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
                     FrameElement::ControlsHandle,
                     handle
                         .id("controls-handle")
+                        .children(platform::touch_mouse_region())
                         .occlude()
                         .cursor(CursorStyle::ResizeRow)
                         .on_any_mouse_down(cx.listener(|frame, _: &MouseDownEvent, _, cx| {
@@ -1764,6 +1768,7 @@ impl<H: FrameHost> Render for HubFrame<H> {
                 FrameElement::SideBarHandle,
                 handle
                     .id("side-bar-handle")
+                    .children(platform::touch_mouse_region())
                     .occlude()
                     .cursor(CursorStyle::ResizeColumn)
                     .on_any_mouse_down(cx.listener(|frame, _: &MouseDownEvent, _, cx| {

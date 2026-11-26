@@ -1,3 +1,4 @@
+// Modified by asrs: see patches/gpui-pre-windows-0.3.12.patch in the asrs repository.
 use std::{
     cell::{Cell, RefCell},
     ffi::{OsStr, OsString},
@@ -8,6 +9,7 @@ use std::{
         Arc,
         atomic::{AtomicBool, Ordering},
     },
+    time::Duration,
 };
 
 use anyhow::{Context as _, Result, anyhow};
@@ -519,6 +521,22 @@ fn encode_restart_arguments(arguments: &[OsString]) -> OsString {
     OsString::from_wide(&encoded)
 }
 
+/// The feel of Chromium's touch gestures on Windows: `GestureConfigurationAura`'s slop and long
+/// press, and the fling curve of its touchscreen.
+struct WindowsGestures;
+
+impl PlatformGestures for WindowsGestures {
+    fn tuning(&self) -> GestureTuning {
+        GestureTuning {
+            touch_slop: px(15.),
+            long_press_duration: Duration::from_millis(500),
+            scroll_physics: ScrollPhysics::FlingCurve,
+            pan_from_slop: true,
+            ..GestureTuning::default()
+        }
+    }
+}
+
 impl Platform for WindowsPlatform {
     fn platform_info(&self) -> gpui::PlatformInfo {
         gpui::PlatformInfo {
@@ -537,6 +555,10 @@ impl Platform for WindowsPlatform {
 
     fn text_system(&self) -> Arc<dyn PlatformTextSystem> {
         self.text_system.clone()
+    }
+
+    fn gestures(&self) -> Option<Rc<dyn PlatformGestures>> {
+        Some(Rc::new(WindowsGestures))
     }
 
     fn keyboard_layout(&self) -> Box<dyn PlatformKeyboardLayout> {

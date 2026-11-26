@@ -821,6 +821,10 @@ impl SidebarView {
         self.scroll.range()
     }
 
+    pub fn scroll_top(&self) -> f64 {
+        self.scroll.top()
+    }
+
     fn search_results(
         &self,
         appearance: Appearance,

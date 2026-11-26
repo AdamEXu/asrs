@@ -29,7 +29,7 @@ mod startup_error;
 use std::path::Path;
 use std::time::Duration;
 
-use gpui_kit::{App, Bounds, Pixels, Point, ScrollDelta, ScrollEvent, Window};
+use gpui_kit::{AnyElement, App, Bounds, Pixels, Point, ScrollDelta, ScrollEvent, Window};
 
 /// Chromium's pixel size of one notched wheel tick on macOS (`kScrollbarPixelsPerCocoaTick`).
 pub const PIXELS_PER_WHEEL_TICK: f32 = 40.0;
@@ -286,6 +286,58 @@ pub fn window_bounds(window: &Window) -> Option<(f64, f64, f64, f64)> {
 #[cfg(feature = "parity")]
 pub fn titled_content_size(width: f64, height: f64, scale: f64) -> (f64, f64) {
     imp::window::titled_content_size(width, height, scale)
+}
+
+/// `bounds`, a scroller of the frame being drawn, pans by the touches that start over it, as
+/// Chromium's do on Windows. Call it in the scroller's prepaint.
+pub fn touch_region(window: &Window, bounds: Bounds<Pixels>) {
+    #[cfg(windows)]
+    win::touch::region(window, bounds, true);
+    #[cfg(not(windows))]
+    let _ = (window, bounds);
+}
+
+/// Opens the context menu at a press held still as it lifts, Chromium's long tap. Call it in the
+/// paint of a [`touch_region`].
+pub fn touch_listen(window: &mut Window) {
+    #[cfg(windows)]
+    win::touch::listen(window);
+    #[cfg(not(windows))]
+    let _ = window;
+}
+
+/// A [`touch_region`] over the box it fills, for a scroller without [`crate::scroll::scrollbars`].
+pub fn touch_pan_region() -> Option<AnyElement> {
+    touch_box(true)
+}
+
+/// A box drawn over a [`touch_region`] whose touches stay a mouse, as for a resize handle.
+pub fn touch_mouse_region() -> Option<AnyElement> {
+    touch_box(false)
+}
+
+fn touch_box(pans: bool) -> Option<AnyElement> {
+    #[cfg(windows)]
+    use gpui_kit::{IntoElement as _, Styled as _};
+    #[cfg(windows)]
+    return Some(
+        gpui_kit::canvas(
+            move |bounds, window, _| win::touch::region(window, bounds, pans),
+            move |_, _, window, _| {
+                if pans {
+                    touch_listen(window);
+                }
+            },
+        )
+        .absolute()
+        .inset_0()
+        .into_any_element(),
+    );
+    #[cfg(not(windows))]
+    {
+        let _ = pans;
+        None
+    }
 }
 
 /// What Electron sets on every macOS window's frame and GPUI does not.
