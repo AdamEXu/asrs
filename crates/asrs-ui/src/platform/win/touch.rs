@@ -207,42 +207,40 @@ fn route(hwnd: HWND, message: u32, id: u32) -> Route {
 
 fn press(hwnd: HWND, id: u32) -> Route {
     let at = position(hwnd, id);
-    let alone = with(hwnd, |touch| {
+    let (pinching, alone) = with(hwnd, |touch| {
         if touch.pinch.is_some() {
             touch.recognized.insert(id);
-            return Err(Route::Taken);
         }
-        let mut recognized = touch.recognized.iter();
-        Ok(recognized
-            .next()
-            .copied()
-            .filter(|_| touch.recognized.len() == 1))
+        let alone = touch.recognized.iter().next().copied();
+        (
+            touch.pinch.is_some(),
+            alone.filter(|_| touch.recognized.len() == 1),
+        )
     });
-    let first = match alone {
-        Ok(first) => first,
-        Err(route) => return route,
-    };
-    if let Some(first) = first {
-        if let (Some(a), Some(b)) = (screen(first), screen(id)) {
-            with(hwnd, |touch| {
-                touch.recognized.insert(id);
-                touch.pinch = Some(Pinch {
-                    fingers: [first, id],
-                    apart: apart(a, b),
-                    rest: 0.0,
-                });
+    if pinching {
+        return Route::Taken;
+    }
+    if let Some(first) = alone
+        && let (Some(a), Some(b)) = (screen(first), screen(id))
+    {
+        with(hwnd, |touch| {
+            touch.recognized.insert(id);
+            touch.pinch = Some(Pinch {
+                fingers: [first, id],
+                apart: apart(a, b),
+                rest: 0.0,
             });
-            // SAFETY: the window belongs to this thread; GPUI ends the first finger's gesture.
-            unsafe {
-                DefSubclassProc(
-                    hwnd,
-                    WM_POINTERCAPTURECHANGED,
-                    WPARAM(first as usize),
-                    LPARAM(0),
-                )
-            };
-            return Route::Taken;
-        }
+        });
+        // SAFETY: the window belongs to this thread; GPUI ends the first finger's gesture.
+        unsafe {
+            DefSubclassProc(
+                hwnd,
+                WM_POINTERCAPTURECHANGED,
+                WPARAM(first as usize),
+                LPARAM(0),
+            )
+        };
+        return Route::Taken;
     }
     with(hwnd, |touch| {
         let over = at.is_some_and(|at| {
