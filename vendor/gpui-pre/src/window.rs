@@ -6241,6 +6241,15 @@ impl Window {
             RecognizedTouchGesture::Tap { down, up } => {
                 self.mouse_position = up.position;
                 cx.propagate_event = true;
+                self.dispatch_mouse_event(
+                    &MouseMoveEvent {
+                        position: up.position,
+                        pressed_button: None,
+                        modifiers: up.modifiers,
+                    },
+                    cx,
+                );
+                cx.propagate_event = true;
                 self.dispatch_mouse_event(&down, cx);
                 cx.propagate_event = true;
                 self.dispatch_mouse_event(&up, cx);

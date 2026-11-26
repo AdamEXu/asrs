@@ -83,7 +83,18 @@ pub fn open_window<V: Render>(
         })?;
         Ok((handle, built.expect("open_window ran its build closure")))
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(windows)]
+    {
+        let mut built = None;
+        let (handle, _) = gpui_kit::open_window(options, cx, |window, cx| {
+            platform::tag_srgb_colorspace(window);
+            let view = build(window, cx);
+            built = Some(view.clone());
+            platform::win::touch::root(view, window, cx)
+        })?;
+        Ok((handle, built.expect("open_window ran its build closure")))
+    }
+    #[cfg(target_os = "macos")]
     gpui_kit::open_window(options, cx, |window, cx| {
         platform::tag_srgb_colorspace(window);
         build(window, cx)

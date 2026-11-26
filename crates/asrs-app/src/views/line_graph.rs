@@ -316,6 +316,7 @@ impl<H: FrameHost> HubFrame<H> {
             "div.line-graph-scroll",
             div()
                 .id("line-graph-scroll")
+                .children(asrs_ui::platform::touch_pan_region())
                 .capture_any_mouse_down(
                     cx.listener(move |frame, _, _, _| frame.press_area(&Area::LineGraph(key))),
                 )

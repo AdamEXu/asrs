@@ -1,3 +1,4 @@
+// Modified by asrs: see patches/gpui-pre-0.3.12.patch in the asrs repository.
 //! Touch gesture recognition vocabulary.
 //!
 //! GPUI recognizes gestures from raw [`TouchEvent`](crate::TouchEvent)s using
@@ -123,6 +124,9 @@ pub struct GestureTuning {
     /// Minimum release velocity, in pixels per second, required to start
     /// scroll momentum.
     pub min_fling_velocity: f32,
+    /// Whether a pan leaves out the slop it crossed, as Chromium's do, rather
+    /// than catching the content up to the finger.
+    pub pan_from_slop: bool,
 }
 
 impl Default for GestureTuning {
@@ -134,6 +138,7 @@ impl Default for GestureTuning {
             long_press_duration: Duration::from_millis(500),
             scroll_physics: ScrollPhysics::ios(),
             min_fling_velocity: 50.,
+            pan_from_slop: false,
         }
     }
 }
@@ -166,6 +171,10 @@ pub enum ScrollPhysics {
         /// further in pixels on a denser screen.
         pixels_per_inch: f32,
     },
+    /// Chromium's `ui::FlingCurve`, its touchscreen fling outside Android:
+    /// position follows `α·e^(-γt) - βt - α`, entered at the time whose
+    /// velocity is the release speed and run until the velocity reaches zero.
+    FlingCurve,
 }
 
 impl ScrollPhysics {
@@ -211,6 +220,14 @@ impl ScrollPhysics {
                 let seconds = (deceleration / (friction_spline::deceleration_rate() - 1.)).exp();
                 Duration::from_secs_f64(seconds)
             }
+            Self::FlingCurve => {
+                if speed <= 0. {
+                    return Duration::ZERO;
+                }
+                let seconds = fling_curve::time_at_velocity(0.)
+                    - fling_curve::time_at_velocity(fling_curve::start_speed(speed));
+                Duration::from_secs_f64(seconds.max(0.))
+            }
         }
     }
 
@@ -242,7 +259,35 @@ impl ScrollPhysics {
                 let progress = elapsed.as_secs_f64() / duration.as_secs_f64();
                 total_distance as f32 * friction_spline::distance_coefficient(progress as f32)
             }
+            Self::FlingCurve => {
+                let offset = fling_curve::time_at_velocity(fling_curve::start_speed(speed));
+                (fling_curve::position_at_time(offset + elapsed.as_secs_f64())
+                    - fling_curve::position_at_time(offset)) as f32
+            }
         }
+    }
+}
+
+/// The constants and curve of Chromium's `ui/events/gestures/fling_curve.cc`.
+mod fling_curve {
+    const ALPHA: f64 = -5707.62;
+    const BETA: f64 = 172.;
+    const GAMMA: f64 = 3.7;
+
+    pub(super) fn position_at_time(t: f64) -> f64 {
+        ALPHA * (-GAMMA * t).exp() - BETA * t - ALPHA
+    }
+
+    fn velocity_at_time(t: f64) -> f64 {
+        -ALPHA * GAMMA * (-GAMMA * t).exp() - BETA
+    }
+
+    pub(super) fn time_at_velocity(v: f64) -> f64 {
+        -((v + BETA) / (-ALPHA * GAMMA)).ln() / GAMMA
+    }
+
+    pub(super) fn start_speed(speed: f32) -> f64 {
+        f64::from(speed).min(velocity_at_time(0.))
     }
 }
 
@@ -699,13 +744,20 @@ impl TouchGestureRecognizer {
                         // of losing the slop distance.
                         let mut target = event.predicted_position.unwrap_or(event.position);
                         let axis = dominant_axis(accumulated);
-                        let mut delta = target - touch.start_position;
+                        let mut origin = touch.start_position;
+                        if self.tuning.pan_from_slop {
+                            let slop = (f64::from(self.tuning.touch_slop)
+                                / accumulated.magnitude())
+                                as f32;
+                            origin = origin + point(accumulated.x * slop, accumulated.y * slop);
+                        }
+                        let mut delta = target - origin;
                         lock_delta_to_axis(&mut delta, axis);
                         touch.last_movement = accumulated;
                         lock_delta_to_axis(&mut touch.last_movement, axis);
                         if movements_oppose(delta, touch.last_movement) {
                             target = event.position;
-                            delta = accumulated;
+                            delta = event.position - origin;
                             lock_delta_to_axis(&mut delta, axis);
                         }
                         touch.emitted_position = target;

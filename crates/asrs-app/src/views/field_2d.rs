@@ -653,6 +653,7 @@ impl<H: FrameHost> HubFrame<H> {
                 "div.field-2d-scroll",
                 local(container)
                     .id("field-2d-scroll")
+                    .children(asrs_ui::platform::touch_pan_region())
                     .capture_any_mouse_down(
                         cx.listener(move |frame, _, _, _| frame.press_area(&Area::Field2d(key))),
                     )

@@ -14,6 +14,7 @@ use gpui_kit::{
 use super::keys::{LINE, page_step};
 use crate::canvas_view::geometry::mouse_client;
 use crate::input::skia;
+use crate::platform;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Style {
@@ -99,11 +100,11 @@ pub fn set_style(style: Style, jump: bool, cx: &mut App) {
 /// Takes the system's style, and follows it.
 pub fn use_system_style(cx: &mut App) {
     take_system_style(cx);
-    crate::platform::observe_scrollbar_preferences(cx, take_system_style);
+    platform::observe_scrollbar_preferences(cx, take_system_style);
 }
 
 fn take_system_style(cx: &mut App) {
-    let (classic, jump) = crate::platform::scrollbar_preferences();
+    let (classic, jump) = platform::scrollbar_preferences();
     set_style(Style::of(classic), jump, cx);
 }
 
@@ -659,6 +660,7 @@ pub fn scrollbars<F: Fn(Request, &mut Window, &mut App) + 'static>(
                 hitboxes: [const { None }; 2],
             };
             frame.bars = geometry(settings.style, &extent, frame.box_size(), scale);
+            platform::touch_region(window, bounds);
             let mut state = laid_out.borrow_mut();
             let now = state.now(cx);
             state.sync(extent.offset, now);
@@ -692,6 +694,7 @@ pub fn scrollbars<F: Fn(Request, &mut Window, &mut App) + 'static>(
             frame
         },
         move |_, frame, window, cx| {
+            platform::touch_listen(window);
             frame.paint(&painted.borrow(), extent.dark, window, cx);
             listen(Rc::new(frame), painted, extent, request, window);
         },

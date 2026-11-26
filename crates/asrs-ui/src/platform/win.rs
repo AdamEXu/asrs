@@ -39,6 +39,7 @@ mod menu;
 pub(crate) mod offscreen;
 pub(super) mod probe;
 mod subclass;
+pub(crate) mod touch;
 pub(super) mod window;
 
 /// The DOM delta of one line: Chromium's 100 px a notch over GPUI's 3 lines.

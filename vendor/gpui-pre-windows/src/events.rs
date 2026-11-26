@@ -1,3 +1,4 @@
+// Modified by asrs: see patches/gpui-pre-windows-0.3.12.patch in the asrs repository.
 use std::{cell::Cell, rc::Rc, sync::atomic::Ordering};
 
 use anyhow::Context as _;
@@ -10,7 +11,7 @@ use windows::{
         UI::{
             Controls::*,
             HiDpi::*,
-            Input::{Ime::*, KeyboardAndMouse::*},
+            Input::{Ime::*, KeyboardAndMouse::*, Pointer::*},
             WindowsAndMessaging::*,
         },
     },
@@ -155,6 +156,9 @@ impl WindowsWindowInner {
             WM_SETTINGCHANGE => self.handle_system_settings_changed(handle, wparam, lparam),
             WM_INPUTLANGCHANGE => self.handle_input_language_changed(),
             WM_SHOWWINDOW => self.handle_window_visibility_changed(handle, wparam),
+            WM_POINTERDOWN | WM_POINTERUPDATE | WM_POINTERUP | WM_POINTERCAPTURECHANGED => {
+                self.handle_pointer_msg(handle, msg, wparam)
+            }
             DM_POINTERHITTEST => self.handle_dm_pointer_hit_test(wparam),
             WM_GETOBJECT => self.handle_wm_getobject(wparam, lparam),
             WM_GPUI_CURSOR_STYLE_CHANGED
@@ -1341,6 +1345,48 @@ impl WindowsWindowInner {
         // between) is treated as a forced render so it both clears
         // `skip_draws` and bypasses the view cache.
         self.state.force_render_pending.set(true);
+        Some(0)
+    }
+
+    /// Touches and pen contacts as raw touches, for the gesture recognizer. Answering the message
+    /// keeps the system from promoting the pointer to a mouse.
+    fn handle_pointer_msg(&self, handle: HWND, msg: u32, wparam: WPARAM) -> Option<isize> {
+        let pointer_id = wparam.loword() as u32;
+        let mut pointer_type = POINTER_INPUT_TYPE::default();
+        let typed = unsafe { GetPointerType(pointer_id, &mut pointer_type) }.is_ok();
+        let contact = typed && (pointer_type == PT_TOUCH || pointer_type == PT_PEN);
+        if !contact && (typed || msg != WM_POINTERCAPTURECHANGED) {
+            return None;
+        }
+        let mut info = POINTER_INFO::default();
+        let known = unsafe { GetPointerInfo(pointer_id, &mut info) }.is_ok();
+        if !known && msg != WM_POINTERCAPTURECHANGED {
+            return None;
+        }
+        let flag = |flag: POINTER_FLAGS| info.pointerFlags.0 & flag.0 != 0;
+        let phase = match msg {
+            WM_POINTERCAPTURECHANGED => TouchPhase::Cancelled,
+            _ if flag(POINTER_FLAG_CANCELED) => TouchPhase::Cancelled,
+            WM_POINTERDOWN => TouchPhase::Started,
+            WM_POINTERUP => TouchPhase::Ended,
+            _ if flag(POINTER_FLAG_INCONTACT) => TouchPhase::Moved,
+            _ => return None,
+        };
+        let mut point = info.ptPixelLocation;
+        if known {
+            let _ = unsafe { ScreenToClient(handle, &mut point) };
+        }
+        let scale_factor = self.state.scale_factor.get();
+        let input = PlatformInput::Touch(TouchEvent {
+            id: TouchId(u64::from(pointer_id)),
+            phase,
+            position: logical_point(point.x as f32, point.y as f32, scale_factor),
+            predicted_position: None,
+            force: None,
+        });
+        let mut func = self.state.callbacks.input.take()?;
+        func(input);
+        self.state.callbacks.input.set(Some(func));
         Some(0)
     }
 
