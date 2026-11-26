@@ -6,6 +6,9 @@ use super::gpu::RenderError;
 #[cfg(feature = "parity")]
 const VARIABLE: &str = "ASRS_FIELD3D_ADAPTER";
 
+// DX12 allocates its non-sampler descriptor heap to this size when the device opens.
+const NON_SAMPLER_BINDINGS: u32 = 1 << 16;
+
 pub(super) struct Opened {
     pub info: wgpu::AdapterInfo,
     pub device: wgpu::Device,
@@ -85,9 +88,18 @@ fn open_software(wanted: &str) -> Result<Opened, RenderError> {
     }
 }
 
+fn required_limits(adapter: &wgpu::Adapter) -> wgpu::Limits {
+    wgpu::Limits {
+        max_non_sampler_bindings: NON_SAMPLER_BINDINGS
+            .min(adapter.limits().max_non_sampler_bindings),
+        ..Default::default()
+    }
+}
+
 fn open_device(adapter: &wgpu::Adapter) -> Result<Opened, RenderError> {
     let desc = wgpu::DeviceDescriptor {
         label: Some("field3d"),
+        required_limits: required_limits(adapter),
         // DX12 and Vulkan suballocate from blocks they keep, by default 128 MB and up. Anything
         // larger than a block gets memory of its own, which is freed with it.
         memory_hints: wgpu::MemoryHints::Manual {
@@ -119,4 +131,30 @@ fn open_device(adapter: &wgpu::Adapter) -> Result<Opened, RenderError> {
         gl_clip_space,
         lost,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{NON_SAMPLER_BINDINGS, adapters, backend_sets, open_device, required_limits};
+
+    #[test]
+    fn the_device_limits_carry_the_clamped_non_sampler_binding_limit() {
+        for backends in backend_sets() {
+            let mut adapters = adapters(backends);
+            adapters.sort_by_key(|a| a.get_info().device_type == wgpu::DeviceType::Cpu);
+            for adapter in adapters {
+                assert!(required_limits(&adapter).check_limits(&adapter.limits()));
+                let expected = wgpu::Limits {
+                    max_non_sampler_bindings: NON_SAMPLER_BINDINGS
+                        .min(adapter.limits().max_non_sampler_bindings),
+                    ..Default::default()
+                };
+                if let Ok(opened) = open_device(&adapter) {
+                    assert_eq!(opened.device.limits(), expected);
+                    return;
+                }
+            }
+        }
+        eprintln!("note: skipping device limits test: no graphics adapter");
+    }
 }
