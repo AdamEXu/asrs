@@ -420,6 +420,8 @@ fn launch(paths: &Paths, scenario: &Scenario, variant: &Variant<'_>, out: &Path)
 /// on a display at another scale gives framed windows sizes no display of that scale gives.
 struct DisplayAt {
     script: PathBuf,
+    /// The scale to restore, kept until restored so a run killed before then still restores it.
+    saved: PathBuf,
     restore: Option<u32>,
 }
 
@@ -427,13 +429,24 @@ impl DisplayAt {
     fn scale(paths: &Paths, scale: u32) -> Result<Self> {
         let mut display = DisplayAt {
             script: paths.root.join("xtask/hosts/windows/display-scale.ps1"),
+            saved: std::env::temp_dir().join("asrs-display-scale"),
             restore: None,
         };
         if cfg!(windows) {
-            let was = display.percent(None)?;
-            if was != scale * 100 {
-                display.percent(Some(scale * 100))?;
+            let now = display.percent(None)?;
+            let was = fs::read_to_string(&display.saved)
+                .ok()
+                .and_then(|text| text.trim().parse().ok())
+                .unwrap_or(now);
+            if was == scale * 100 {
+                let _ = fs::remove_file(&display.saved);
+            } else {
+                fs::write(&display.saved, was.to_string())
+                    .map_err(|e| format!("{}: {e}", display.saved.display()))?;
                 display.restore = Some(was);
+            }
+            if now != scale * 100 {
+                display.percent(Some(scale * 100))?;
             }
         }
         Ok(display)
@@ -465,10 +478,13 @@ impl DisplayAt {
 
 impl Drop for DisplayAt {
     fn drop(&mut self) {
-        if let Some(percent) = self.restore
-            && let Err(e) = self.percent(Some(percent))
-        {
-            eprintln!("{e}");
+        if let Some(percent) = self.restore {
+            match self.percent(Some(percent)) {
+                Ok(_) => {
+                    let _ = fs::remove_file(&self.saved);
+                }
+                Err(e) => eprintln!("{e}"),
+            }
         }
     }
 }

@@ -15,7 +15,7 @@ public static class DisplayScale {
   [DllImport("user32.dll")] static extern IntPtr MonitorFromPoint(long point, uint flags);
   [DllImport("shcore.dll")] static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint x, out uint y);
   static readonly int[] Steps = {100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500};
-  const int GetScale = -3, SetScale = -4, PathSize = 72, ModeSize = 64, OnlyActive = 2;
+  const int GetScale = -3, SetScale = -4, PathSize = 72, ModeSize = 64, OnlyActive = 2, SourceMode = 1;
 
   static byte[] Packet(int type, int size) {
     uint paths, modes;
@@ -25,8 +25,19 @@ public static class DisplayScale {
     byte[] packet = new byte[size];
     BitConverter.GetBytes(type).CopyTo(packet, 0);
     BitConverter.GetBytes(size).CopyTo(packet, 4);
-    Array.Copy(pathArray, 0, packet, 8, 12);
+    Array.Copy(pathArray, PrimaryPath(pathArray, paths, modeArray, modes) * PathSize, packet, 8, 12);
     return packet;
+  }
+
+  // The path whose source mode sits at (0, 0): the primary display, which Get reads.
+  static int PrimaryPath(byte[] pathArray, uint paths, byte[] modeArray, uint modes) {
+    for (int i = 0; i < paths; i++) {
+      uint mode = BitConverter.ToUInt32(pathArray, i * PathSize + 12);
+      if (mode >= modes) continue;
+      int at = (int)mode * ModeSize;
+      if (BitConverter.ToInt32(modeArray, at) == SourceMode && BitConverter.ToInt32(modeArray, at + 28) == 0 && BitConverter.ToInt32(modeArray, at + 32) == 0) return i;
+    }
+    return 0;
   }
 
   static void Check(int result, string call) {
