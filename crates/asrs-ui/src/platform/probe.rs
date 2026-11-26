@@ -284,6 +284,36 @@ pub fn post_mouse(action: MouseAction, x: f64, y: f64) -> bool {
     imp::probe::post_mouse(action, x, y)
 }
 
+/// What a synthetic pointer device stands for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PointerKind {
+    Touch,
+    Pen,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ContactPhase {
+    Down,
+    Move,
+    Up,
+    /// A pen in range, not touching.
+    Hover,
+}
+
+/// One contact of a frame of pointer input, at a point in screen px.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Contact {
+    pub id: u32,
+    pub x: f64,
+    pub y: f64,
+    pub phase: ContactPhase,
+}
+
+/// A touch screen or pen digitizer of `InjectSyntheticPointerInput`, whose frames reach windows
+/// as a real one's do.
+#[cfg(windows)]
+pub use super::win::probe::SyntheticPointer;
+
 /// The cursor position in global top-left screen coordinates.
 pub fn cursor_location() -> (f64, f64) {
     imp::probe::cursor_location()

@@ -7,6 +7,15 @@ use windows::Win32::Graphics::Gdi::{
     BI_RGB, BITMAPINFO, BITMAPINFOHEADER, BitBlt, CreateCompatibleDC, CreateDIBSection,
     DIB_RGB_COLORS, DeleteDC, DeleteObject, GdiFlush, GetDC, ReleaseDC, SRCCOPY, SelectObject,
 };
+use windows::Win32::UI::Controls::{
+    CreateSyntheticPointerDevice, DestroySyntheticPointerDevice, HSYNTHETICPOINTERDEVICE,
+    POINTER_FEEDBACK_NONE, POINTER_TYPE_INFO, POINTER_TYPE_INFO_0,
+};
+use windows::Win32::UI::Input::Pointer::{
+    InjectSyntheticPointerInput, POINTER_FLAG_DOWN, POINTER_FLAG_FIRSTBUTTON, POINTER_FLAG_INCONTACT,
+    POINTER_FLAG_INRANGE, POINTER_FLAG_UP, POINTER_FLAG_UPDATE, POINTER_FLAGS, POINTER_INFO,
+    POINTER_PEN_INFO, POINTER_TOUCH_INFO,
+};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYBDINPUT, KEYEVENTF_KEYUP,
     MOUSE_EVENT_FLAGS, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
@@ -16,14 +25,18 @@ use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, FindWindowW, GWL_EXSTYLE, GWL_STYLE, GetCursorPos, GetForegroundWindow,
     GetMenuItemCount, GetMenuItemInfoW, GetWindowLongPtrW, GetWindowThreadProcessId, HMENU,
     IsWindowVisible, MENUITEMINFOW, MFS_CHECKED, MFS_DISABLED, MFT_SEPARATOR, MIIM_BITMAP,
-    MIIM_FTYPE, MIIM_ID, MIIM_STATE, MIIM_STRING, MIIM_SUBMENU, MINMAXINFO, SW_MAXIMIZE,
+    MIIM_FTYPE, MIIM_ID, MIIM_STATE, MIIM_STRING, MIIM_SUBMENU, MINMAXINFO, PEN_MASK_PRESSURE,
+    PT_PEN, PT_TOUCH, SW_MAXIMIZE, TOUCH_MASK_CONTACTAREA,
     SW_MINIMIZE, SW_RESTORE, SendMessageW, SetCursorPos, ShowWindow, USER_DEFAULT_SCREEN_DPI,
     WM_DPICHANGED, WM_GETMINMAXINFO, WM_SIZING, WS_EX_TOPMOST,
 };
 use windows::core::{BOOL, PWSTR, w};
 
 pub use super::super::fallback::probe::*;
-use super::super::probe::{Frame, MouseAction, SizeHints, TopLevel, WheelSample, WindowImage};
+use super::super::probe::{
+    Contact, ContactPhase, Frame, MouseAction, PointerKind, SizeHints, TopLevel, WheelSample,
+    WindowImage,
+};
 use super::super::{PopupEntry, PopupItem, PopupMenu};
 use super::menu::NativeMenu;
 use super::window::{client_rect, window_rect};
@@ -261,6 +274,99 @@ pub fn cursor_location() -> (f64, f64) {
     // SAFETY: `point` outlives the call.
     unsafe { GetCursorPos(&mut point) }.ok();
     (f64::from(point.x), f64::from(point.y))
+}
+
+pub struct SyntheticPointer {
+    device: HSYNTHETICPOINTERDEVICE,
+    kind: PointerKind,
+}
+
+impl SyntheticPointer {
+    pub fn new(kind: PointerKind) -> Option<Self> {
+        let (pointer_type, contacts) = match kind {
+            PointerKind::Touch => (PT_TOUCH, 10),
+            PointerKind::Pen => (PT_PEN, 1),
+        };
+        // SAFETY: no preconditions.
+        let device =
+            unsafe { CreateSyntheticPointerDevice(pointer_type, contacts, POINTER_FEEDBACK_NONE) };
+        Some(Self {
+            device: device.ok()?,
+            kind,
+        })
+    }
+
+    pub fn inject(&self, contacts: &[Contact]) -> bool {
+        let frame: Vec<POINTER_TYPE_INFO> = contacts.iter().map(|c| self.info(c)).collect();
+        // SAFETY: the device is alive and `frame` outlives the call.
+        unsafe { InjectSyntheticPointerInput(self.device, &frame) }.is_ok()
+    }
+
+    fn info(&self, contact: &Contact) -> POINTER_TYPE_INFO {
+        let (x, y) = (contact.x.round() as i32, contact.y.round() as i32);
+        let flags = match contact.phase {
+            ContactPhase::Down => POINTER_FLAG_INRANGE.0 | POINTER_FLAG_INCONTACT.0 | POINTER_FLAG_DOWN.0,
+            ContactPhase::Move => {
+                POINTER_FLAG_INRANGE.0 | POINTER_FLAG_INCONTACT.0 | POINTER_FLAG_UPDATE.0
+            }
+            ContactPhase::Up => match self.kind {
+                PointerKind::Touch => POINTER_FLAG_UP.0,
+                PointerKind::Pen => POINTER_FLAG_INRANGE.0 | POINTER_FLAG_UP.0,
+            },
+            ContactPhase::Hover => POINTER_FLAG_INRANGE.0 | POINTER_FLAG_UPDATE.0,
+        };
+        let touching = matches!(contact.phase, ContactPhase::Down | ContactPhase::Move);
+        let flags = match (self.kind, touching) {
+            (PointerKind::Pen, true) => flags | POINTER_FLAG_FIRSTBUTTON.0,
+            _ => flags,
+        };
+        let pointer = POINTER_INFO {
+            pointerType: match self.kind {
+                PointerKind::Touch => PT_TOUCH,
+                PointerKind::Pen => PT_PEN,
+            },
+            pointerId: contact.id,
+            pointerFlags: POINTER_FLAGS(flags),
+            ptPixelLocation: POINT { x, y },
+            ..Default::default()
+        };
+        match self.kind {
+            PointerKind::Touch => POINTER_TYPE_INFO {
+                r#type: PT_TOUCH,
+                Anonymous: POINTER_TYPE_INFO_0 {
+                    touchInfo: POINTER_TOUCH_INFO {
+                        pointerInfo: pointer,
+                        touchMask: TOUCH_MASK_CONTACTAREA,
+                        rcContact: RECT {
+                            left: x - 2,
+                            top: y - 2,
+                            right: x + 2,
+                            bottom: y + 2,
+                        },
+                        ..Default::default()
+                    },
+                },
+            },
+            PointerKind::Pen => POINTER_TYPE_INFO {
+                r#type: PT_PEN,
+                Anonymous: POINTER_TYPE_INFO_0 {
+                    penInfo: POINTER_PEN_INFO {
+                        pointerInfo: pointer,
+                        penMask: PEN_MASK_PRESSURE,
+                        pressure: if touching { 512 } else { 0 },
+                        ..Default::default()
+                    },
+                },
+            },
+        }
+    }
+}
+
+impl Drop for SyntheticPointer {
+    fn drop(&mut self) {
+        // SAFETY: the device was created by `new` and is destroyed once.
+        unsafe { DestroySyntheticPointerDevice(self.device) };
+    }
 }
 
 pub fn post_mouse(action: MouseAction, x: f64, y: f64) -> bool {

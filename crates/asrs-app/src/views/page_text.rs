@@ -454,14 +454,19 @@ impl<H: FrameHost> HubFrame<H> {
     }
 
     pub(super) fn copy_text(&mut self, cx: &mut Context<'_, Self>) {
+        if let Some(text) = self.selected_text(cx) {
+            write_clipboard(&text, cx);
+        }
+    }
+
+    /// What a copy would write: the page's selected text, if any.
+    pub fn selected_text(&mut self, cx: &mut Context<'_, Self>) -> Option<String> {
         let mut copied = None;
         self.with_text(cx, |_, state, page| {
             state.sync(page.document());
             copied = state.text(page.document());
         });
-        if let Some(text) = copied {
-            write_clipboard(&text, cx);
-        }
+        copied
     }
 
     pub(super) fn select_all_text(&mut self, cx: &mut Context<'_, Self>) {
