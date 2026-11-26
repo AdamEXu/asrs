@@ -996,8 +996,8 @@ impl<H: FrameHost> HubFrame<H> {
                 overflows,
                 text::opaque_background(false, cells),
             ))
-            .child(text::opaque_background(overflows, first_cells))
-            .child(text::opaque_background(overflows, header))
+            .child(text::sticky_background(overflows, first_cells))
+            .child(text::sticky_background(overflows, header))
             .into_any_element()
     }
 }

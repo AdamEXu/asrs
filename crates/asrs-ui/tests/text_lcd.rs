@@ -12,7 +12,7 @@ use asrs_canvas::text::{
 use asrs_ui::gpui::{HeadlessAppContext, NoopTextSystem};
 use asrs_ui::text::{
     CacheStats, FontSpec, Text, TextStyle, TextSystem, faded, grayscale_layer, opaque_background,
-    scroller,
+    scroller, sticky_background,
 };
 use gpui_kit::{
     AnyElement, AnyWindowHandle, AppContext, Context, IntoElement, ParentElement, Render, Styled,
@@ -244,10 +244,14 @@ fn own(child: impl IntoElement) -> AnyElement {
     opaque_background(false, div().bg(rgb(0xaaaaaa)).child(child)).into_any_element()
 }
 
+fn sticky(scrolls: bool, child: impl IntoElement) -> AnyElement {
+    sticky_background(scrolls, div().bg(rgb(0xaaaaaa)).child(child)).into_any_element()
+}
+
 #[test]
 fn a_grayscale_window_keeps_lcd_text_over_an_opaque_background_of_its_own() {
     type Case = (f32, &'static str, u64, fn() -> AnyElement);
-    let cases: [Case; 10] = [
+    let cases: [Case; 13] = [
         (1.0, "the page", 0, || page(0xffffff, text("run"))),
         (1.0, "its own", 1, || page(0xffffff, own(text("run")))),
         (1.0, "the page's in it", 0, || {
@@ -276,6 +280,15 @@ fn a_grayscale_window_keeps_lcd_text_over_an_opaque_background_of_its_own() {
         }),
         (2.0, "in a scroller", 1, || {
             page(0xffffff, scroller(true, own(text("run"))))
+        }),
+        (1.0, "sticky in a scroller that does not scroll", 0, || {
+            page(0xffffff, sticky(false, text("run")))
+        }),
+        (1.0, "sticky in a scroller that scrolls", 1, || {
+            page(0xffffff, sticky(true, text("run")))
+        }),
+        (2.0, "sticky in a scroller that scrolls", 1, || {
+            page(0xffffff, sticky(true, text("run")))
         }),
     ];
     for (scale, name, lcd, build) in cases {

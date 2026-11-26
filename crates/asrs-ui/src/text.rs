@@ -203,6 +203,7 @@ impl TextSystem {
                     (own, separate) = (true, false);
                     composited |= always;
                 }
+                Layer::Sticky(scrolls) => (own, separate, composited) = (true, false, scrolls),
                 Layer::Page | Layer::Faded(_) | Layer::Selection => {}
             }
         }
@@ -454,6 +455,8 @@ enum Layer {
     Faded(f32),
     /// An [`opaque_background`], `true` where it is composited at any scale.
     Own(bool),
+    /// A [`sticky_background`], `true` while its scroller scrolls.
+    Sticky(bool),
     /// A [`selection_background`].
     Selection,
 }
@@ -462,13 +465,20 @@ impl Layer {
     fn opacity(self) -> f32 {
         match self {
             Layer::Faded(opacity) => opacity,
-            Layer::Page | Layer::Always | Layer::Scroller | Layer::Own(_) | Layer::Selection => 1.0,
+            Layer::Page
+            | Layer::Always
+            | Layer::Scroller
+            | Layer::Own(_)
+            | Layer::Sticky(_)
+            | Layer::Selection => 1.0,
         }
     }
 
     fn grayscale(self, scale: f32) -> bool {
         match self {
-            Layer::Page | Layer::Faded(_) | Layer::Own(_) | Layer::Selection => false,
+            Layer::Page | Layer::Faded(_) | Layer::Own(_) | Layer::Sticky(_) | Layer::Selection => {
+                false
+            }
             Layer::Always => true,
             Layer::Scroller => scale >= PREFER_COMPOSITING,
         }
@@ -505,10 +515,19 @@ pub fn scroller(overflows: bool, child: impl IntoElement) -> TextLayer {
 /// An element that paints an opaque background under its own text. In a window that is not
 /// opaque Chromium still draws that text LCD where it gives the element a layer of its own: below
 /// 1.5x, in a scroller that overflows, or at any scale if `composited` (an overflowing scroller
-/// itself, or `sticky` in one). Being its own layer, it is not on a [`grayscale_layer`] around it.
+/// itself). Being its own layer, it is not on a [`grayscale_layer`] around it.
 pub fn opaque_background(composited: bool, child: impl IntoElement) -> TextLayer {
     TextLayer {
         layer: Layer::Own(composited),
+        child: child.into_any_element(),
+    }
+}
+
+/// An [`opaque_background`] that is `position: sticky`: a layer of its own only while its scroller
+/// `scrolls`, at any scale. Upstream's empty table draws its sticky jump field grayscale at 1x.
+pub fn sticky_background(scrolls: bool, child: impl IntoElement) -> TextLayer {
+    TextLayer {
+        layer: Layer::Sticky(scrolls),
         child: child.into_any_element(),
     }
 }
@@ -586,7 +605,7 @@ impl Element for TextLayer {
         system.layers.push(self.layer);
         let start = window.painted_scene().len();
         let own = match self.layer {
-            Layer::Own(_) => Some(true),
+            Layer::Own(_) | Layer::Sticky(_) => Some(true),
             Layer::Selection => Some(false),
             _ => None,
         };
