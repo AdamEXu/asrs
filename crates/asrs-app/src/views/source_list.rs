@@ -10,6 +10,7 @@ use std::rc::Rc;
 use asrs_hub::frame::client_coordinate;
 use asrs_hub::hub::HubModel;
 use asrs_js::math;
+use asrs_js::time::Clock;
 use asrs_model::layout_unit::{centred, device, percent, snap, zoomed};
 use asrs_model::source_list::layout::{ListLayout, ListRoot, controller_roots};
 use asrs_model::source_list::{
@@ -305,7 +306,13 @@ impl Shown {
     }
 }
 
-type Dispatch = Rc<dyn Fn(ListPointer, &mut App)>;
+type Sender = Rc<dyn Fn(ListPointer, &mut App)>;
+
+#[derive(Clone)]
+struct Dispatch {
+    send: Sender,
+    date: Rc<dyn Clock>,
+}
 
 fn on(
     dispatch: &Option<Dispatch>,
@@ -314,7 +321,7 @@ fn on(
     let dispatch = dispatch.clone();
     move |_, _, cx| {
         if let Some(d) = &dispatch {
-            d(event, cx);
+            (d.send)(event, cx);
         }
     }
 }
@@ -469,9 +476,9 @@ fn item_body(
     let name_click = {
         let dispatch = dispatch.clone();
         move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
-            let now = math::trunc(asrs_js::time::Clock::now(&asrs_js::time::SystemClock));
             if let Some(d) = &dispatch {
-                d(ListPointer::NameClick { index, now }, cx);
+                let now = math::trunc(d.date.now());
+                (d.send)(ListPointer::NameClick { index, now }, cx);
             }
         }
     };
@@ -897,12 +904,15 @@ impl<H: FrameHost> HubFrame<H> {
                         .subpixel(title_dx as f32, 0.0),
                 ),
         );
-        let dispatch: Option<Dispatch> = {
+        let dispatch = {
             let frame = cx.entity().downgrade();
             let uuid = uuid.clone();
-            Some(Rc::new(move |event, cx: &mut App| {
-                let _ = frame.update(cx, |frame, cx| frame.list_input(&uuid, event, cx));
-            }))
+            Some(Dispatch {
+                send: Rc::new(move |event, cx: &mut App| {
+                    let _ = frame.update(cx, |frame, cx| frame.list_input(&uuid, event, cx));
+                }),
+                date: self.host().hub(cx).page().clock().clone(),
+            })
         };
         let half = f64::from(BUTTON) / 2.0;
         let corner =
