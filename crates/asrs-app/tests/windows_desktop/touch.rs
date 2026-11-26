@@ -238,7 +238,12 @@ async fn open_hub(cx: &mut AsyncApp, user_data: &Path) -> (windows::WindowId, Ou
     );
     main_message(cx, &hub, MainToHub::OpenFiles, json(&files));
     sleep(cx, 5000).await;
-    main_message(cx, &hub, MainToHub::RestoreState, json(&STATE.replace('\n', "")));
+    main_message(
+        cx,
+        &hub,
+        MainToHub::RestoreState,
+        json(&STATE.replace('\n', "")),
+    );
     sleep(cx, 3000).await;
     with_window(cx, handle, |w| w.activate_window());
     sleep(cx, 800).await;
@@ -259,8 +264,9 @@ async fn open_hub(cx: &mut AsyncApp, user_data: &Path) -> (windows::WindowId, Ou
 impl OurHub {
     fn rect(&self, cx: &mut AsyncApp, element: FrameElement) -> [f64; 4] {
         let layout = cx.update(|cx| self.frame.read(cx).layout(cx, 1100.0, 400.0, 1.0));
-        let [x, y, w, h] = layout.rect(element).unwrap_or_default();
-        [x + self.client[0], y + self.client[1], w, h]
+        layout.rect(element).map_or([f64::NAN; 4], |[x, y, w, h]| {
+            [x + self.client[0], y + self.client[1], w, h]
+        })
     }
 
     fn tab(&self, cx: &mut AsyncApp, index: usize) -> Point {
@@ -268,7 +274,10 @@ impl OurHub {
             let frame = self.frame.read(cx);
             frame.host().geometry().tab_bar().borrow().title_rect(index)
         });
-        plus(self.client, [rect.x + rect.width / 2.0, rect.y + rect.height / 2.0])
+        plus(
+            self.client,
+            [rect.x + rect.width / 2.0, rect.y + rect.height / 2.0],
+        )
     }
 
     fn sidebar_top(&self, cx: &mut AsyncApp) -> f64 {
@@ -290,9 +299,8 @@ impl OurHub {
         })
     }
 
-    fn selected_text(&self, cx: &mut AsyncApp) -> String {
+    fn selected_text(&self, cx: &mut AsyncApp) -> Option<String> {
         cx.update(|cx| self.frame.update(cx, |frame, cx| frame.selected_text(cx)))
-            .unwrap_or_default()
     }
 
     fn selected_tab(&self, cx: &mut AsyncApp) -> Option<usize> {
@@ -302,14 +310,18 @@ impl OurHub {
     fn range(&self, cx: &mut AsyncApp) -> [f64; 2] {
         cx.update(|cx| {
             self.hub.update(cx, |hub, cx| {
-                hub.update(cx, |model, _| model.page_mut().selection_mut().get_timeline_range())
+                hub.update(cx, |model, _| {
+                    model.page_mut().selection_mut().get_timeline_range()
+                })
             })
         })
     }
 
     fn asked_to_rename(&self) -> usize {
         let sent = self.sent.borrow();
-        sent.iter().filter(|n| **n == HubToMain::AskRenameTab).count()
+        sent.iter()
+            .filter(|n| **n == HubToMain::AskRenameTab)
+            .count()
     }
 }
 
@@ -341,7 +353,10 @@ pub async fn run(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
     report.check(
         "Chromium: a held press opens the context menu as it lifts; a tap clicks",
         theirs.menu_on_lift && theirs.clicks == 1.0,
-        format!("menu on lift {}, clicks {}", theirs.menu_on_lift, theirs.clicks),
+        format!(
+            "menu on lift {}, clicks {}",
+            theirs.menu_on_lift, theirs.clicks
+        ),
     );
 
     let user_data = std::env::temp_dir().join(format!("asrs-touch-{}", std::process::id()));
@@ -349,7 +364,10 @@ pub async fn run(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
     let touched = PointerKind::Touch;
 
     let side_bar = hub.rect(cx, FrameElement::SideBar);
-    let from = [side_bar[0] + side_bar[2] - 12.0, side_bar[1] + side_bar[3] - 40.0];
+    let from = [
+        side_bar[0] + side_bar[2] - 12.0,
+        side_bar[1] + side_bar[3] - 40.0,
+    ];
     let before = hub.sidebar_top(cx);
     stroke(cx, &touch, touched, from, [0.0, -150.0], 30, 300).await;
     sleep(cx, 800).await;
@@ -373,7 +391,7 @@ pub async fn run(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
     let selected = hub.selected_text(cx);
     report.check(
         "touch: a drag scrolls the table as Chromium's and selects no text",
-        near(scrolled, theirs.table, 20.0) && selected.is_empty(),
+        near(scrolled, theirs.table, 20.0) && selected.is_none(),
         format!(
             "{scrolled}, Chromium {}; selected {selected:?}",
             theirs.table
@@ -397,7 +415,7 @@ pub async fn run(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
     let selected = hub.selected_text(cx);
     report.check(
         "pen: a drag scrolls the table as Chromium's and selects no text",
-        near(scrolled, theirs.pen, 20.0) && selected.is_empty(),
+        near(scrolled, theirs.pen, 20.0) && selected.is_none(),
         format!("{scrolled}, Chromium {}; selected {selected:?}", theirs.pen),
     );
 
@@ -438,7 +456,16 @@ pub async fn run(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
 
     let timeline = hub.rect(cx, FrameElement::Timeline);
     let before = hub.range(cx);
-    stroke(cx, &touch, touched, center(timeline), [-150.0, 0.0], 30, 300).await;
+    stroke(
+        cx,
+        &touch,
+        touched,
+        center(timeline),
+        [-150.0, 0.0],
+        30,
+        300,
+    )
+    .await;
     sleep(cx, 1000).await;
     let after = hub.range(cx);
     report.check(

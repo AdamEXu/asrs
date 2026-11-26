@@ -318,6 +318,8 @@ pub fn touch_mouse_region() -> Option<AnyElement> {
 
 fn touch_box(pans: bool) -> Option<AnyElement> {
     #[cfg(windows)]
+    use gpui_kit::{IntoElement as _, Styled as _};
+    #[cfg(windows)]
     return Some(
         gpui_kit::canvas(
             move |bounds, window, _| win::touch::region(window, bounds, pans),

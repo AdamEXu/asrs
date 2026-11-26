@@ -226,12 +226,22 @@ app.whenReady().then(() => {
             panic!("Electron did not answer {prefix:?}");
         }
 
-        pub(crate) async fn request(&self, cx: &mut AsyncApp, request: &str, prefix: &str) -> String {
+        pub(crate) async fn request(
+            &self,
+            cx: &mut AsyncApp,
+            request: &str,
+            prefix: &str,
+        ) -> String {
             writeln!(self.socket.borrow_mut(), "{request}").expect("request");
             self.reply(cx, prefix).await
         }
 
-        pub(crate) async fn numbers(&self, cx: &mut AsyncApp, request: &str, prefix: &str) -> Vec<f64> {
+        pub(crate) async fn numbers(
+            &self,
+            cx: &mut AsyncApp,
+            request: &str,
+            prefix: &str,
+        ) -> Vec<f64> {
             let reply = self.request(cx, request, prefix).await;
             let values = json::parse(&reply).expect("json");
             let values = values.as_array().expect("array").iter();

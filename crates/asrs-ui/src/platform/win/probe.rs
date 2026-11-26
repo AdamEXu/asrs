@@ -11,24 +11,24 @@ use windows::Win32::UI::Controls::{
     CreateSyntheticPointerDevice, DestroySyntheticPointerDevice, HSYNTHETICPOINTERDEVICE,
     POINTER_FEEDBACK_NONE, POINTER_TYPE_INFO, POINTER_TYPE_INFO_0,
 };
-use windows::Win32::UI::Input::Pointer::{
-    InjectSyntheticPointerInput, POINTER_FLAG_DOWN, POINTER_FLAG_FIRSTBUTTON, POINTER_FLAG_INCONTACT,
-    POINTER_FLAG_INRANGE, POINTER_FLAG_UP, POINTER_FLAG_UPDATE, POINTER_FLAGS, POINTER_INFO,
-    POINTER_PEN_INFO, POINTER_TOUCH_INFO,
-};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBD_EVENT_FLAGS, KEYBDINPUT, KEYEVENTF_KEYUP,
     MOUSE_EVENT_FLAGS, MOUSEEVENTF_HWHEEL, MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP,
     MOUSEEVENTF_MOVE, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput, VIRTUAL_KEY,
+};
+use windows::Win32::UI::Input::Pointer::{
+    InjectSyntheticPointerInput, POINTER_FLAG_DOWN, POINTER_FLAG_FIRSTBUTTON,
+    POINTER_FLAG_INCONTACT, POINTER_FLAG_INRANGE, POINTER_FLAG_UP, POINTER_FLAG_UPDATE,
+    POINTER_FLAGS, POINTER_INFO, POINTER_PEN_INFO, POINTER_TOUCH_INFO,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumWindows, FindWindowW, GWL_EXSTYLE, GWL_STYLE, GetCursorPos, GetForegroundWindow,
     GetMenuItemCount, GetMenuItemInfoW, GetWindowLongPtrW, GetWindowThreadProcessId, HMENU,
     IsWindowVisible, MENUITEMINFOW, MFS_CHECKED, MFS_DISABLED, MFT_SEPARATOR, MIIM_BITMAP,
     MIIM_FTYPE, MIIM_ID, MIIM_STATE, MIIM_STRING, MIIM_SUBMENU, MINMAXINFO, PEN_MASK_PRESSURE,
-    PT_PEN, PT_TOUCH, SW_MAXIMIZE, TOUCH_MASK_CONTACTAREA,
-    SW_MINIMIZE, SW_RESTORE, SendMessageW, SetCursorPos, ShowWindow, USER_DEFAULT_SCREEN_DPI,
-    WM_DPICHANGED, WM_GETMINMAXINFO, WM_SIZING, WS_EX_TOPMOST,
+    PT_PEN, PT_TOUCH, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, SendMessageW, SetCursorPos, ShowWindow,
+    TOUCH_MASK_CONTACTAREA, USER_DEFAULT_SCREEN_DPI, WM_DPICHANGED, WM_GETMINMAXINFO, WM_SIZING,
+    WS_EX_TOPMOST,
 };
 use windows::core::{BOOL, PWSTR, w};
 
@@ -305,7 +305,9 @@ impl SyntheticPointer {
     fn info(&self, contact: &Contact) -> POINTER_TYPE_INFO {
         let (x, y) = (contact.x.round() as i32, contact.y.round() as i32);
         let flags = match contact.phase {
-            ContactPhase::Down => POINTER_FLAG_INRANGE.0 | POINTER_FLAG_INCONTACT.0 | POINTER_FLAG_DOWN.0,
+            ContactPhase::Down => {
+                POINTER_FLAG_INRANGE.0 | POINTER_FLAG_INCONTACT.0 | POINTER_FLAG_DOWN.0
+            }
             ContactPhase::Move => {
                 POINTER_FLAG_INRANGE.0 | POINTER_FLAG_INCONTACT.0 | POINTER_FLAG_UPDATE.0
             }

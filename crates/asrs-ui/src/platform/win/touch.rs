@@ -20,9 +20,8 @@ use windows::Win32::Graphics::Gdi::ScreenToClient;
 use windows::Win32::UI::Input::Pointer::{GetPointerInfo, GetPointerType, POINTER_INFO};
 use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    DefWindowProcW, POINTER_INPUT_TYPE, PT_PEN, PT_TOUCH, PostMessageW, WHEEL_DELTA,
-    WM_MOUSEWHEEL, WM_NCDESTROY, WM_POINTERCAPTURECHANGED, WM_POINTERDOWN, WM_POINTERUP,
-    WM_POINTERUPDATE,
+    DefWindowProcW, POINTER_INPUT_TYPE, PT_PEN, PT_TOUCH, PostMessageW, WHEEL_DELTA, WM_MOUSEWHEEL,
+    WM_NCDESTROY, WM_POINTERCAPTURECHANGED, WM_POINTERDOWN, WM_POINTERUP, WM_POINTERUPDATE,
 };
 
 use super::window::scale;
@@ -214,7 +213,10 @@ fn press(hwnd: HWND, id: u32) -> Route {
             return Err(Route::Taken);
         }
         let mut recognized = touch.recognized.iter();
-        Ok(recognized.next().copied().filter(|_| touch.recognized.len() == 1))
+        Ok(recognized
+            .next()
+            .copied()
+            .filter(|_| touch.recognized.len() == 1))
     });
     let first = match alone {
         Ok(first) => first,
@@ -245,7 +247,9 @@ fn press(hwnd: HWND, id: u32) -> Route {
     with(hwnd, |touch| {
         let over = at.is_some_and(|at| {
             let mut under = touch.regions.iter().rev();
-            under.find(|(bounds, _)| bounds.contains(&at)).is_some_and(|r| r.1)
+            under
+                .find(|(bounds, _)| bounds.contains(&at))
+                .is_some_and(|r| r.1)
         });
         if over || !touch.recognized.is_empty() {
             touch.recognized.insert(id);
@@ -262,10 +266,18 @@ fn moved(hwnd: HWND, id: u32) -> Route {
         (touch.recognized.contains(&id), fingers)
     });
     let Some(fingers) = fingers else {
-        return if recognized { Route::Gpui } else { Route::System };
+        return if recognized {
+            Route::Gpui
+        } else {
+            Route::System
+        };
     };
     if !fingers.contains(&id) {
-        return if recognized { Route::Taken } else { Route::System };
+        return if recognized {
+            Route::Taken
+        } else {
+            Route::System
+        };
     }
     let (Some(a), Some(b)) = (screen(fingers[0]), screen(fingers[1])) else {
         return Route::Taken;
@@ -294,7 +306,10 @@ fn moved(hwnd: HWND, id: u32) -> Route {
 
 fn lift(hwnd: HWND, id: u32) -> Route {
     with(hwnd, |touch| {
-        let pinched = touch.pinch.as_ref().is_some_and(|p| p.fingers.contains(&id));
+        let pinched = touch
+            .pinch
+            .as_ref()
+            .is_some_and(|p| p.fingers.contains(&id));
         if pinched {
             touch.pinch = None;
         }
