@@ -291,11 +291,7 @@ pub(super) fn select_popup(
         let (Ok((anchor, monitor, scale)), Some(parent_hwnd)) = (opened, parent_hwnd) else {
             return on_close(None, cx);
         };
-        if let Some(open) = LIST.take() {
-            open.window
-                .update(cx, |_, window, _| window.remove_window())
-                .ok();
-        }
+        close_open_list();
         let id = NEXT_LIST.replace(NEXT_LIST.get() + 1);
         let on_close = Rc::new(Cell::new(Some(on_close)));
         let close = on_close.clone();
@@ -321,7 +317,9 @@ pub(super) fn select_popup(
             .ok();
         let (pressed, presses) = async_channel::unbounded();
         cx.spawn(async move |_| {
-            if presses.recv().await.is_ok() {
+            if presses.recv().await.is_ok()
+                && LIST.with_borrow(|list| list.as_ref().is_some_and(|list| list.id == id))
+            {
                 close_open_list();
             }
         })
