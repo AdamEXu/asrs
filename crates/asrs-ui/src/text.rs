@@ -193,20 +193,20 @@ impl TextSystem {
             let grayscale = self.layers.iter().any(|layer| layer.grayscale(scale));
             return if grayscale { Lcd::Never } else { Lcd::Anywhere };
         }
-        let mut own = false;
+        let (mut own, mut separate) = (false, false);
         let mut composited = scale < PREFER_COMPOSITING;
         for layer in &self.layers {
             match *layer {
-                Layer::Always => return Lcd::Never,
+                Layer::Always => separate = true,
                 Layer::Scroller => composited = true,
                 Layer::Own(always) => {
-                    own = true;
+                    (own, separate) = (true, false);
                     composited |= always;
                 }
                 Layer::Page | Layer::Faded(_) | Layer::Selection => {}
             }
         }
-        if own && composited {
+        if own && composited && !separate {
             Lcd::OwnBackground
         } else {
             Lcd::Never
@@ -505,7 +505,7 @@ pub fn scroller(overflows: bool, child: impl IntoElement) -> TextLayer {
 /// An element that paints an opaque background under its own text. In a window that is not
 /// opaque Chromium still draws that text LCD where it gives the element a layer of its own: below
 /// 1.5x, in a scroller that overflows, or at any scale if `composited` (an overflowing scroller
-/// itself, or `sticky` in one).
+/// itself, or `sticky` in one). Being its own layer, it is not on a [`grayscale_layer`] around it.
 pub fn opaque_background(composited: bool, child: impl IntoElement) -> TextLayer {
     TextLayer {
         layer: Layer::Own(composited),

@@ -422,9 +422,7 @@ impl Rows<'_> {
             .map_or(0, |(s, _)| s.colors.background);
         let mut layer = layer;
         for (_, _, rect) in selection.iter().filter(|(_, piece, _)| piece.is_none()) {
-            layer = layer.child(text::selection_background(
-                self.grid.place(*rect).bg(rgba(selected)),
-            ));
+            layer = layer.child(self.grid.place(*rect).bg(rgba(selected)));
         }
         let mut behind = selection.iter().filter(|(_, piece, _)| piece.is_some());
         let mut behind_next = behind.next();
@@ -469,8 +467,7 @@ impl Rows<'_> {
             }
             if let Some(rect) = selected_rect {
                 let color = blend(selected >> 8) << 8 | selected & 0xff;
-                let highlight = self.grid.place(rect).bg(rgba(color));
-                layer = layer.child(text::selection_background(highlight));
+                layer = layer.child(self.grid.place(rect).bg(rgba(color)));
             }
             // Underlines take the colour of the box that has the decoration, outside the highlight.
             let decoration = if *link {
@@ -633,7 +630,6 @@ impl<H: FrameHost> HubFrame<H> {
             scale: f64::from(scale),
         };
         let dark = appearance == Appearance::Dark;
-        let overflows = layout.table_height() > shown.container[3];
         let mut root = div()
             .absolute()
             .left_0()
@@ -645,20 +641,17 @@ impl<H: FrameHost> HubFrame<H> {
             ))
             .children(recorded)
             .child(self.area_bars(Area::Console(shown.key), layout.extent(), cx))
-            .child(text::opaque_background(
-                overflows,
-                self.console_header(
-                    Shown {
-                        container: [rect[0], rect[1], layout.client()[0], rect[3]],
-                        ..shown
-                    },
-                    &view,
-                    appearance,
-                    blurred,
-                    grid,
-                    window,
-                    cx,
-                ),
+            .child(self.console_header(
+                Shown {
+                    container: [rect[0], rect[1], layout.client()[0], rect[3]],
+                    ..shown
+                },
+                &view,
+                appearance,
+                blurred,
+                grid,
+                window,
+                cx,
             ));
         let drag_hidden = displayed(self.host().hub(cx))
             .is_none_or(|(_, r)| r.dom().borrow().drag_highlight_hidden);
@@ -720,10 +713,7 @@ impl<H: FrameHost> HubFrame<H> {
                 grid.place([x, y - scroll_top, width, layout.table_height()])
                     .track_focus(&focus::last(&rows_place)),
             )
-            .child(scroller(
-                layout.table_height() > height,
-                text::opaque_background(false, layer),
-            ))
+            .child(scroller(layout.table_height() > height, layer))
             .child(probed(
                 ".console-table-container",
                 grid.place([x, y, width, height]),

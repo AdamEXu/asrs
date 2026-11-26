@@ -247,7 +247,7 @@ fn own(child: impl IntoElement) -> AnyElement {
 #[test]
 fn a_grayscale_window_keeps_lcd_text_over_an_opaque_background_of_its_own() {
     type Case = (f32, &'static str, u64, fn() -> AnyElement);
-    let cases: [Case; 9] = [
+    let cases: [Case; 10] = [
         (1.0, "the page", 0, || page(0xffffff, text("run"))),
         (1.0, "its own", 1, || page(0xffffff, own(text("run")))),
         (1.0, "the page's in it", 0, || {
@@ -258,6 +258,9 @@ fn a_grayscale_window_keeps_lcd_text_over_an_opaque_background_of_its_own() {
         }),
         (1.0, "a layer in it", 0, || {
             page(0xffffff, own(grayscale_layer(true, text("run"))))
+        }),
+        (1.0, "in a layer", 1, || {
+            page(0xffffff, grayscale_layer(true, own(text("run"))))
         }),
         (1.0, "under the page's translucent box", 0, || {
             let under = div().absolute().size_full().bg(rgb(0xaaaaaa));
