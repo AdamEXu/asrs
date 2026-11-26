@@ -907,7 +907,6 @@ pub struct Text {
     selected: Option<Rgba>,
     alpha: f32,
     grayscale: bool,
-    page_layer: bool,
     gpui: StyleRefinement,
     /// Each width the measure function returned, snapped as GPUI will snap the box, with the
     /// exact width it stands for: lines wrap and align at the exact width, as in Chromium.
@@ -930,7 +929,6 @@ impl Text {
             selected: None,
             alpha: 1.0,
             grayscale: false,
-            page_layer: false,
             gpui: StyleRefinement::default(),
             measured: Rc::default(),
         }
@@ -951,13 +949,6 @@ impl Text {
     /// is over an [`opaque_background`] that is a layer of its own.
     pub fn grayscale(mut self) -> Self {
         self.grayscale = true;
-        self
-    }
-
-    /// Text Chromium leaves in the page's layer even over an [`opaque_background`], as it does a
-    /// `::placeholder`: grayscale in a window that is not opaque.
-    pub fn page_layer(mut self) -> Self {
-        self.page_layer = true;
         self
     }
 
@@ -1143,7 +1134,6 @@ impl Element for Text {
         let lcd = match system.lcd(window) {
             _ if self.fade.is_some() => Lcd::Never,
             Lcd::Anywhere if self.grayscale => Lcd::Never,
-            Lcd::OwnBackground if self.page_layer => Lcd::Never,
             lcd => lcd,
         };
         let faded = system.faded();

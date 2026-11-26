@@ -910,11 +910,7 @@ impl<M: FieldModel> Render for TextField<M> {
                     .left_0()
                     .top_0()
                     .opacity(style.placeholder_opacity)
-                    .child(
-                        paint(&self.placeholder, style.placeholder)
-                            .alpha(alpha)
-                            .page_layer(),
-                    ),
+                    .child(paint(&self.placeholder, style.placeholder).alpha(alpha)),
             );
         } else if !focused && !self.value.shown().is_empty() {
             let alpha = (color & 0xff) as f32 / 255.0;
