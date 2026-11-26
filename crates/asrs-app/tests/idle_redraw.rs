@@ -515,7 +515,7 @@ mod body {
         page.settle();
         page.message(MainToHub::CloseTab, JsValue::Bool(true));
         let closed = if asrs_field3d::render::keep_device() {
-            Some(false)
+            Some((false, false))
         } else {
             None
         };
