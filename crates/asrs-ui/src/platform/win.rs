@@ -1,16 +1,18 @@
 //! Windows: `alwaysOnTop`, the acrylic backdrop, native popup menus and the wheel mapping over
-//! GPUI's window handles. Select lists are drawn (`crate::menu`), as Chromium draws its own.
+//! GPUI's window handles. Select lists are drawn (`crate::menu`), as Chromium draws its own, and
+//! leave the activation with the window they are for.
 
 use std::cell::{Cell, RefCell};
 use std::os::windows::io::AsRawHandle;
 use std::rc::Rc;
 
 use gpui_kit::{
-    AnyWindowHandle, App, Bounds, Pixels, ScrollDelta, ScrollEvent, Window, point, px, size,
+    AnyWindowHandle, App, AsyncApp, Bounds, Pixels, ScrollDelta, ScrollEvent, Subscription,
+    WeakEntity, Window, WindowId, point, px, size,
 };
 use raw_window_handle::{HasWindowHandle, RawWindowHandle};
 use windows::Wdk::System::SystemServices::RtlGetVersion;
-use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
+use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Dwm::{
     DWM_SYSTEMBACKDROP_TYPE, DWMSBT_TRANSIENTWINDOW, DWMWA_SYSTEMBACKDROP_TYPE,
     DWMWA_USE_IMMERSIVE_DARK_MODE, DwmExtendFrameIntoClientArea, DwmSetWindowAttribute,
@@ -18,9 +20,12 @@ use windows::Win32::Graphics::Dwm::{
 use windows::Win32::System::Console::{ATTACH_PARENT_PROCESS, AttachConsole};
 use windows::Win32::System::SystemInformation::OSVERSIONINFOW;
 use windows::Win32::UI::Controls::MARGINS;
+use windows::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
 use windows::Win32::UI::WindowsAndMessaging::{
-    EndMenu, HWND_TOPMOST, PostMessageW, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowPos,
-    WM_CANCELMODE,
+    EndMenu, GWL_EXSTYLE, GetWindowLongPtrW, HWND_TOPMOST, MA_NOACTIVATE, PostMessageW,
+    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SetWindowLongPtrW, SetWindowPos, WM_CANCELMODE,
+    WM_LBUTTONDBLCLK, WM_LBUTTONDOWN, WM_MOUSEACTIVATE, WM_NCDESTROY, WM_NCLBUTTONDBLCLK,
+    WM_NCLBUTTONDOWN, WS_EX_NOACTIVATE,
 };
 use windows::core::BOOL;
 
@@ -42,10 +47,25 @@ const PIXELS_PER_LINE: f32 = 100.0 / 3.0;
 /// Windows 11 22H2, the first with `DWMWA_SYSTEMBACKDROP_TYPE`, as `main.ts` asks for acrylic.
 const ACRYLIC_BUILD: u32 = 22621;
 
+const LIST_SUBCLASS: usize = 0x6c69_7374;
+
+struct OpenList {
+    id: u64,
+    parent: WindowId,
+    parent_hwnd: isize,
+    view: WeakEntity<MenuView>,
+    window: AnyWindowHandle,
+    cx: AsyncApp,
+    pressed: async_channel::Sender<()>,
+    _keys: Subscription,
+    _parent_closed: Subscription,
+}
+
 thread_local! {
     /// The window whose native menu is open.
     static MENU_OWNER: Cell<Option<isize>> = const { Cell::new(None) };
-    static LIST: RefCell<Option<AnyWindowHandle>> = const { RefCell::new(None) };
+    static LIST: RefCell<Option<OpenList>> = const { RefCell::new(None) };
+    static NEXT_LIST: Cell<u64> = const { Cell::new(0) };
 }
 
 pub(super) fn init() {}
@@ -206,11 +226,15 @@ pub(super) fn popup_menu(
     .detach();
 }
 
-pub(super) fn menu_takes_keys(_window: &Window) -> bool {
-    false
+pub(super) fn menu_takes_keys(window: &Window) -> bool {
+    let id = handle_of(window).window_id();
+    LIST.with_borrow(|list| list.as_ref().is_some_and(|list| list.parent == id))
 }
 
 pub(super) fn close_popup_menu(window: &Window) {
+    if menu_takes_keys(window) {
+        close_open_list();
+    }
     let Some(hwnd) = hwnd(window) else {
         return;
     };
@@ -257,56 +281,164 @@ pub(super) fn select_popup(
         };
     }
     let parent = handle_of(window);
+    let parent_hwnd = hwnd(window);
     cx.defer(move |cx| {
         let opened = parent.update(cx, |_, window, _| {
             let bounds = window::screen_bounds(window, anchor);
             let monitor = window::monitor_bounds(window);
             (bounds.unwrap_or(anchor), monitor, window.scale_factor())
         });
-        let Ok((anchor, monitor, scale)) = opened else {
+        let (Ok((anchor, monitor, scale)), Some(parent_hwnd)) = (opened, parent_hwnd) else {
             return on_close(None, cx);
         };
-        if let Some(open) = LIST.take() {
-            open.update(cx, |_, window, _| window.remove_window()).ok();
-        }
+        close_open_list();
+        let id = NEXT_LIST.replace(NEXT_LIST.get() + 1);
         let on_close = Rc::new(Cell::new(Some(on_close)));
         let close = on_close.clone();
-        let handler: CloseHandler = Rc::new(move |path, list, cx| {
-            LIST.take();
-            // A list that closes because another window took the focus leaves it there.
-            let focused = list.is_window_active();
+        let handler: CloseHandler = Rc::new(move |path, _, cx| {
+            LIST.with_borrow_mut(|list| list.take_if(|list| list.id == id));
             if let Some(on_close) = close.take() {
                 let chosen = path.and_then(|path| path.first().copied());
-                cx.defer(move |cx| {
-                    if focused {
-                        parent
-                            .update(cx, |_, window, _| window.activate_window())
-                            .ok();
-                    }
-                    on_close(chosen, cx);
-                });
+                cx.defer(move |cx| on_close(chosen, cx));
             }
         });
         let placement = Placement::Screen(anchor, monitor);
-        match MenuView::open(popup, placement, Some(list), scale, cx, handler) {
-            Some((handle, _)) => LIST.set(Some(handle)),
-            None => {
-                if let Some(on_close) = on_close.take() {
-                    on_close(None, cx);
-                }
+        let Some((handle, view)) = MenuView::open(popup, placement, Some(list), scale, cx, handler)
+        else {
+            if let Some(on_close) = on_close.take() {
+                on_close(None, cx);
             }
-        }
+            return;
+        };
+        parent
+            .update(cx, |_, window, cx| {
+                view.update(cx, |view, cx| view.dismiss_with(window, cx));
+            })
+            .ok();
+        let (pressed, presses) = async_channel::unbounded();
+        cx.spawn(async move |_| {
+            if presses.recv().await.is_ok()
+                && LIST.with_borrow(|list| list.as_ref().is_some_and(|list| list.id == id))
+            {
+                close_open_list();
+            }
+        })
+        .detach();
+        // SAFETY: the window belongs to this thread; installing the procedure again updates it.
+        let _ = unsafe { SetWindowSubclass(parent_hwnd, Some(parent_procedure), LIST_SUBCLASS, 0) };
+        let keys = crate::menu::intercept_keys(&view, cx);
+        let parent_closed = cx.on_window_closed(move |_, closed| {
+            if closed == parent.window_id() {
+                close_open_list();
+            }
+        });
+        LIST.set(Some(OpenList {
+            id,
+            parent: parent.window_id(),
+            parent_hwnd: parent_hwnd.0 as isize,
+            view: view.downgrade(),
+            window: handle,
+            cx: cx.to_async(),
+            pressed,
+            _keys: keys,
+            _parent_closed: parent_closed,
+        }));
     });
 }
 
+fn close_open_list() {
+    if let Some(open) = LIST.take() {
+        let OpenList {
+            view, window, cx, ..
+        } = open;
+        cx.spawn(async move |cx| {
+            window
+                .update(cx, |_, window, cx| {
+                    view.update(cx, |view, cx| view.cancel(window, cx))
+                })
+                .ok();
+        })
+        .detach();
+    }
+}
+
+/// Blink's `WebViewImpl::HandleMouseDown`: a left press in the page closes its open list, and the
+/// page still gets it.
+///
+/// SAFETY: called by the system with a live window of this thread and the message's own
+/// parameters.
+unsafe extern "system" fn parent_procedure(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _id: usize,
+    _data: usize,
+) -> LRESULT {
+    if matches!(
+        message,
+        WM_LBUTTONDOWN | WM_LBUTTONDBLCLK | WM_NCLBUTTONDOWN | WM_NCLBUTTONDBLCLK
+    ) {
+        LIST.with(|list| {
+            if let Ok(list) = list.try_borrow()
+                && let Some(list) = list.as_ref()
+                && list.parent_hwnd == hwnd.0 as isize
+            {
+                let _ = list.pressed.try_send(());
+            }
+        });
+    }
+    // SAFETY: as above.
+    unsafe {
+        if message == WM_NCDESTROY {
+            let _ = RemoveWindowSubclass(hwnd, Some(parent_procedure), LIST_SUBCLASS);
+        }
+        DefSubclassProc(hwnd, message, wparam, lparam)
+    }
+}
+
+/// GPUI answers `WM_MOUSEACTIVATE` with `MA_ACTIVATE`, which a press on a `WS_EX_NOACTIVATE`
+/// window would otherwise follow.
+///
+/// SAFETY: as [`parent_procedure`].
+unsafe extern "system" fn list_procedure(
+    hwnd: HWND,
+    message: u32,
+    wparam: WPARAM,
+    lparam: LPARAM,
+    _id: usize,
+    _data: usize,
+) -> LRESULT {
+    // SAFETY: as above.
+    unsafe {
+        match message {
+            WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
+            WM_NCDESTROY => {
+                let _ = RemoveWindowSubclass(hwnd, Some(list_procedure), LIST_SUBCLASS);
+                DefSubclassProc(hwnd, message, wparam, lparam)
+            }
+            _ => DefSubclassProc(hwnd, message, wparam, lparam),
+        }
+    }
+}
+
 /// GPUI takes half of the frame below a window's content for a frame above it, and opens a window
-/// that is not on the primary monitor somewhere on that.
+/// that is not on the primary monitor somewhere on that. A list, like Chromium's, cannot be
+/// activated.
 pub(super) fn popup_window_opened(
     window: &Window,
     bounds: Bounds<Pixels>,
-    _root: bool,
+    root: bool,
     cx: &mut App,
 ) {
+    if let Some(hwnd) = hwnd(window).filter(|_| root) {
+        // SAFETY: the window belongs to this thread and is open.
+        unsafe {
+            let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+            SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_NOACTIVATE.0 as isize);
+            let _ = SetWindowSubclass(hwnd, Some(list_procedure), LIST_SUBCLASS, 0);
+        }
+    }
     let Some(native) = window::native(window) else {
         return;
     };

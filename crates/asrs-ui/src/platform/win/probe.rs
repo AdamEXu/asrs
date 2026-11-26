@@ -13,12 +13,12 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     MOUSEEVENTF_MOVE, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput, VIRTUAL_KEY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, FindWindowW, GWL_EXSTYLE, GWL_STYLE, GetCursorPos, GetMenuItemCount,
-    GetMenuItemInfoW, GetWindowLongPtrW, GetWindowThreadProcessId, HMENU, IsWindowVisible,
-    MENUITEMINFOW, MFS_CHECKED, MFS_DISABLED, MFT_SEPARATOR, MIIM_BITMAP, MIIM_FTYPE, MIIM_ID,
-    MIIM_STATE, MIIM_STRING, MIIM_SUBMENU, MINMAXINFO, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE,
-    SendMessageW, SetCursorPos, ShowWindow, USER_DEFAULT_SCREEN_DPI, WM_DPICHANGED,
-    WM_GETMINMAXINFO, WM_SIZING, WS_EX_TOPMOST,
+    EnumWindows, FindWindowW, GWL_EXSTYLE, GWL_STYLE, GetCursorPos, GetForegroundWindow,
+    GetMenuItemCount, GetMenuItemInfoW, GetWindowLongPtrW, GetWindowThreadProcessId, HMENU,
+    IsWindowVisible, MENUITEMINFOW, MFS_CHECKED, MFS_DISABLED, MFT_SEPARATOR, MIIM_BITMAP,
+    MIIM_FTYPE, MIIM_ID, MIIM_STATE, MIIM_STRING, MIIM_SUBMENU, MINMAXINFO, SW_MAXIMIZE,
+    SW_MINIMIZE, SW_RESTORE, SendMessageW, SetCursorPos, ShowWindow, USER_DEFAULT_SCREEN_DPI,
+    WM_DPICHANGED, WM_GETMINMAXINFO, WM_SIZING, WS_EX_TOPMOST,
 };
 use windows::core::{BOOL, PWSTR, w};
 
@@ -248,6 +248,12 @@ fn mouse(flags: MOUSE_EVENT_FLAGS, data: i32) -> INPUT {
 pub fn warp_cursor(x: f64, y: f64) {
     // SAFETY: no preconditions.
     unsafe { SetCursorPos(x as i32, y as i32) }.ok();
+}
+
+pub fn foreground_window() -> Option<u32> {
+    // SAFETY: no preconditions.
+    let hwnd = unsafe { GetForegroundWindow() };
+    (!hwnd.is_invalid()).then_some(hwnd.0 as usize as u32)
 }
 
 pub fn cursor_location() -> (f64, f64) {

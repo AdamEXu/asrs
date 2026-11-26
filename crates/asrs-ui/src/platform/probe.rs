@@ -289,6 +289,12 @@ pub fn cursor_location() -> (f64, f64) {
     imp::probe::cursor_location()
 }
 
+/// The handle of the window that has the activation.
+#[cfg(windows)]
+pub fn foreground_window() -> Option<u32> {
+    imp::probe::foreground_window()
+}
+
 pub fn warp_cursor(x: f64, y: f64) {
     imp::probe::warp_cursor(x, y);
 }
