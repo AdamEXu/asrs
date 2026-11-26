@@ -13,6 +13,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::ops::Range;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -20,12 +21,13 @@ use asrs_canvas::text::caret;
 use asrs_canvas::text::dom::{self, Layout, LcdExtent, Lu};
 use asrs_canvas::text::font::FontKey;
 use asrs_canvas::text::lut::{LcdGammaLut, MaskGammaLut};
-use asrs_canvas::text::{FixedAdvance, TextBackend, platform_backend};
+use asrs_canvas::text::{Family, FixedAdvance, TextBackend, platform_backend};
+use gpui_kit::base::input::InputState;
 use gpui_kit::{
-    AnyElement, App, AvailableSpace, Bounds, ContentMask, Corners, Element, ElementId, Global,
-    GlobalElementId, InspectorElementId, IntoElement, LayoutId, Pixels, Refineable, RenderImage,
-    Rgba, Scene, SharedString, Style, StyleRefinement, Styled, Window, WindowId, fill, point, px,
-    size,
+    AnyElement, App, AvailableSpace, Bounds, ContentMask, Corners, Element, ElementId, Entity,
+    Global, GlobalElementId, InspectorElementId, IntoElement, LayoutId, Pixels, Refineable,
+    RenderImage, Rgba, Scene, SharedString, Style, StyleRefinement, Styled, Window, WindowId, fill,
+    point, px, size,
 };
 use image::{Frame, RgbaImage};
 
@@ -738,6 +740,15 @@ pub fn font_metrics(cx: &mut App, style: &TextStyle, scale: f32) -> (f32, f32) {
     (ascent as f32 / 64.0, descent as f32 / 64.0)
 }
 
+/// The name GPUI's own text takes `font`'s family by, for what lays out but draws no text.
+pub fn gpui_family(font: &FontSpec) -> SharedString {
+    match font.family {
+        Family::Arial if cfg!(target_os = "linux") => "Liberation Sans".into(),
+        Family::Arial => "Arial".into(),
+        _ => ".SystemUIFont".into(),
+    }
+}
+
 /// The advance of a space in device px.
 pub fn space_width(cx: &mut App, style: &TextStyle, scale: f32) -> f32 {
     let system = cx.default_global::<TextSystem>();
@@ -924,6 +935,9 @@ pub struct Text {
     cut: Option<f64>,
     fade: Option<(f64, f64)>,
     selected: Option<Rgba>,
+    selected_part: Option<(Range<usize>, SelectionColors)>,
+    scroll: Option<Entity<InputState>>,
+    marked: Option<Range<usize>>,
     alpha: f32,
     grayscale: bool,
     gpui: StyleRefinement,
@@ -946,6 +960,9 @@ impl Text {
             cut: None,
             fade: None,
             selected: None,
+            selected_part: None,
+            scroll: None,
+            marked: None,
             alpha: 1.0,
             grayscale: false,
             gpui: StyleRefinement::default(),
@@ -1011,6 +1028,24 @@ impl Text {
             Some(text) => self.color(text),
             None => self,
         }
+    }
+
+    /// Draws the bytes `part` of a single line selected.
+    pub fn selected_part(mut self, part: Range<usize>, colors: SelectionColors) -> Self {
+        self.selected_part = (!part.is_empty()).then_some((part, colors));
+        self
+    }
+
+    /// Underlines the bytes `marked` of a single line, which an input method composes.
+    pub fn marked(mut self, marked: Option<Range<usize>>) -> Self {
+        self.marked = marked;
+        self
+    }
+
+    /// Scrolls with a single-line editor laid out before this text.
+    pub fn scrolled_by(mut self, editor: &Entity<InputState>) -> Self {
+        self.scroll = Some(editor.clone());
+        self
     }
 
     /// Draws only what fits in `room` CSS px, for a box the line's ellipsis follows or replaces.
@@ -1118,6 +1153,14 @@ impl Element for Text {
         if let Some(room) = self.cut {
             dom::cut(&mut layout, dom::lu_round((room * f64::from(scale)) as f32));
         }
+        let scroll = self.scroll.as_ref().map_or(0.0, |editor| {
+            let line = layout.lines.first().and_then(|line| line.fragments.last());
+            let end = line.map_or(0, |last| last.x + last.width);
+            let most = ((available - end).min(0) as f32 / 64.0).round();
+            (f32::from(editor.read(cx).scroll_offset().x) * scale)
+                .round()
+                .max(most)
+        });
         let system = cx.default_global::<TextSystem>();
         if system.lcd_lut.is_some()
             && let Some(text) = system.windows.get_mut(&window.window_handle().window_id())
@@ -1126,7 +1169,7 @@ impl Element for Text {
             text.frame = None;
         }
         let origin = (
-            dom::lu_round((f32::from(bounds.origin.x) + self.subpixel.0) * scale),
+            dom::lu_round((f32::from(bounds.origin.x) + self.subpixel.0) * scale + scroll),
             dom::lu_round((f32::from(bounds.origin.y) + self.subpixel.1) * scale),
         );
         Prepaint { layout, origin }
@@ -1173,6 +1216,45 @@ impl Element for Text {
                 }
             }
         }
+        let mut part = None;
+        let mut composition = None;
+        if (self.selected_part.is_some() || self.marked.is_some())
+            && let Some(line) = layout.lines.first()
+            && let (Some(first), Some(last)) = (line.fragments.first(), line.fragments.last())
+        {
+            let font = &self.style.font;
+            let carets = caret::carets(system.backend.as_mut(), font, &self.text, scale);
+            let caret = |byte: usize| {
+                let at = carets.partition_point(|&(b, _)| b < byte);
+                carets.get(at).or(carets.last()).map_or(0.0, |&(_, x)| x) * 64.0
+            };
+            let round = |lu: Lu| (lu + 32).div_euclid(64);
+            let top = round(origin.1 + line.top.min(line.baseline - layout.ascent));
+            let bottom = (line.top + line.height).max(line.baseline + layout.descent);
+            let bottom = round(origin.1 + bottom);
+            let span = |range: &Range<usize>| {
+                let right = match range.end == self.text.len() {
+                    true => last.x + last.width,
+                    false => first.x + caret(range.end).ceil() as Lu,
+                };
+                let left = first.x + caret(range.start).floor() as Lu;
+                [left, right].map(|x| round(origin.0 + x))
+            };
+            part = self.selected_part.as_ref().map(|(range, colors)| {
+                let [left, right] = span(range);
+                let color = colors
+                    .text
+                    .map(|c| [(c >> 16) as u8, (c >> 8) as u8, c as u8]);
+                let rect = [left, top, right - left, bottom - top];
+                (rect, colors.rgba(), color)
+            });
+            // `StyleableMarkerPainter`: a thin line, in from both ends of the marker.
+            composition = self.marked.as_ref().map(|range| {
+                let [left, right] = span(range);
+                let unit = scale.floor().max(1.0) as i32;
+                [left + unit, bottom - unit, right - left - 2 * unit, unit]
+            });
+        }
         let to_px = |v: i32| px(v as f32 / scale);
         let bounds_of = |[x, y, w, h]: [i32; 4]| Bounds {
             origin: point(to_px(x), to_px(y)),
@@ -1183,13 +1265,16 @@ impl Element for Text {
         let clip = (self.style.overflow != Overflow::Visible).then_some(ContentMask { bounds });
         let alpha = Some(self.alpha);
         window.with_content_mask(clip, |window| {
-            if let Some(background) = self.selected {
-                window.with_element_opacity(alpha, |window| {
+            window.with_element_opacity(alpha, |window| {
+                if let Some(background) = self.selected {
                     for rect in selection {
                         window.paint_quad(fill(bounds_of(rect), background));
                     }
-                });
-            }
+                }
+                if let Some((rect, background, _)) = part {
+                    window.paint_quad(fill(bounds_of(rect), background));
+                }
+            });
             let painted = window.painted_scene().len();
             let ink = Ink {
                 font: &self.style.font,
@@ -1201,7 +1286,11 @@ impl Element for Text {
                 own: lcd == Lcd::OwnBackground,
                 clip: device_rect(window.content_mask().bounds, scale),
             };
+            let part_ink = part
+                .and_then(|(_, _, color)| color)
+                .map(|color| Ink { color, ..ink });
             let mut images = Vec::new();
+            let mut part_images = Vec::new();
             let mut underlines = Vec::new();
             for line in &layout.lines {
                 let baseline = (origin.1 + line.baseline + 32).div_euclid(64);
@@ -1209,6 +1298,9 @@ impl Element for Text {
                 for fragment in &line.fragments {
                     let at = (origin.0 + fragment.x, baseline);
                     system.draw(window_id, fragment, &ink, at, &mut images, inked.as_mut());
+                    if let Some(part_ink) = &part_ink {
+                        system.draw(window_id, fragment, part_ink, at, &mut part_images, None);
+                    }
                 }
                 if let (Some(inked), Some(start), Some(end)) =
                     (inked, line.fragments.first(), line.fragments.last())
@@ -1236,23 +1328,51 @@ impl Element for Text {
                         (solid..end).for_each(|column| paint(column, 1, fade_kept(fade, column)));
                     }
                 }
+                if let Some([x, y, w, h]) = composition {
+                    let rect = bounds_of([x, y, w.max(0), h]);
+                    window.paint_quad(fill(rect, Rgba { r, g, b, a: 1.0 }));
+                }
             });
-            for Drawn { x, y, image, clip } in images {
-                let s = image.size(0);
-                let rect = bounds_of([x, y, s.width.0, s.height.0]);
-                let (mask, opacity) = match clip {
-                    Some([l, t, r, b]) => {
-                        let bounds = bounds_of([l, t, r - l, b - t]);
-                        let opacity = (faded != 1.0).then_some(1.0 / faded);
-                        (Some(ContentMask { bounds }), opacity)
-                    }
-                    None => (None, alpha),
-                };
-                window.with_content_mask(mask, |window| {
-                    window.with_element_opacity(opacity, |window| {
-                        let _ = window.paint_image(rect, rect, Corners::default(), image, 0, false);
+            let draw = |images: &[Drawn], window: &mut Window| {
+                for Drawn { x, y, image, clip } in images {
+                    let s = image.size(0);
+                    let rect = bounds_of([*x, *y, s.width.0, s.height.0]);
+                    let (mask, opacity) = match *clip {
+                        Some([l, t, r, b]) => {
+                            let bounds = bounds_of([l, t, r - l, b - t]);
+                            let opacity = (faded != 1.0).then_some(1.0 / faded);
+                            (Some(ContentMask { bounds }), opacity)
+                        }
+                        None => (None, alpha),
+                    };
+                    window.with_content_mask(mask, |window| {
+                        window.with_element_opacity(opacity, |window| {
+                            let image = image.clone();
+                            let _ =
+                                window.paint_image(rect, rect, Corners::default(), image, 0, false);
+                        });
                     });
-                });
+                }
+            };
+            match part {
+                Some(([x, _, w, _], _, Some(_))) => {
+                    let within = |left: Pixels, right: Pixels| ContentMask {
+                        bounds: Bounds {
+                            origin: point(left, bounds.top()),
+                            size: size((right - left).max(px(0.0)), bounds.size.height),
+                        },
+                    };
+                    let [left, right] = [to_px(x), to_px(x + w)];
+                    for (left, right) in [(bounds.left(), left), (right, bounds.right())] {
+                        window.with_content_mask(Some(within(left, right)), |window| {
+                            draw(&images, window)
+                        });
+                    }
+                    window.with_content_mask(Some(within(left, right)), |window| {
+                        draw(&part_images, window)
+                    });
+                }
+                _ => draw(&images, window),
             }
             if let Some(backdrop) = system.backdrop(window) {
                 backdrop.skip(painted..window.painted_scene().len());

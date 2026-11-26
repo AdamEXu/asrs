@@ -2,16 +2,15 @@ use std::cell::RefCell;
 use std::ops::Range;
 use std::rc::Rc;
 
-use asrs_canvas::text::Family;
 use gpui_kit::base::input::{
     Cut, Delete, Input, InputEditorStyle, InputEvent, InputState, MoveDown, MoveUp, Paste, Position,
 };
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, ClipboardItem, Context, DispatchPhase, Entity,
-    EntityInputHandler, EventEmitter, FocusHandle, Focusable, Font, FontWeight, Hsla,
-    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Pixels, Point, Render, SharedString, StatefulInteractiveElement, Styled,
-    Subscription, Task, TextAlign, WeakEntity, Window, canvas, div, point, px, rgba, size,
+    EntityInputHandler, EventEmitter, FocusHandle, Focusable, Font, FontWeight, HoverListenerMode,
+    Hsla, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, ParentElement, Pixels, Point, Render, SharedString, StatefulInteractiveElement,
+    Styled, Subscription, Task, TextAlign, WeakEntity, Window, canvas, div, point, px, rgba, size,
 };
 
 use crate::focus;
@@ -22,7 +21,7 @@ use crate::input::native::{PointerState, paint_text_field};
 use crate::input::spin::{self, paint_spin_button};
 use crate::input::style::{DISABLED_TEXT, FieldStyle, Frame, device_border};
 use crate::platform;
-use crate::selection::colors::SelectionColors;
+use crate::selection::colors::{SelectionColors, page_active};
 use crate::selection::{self, Behavior};
 use crate::symbols::Symbol;
 use crate::text::{self, Align, LineHeight, Overflow, Text, TextStyle, WhiteSpace};
@@ -126,14 +125,6 @@ const EDITOR_CARET: f32 = 0.85;
 const CARET_WIDTH: f32 = 1.0;
 const EDITOR_MARGIN: f32 = 10.0;
 
-fn gpui_family(family: Family) -> &'static str {
-    match family {
-        Family::Arial if cfg!(target_os = "linux") => "Liberation Sans",
-        Family::Arial => "Arial",
-        _ => ".SystemUIFont",
-    }
-}
-
 /// What an edit from `old` to `new` replaced: the range of `old`, and what it is now.
 fn edited<'a>(old: &str, new: &'a str) -> (Range<usize>, &'a str) {
     let start: usize = (old.chars().zip(new.chars()))
@@ -229,8 +220,8 @@ impl Spin {
 }
 
 /// An `<input type="text|number|search">`. The editor (gpui-base's, for IME) is always
-/// present and takes clicks; its glyphs show only while it has focus. Unfocused, the shown
-/// text or the placeholder is painted with [`Text`], as Chromium paints it.
+/// present and takes clicks; only its caret shows. The text, its selection and the placeholder
+/// are painted with [`Text`], as Chromium paints them.
 pub struct TextField<M: FieldModel> {
     value: FieldValue<M>,
     kind: FieldKind,
@@ -244,6 +235,8 @@ pub struct TextField<M: FieldModel> {
     committed: String,
     hovered: bool,
     pressed: bool,
+    /// Whether the press was on the line of text, which a drag then selects from.
+    selecting: bool,
     spin: Spin,
     _subscription: Subscription,
 }
@@ -290,6 +283,7 @@ impl<M: FieldModel> TextField<M> {
             committed: shown,
             hovered: false,
             pressed: false,
+            selecting: false,
             spin: Spin::default(),
             _subscription: subscription,
         }
@@ -607,6 +601,26 @@ impl<M: FieldModel> TextField<M> {
         });
     }
 
+    /// A drag above or below the line, which on some platforms selects to its end there.
+    fn drag_beside(&mut self, y: Pixels, line: Bounds<Pixels>, cx: &mut Context<'_, Self>) {
+        let start = y < line.top();
+        if !Behavior::current().moves_to_line_edge() || (!start && y < line.bottom()) {
+            return;
+        }
+        self.editor.update(cx, |state, cx| {
+            let selected = state.selected_range();
+            let anchor = match state.is_selection_reversed() {
+                true => selected.end,
+                false => selected.start,
+            };
+            if start {
+                state.set_selected_range_with_direction(0..anchor, true, cx);
+            } else {
+                state.set_selected_range(anchor..state.value().len(), cx);
+            }
+        });
+    }
+
     /// The spin button in the box `[x, y, width, height]` (device px), which the pointer keeps
     /// turning after a press on it wherever it goes.
     fn spin_button(
@@ -641,6 +655,7 @@ impl<M: FieldModel> TextField<M> {
             .w(px(right - left))
             .h(px(bottom - top))
             .cursor_default()
+            .hover_listener_mode(HoverListenerMode::InputModalityIndependent)
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
                 this.spin.hovered = *hovered;
                 cx.notify();
@@ -805,36 +820,7 @@ impl<M: FieldModel> Render for TextField<M> {
         let (top, dy) = split(ey, scale);
         let (right, _) = split(ex + ew, scale);
         let (bottom, _) = split(ey + eh, scale);
-        let text_color = rgba(color);
-        // The editor draws its selection, whose text is one colour, in active windows alone.
-        let active = window.is_window_active();
-        let selection_colors = SelectionColors::new(active);
-        let (none_selected, all_selected) = self.editor.update(cx, |editor, cx| {
-            let selected = editor.selected_range();
-            let composing = editor.marked_text_range(window, cx).is_some();
-            let all = !composing && selected == (0..editor.value().len());
-            (selected.is_empty(), !selected.is_empty() && all)
-        });
-        let editor_text_color: Hsla = match selection_colors.text {
-            _ if !focused => gpui_kit::transparent_black(),
-            Some(selected) if all_selected && active => rgba(selected << 8 | 0xff).into(),
-            _ => text_color.into(),
-        };
-        self.editor.update(cx, |editor, cx| {
-            // The editor replaces a colour whose alpha is 0 with its theme's.
-            let hidden = Hsla {
-                a: 1e-4,
-                ..gpui_kit::transparent_black()
-            };
-            editor.set_editor_style(InputEditorStyle {
-                selection: selection_colors.rgba().into(),
-                caret: if none_selected {
-                    text_color.into()
-                } else {
-                    hidden
-                },
-                ..InputEditorStyle::default()
-            });
+        let (shown, selected, marked) = self.editor.update(cx, |editor, cx| {
             editor.set_text_align(
                 match style.align {
                     Align::Center => TextAlign::Center,
@@ -843,15 +829,38 @@ impl<M: FieldModel> Render for TextField<M> {
                 },
                 cx,
             );
+            let marked = editor.marked_text_range(window, cx);
+            (editor.value(), editor.selected_range(), marked)
+        });
+        let shown = if focused {
+            shown.to_string()
+        } else {
+            self.value.shown().to_owned()
+        };
+        let caret = selected.is_empty() && page_active(window, cx) && !crate::parity::recording(cx);
+        if !has_focus && self.editor.read(cx).scroll_offset().x != px(0.0) {
+            self.editor.update(cx, |editor, cx| {
+                editor.set_scroll_offset(point(px(0.0), px(0.0)), cx)
+            });
+        }
+        let clear: Hsla = rgba(0x00000000).into();
+        // The editor replaces a colour whose alpha is 0 with its theme's.
+        let hidden = Hsla { a: 1e-4, ..clear };
+        self.editor.update(cx, |editor, _| {
+            editor.set_editor_style(InputEditorStyle {
+                caret: if caret { rgba(color).into() } else { hidden },
+                selection: hidden,
+                ..InputEditorStyle::default()
+            });
         });
         let (box_width, box_height) = (right - left, bottom - top);
-        let family = gpui_family(style.font.family);
+        let family = text::gpui_family(&style.font);
         let weight = FontWeight(style.font.weight);
         let line_height = px(box_height / EDITOR_CARET).round();
         let text_system = window.text_system();
         let font_id = text_system.resolve_font(&Font {
             weight,
-            ..gpui_kit::font(family)
+            ..gpui_kit::font(family.clone())
         });
         // A platform's descent may have either sign.
         let ascent = text_system.ascent(font_id, px(style.font.size));
@@ -888,7 +897,7 @@ impl<M: FieldModel> Render for TextField<M> {
                             .font_weight(weight)
                             .text_size(px(style.font.size))
                             .line_height(line_height)
-                            .text_color(editor_text_color)
+                            .text_color(clear)
                             .child(Input::new(&self.editor)),
                     ),
             );
@@ -902,7 +911,7 @@ impl<M: FieldModel> Render for TextField<M> {
                 .w(px(right - left))
                 .h(px(bottom - top))
         };
-        if self.value.shown().is_empty() && !self.placeholder.is_empty() {
+        if shown.is_empty() && !self.placeholder.is_empty() {
             let alpha = (style.placeholder & 0xff) as f32 / 255.0;
             editor_box = editor_box.child(
                 div()
@@ -912,15 +921,19 @@ impl<M: FieldModel> Render for TextField<M> {
                     .opacity(style.placeholder_opacity)
                     .child(paint(&self.placeholder, style.placeholder).alpha(alpha)),
             );
-        } else if !focused && !self.value.shown().is_empty() {
+        } else if !shown.is_empty() {
             let alpha = (color & 0xff) as f32 / 255.0;
-            editor_box = editor_box.child(
-                div().absolute().left_0().top_0().child(
-                    paint(self.value.shown(), color)
-                        .alpha(alpha)
-                        .selected(page_selected),
-                ),
-            );
+            let text = paint(&shown, color).alpha(alpha);
+            let text = match focused {
+                false => text.selected(page_selected),
+                true => {
+                    let colors = SelectionColors::new(page_active(window, cx));
+                    text.scrolled_by(&self.editor)
+                        .selected_part(selected, colors)
+                        .marked(marked.map(|range| utf8_range(&shown, range)))
+                }
+            };
+            editor_box = editor_box.child(div().absolute().left_0().top_0().child(text));
         }
 
         let editor_bounds = Bounds {
@@ -928,7 +941,7 @@ impl<M: FieldModel> Render for TextField<M> {
             size: size(px(box_width), px(box_height)),
         };
         let placed = Rc::new(std::cell::Cell::new(None::<Bounds<Pixels>>));
-        let pressed_at = placed.clone();
+        let (pressed_at, pressed_in, dragged_in) = (placed.clone(), placed.clone(), placed.clone());
         let mut root = div()
             .id("text-field")
             .key_context(match self.kind {
@@ -967,6 +980,7 @@ impl<M: FieldModel> Render for TextField<M> {
             .relative()
             .w(px(width))
             .h(px(height))
+            .hover_listener_mode(HoverListenerMode::InputModalityIndependent)
             .on_hover(cx.listener(|this, hovered: &bool, _, cx| {
                 this.hovered = *hovered;
                 this.spin.hovered &= *hovered;
@@ -998,9 +1012,14 @@ impl<M: FieldModel> Render for TextField<M> {
                 .absolute()
                 .inset_0(),
             )
-            .capture_any_mouse_down(cx.listener(|this, event: &MouseDownEvent, _, cx| {
+            .capture_any_mouse_down(cx.listener(move |this, event: &MouseDownEvent, _, cx| {
                 if event.button == MouseButton::Left {
                     this.pressed = true;
+                    this.selecting = pressed_in.get().is_some_and(|bounds| {
+                        let mut line = editor_bounds;
+                        line.origin += bounds.origin;
+                        line.contains(&event.position)
+                    });
                     cx.notify();
                 }
             }))
@@ -1008,14 +1027,32 @@ impl<M: FieldModel> Render for TextField<M> {
             .child(editor_box);
         if self.pressed {
             let field = cx.weak_entity();
+            let selecting = self.selecting;
             root = root.child(
                 canvas(
                     |_, _, _| {},
                     move |_, _, window, _| {
+                        let dragged = field.clone();
+                        window.on_mouse_event(move |event: &MouseMoveEvent, phase, _, cx| {
+                            let Some(bounds) = dragged_in.get() else {
+                                return;
+                            };
+                            if phase != DispatchPhase::Capture || !selecting || !event.dragging() {
+                                return;
+                            }
+                            let mut line = editor_bounds;
+                            line.origin += bounds.origin;
+                            let (y, field) = (event.position.y, dragged.clone());
+                            // After the editor has followed the pointer.
+                            cx.defer(move |cx| {
+                                let _ = field.update(cx, |this, cx| this.drag_beside(y, line, cx));
+                            });
+                        });
                         window.on_mouse_event(move |_: &MouseUpEvent, phase, _, cx| {
                             if phase == DispatchPhase::Capture {
                                 let _ = field.update(cx, |this, cx| {
                                     this.pressed = false;
+                                    this.selecting = false;
                                     cx.notify();
                                 });
                             }
@@ -1043,8 +1080,7 @@ impl<M: FieldModel> Render for TextField<M> {
                 .then(|| [utf16(selected.start), utf16(selected.end)]);
             root = root.child(
                 canvas(
-                    move |bounds, _, cx| {
-                        crate::parity::record_mask(cx, crate::parity::FOCUSED_INPUT, bounds);
+                    move |_, _, cx| {
                         crate::parity::record_focused_input(cx, || crate::parity::FocusedInput {
                             handle,
                             value,
@@ -1063,6 +1099,16 @@ impl<M: FieldModel> Render for TextField<M> {
         if let (Some([cx0, cy0, cw, ch]), true) = (g.cancel, cancel_visible) {
             let (cl, _) = split(cx0, scale);
             let (ct, _) = split(cy0, scale);
+            let (cr, _) = split(cx0 + cw, scale);
+            let (cb, _) = split(cy0 + ch, scale);
+            let (box_w, box_h) = (cr - cl, cb - ct);
+            let side = box_w.min(box_h);
+            // `background-size: contain` at 50 % 50 %: the snapped box sizes the image, and the
+            // unsnapped one centres it.
+            let anchor = [(cx0, cw, cl), (cy0, ch, ct)].map(|(start, size, snapped)| {
+                let start = lu(start) + (lu(size) - lu(side * scale)) / 2;
+                f64::from((start + 31).div_euclid(64) as f32 / scale - snapped)
+            });
             let filter = style.cancel_filter;
             root = root.child(
                 div()
@@ -1070,8 +1116,8 @@ impl<M: FieldModel> Render for TextField<M> {
                     .absolute()
                     .left(px(cl))
                     .top(px(ct))
-                    .w(px(cw / scale))
-                    .h(px(ch / scale))
+                    .w(px(box_w))
+                    .h(px(box_h))
                     .on_mouse_down(MouseButton::Left, |_, window, _| window.prevent_default())
                     .on_click(cx.listener(|this, _, window, cx| this.clear(window, cx)))
                     .child(
@@ -1079,9 +1125,9 @@ impl<M: FieldModel> Render for TextField<M> {
                             |_, _, _| {},
                             move |bounds, _, window, cx| {
                                 let dpr = f64::from(window.scale_factor());
-                                let side = f64::from(bounds.size.width) * dpr;
+                                let side = f64::from(side) * dpr;
                                 let placement = Placement {
-                                    anchor: [0.0, 0.0],
+                                    anchor,
                                     size: [side, side],
                                     scale: 1.0,
                                     centered: false,

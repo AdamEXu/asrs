@@ -173,6 +173,15 @@
     "src/historical/timers.ts",
     "src/shims.ts"
   ],
+  "fieldText": [
+    "src/dom/fixtureFile.ts",
+    "src/environment.ts",
+    "src/fieldText.ts",
+    "src/shims.ts"
+  ],
+  "fieldTextMain": [
+    "src/fieldTextMain.ts"
+  ],
   "fn": [
     "src/consoleExport.ts",
     "src/cve1.ts",

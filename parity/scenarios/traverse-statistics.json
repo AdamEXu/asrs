@@ -220,6 +220,9 @@
       "count": 28
     },
     {
+      "wait": 1500
+    },
+    {
       "capture": "list-end",
       "probes": []
     },
@@ -495,6 +498,9 @@
     {
       "traverse": "cleared-next",
       "count": 3
+    },
+    {
+      "wait": 1500
     },
     {
       "capture": "cleared",

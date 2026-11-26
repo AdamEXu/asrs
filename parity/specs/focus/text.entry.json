@@ -1,0 +1,287 @@
+{
+ "entry": "fieldText",
+ "platforms": [
+  "macos-aarch64"
+ ],
+ "fixture": {
+  "scales": [
+   1,
+   2
+  ],
+  "controls": [
+   {
+    "name": "setting_block",
+    "type": "number",
+    "css": [
+     "global.css",
+     "hub.css"
+    ],
+    "markup": "<div class=\"setting-blocks\" style=\"position:static\"><div class=\"input\" style=\"position:absolute;left:4px;top:4px;width:200px;height:40px\"><input id=\"i\" type=\"number\" step=\"any\"></div></div>",
+    "cases": [
+     [
+      "5",
+      "all"
+     ],
+     [
+      "-2.5",
+      "all"
+     ],
+     [
+      "12.5",
+      null
+     ],
+     [
+      "123456789.123456789",
+      "typed"
+     ]
+    ]
+   },
+   {
+    "name": "field_value",
+    "type": "number",
+    "css": [
+     "global.css",
+     "hub.css"
+    ],
+    "markup": "<div class=\"field-value\"><input id=\"i\" type=\"number\" step=\"any\" placeholder=\"12.345\"></div>",
+    "cases": [
+     [
+      "5",
+      "all"
+     ],
+     [
+      "-2.5",
+      "all"
+     ],
+     [
+      "12.5",
+      null
+     ],
+     [
+      "",
+      null
+     ],
+     [
+      "123456789.123456789",
+      "typed"
+     ]
+    ]
+   },
+   {
+    "name": "native",
+    "type": "number",
+    "css": [
+     "global.css",
+     "prompts.css"
+    ],
+    "markup": "<input id=\"i\" type=\"number\" step=\"any\" style=\"position:absolute;left:10px;top:10px;width:150px;box-sizing:border-box\">",
+    "cases": [
+     [
+      "5",
+      "all"
+     ],
+     [
+      "-2.5",
+      "all"
+     ],
+     [
+      "12.5",
+      null
+     ],
+     [
+      "12345678901234567890.123456789",
+      "typed"
+     ]
+    ]
+   },
+   {
+    "name": "native",
+    "type": "text",
+    "css": [
+     "global.css",
+     "prompts.css"
+    ],
+    "markup": "<input id=\"i\" type=\"text\" placeholder=\"/U/logs\" style=\"position:absolute;left:10px;top:10px;width:150px;box-sizing:border-box\">",
+    "cases": [
+     [
+      "Line Graph",
+      "all"
+     ],
+     [
+      "Line Graph",
+      [
+       5,
+       10
+      ]
+     ],
+     [
+      "Line Graph",
+      [
+       2,
+       7
+      ]
+     ],
+     [
+      "",
+      null
+     ],
+     [
+      "/U/logs/with/a/long/path/that/overflows/the/box",
+      "typed"
+     ]
+    ],
+    "pressed": "Line Graph",
+    "presses": [
+     [
+      1,
+      10
+     ],
+     [
+      3,
+      10
+     ],
+     [
+      30,
+      1
+     ],
+     [
+      30,
+      10
+     ],
+     [
+      30,
+      19
+     ],
+     [
+      75,
+      1
+     ],
+     [
+      120,
+      20
+     ],
+     [
+      147,
+      2
+     ],
+     [
+      148,
+      10
+     ]
+    ]
+   },
+   {
+    "name": "sidebar_search",
+    "type": "search",
+    "themes": [
+     "light",
+     "dark"
+    ],
+    "css": [
+     "global.css",
+     "hub.css"
+    ],
+    "markup": "<div class=\"side-bar-search-container\" style=\"position:relative;left:0;top:0;width:200px;height:39px\"><input id=\"i\" class=\"side-bar-search\" type=\"search\" placeholder=\"Search\"></div>",
+    "cases": [
+     [
+      "Drive/Pose",
+      "all"
+     ],
+     [
+      "Drive/Pose",
+      [
+       2,
+       5
+      ]
+     ],
+     [
+      "",
+      null
+     ]
+    ],
+    "pressed": "Drive/Pose",
+    "presses": [
+     [
+      2,
+      14
+     ],
+     [
+      24,
+      27
+     ],
+     [
+      50,
+      1
+     ],
+     [
+      50,
+      14
+     ],
+     [
+      50,
+      27
+     ],
+     [
+      60,
+      3
+     ],
+     [
+      120,
+      27
+     ]
+    ]
+   },
+   {
+    "name": "console_filter",
+    "type": "search",
+    "css": [
+     "global.css",
+     "hub.css",
+     "renderers.css"
+    ],
+    "markup": "<table class=\"console-table\" style=\"width:100%\"><thead><tr><th style=\"height:30px\"></th><th style=\"position:relative\"><input id=\"i\" class=\"filter\" type=\"search\" placeholder=\"Filter\"></th></tr></thead></table>",
+    "cases": [
+     [
+      "warning",
+      "all"
+     ],
+     [
+      "warning",
+      [
+       3,
+       7
+      ]
+     ],
+     [
+      "",
+      null
+     ]
+    ]
+   },
+   {
+    "name": "table_jump",
+    "type": "number",
+    "css": [
+     "global.css",
+     "hub.css",
+     "renderers.css"
+    ],
+    "markup": "<table class=\"data-table\"><thead><tr><th style=\"height:30px\"><input id=\"i\" class=\"data-table-jump-input\" type=\"number\" step=\"any\" placeholder=\"0.000\"></th></tr></thead></table>",
+    "cases": [
+     [
+      "12.5",
+      "all"
+     ],
+     [
+      "12.5",
+      null
+     ],
+     [
+      "",
+      null
+     ]
+    ]
+   }
+  ]
+ }
+}

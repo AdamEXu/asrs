@@ -1318,11 +1318,20 @@ focuses the page. The window is never shown, and on Linux the run uses the headl
 so no display is needed. Presses on the select and keys that open its popup are left out.
 
 `focus/fields` is the same entry with `hub.css` and the fixture's `styles`, computed values to
-record: the backgrounds of focused fields, which window captures mask.
+record: the backgrounds of focused fields.
 
 `crates/asrs-ui/tests/focus_rings.rs` and `focus_fields.rs` replay them. Each is generated on macOS
 and on Linux x86_64; on the latter with `cargo xtask oracle gen` in a checkout there. Windows
 has no records (#379): the port applies the rule that the two recorded platforms share.
+
+### Field text vectors
+
+`focus/text` (`src/fieldText.ts`, with `src/fieldTextMain.ts` as its Electron main process, run
+once per device scale) records the pixels of focused inputs under upstream's stylesheets: the
+fixture's controls with each case's value and selection, in an active and an inactive page, the
+caret transparent. Rows are runs of `[count, colour]`. Presses on an input, its border and padding
+included, are recorded with where they put the caret. The window is never shown.
+`crates/asrs-ui/tests/field_text.rs` draws the same inputs. It is recorded on macOS only.
 
 ### Text selection vectors
 
@@ -1503,7 +1512,7 @@ A capture waits until the page is idle (fonts loaded, no log or field loading, n
 then until three consecutive window captures, DOM dumps and drawing-buffer read counts agree.
 It writes `captures/<name>.png` (capturePage), `captures/<name>.json` (size, colour space,
 probed boxes, every visible text node's line boxes with font and colour, form controls, masks
-for focused text inputs, webviews and the scenario's mask selectors, the canvas and GL dump
+for webviews and the scenario's mask selectors, the canvas and GL dump
 list, and a `timing` object that differs between runs), `<name>.canvas-<i>.png` (`getImageData`
 on each visible 2D canvas) and `<name>.gl-<i>.png`. Each GL entry names its render mode (`mode`:
 `standard`, `low-power` or `cinematic`, read from the context's `powerPreference`, which

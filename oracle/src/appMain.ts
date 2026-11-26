@@ -542,6 +542,8 @@ async function capture(name: string, probes: string[], maskSelectors: string[]) 
     throw new Error(`capture ${name}: the window moved to display ${display.id}`);
   }
 
+  // Whether a caret blinks on is a matter of time, and the port draws none in captures.
+  const noCaret = await win.webContents.insertCSS("* { caret-color: transparent !important; }");
   let dom: any = null;
   let rgba: Buffer | null = null;
   let size = { width: 0, height: 0 };
@@ -574,6 +576,7 @@ async function capture(name: string, probes: string[], maskSelectors: string[]) 
     return false;
   });
 
+  await win.webContents.removeInsertedCSS(noCaret);
   const content = win === target ? scenario.window : { width: win.getContentSize()[0], height: win.getContentSize()[1] };
   const expected = { width: content.width * scale, height: content.height * scale };
   if (size.width !== expected.width || size.height !== expected.height) {

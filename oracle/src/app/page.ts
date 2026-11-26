@@ -109,10 +109,6 @@ export function domDump(probes: string[], maskSelectors: string[]) {
     }));
 
   const masks: { reason: string; rect: number[] }[] = [];
-  const active = document.activeElement;
-  if (active !== null && active.matches("input:not([type=checkbox]):not([type=radio]):not([type=range]), textarea, [contenteditable]")) {
-    masks.push({ reason: "focused text input", rect: rect(active) });
-  }
   for (const el of Array.from(document.querySelectorAll("webview"))) if (visible(el)) masks.push({ reason: "webview", rect: rect(el) });
   for (const selector of maskSelectors) {
     for (const el of Array.from(document.querySelectorAll(selector))) if (visible(el)) masks.push({ reason: selector, rect: rect(el) });
