@@ -12,6 +12,7 @@ use asrs_ui::gpui::{
 };
 use asrs_ui::parity::probed;
 use asrs_ui::selection::{Document, Hit, Place};
+use asrs_ui::text::opaque_background;
 use asrs_ui::theme::Appearance;
 
 use super::cell_text::css;
@@ -232,9 +233,8 @@ fn table_element(
         }
     }
     let container = [x, y, rect[2], px(placed.height)];
-    layer
-        .child(probed(".metadata-table-container", grid.place(container)))
-        .into_any_element()
+    let layer = layer.child(probed(".metadata-table-container", grid.place(container)));
+    opaque_background(false, layer).into_any_element()
 }
 
 impl<H: FrameHost> HubFrame<H> {

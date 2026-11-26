@@ -7,8 +7,9 @@
 //!
 //! Where Chromium draws LCD text (Windows, and Linux under fontconfig rules that ask for it), a run
 //! is blended per channel onto the colours the frame painted behind it, which its key then holds
-//! too. It stays grayscale in a window that is not opaque, under CSS opacity, behind an image or a
-//! gradient, where [`Text::grayscale`] says so, and where the backend has no LCD masks.
+//! too. It stays grayscale under CSS opacity, behind an image or a gradient, where
+//! [`Text::grayscale`] says so, and where the backend has no LCD masks; in a window that is not
+//! opaque it is LCD only over an [`opaque_background`].
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -164,8 +165,8 @@ impl TextSystem {
             })
     }
 
-    /// Draws all text of `window` in grayscale: Chromium decides per layer, and a page that is not
-    /// opaque is one layer that is not.
+    /// Draws the text of `window` in grayscale except over an [`opaque_background`]: Chromium
+    /// decides per layer, and a page that is not opaque is a layer that is not.
     pub fn set_grayscale(cx: &mut App, window: WindowId) {
         let system = cx.default_global::<TextSystem>();
         system.windows.entry(window).or_default().grayscale = true;
@@ -182,13 +183,35 @@ impl TextSystem {
         }
     }
 
-    fn may_be_lcd(&self, window: &Window) -> bool {
+    fn lcd(&self, window: &Window) -> Lcd {
         let id = window.window_handle().window_id();
         let scale = window.scale_factor();
-        self.lcd_lut.is_some()
-            && !self.windows.get(&id).is_some_and(|text| text.grayscale)
-            && !self.layers.iter().any(|layer| layer.grayscale(scale))
-            && window.element_opacity() >= self.faded()
+        if self.lcd_lut.is_none() || window.element_opacity() < self.faded() {
+            return Lcd::Never;
+        }
+        if !self.windows.get(&id).is_some_and(|text| text.grayscale) {
+            let grayscale = self.layers.iter().any(|layer| layer.grayscale(scale));
+            return if grayscale { Lcd::Never } else { Lcd::Anywhere };
+        }
+        let (mut own, mut separate) = (false, false);
+        let mut composited = scale < PREFER_COMPOSITING;
+        for layer in &self.layers {
+            match *layer {
+                Layer::Always => separate = true,
+                Layer::Scroller => composited = true,
+                Layer::Own(always) => {
+                    (own, separate) = (true, false);
+                    composited |= always;
+                }
+                Layer::Sticky(scrolls) => (own, separate, composited) = (true, false, scrolls),
+                Layer::Page | Layer::Faded(_) | Layer::Selection => {}
+            }
+        }
+        if own && composited && !separate {
+            Lcd::OwnBackground
+        } else {
+            Lcd::Never
+        }
     }
 
     /// The opacity around the text that does not make it grayscale.
@@ -299,7 +322,7 @@ impl TextSystem {
                     let extent = [left, top, left + width, top + height];
                     backdrop.read(scene);
                     match backdrop::intersect(extent, ink.clip) {
-                        Some(visible) => regions = backdrop.regions(visible),
+                        Some(visible) => regions = backdrop.regions(visible, ink.own),
                         None => regions = Some(Vec::new()),
                     }
                 }
@@ -406,6 +429,18 @@ impl TextSystem {
     }
 }
 
+/// Where text painted now may be LCD.
+#[derive(Clone, Copy, PartialEq)]
+enum Lcd {
+    Never,
+    Anywhere,
+    /// Only over what an [`opaque_background`] painted.
+    OwnBackground,
+}
+
+/// The device scale from which Chromium prefers compositing to LCD text.
+const PREFER_COMPOSITING: f32 = 1.5;
+
 /// The compositing layer Chromium draws text on: it is grayscale where the layer's own pixels are
 /// not all opaque.
 #[derive(Clone, Copy)]
@@ -418,21 +453,34 @@ enum Layer {
     Scroller,
     /// CSS opacity that leaves LCD text alone (`save_layer_alpha_should_preserve_lcd_text`).
     Faded(f32),
+    /// An [`opaque_background`], `true` where it is composited at any scale.
+    Own(bool),
+    /// A [`sticky_background`], `true` while its scroller scrolls.
+    Sticky(bool),
+    /// A [`selection_background`].
+    Selection,
 }
 
 impl Layer {
     fn opacity(self) -> f32 {
         match self {
             Layer::Faded(opacity) => opacity,
-            Layer::Page | Layer::Always | Layer::Scroller => 1.0,
+            Layer::Page
+            | Layer::Always
+            | Layer::Scroller
+            | Layer::Own(_)
+            | Layer::Sticky(_)
+            | Layer::Selection => 1.0,
         }
     }
 
     fn grayscale(self, scale: f32) -> bool {
         match self {
-            Layer::Page | Layer::Faded(_) => false,
+            Layer::Page | Layer::Faded(_) | Layer::Own(_) | Layer::Sticky(_) | Layer::Selection => {
+                false
+            }
             Layer::Always => true,
-            Layer::Scroller => scale >= 1.5,
+            Layer::Scroller => scale >= PREFER_COMPOSITING,
         }
     }
 }
@@ -460,6 +508,35 @@ pub fn scroller(overflows: bool, child: impl IntoElement) -> TextLayer {
         } else {
             Layer::Page
         },
+        child: child.into_any_element(),
+    }
+}
+
+/// An element that paints an opaque background under its own text. In a window that is not
+/// opaque Chromium still draws that text LCD where it gives the element a layer of its own: below
+/// 1.5x, in a scroller that overflows, or at any scale if `composited` (an overflowing scroller
+/// itself). Being its own layer, it is not on a [`grayscale_layer`] around it.
+pub fn opaque_background(composited: bool, child: impl IntoElement) -> TextLayer {
+    TextLayer {
+        layer: Layer::Own(composited),
+        child: child.into_any_element(),
+    }
+}
+
+/// An [`opaque_background`] that is `position: sticky`: a layer of its own only while its scroller
+/// `scrolls`, at any scale. Upstream's empty table draws its sticky jump field grayscale at 1x.
+pub fn sticky_background(scrolls: bool, child: impl IntoElement) -> TextLayer {
+    TextLayer {
+        layer: Layer::Sticky(scrolls),
+        child: child.into_any_element(),
+    }
+}
+
+/// A text selection's highlight: Chromium paints it with the text, not as a background, so text
+/// on it is not over an [`opaque_background`].
+pub fn selection_background(child: impl IntoElement) -> TextLayer {
+    TextLayer {
+        layer: Layer::Selection,
         child: child.into_any_element(),
     }
 }
@@ -524,10 +601,23 @@ impl Element for TextLayer {
         window: &mut Window,
         cx: &mut App,
     ) {
-        cx.default_global::<TextSystem>().layers.push(self.layer);
+        let system = cx.default_global::<TextSystem>();
+        system.layers.push(self.layer);
+        let start = window.painted_scene().len();
+        let own = match self.layer {
+            Layer::Own(_) | Layer::Sticky(_) => Some(true),
+            Layer::Selection => Some(false),
+            _ => None,
+        };
+        let own = own.and_then(|own| Some(system.backdrop(window)?.own_from(start, own)));
         let opacity = matches!(self.layer, Layer::Faded(_)).then(|| self.layer.opacity());
         window.with_element_opacity(opacity, |window| self.child.paint(window, cx));
-        cx.default_global::<TextSystem>().layers.pop();
+        let system = cx.default_global::<TextSystem>();
+        system.layers.pop();
+        let end = window.painted_scene().len();
+        if let (Some(mark), Some(backdrop)) = (own, system.backdrop(window)) {
+            backdrop.own_until(mark, end);
+        }
     }
 }
 
@@ -540,6 +630,8 @@ struct Ink<'a> {
     fade: Option<(Lu, Lu)>,
     /// What the frame has painted so far, if the text may be LCD.
     lcd: Option<&'a Scene>,
+    /// Whether it may be LCD only over an [`opaque_background`].
+    own: bool,
     clip: Rect,
 }
 
@@ -655,7 +747,7 @@ pub fn space_width(cx: &mut App, style: &TextStyle, scale: f32) -> f32 {
 /// Whether `Text` painted now may be LCD.
 pub fn may_be_lcd(window: &Window, cx: &mut App) -> bool {
     let system = cx.default_global::<TextSystem>();
-    system.may_be_lcd(window)
+    system.lcd(window) != Lcd::Never
 }
 
 /// Tells the text painted later that what `window` painted since its scene held `start` operations
@@ -872,7 +964,8 @@ impl Text {
         self
     }
 
-    /// [`grayscale_layer`] of this text alone.
+    /// CSS opacity around this text alone, on a page with masks or filters: grayscale unless it
+    /// is over an [`opaque_background`] that is a layer of its own.
     pub fn grayscale(mut self) -> Self {
         self.grayscale = true;
         self
@@ -1057,7 +1150,11 @@ impl Element for Text {
             let _ = window.drop_image(image);
         }
         // Text behind a mask is grayscale.
-        let may_be_lcd = !self.grayscale && self.fade.is_none() && system.may_be_lcd(window);
+        let lcd = match system.lcd(window) {
+            _ if self.fade.is_some() => Lcd::Never,
+            Lcd::Anywhere if self.grayscale => Lcd::Never,
+            lcd => lcd,
+        };
         let faded = system.faded();
         let Prepaint { layout, origin } = prepaint;
         let mut selection = Vec::new();
@@ -1100,7 +1197,8 @@ impl Element for Text {
                 color: self.color,
                 alpha: (self.alpha * faded * 255.0).round() as u8,
                 fade,
-                lcd: may_be_lcd.then(|| window.painted_scene()),
+                lcd: (lcd != Lcd::Never).then(|| window.painted_scene()),
+                own: lcd == Lcd::OwnBackground,
                 clip: device_rect(window.content_mask().bounds, scale),
             };
             let mut images = Vec::new();

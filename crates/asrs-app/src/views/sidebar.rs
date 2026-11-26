@@ -23,7 +23,7 @@ use asrs_ui::gpui::{
 use asrs_ui::icon::{Icon, IconFit, IconSource};
 use asrs_ui::input::{FieldEvent, FieldKind, FieldStyle, PlainText, TextField};
 use asrs_ui::symbols::Symbol;
-use asrs_ui::text::{Measurer, Text, TextStyle, scroller, snap_remainder};
+use asrs_ui::text::{Measurer, Text, TextStyle, opaque_background, scroller, snap_remainder};
 use asrs_ui::theme::{Appearance, FONT_FAMILY, IconTint, chains};
 use asrs_ui::tooltip::{covering, titled, untitled};
 
@@ -946,7 +946,7 @@ impl SidebarView {
             deferred(
                 anchored()
                     .position(point(px(left), px(top.unwrap_or(0.0) as f32)))
-                    .child(popup),
+                    .child(opaque_background(content > height, popup)),
             )
             .with_priority(1)
             .into_any_element(),

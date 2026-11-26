@@ -166,7 +166,9 @@ impl Selected {
             .rects(&self.range, backend)
             .into_iter()
             .fold(layer, |layer, rect| {
-                layer.child(grid.place(rect).bg(self.colors.rgba()))
+                layer.child(asrs_ui::text::selection_background(
+                    grid.place(rect).bg(self.colors.rgba()),
+                ))
             })
     }
 }

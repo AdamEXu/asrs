@@ -222,7 +222,7 @@ pub fn titles(
                 .track_focus(&focus.handle)
                 .on_key_down(move |event, window, cx| on_key(i, event, window, cx));
         }
-        row = row.child(title);
+        row = row.child(text::opaque_background(false, title));
     }
     let overflows = geometry.scroll_width() > geometry.client_width();
     scroller(overflows, row.children(ring)).into_any_element()
