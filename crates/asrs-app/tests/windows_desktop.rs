@@ -9,6 +9,7 @@
 //!
 //! Needs the logged-in desktop at scale 1 and the oracle's Electron (`ASRS_ELECTRON` or
 //! `cargo xtask oracle setup`); skipped under `ASRS_CI=1` and off Windows. It moves the pointer.
+//! `ASRS_DESKTOP_ONLY=touch` runs the touch and pen checks alone.
 
 #[cfg(windows)]
 #[path = "windows_desktop/touch.rs"]
@@ -1538,22 +1539,27 @@ app.whenReady().then(() => {
                 let version = electron.reply(cx, "ready ").await;
                 let mut report = Report::default();
                 report.check("Electron is upstream's", version == "39.2.7", &version);
-                let (hub, hub_view) = cx
-                    .update(|cx| windows::open_hub(cx, None, blank))
-                    .expect("hub");
-                sleep(cx, 1500).await;
-                captions(cx, &electron, &mut report).await;
-                menus(cx, &mut report, hub).await;
-                lists(cx, &electron, &mut report, (hub, &hub_view)).await;
-                accelerators(cx, &mut report, hub).await;
-                wheel(cx, &electron, &mut report).await;
-                aspects(cx, &electron, &mut report).await;
-                sizes(cx, &electron, &mut report, hub).await;
-                states(cx, &electron, &mut report).await;
-                tooltips(cx, &electron, &mut report).await;
+                let only_touch = std::env::var("ASRS_DESKTOP_ONLY").as_deref() == Ok("touch");
+                if !only_touch {
+                    let (hub, hub_view) = cx
+                        .update(|cx| windows::open_hub(cx, None, blank))
+                        .expect("hub");
+                    sleep(cx, 1500).await;
+                    captions(cx, &electron, &mut report).await;
+                    menus(cx, &mut report, hub).await;
+                    lists(cx, &electron, &mut report, (hub, &hub_view)).await;
+                    accelerators(cx, &mut report, hub).await;
+                    wheel(cx, &electron, &mut report).await;
+                    aspects(cx, &electron, &mut report).await;
+                    sizes(cx, &electron, &mut report, hub).await;
+                    states(cx, &electron, &mut report).await;
+                    tooltips(cx, &electron, &mut report).await;
+                }
                 crate::touch::run(cx, &electron, &mut report).await;
                 drop(electron);
-                own_window(cx, &mut report).await;
+                if !only_touch {
+                    own_window(cx, &mut report).await;
+                }
                 println!(
                     "windows desktop: {} passed, {} failed {:?}",
                     report.passed,

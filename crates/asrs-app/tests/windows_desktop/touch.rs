@@ -19,7 +19,7 @@ use asrs_model::tab_type::TabType;
 use asrs_parity::json::Json;
 use asrs_parity::vectors;
 use asrs_tabs::table::TableRenderer;
-use asrs_ui::gpui::{App, AppContext, AsyncApp, Entity, px, size};
+use asrs_ui::gpui::{App, AsyncApp, Entity, px, size};
 use asrs_ui::platform::probe::{self, Contact, ContactPhase, PointerKind, SyntheticPointer};
 
 use crate::desktop::{Electron, Report, fresh_boot, handle_of, sleep, with_window};
@@ -46,7 +46,8 @@ let ups = 0, clicks = 0;
 tab.addEventListener("pointerup", () => ups++);
 tab.addEventListener("contextmenu", () => menus.push(ups));
 tab.addEventListener("click", () => clicks++);
-window.state = () => [scroll.scrollTop, table.scrollTop, String(getSelection()).length,
+const top = (id) => document.getElementById(id).scrollTop;
+window.state = () => [top("scroll"), top("table"), String(getSelection()).length,
   menus.length, menus.length ? menus.at(-1) : -1, ups, clicks];
 </script>"#;
 
