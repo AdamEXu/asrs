@@ -1519,7 +1519,7 @@ pub(super) mod probe {
         Some((frame.width, frame.height))
     }
 
-    pub fn framed_window() -> Option<(f64, f64)> {
+    pub fn framed_window(_scale: f64) -> Option<(f64, f64)> {
         let mtm = MainThreadMarker::new()?;
         let style = objc2_app_kit::NSWindowStyleMask::Titled
             | objc2_app_kit::NSWindowStyleMask::Closable

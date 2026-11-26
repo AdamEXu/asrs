@@ -53,9 +53,8 @@ pub fn is_visible(window: &Window) -> Option<bool> {
     super::window::native(window).map(|native| native.is_visible())
 }
 
-pub fn framed_window() -> Option<(f64, f64)> {
-    let (width, height) = super::window::titled_frame();
-    Some((f64::from(width), f64::from(height)))
+pub fn framed_window(scale: f64) -> Option<(f64, f64)> {
+    Some(super::window::titled_frame(scale))
 }
 
 pub fn size_hints(_window: &Window, number: u32) -> Option<SizeHints> {

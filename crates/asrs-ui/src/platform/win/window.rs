@@ -18,16 +18,18 @@ use super::subclass;
 pub struct NativeWindow(HWND);
 
 #[cfg(feature = "parity")]
-pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
-    let (w, h) = titled_frame();
-    (width - f64::from(w), height - f64::from(h))
+pub fn titled_content_size(width: f64, height: f64, scale: f64) -> (f64, f64) {
+    let (w, h) = titled_frame(scale);
+    (width - w, height - h)
 }
 
-/// How much larger a titled, resizable window's bounds are than its content at scale 1.
-pub fn titled_frame() -> (i32, i32) {
+/// How much larger a titled, resizable window's bounds are than its content on a display at
+/// `scale`: Windows' frame, which Electron leaves out in whole logical px.
+pub fn titled_frame(scale: f64) -> (f64, f64) {
     use windows::Win32::UI::HiDpi::AdjustWindowRectExForDpi;
     use windows::Win32::UI::WindowsAndMessaging::{WINDOW_EX_STYLE, WS_OVERLAPPEDWINDOW};
     let mut rect = RECT::default();
+    let dpi = (f64::from(USER_DEFAULT_SCREEN_DPI) * scale).round() as u32;
     // SAFETY: `rect` outlives the call.
     let _ = unsafe {
         AdjustWindowRectExForDpi(
@@ -35,10 +37,14 @@ pub fn titled_frame() -> (i32, i32) {
             WS_OVERLAPPEDWINDOW,
             false,
             WINDOW_EX_STYLE(0),
-            USER_DEFAULT_SCREEN_DPI,
+            dpi,
         )
     };
-    (rect.right - rect.left, rect.bottom - rect.top)
+    let logical = |v: i32| (f64::from(v) / scale).floor();
+    (
+        logical(rect.right - rect.left),
+        logical(rect.bottom - rect.top),
+    )
 }
 
 pub fn native(window: &Window) -> Option<NativeWindow> {

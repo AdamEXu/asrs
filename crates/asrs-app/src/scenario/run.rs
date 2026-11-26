@@ -725,13 +725,14 @@ impl Variant<'_> {
     /// Electron sizes windows without `useContentSize` by their frame, and a headless window has
     /// none to take the title bar from.
     fn leave_title_bar(&mut self, window: AnyWindowHandle) -> Result<(), String> {
+        let scale = f64::from(self.scale);
         self.headless
             .context()
             .update_window(window, |_, window, _| {
                 let frame = window.viewport_size();
                 let side = |v| f64::from(f32::from(v));
                 let (width, height) =
-                    platform::titled_content_size(side(frame.width), side(frame.height));
+                    platform::titled_content_size(side(frame.width), side(frame.height), scale);
                 window.resize(size(px(width as f32), px(height as f32)));
             })
             .map_err(|e| e.to_string())
@@ -1428,7 +1429,8 @@ impl Variant<'_> {
                     let id = Windows::adopt_hub(cx, window.into(), screen.window);
                     screen.hub = id;
                     cx.set_global(ScriptedFrame {
-                        size: platform::probe::framed_window().unwrap_or((0.0, 0.0)),
+                        size: platform::probe::framed_window(f64::from(self.scale))
+                            .unwrap_or((0.0, 0.0)),
                     });
                     cx.global_mut::<MainProcess>()
                         .adopt_hub(id, hub.downgrade());
