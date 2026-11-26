@@ -2,9 +2,10 @@
 //! for the parts upstream leaves at `appearance: auto`: checkbox and progress bar. Upstream sets
 //! no `color-scheme`, so they keep their light colours in dark mode.
 
+use asrs_canvas::Pixmap;
 use gpui_kit::{
-    App, Bounds, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels, RenderOnce,
-    StatefulInteractiveElement, Styled, Window, canvas, div,
+    App, Bounds, Edges, ElementId, InteractiveElement, IntoElement, ParentElement, Pixels,
+    RenderOnce, StatefulInteractiveElement, Styled, Window, canvas, div, px,
 };
 
 use crate::input::skia;
@@ -12,6 +13,8 @@ use crate::input::style::{
     ACCENT, DISABLED_BACKGROUND, DISABLED_BORDER, LIGHTEN_LAYER, NATIVE_BORDER, NATIVE_FILL,
     NATIVE_RADIUS, NATIVE_TRACK_BORDER, native_stroke,
 };
+use crate::svg::Backend;
+use crate::text;
 
 /// `PaintTextField`: a white rounded rect, radius 2 zoomed px, in a `#767676` stroke one
 /// zoomed pixel wide, both inset by half the stroke. Disabled, the fill is a translucent white
@@ -45,6 +48,11 @@ pub fn paint_text_field(
         );
         let mut pixmap = skia::svg(w, h, 1.0, &lighten)?;
         skia::fill_aliased_rrect(&mut pixmap, [i, i, fw, fh], radius, DISABLED_BACKGROUND);
+        if Backend::HOST == Backend::Raster {
+            let rect = [i, i, fw, fh];
+            skia::stroke_aliased_rrect(&mut pixmap, rect, radius, stroke, DISABLED_BORDER);
+            return Some(pixmap);
+        }
         let paint = format!(
             "fill=\"none\" {} stroke-width=\"{stroke}\"",
             skia::paint_attrs("stroke", DISABLED_BORDER)
@@ -58,6 +66,13 @@ pub fn paint_text_field(
             return draw_disabled();
         }
         let i = stroke / 2.0;
+        if Backend::HOST == Backend::Raster {
+            let rect = [i, i, f64::from(w) - stroke, f64::from(h) - stroke];
+            let mut pixmap = Pixmap::new(w, h)?;
+            skia::fill_aliased_rrect(&mut pixmap, rect, radius, 0xffffffff);
+            skia::stroke_aliased_rrect(&mut pixmap, rect, radius, stroke, border_color);
+            return Some(pixmap);
+        }
         let paint = format!(
             "{} {} stroke-width=\"{stroke}\"",
             skia::paint_attrs("fill", 0xffffffff),
@@ -74,7 +89,19 @@ pub fn paint_text_field(
         skia::svg(w, h, 1.0, &body)
     };
     let key = ("text-field", w, h, disabled, pointer);
+    let start = window.painted_scene().len();
     skia::paint(key, bounds, draw, window, cx);
+    if !disabled {
+        let border = px(native_stroke(scale).ceil() / scale);
+        let corner = px((NATIVE_RADIUS * scale).ceil() / scale).max(border);
+        let white = bounds.extend(Edges {
+            top: -border,
+            right: -corner,
+            bottom: -border,
+            left: -corner,
+        });
+        text::painted_flat(window, cx, start, white, 0xffffff);
+    }
 }
 
 /// What the pointer does to a control, which the theme's colours follow.
@@ -244,6 +271,7 @@ pub fn paint_progress(bounds: Bounds<Pixels>, position: f64, window: &mut Window
             &skia::paint_attrs("fill", NATIVE_FILL),
         );
         let mut pixmap = skia::svg(w, h, 1.0, &fill)?;
+        let track = pixmap.clone();
         if value > 0 {
             let pill = skia::rect(0.0, top, wf, track_h, r, &skia::paint_attrs("fill", ACCENT));
             let mut bar = skia::svg(w, h, 1.0, &pill)?;
@@ -251,6 +279,9 @@ pub fn paint_progress(bounds: Bounds<Pixels>, position: f64, window: &mut Window
                 for p in row.iter_mut().skip(value as usize) {
                     *p = tiny_skia::PremultipliedColorU8::TRANSPARENT;
                 }
+            }
+            if Backend::HOST == Backend::Raster {
+                skia::clipped(&mut bar, &track);
             }
             skia::over(&mut pixmap, &bar);
         }
@@ -261,7 +292,11 @@ pub fn paint_progress(bounds: Bounds<Pixels>, position: f64, window: &mut Window
         );
         let (bw, bh) = (wf - stroke, track_h - stroke);
         let border = skia::rect(i, top + i, bw, bh, bw.min(bh) / 2.0, &paint);
-        skia::over(&mut pixmap, &skia::svg(w, h, 1.0, &border)?);
+        let mut border = skia::svg(w, h, 1.0, &border)?;
+        if Backend::HOST == Backend::Raster {
+            skia::clipped(&mut border, &track);
+        }
+        skia::over(&mut pixmap, &border);
         Some(pixmap)
     };
     skia::paint(("progress", w, h, value), bounds, draw, window, cx);

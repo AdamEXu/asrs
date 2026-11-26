@@ -1,5 +1,6 @@
 {
   "about": "Focus rings (#355) in the active download window: the scrolling list and both buttons reached with Tab, and the download button pressed, after Cmd+A and after another key",
+  "titleBar": true,
   "prefs": {
     "robotAddress": "127.0.0.1",
     "remotePath": "/media/sda1/logs/",
@@ -130,12 +131,12 @@
     {
       "mouse": "move",
       "x": 477,
-      "y": 449
+      "y": 449, "on": "#download"
     },
     {
       "mouse": "down",
       "x": 477,
-      "y": 449
+      "y": 449, "on": "#download"
     },
     {
       "mouse": "move",

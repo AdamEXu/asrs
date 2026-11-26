@@ -28,21 +28,23 @@ use asrs_ui::focus::{self, Activate, FocusRing, LINK_OUTLINE_OFFSET};
 use asrs_ui::gpui::{
     AnyElement, App, AppContext, ClickEvent, Context, Entity, InteractiveElement, IntoElement,
     KeyboardButton, MouseButton, MouseDownEvent, MouseUpEvent, ParentElement, ScrollEvent, Styled,
-    Subscription, Window, canvas, div, px, rgb,
+    Subscription, Window, canvas, div, px,
 };
 use asrs_ui::icon::IconSource;
 use asrs_ui::input::style::CONTROL_FONT;
 use asrs_ui::input::{Segment, SegmentedControl, Select, SelectEvent, select_geometry};
 use asrs_ui::parity::probed;
+use asrs_ui::scroll;
 use asrs_ui::symbols::Symbol;
 use asrs_ui::text::{self, Text, TextStyle, WhiteSpace, snap_remainder};
 use asrs_ui::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, FONT_FAMILY};
 use asrs_ui::tooltip::{titled, untitled};
 
 use super::field_image::{self, FieldImage};
-use super::frame::{FrameHost, HubFrame, SETTINGS_SECTION, overlay_range, wheel_of};
+use super::frame::{FrameHost, HubFrame, overlay_range, wheel_of};
 use super::scrollers::Area;
 use super::select::FormSelect;
+use super::settings_panel::{SettingsPanel, tab_key};
 use super::source_list::{centred_offset, place_in};
 
 /// `div.field-2d-canvas-container` and `div.field-2d-scroll` are `height: calc(100% + 26px)`
@@ -85,6 +87,13 @@ fn title_style() -> TextStyle {
     .expect("field 2d title style")
 }
 
+/// `ToPixelSnappedRect`: each edge on its own device pixel boundary.
+fn pixel_snapped([x, y, w, h]: [f64; 4], scale: f64) -> [f64; 4] {
+    let snap = |v: f64| (v * scale).round() / scale;
+    let (left, top) = (snap(x), snap(y));
+    [left, top, snap(x + w) - left, snap(y + h) - top]
+}
+
 fn source_style() -> TextStyle {
     let font = format!("14px {}", FONT_FAMILY.join(", "));
     TextStyle::from_css([("font", font.as_str()), ("white-space", "nowrap")])
@@ -92,12 +101,13 @@ fn source_style() -> TextStyle {
 }
 
 /// Where `div.field-2d-settings` puts its parts inside `div.controls-content`, in client
-/// coordinates. `select_width` is the field select's intrinsic width.
+/// coordinates of its unscrolled content. `select_width` is the field select's intrinsic width.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct SettingsLayout {
     /// The border box, `border` of it on the left the `border-left`.
     panel: [f64; 4],
     border: f64,
+    content_height: f64,
     titles: [[f64; 4]; 3],
     select: [f64; 4],
     source: Option<[f64; 2]>,
@@ -106,8 +116,10 @@ struct SettingsLayout {
 }
 
 impl SettingsLayout {
+    /// `bar` is what a scrollbar takes of the panel where it overflows, in CSS px.
     fn new(
         controls: [f64; 4],
+        bar: f64,
         select_width: f64,
         source_width: Option<f64>,
         scale: f64,
@@ -118,14 +130,8 @@ impl SettingsLayout {
         let edge = border(1.0, scale);
         let title_height = length(TITLE_HEIGHT);
         let row_height = length(FIELD_ROW_HEIGHT);
-        let content_width = math::min2(percent(w, 40.0), length(SETTINGS_MAX_WIDTH));
-        let panel = [x + w - content_width - edge, y, content_width + edge, h];
-        let content_x = panel[0] + edge;
-        let half = percent(content_width, 50.0);
-        let title_top = y + length(SETTINGS_TOP);
-        let field_top = title_top + title_height;
-        let second_title = field_top + row_height;
-        let tall_top = second_title + title_height;
+        let width = math::min2(percent(w, 40.0), length(SETTINGS_MAX_WIDTH));
+        let panel = [x + w - width - edge, y, width + edge, h];
         let tall = math::max2(
             math::min2(
                 math::max2(h - length(TALL_INSET), 0.0),
@@ -133,6 +139,18 @@ impl SettingsLayout {
             ),
             length(INPUT_MIN_HEIGHT),
         );
+        let content_height = length(SETTINGS_TOP) + 2.0 * title_height + row_height + tall;
+        let content_width = if content_height > h {
+            width - length(bar)
+        } else {
+            width
+        };
+        let content_x = panel[0] + edge;
+        let half = percent(content_width, 50.0);
+        let title_top = y + length(SETTINGS_TOP);
+        let field_top = title_top + title_height;
+        let second_title = field_top + row_height;
+        let tall_top = second_title + title_height;
         let select_width = device(select_width, scale);
         let source = source_width.map(|w| device(w, scale) + 2.0 * length(SOURCE_PADDING));
         let line_width = select_width + source.unwrap_or(0.0);
@@ -152,6 +170,7 @@ impl SettingsLayout {
         SettingsLayout {
             panel: css(panel),
             border: edge / scale,
+            content_height: content_height / scale,
             titles: [
                 css([content_x, title_top, content_width, title_height]),
                 css([content_x, second_title, half, title_height]),
@@ -302,6 +321,21 @@ pub struct Field2dViews {
 }
 
 impl Field2dViews {
+    /// Forgets the views of the tabs not in `live` and takes the shown frame of every view but
+    /// `shown`'s: the bitmap stays, to show again the moment its tab is.
+    fn hide(&mut self, live: &HashSet<usize>, shown: Option<usize>) -> Vec<FramePresenter> {
+        let mut hidden = Vec::new();
+        self.tabs.retain(|key, tab| {
+            let keep = live.contains(key);
+            if !keep || Some(*key) != shown && tab.presented.is_some() {
+                hidden.push(std::mem::take(&mut tab.presenter));
+                tab.presented = None;
+            }
+            keep
+        });
+        hidden
+    }
+
     fn over_overlay(&self, x: f64, y: f64) -> bool {
         let covered = self
             .covered
@@ -376,7 +410,7 @@ fn mouse_button(button: MouseButton) -> f64 {
 struct Painted {
     frame: Canvas2d,
     style: Option<CanvasStyle>,
-    heatmap: Option<Pixmap>,
+    heatmap: Option<Arc<Pixmap>>,
 }
 
 /// What a settings control does to its controller.
@@ -450,16 +484,9 @@ impl<H: FrameHost> HubFrame<H> {
         let now = self.host().frame_time(cx);
         let views = &mut self.field_2d;
         views.covered = covered;
-        let mut dropped = Vec::new();
-        views.tabs.retain(|key, tab| {
-            let keep = live.contains(key);
-            if !keep {
-                dropped.push(std::mem::take(&mut tab.presenter));
-            }
-            keep
-        });
-        for mut presenter in dropped {
-            presenter.release(cx);
+        let hidden = views.hide(&live, shown.as_ref().map(|&(_, key, _)| key));
+        for mut presenter in hidden {
+            presenter.clear(window, cx);
         }
         views.images.retain(|path, _| paths.contains(path));
         let Some((index, key, path)) = shown else {
@@ -471,7 +498,7 @@ impl<H: FrameHost> HubFrame<H> {
             views
                 .images
                 .entry(path.clone())
-                .or_insert_with(|| field_image::load(path).map(Rc::new));
+                .or_insert_with(|| field_image::load_shared(path));
         }
         let container = [rect[0], rect[1] - overhang, rect[2], rect[3] + overhang];
         let shown = Shown {
@@ -548,7 +575,7 @@ impl<H: FrameHost> HubFrame<H> {
                 images.push((path.to_string_lossy(), image.pixmap.clone()));
             }
             if let Some(heatmap) = painted.heatmap {
-                images.push((HEATMAP_IMAGE.to_owned(), Arc::new(heatmap)));
+                images.push((HEATMAP_IMAGE.to_owned(), heatmap));
             }
             let (raster, shades) = (&mut tab.raster, &mut tab.shades);
             tab.bitmap = rasterize(&painted.frame, &images, raster, shades).map(Arc::new);
@@ -669,12 +696,12 @@ impl<H: FrameHost> HubFrame<H> {
     ) -> Option<AnyElement> {
         let hub = self.host().hub(cx);
         let (_, renderer, tab) = displayed(hub)?;
+        let panel_key = tab_key(&tab);
         let controller = tab.controller().downcast_ref::<Field2dController>()?;
         let key = renderer_key(renderer);
         let state = controller.controls.clone();
         let source_shown = !state.source_hidden;
         let wanted = field_select(&state);
-        let dark = appearance == Appearance::Dark;
         let theme = appearance.theme();
 
         let mut select_style = TextStyle::new(CONTROL_FONT);
@@ -693,7 +720,14 @@ impl<H: FrameHost> HubFrame<H> {
         let select_width = math::ceil(options_width * zoom) / zoom + SELECT_CHROME;
         let source_width =
             source_shown.then(|| text::measure(cx, &source_style(), "Source", scale).0);
-        let layout = SettingsLayout::new(controls, select_width, source_width, f64::from(scale));
+        let layout = SettingsLayout::new(
+            controls,
+            scroll::style(cx).reserved(),
+            select_width,
+            source_width,
+            f64::from(scale),
+        );
+        let content = [layout.panel[0] + layout.border, layout.panel[1]];
 
         let entity = cx.entity().downgrade();
         let tab = self.field_2d.tabs.entry(key).or_default();
@@ -736,36 +770,15 @@ impl<H: FrameHost> HubFrame<H> {
         let local = |r: [f64; 4]| {
             div()
                 .absolute()
-                .left(px((r[0] - controls[0]) as f32))
-                .top(px((r[1] - controls[1]) as f32))
+                .left(px((r[0] - content[0]) as f32))
+                .top(px((r[1] - content[1]) as f32))
                 .w(px(r[2] as f32))
                 .h(px(r[3] as f32))
         };
         let place = |part: &'static str, window: &mut Window, cx: &mut App| {
             focus::place((part, key), window, cx)
         };
-        let mut panel = div()
-            .absolute()
-            .left_0()
-            .top_0()
-            .size_full()
-            .tab_group()
-            .tab_index(SETTINGS_SECTION);
-        let ph = layout.panel[3];
-        panel = panel.child(probed(
-            "div.field-2d-settings",
-            local(layout.panel)
-                .track_focus(&place("panel", window, cx))
-                .child(
-                    div()
-                        .absolute()
-                        .left_0()
-                        .top_0()
-                        .w(px(layout.border as f32))
-                        .h(px(ph as f32))
-                        .bg(rgb(if dark { 0x000000 } else { 0xdddddd })),
-                ),
-        ));
+        let mut panel = div();
         let titles = [("Field", 0), ("Orientation", 1), ("Size", 2)];
         for (label, i) in titles {
             let r = layout.titles[i];
@@ -850,12 +863,15 @@ impl<H: FrameHost> HubFrame<H> {
             ));
             if focus.visible {
                 let around = SOURCE_PADDING + LINK_OUTLINE_OFFSET;
-                let outlined = [
-                    r[0] - around,
-                    top - around,
-                    width + 2.0 * around,
-                    content + 2.0 * around,
-                ];
+                let outlined = pixel_snapped(
+                    [
+                        r[0] - around,
+                        top - around,
+                        width + 2.0 * around,
+                        content + 2.0 * around,
+                    ],
+                    f64::from(scale),
+                );
                 let radius = px(FOCUS_RING_RADIUS + LINK_OUTLINE_OFFSET as f32 + FOCUS_RING_WIDTH);
                 panel =
                     panel.child(local(outlined).child(focus::outline(appearance).rounded(radius)));
@@ -911,7 +927,16 @@ impl<H: FrameHost> HubFrame<H> {
                     ),
             );
         }
-        Some(panel.into_any_element())
+        let panel = SettingsPanel {
+            key: panel_key,
+            probe: "div.field-2d-settings",
+            controls,
+            rect: layout.panel,
+            border: layout.border,
+            content: panel,
+            content_height: layout.content_height,
+        };
+        Some(self.settings_scroller(panel, appearance, scale, window, cx))
     }
 
     fn field_2d_select(&mut self, key: usize, value: JsString, cx: &mut Context<'_, Self>) {
@@ -1072,8 +1097,36 @@ mod tests {
     use crate::views::control_layout_vectors;
 
     #[test]
+    fn a_hidden_tab_lets_go_of_its_shown_frame_and_keeps_its_bitmap() {
+        let mut views = Field2dViews::default();
+        let style = CanvasStyle {
+            width: 10.0,
+            height: 5.0,
+            rotation: 0.0,
+        };
+        for key in [1, 2, 3] {
+            let tab = views.tabs.entry(key).or_default();
+            tab.bitmap = Pixmap::new(4, 2).map(Arc::new);
+            tab.presented = Some((style, [0; 4], 0));
+        }
+        let live = HashSet::from([1, 2]);
+        assert_eq!(views.hide(&live, Some(2)).len(), 2);
+        assert_eq!(views.tabs.len(), 2);
+        assert!(views.tabs[&1].presented.is_none() && views.tabs[&1].bitmap.is_some());
+        assert!(views.tabs[&2].presented.is_some());
+        assert_eq!(views.hide(&live, Some(2)).len(), 0);
+        assert_eq!(views.hide(&live, None).len(), 1);
+        assert!(
+            views
+                .tabs
+                .values()
+                .all(|t| t.presented.is_none() && t.bitmap.is_some())
+        );
+    }
+
+    #[test]
     fn settings_boxes_match_blink() {
-        let layout = SettingsLayout::new([300.0, 450.0, 800.0, 200.0], 99.0, None, 1.0);
+        let layout = SettingsLayout::new([300.0, 450.0, 800.0, 200.0], 0.0, 99.0, None, 1.0);
         assert_eq!(layout.panel, [849.0, 450.0, 251.0, 200.0]);
         assert_eq!(
             layout.titles,
@@ -1086,6 +1139,13 @@ mod tests {
         assert_eq!(layout.select, [925.5, 483.0, 99.0, 24.0]);
         assert_eq!(layout.orientation, [862.5, 543.0, 100.0, 65.0]);
         assert_eq!(layout.size, [987.5, 543.0, 100.0, 65.0]);
+    }
+
+    /// The focused link of `focus-field-2d` in Electron on Linux, at 1x.
+    #[test]
+    fn the_ring_of_the_source_link_has_snapped_edges() {
+        let box_ = [994.453125, 480.5, 60.09375, 28.0];
+        assert_eq!(pixel_snapped(box_, 1.0), [994.0, 481.0, 61.0, 28.0]);
     }
 
     #[test]
@@ -1108,7 +1168,7 @@ mod tests {
             let source = blink.all("div.setting-blocks a").first().map(|a| a.rect);
             let padding = 2.0 * zoomed(SOURCE_PADDING, scale) / scale;
             let source_width = source.map(|a| a[2] - padding);
-            let layout = SettingsLayout::new(blink.controls, select[2], source_width, scale);
+            let layout = SettingsLayout::new(blink.controls, 0.0, select[2], source_width, scale);
             let panel = blink.all("div.setting-blocks")[0].rect;
             blink.check("panel", &layout.panel, &panel);
             let field = blink.all("div.setting-blocks > div")[0].rect;

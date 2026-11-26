@@ -87,6 +87,23 @@ fn scrollbar_preferences(headless: &mut HeadlessCapture) {
     assert_eq!(cx.update(|cx| style(cx)), system);
 }
 
+/// The kit's default fonts come from a list that has no fonts parsed, which leaves out the
+/// system's hidden families.
+#[cfg(target_os = "macos")]
+fn default_fonts(headless: &mut HeadlessCapture) {
+    headless.context().update(|cx| {
+        let names = cx.text_system().all_font_names();
+        for name in ["Menlo", "Monaco", "Courier New"] {
+            assert!(names.iter().any(|n| n == name), "no {name}");
+        }
+        let hidden: Vec<_> = names.iter().filter(|n| n.starts_with('.')).collect();
+        assert!(hidden.is_empty(), "{hidden:?}");
+        let theme = gpui_kit::component::Theme::global(cx);
+        assert_eq!(theme.font_family, ".SystemUIFont");
+        assert_eq!(theme.mono_font_family, "Menlo");
+    });
+}
+
 fn main() {
     if asrs_parity::ci::skip_in_ci("headless capture", "a GPU") {
         return;
@@ -115,6 +132,8 @@ fn run() {
     assert_eq!(capture.capture(handle).expect("capture"), one);
     assert_eq!(capture.capture(handle).expect("capture"), one);
 
+    #[cfg(target_os = "macos")]
+    default_fonts(&mut capture);
     #[cfg(target_os = "macos")]
     scrollbar_preferences(&mut capture);
 

@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U12): a restored empty Table tab; three sidebar fields dragged into it with the pointer, the last in front; a selected time, a row hover, a row click; trackpad scrolling; the close button's hover; a column dragged in front of the first, captured mid-drag; a column closed; a timestamp typed into the jump input and entered; a row's context menu, which goes idle; and the last columns closed, after which the hand icon fades in. Then a restored tab with array, boolean, missing and nested fields whose keys are cut with an ellipsis, scrolled right and to the end, and an empty one again. Saved HubState (the field list) and the written files are compared; waits after scrolling let macOS fade the scrollbar, which gate 5 leaves out",
+  "titleBar": true,
   "actions": [
     {
       "open": [

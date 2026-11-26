@@ -1,6 +1,7 @@
 // Ported from three.js r168 (MIT, Copyright 2010-2024 three.js authors). See THIRD_PARTY_NOTICES.md.
 
 use std::collections::HashMap;
+use std::ops::Range;
 use std::sync::Arc;
 
 use asrs_js::math;
@@ -204,9 +205,9 @@ fn number_elem(value: Option<&JsValue>, i: usize) -> f64 {
 const MAX_ZERO_FILL_BYTES: usize = 1 << 30;
 
 /// `meshDef.primitives` as `loadMesh` and `loadGeometries` walk it: `for (i < primitives.length)`.
-fn primitives_of(mesh: &JsValue) -> Result<Vec<JsValue>> {
+fn primitives_of(mesh: &JsValue) -> Result<&[JsValue]> {
     match prop(mesh, "primitives") {
-        Some(JsValue::Array(p)) => Ok(p.clone()),
+        Some(JsValue::Array(p)) => Ok(p),
         None | Some(JsValue::Undefined | JsValue::Null) => {
             reject("TypeError: Cannot read properties of undefined (reading 'length')")
         }
@@ -216,7 +217,7 @@ fn primitives_of(mesh: &JsValue) -> Result<Vec<JsValue>> {
         Some(object @ JsValue::Object(_)) if object.get("length").is_some() => {
             unmodeled("mesh primitives as an array-like object")
         }
-        Some(_) => Ok(Vec::new()),
+        Some(_) => Ok(&[]),
     }
 }
 
@@ -275,7 +276,7 @@ fn read_u32(data: &[u8], at: usize) -> Result<u32> {
 }
 
 /// `GLTFBinaryExtension`: the JSON chunk text and the BIN chunk.
-fn parse_glb(data: &[u8]) -> Result<(JsString, Option<Vec<u8>>)> {
+fn parse_glb(data: &[u8]) -> Result<(JsString, Option<&[u8]>)> {
     if data.len() < BINARY_HEADER_LENGTH {
         return reject("RangeError: Offset is outside the bounds of the DataView");
     }
@@ -300,7 +301,7 @@ fn parse_glb(data: &[u8]) -> Result<(JsString, Option<Vec<u8>>)> {
             }
         } else if kind == CHUNK_BIN {
             let from = start.min(data.len());
-            body = Some(data[from..(start + length).min(data.len())].to_vec());
+            body = Some(&data[from..(start + length).min(data.len())]);
         }
         index += length;
     }
@@ -420,9 +421,9 @@ fn typed_array(
     })
 }
 
-/// `ArrayBuffer.prototype.slice(start, end)`.
-fn slice_buffer(buffer: &[u8], start: f64, end: f64) -> Vec<u8> {
-    let len = buffer.len() as f64;
+/// The range `ArrayBuffer.prototype.slice(start, end)` copies from a buffer of `len` bytes.
+fn slice_range(len: usize, start: f64, end: f64) -> Range<usize> {
+    let len = len as f64;
     let clamp = |x: f64| -> usize {
         let x = if x.is_nan() { 0.0 } else { x.trunc() };
         (if x < 0.0 {
@@ -432,10 +433,28 @@ fn slice_buffer(buffer: &[u8], start: f64, end: f64) -> Vec<u8> {
         }) as usize
     };
     let (from, to) = (clamp(start), clamp(end));
-    if to > from {
-        buffer[from..to].to_vec()
-    } else {
-        Vec::new()
+    from..to.max(from)
+}
+
+#[derive(Clone)]
+enum Bytes<'a> {
+    Glb(&'a [u8]),
+    Loaded(Arc<Vec<u8>>),
+}
+
+#[derive(Clone)]
+struct BufferView<'a> {
+    buffer: Bytes<'a>,
+    range: Range<usize>,
+}
+
+impl BufferView<'_> {
+    fn bytes(&self) -> &[u8] {
+        let buffer = match &self.buffer {
+            Bytes::Glb(bytes) => bytes,
+            Bytes::Loaded(bytes) => bytes.as_slice(),
+        };
+        &buffer[self.range.clone()]
     }
 }
 
@@ -555,7 +574,7 @@ struct CameraTemplate {
 
 struct Parser<'a> {
     json: &'a JsValue,
-    body: Option<Vec<u8>>,
+    body: Option<&'a [u8]>,
     path: JsString,
     binary: bool,
     fetch: &'a dyn Fn(&JsString) -> Option<Vec<u8>>,
@@ -563,9 +582,12 @@ struct Parser<'a> {
     meshopt_required: bool,
     basisu_required: bool,
     names: NodeNames,
-    buffers: HashMap<usize, Arc<Vec<u8>>>,
-    buffer_views: HashMap<usize, Arc<Vec<u8>>>,
+    buffers: HashMap<usize, Bytes<'a>>,
+    buffer_views: HashMap<usize, BufferView<'a>>,
     accessors: HashMap<usize, BufferAttribute>,
+    /// How many more times the loaded meshes read each accessor. One that nothing reads again
+    /// is handed over instead of cached.
+    accessor_uses: HashMap<usize, usize>,
     materials: HashMap<usize, Arc<SourceMaterial>>,
     default_material: Arc<SourceMaterial>,
     mesh_refs: HashMap<usize, usize>,
@@ -600,6 +622,7 @@ pub fn load_gltf(
     let json = asrs_js::json::parse(&text).map_err(|e| {
         GltfError::Rejected(format!("SyntaxError: {}", e.message.to_string_lossy()))
     })?;
+    drop(text);
     check_asset(&json)?;
     let used = items(prop(&json, "extensionsUsed"));
     let required = items(prop(&json, "extensionsRequired"));
@@ -612,7 +635,7 @@ pub fn load_gltf(
     }
     let mut parser = Parser {
         json: &json,
-        body: if binary { body } else { None },
+        body,
         binary,
         path: extract_url_base(url),
         fetch,
@@ -623,6 +646,7 @@ pub fn load_gltf(
         buffers: HashMap::new(),
         buffer_views: HashMap::new(),
         accessors: HashMap::new(),
+        accessor_uses: HashMap::new(),
         materials: HashMap::new(),
         default_material: Arc::new(SourceMaterial::white()),
         mesh_refs: HashMap::new(),
@@ -674,8 +698,8 @@ fn check_asset(json: &JsValue) -> Result<()> {
     Ok(())
 }
 
-impl Parser<'_> {
-    fn defs(&self, key: &str) -> &[JsValue] {
+impl<'a> Parser<'a> {
+    fn defs(&self, key: &str) -> &'a [JsValue] {
         items(prop(self.json, key))
     }
 
@@ -683,8 +707,8 @@ impl Parser<'_> {
         if !self.defs("skins").is_empty() {
             return unmodeled("skins");
         }
-        let nodes = self.defs("nodes").to_vec();
-        for node in &nodes {
+        let nodes = self.defs("nodes");
+        for node in nodes {
             if let Some(mesh) = defined(prop(node, "mesh")).and_then(index_of) {
                 *self.mesh_refs.entry(mesh).or_default() += 1;
             }
@@ -693,9 +717,9 @@ impl Parser<'_> {
             }
         }
 
-        let scenes = self.defs("scenes").to_vec();
+        let scenes = self.defs("scenes");
         let mut scene_names = Vec::new();
-        for scene in &scenes {
+        for scene in scenes {
             let name = if truthy(prop(scene, "name")) {
                 self.names.unique(&name_arg(prop(scene, "name"))?)
             } else {
@@ -706,12 +730,13 @@ impl Parser<'_> {
                 self.visit(id, 1)?;
             }
         }
-        for animation in self.defs("animations").to_vec() {
-            self.load_animation(&animation)?;
+        for animation in self.defs("animations") {
+            self.load_animation(animation)?;
         }
         for i in 0..self.defs("cameras").len() {
             self.load_camera(i, false)?;
         }
+        self.count_accessor_uses();
         for mesh in self.mesh_order.clone() {
             let template = self.load_mesh(mesh)?;
             self.meshes.insert(mesh, template);
@@ -751,7 +776,28 @@ impl Parser<'_> {
         }
     }
 
-    fn node_def(&self, index: usize) -> Result<&JsValue> {
+    fn count_accessor_uses(&mut self) {
+        for &mesh in &self.mesh_order {
+            let Some(mesh) = self.defs("meshes").get(mesh) else {
+                continue;
+            };
+            for primitive in items(prop(mesh, "primitives")) {
+                let attributes = match prop(primitive, "attributes") {
+                    Some(JsValue::Object(attributes)) => Some(attributes),
+                    _ => None,
+                };
+                let accessors = attributes
+                    .into_iter()
+                    .flat_map(|a| a.iter().map(|(_, accessor)| accessor))
+                    .chain(prop(primitive, "indices"));
+                for accessor in accessors.filter_map(index_of) {
+                    *self.accessor_uses.entry(accessor).or_default() += 1;
+                }
+            }
+        }
+    }
+
+    fn node_def(&self, index: usize) -> Result<&'a JsValue> {
         require(self.defs("nodes").get(index), "nodeDef")
     }
 
@@ -766,17 +812,17 @@ impl Parser<'_> {
             return Ok(());
         }
         self.node_seen.insert(index, self.visited.len());
-        let def = self.node_def(index)?.clone();
-        let name = if truthy(prop(&def, "name")) {
-            self.names.unique(&name_arg(prop(&def, "name"))?)
+        let def = self.node_def(index)?;
+        let name = if truthy(prop(def, "name")) {
+            self.names.unique(&name_arg(prop(def, "name"))?)
         } else {
             JsString::new()
         };
         self.visited.push((index, name));
-        if let Some(extensions) = prop(&def, "extensions") {
+        if let Some(extensions) = prop(def, "extensions") {
             if let Some(gpu) = prop(extensions, "EXT_mesh_gpu_instancing")
                 && truthy(Some(gpu))
-                && defined(prop(&def, "mesh")).is_some()
+                && defined(prop(def, "mesh")).is_some()
             {
                 return unmodeled("EXT_mesh_gpu_instancing");
             }
@@ -786,23 +832,23 @@ impl Parser<'_> {
                 return unmodeled("KHR_lights_punctual");
             }
         }
-        if let Some(mesh) = defined(prop(&def, "mesh")) {
+        if let Some(mesh) = defined(prop(def, "mesh")) {
             let Some(mesh) = index_of(mesh) else {
                 return reject("TypeError: meshDef is undefined");
             };
             self.request_mesh(mesh)?;
         }
-        if let Some(camera) = defined(prop(&def, "camera")) {
+        if let Some(camera) = defined(prop(def, "camera")) {
             let Some(camera) = index_of(camera) else {
                 return reject("TypeError: cameraDef is undefined");
             };
             self.load_camera(camera, true)?;
         }
-        if defined(prop(&def, "skin")).is_some() {
+        if defined(prop(def, "skin")).is_some() {
             return unmodeled("skins");
         }
-        for child in items(prop(&def, "children")).to_vec() {
-            self.visit(&child, depth + 1)?;
+        for child in items(prop(def, "children")) {
+            self.visit(child, depth + 1)?;
         }
         Ok(())
     }
@@ -814,8 +860,8 @@ impl Parser<'_> {
             return Ok(());
         }
         self.mesh_order.push(index);
-        let def = require(self.defs("meshes").get(index), "meshDef")?.clone();
-        for primitive in &primitives_of(&def)? {
+        let def = require(self.defs("meshes").get(index), "meshDef")?;
+        for primitive in primitives_of(def)? {
             if let Some(material) = defined(prop(primitive, "material")) {
                 self.load_material(material)?;
             }
@@ -831,11 +877,11 @@ impl Parser<'_> {
         }
         let def = match self.defs("cameras").get(index) {
             None | Some(JsValue::Null) => return reject("TypeError: cameraDef is undefined"),
-            Some(def) => def.clone(),
+            Some(def) => def,
         };
-        let kind = prop(&def, "type");
+        let kind = prop(def, "type");
         let params = match kind {
-            Some(JsValue::String(s)) => prop(&def, &s.to_string_lossy()),
+            Some(JsValue::String(s)) => prop(def, &s.to_string_lossy()),
             _ => None,
         };
         if !truthy(params) {
@@ -851,9 +897,9 @@ impl Parser<'_> {
                 "OrthographicCamera"
             }
             _ if from_node
-                || truthy(prop(&def, "name"))
+                || truthy(prop(def, "name"))
                 || matches!(
-                    prop(&def, "extras"),
+                    prop(def, "extras"),
                     Some(JsValue::Object(_) | JsValue::Array(_) | JsValue::Null)
                 ) =>
             {
@@ -861,8 +907,8 @@ impl Parser<'_> {
             }
             _ => return Ok(()),
         };
-        let name = if truthy(prop(&def, "name")) {
-            self.names.unique(&name_arg(prop(&def, "name"))?)
+        let name = if truthy(prop(def, "name")) {
+            self.names.unique(&name_arg(prop(def, "name"))?)
         } else {
             JsString::new()
         };
@@ -883,13 +929,12 @@ impl Parser<'_> {
             return Ok(m.clone());
         }
         let def = match self.defs("materials").get(index) {
-            Some(d @ JsValue::Object(_)) => d.clone(),
             Some(JsValue::Null) | None => return reject("TypeError: materialDef is undefined"),
-            Some(other) => other.clone(),
+            Some(def) => def,
         };
-        let extensions = prop(&def, "extensions").filter(|v| truthy(Some(v)));
+        let extensions = prop(def, "extensions").filter(|v| truthy(Some(v)));
         let is_unlit = extensions.is_some_and(|e| truthy(prop(e, "KHR_materials_unlit")));
-        let pbr = prop(&def, "pbrMetallicRoughness").filter(|v| truthy(Some(v)));
+        let pbr = prop(def, "pbrMetallicRoughness").filter(|v| truthy(Some(v)));
         let mut material = SourceMaterial::white();
         if is_unlit && !self.unlit {
             return reject(
@@ -913,14 +958,14 @@ impl Parser<'_> {
                 self.check_texture(prop(pbr, "metallicRoughnessTexture"))?;
             }
         }
-        let alpha_mode = prop(&def, "alphaMode").filter(|v| truthy(Some(v)));
+        let alpha_mode = prop(def, "alphaMode").filter(|v| truthy(Some(v)));
         material.transparent =
             matches!(alpha_mode, Some(JsValue::String(s)) if *s == JsString::from("BLEND"));
         if !is_unlit {
             for key in ["normalTexture", "occlusionTexture", "emissiveTexture"] {
-                self.check_texture(prop(&def, key))?;
+                self.check_texture(prop(def, key))?;
             }
-            if matches!(prop(&def, "emissiveFactor"), Some(JsValue::Null)) {
+            if matches!(prop(def, "emissiveFactor"), Some(JsValue::Null)) {
                 return reject("TypeError: Cannot read properties of null (reading '0')");
             }
             for (name, textures) in MATERIAL_EXTENSION_TEXTURES {
@@ -1025,24 +1070,24 @@ impl Parser<'_> {
         self.check_buffer(defined(prop(def, "buffer")))
     }
 
-    fn load_buffer(&mut self, index: usize) -> Result<Arc<Vec<u8>>> {
+    fn load_buffer(&mut self, index: usize) -> Result<Bytes<'a>> {
         if let Some(b) = self.buffers.get(&index) {
             return Ok(b.clone());
         }
-        let def = require(self.defs("buffers").get(index), "bufferDef")?.clone();
-        if let Some(t) = prop(&def, "type")
+        let def = require(self.defs("buffers").get(index), "bufferDef")?;
+        if let Some(t) = prop(def, "type")
             && truthy(Some(t))
             && *t != JsValue::string("arraybuffer")
         {
             return reject("THREE.GLTFLoader: buffer type is not supported.");
         }
-        let uri = prop(&def, "uri").cloned().unwrap_or_default();
+        let uri = prop(def, "uri").cloned().unwrap_or_default();
         let bytes = if uri.is_undefined() && index == 0 {
             if !self.binary {
                 return reject("TypeError: Cannot read properties of undefined (reading 'body')");
             }
             match self.body.take() {
-                Some(body) => body,
+                Some(body) => Bytes::Glb(body),
                 None => {
                     return reject("TypeError: Cannot read properties of null (reading 'slice')");
                 }
@@ -1058,7 +1103,7 @@ impl Parser<'_> {
                 (self.fetch)(&url)
             };
             match loaded {
-                Some(bytes) => bytes,
+                Some(bytes) => Bytes::Loaded(Arc::new(bytes)),
                 None => {
                     return reject(format!(
                         "THREE.GLTFLoader: Failed to load buffer \"{}\".",
@@ -1069,12 +1114,11 @@ impl Parser<'_> {
                 }
             }
         };
-        let bytes = Arc::new(bytes);
         self.buffers.insert(index, bytes.clone());
         Ok(bytes)
     }
 
-    fn load_buffer_view(&mut self, index: &JsValue) -> Result<Arc<Vec<u8>>> {
+    fn load_buffer_view(&mut self, index: &JsValue) -> Result<BufferView<'a>> {
         let Some(index) = index_of(index) else {
             return reject("TypeError: bufferViewDef is undefined");
         };
@@ -1082,19 +1126,22 @@ impl Parser<'_> {
             return Ok(view.clone());
         }
         self.check_buffer_view(&JsValue::Number(index as f64))?;
-        let def = require(self.defs("bufferViews").get(index), "bufferViewDef")?.clone();
-        let Some(buffer) = defined(prop(&def, "buffer")).and_then(index_of) else {
+        let def = require(self.defs("bufferViews").get(index), "bufferViewDef")?;
+        let Some(buffer) = defined(prop(def, "buffer")).and_then(index_of) else {
             return reject("TypeError: bufferDef is undefined");
         };
         let buffer = self.load_buffer(buffer)?;
         let or_zero = |v: Option<&JsValue>| if truthy(v) { to_number(v) } else { 0.0 };
-        let byte_length = or_zero(prop(&def, "byteLength"));
-        let byte_offset = or_zero(prop(&def, "byteOffset"));
-        let view = Arc::new(slice_buffer(
-            &buffer,
-            byte_offset,
-            byte_offset + byte_length,
-        ));
+        let byte_length = or_zero(prop(def, "byteLength"));
+        let byte_offset = or_zero(prop(def, "byteOffset"));
+        let length = match &buffer {
+            Bytes::Glb(bytes) => bytes.len(),
+            Bytes::Loaded(bytes) => bytes.len(),
+        };
+        let view = BufferView {
+            buffer,
+            range: slice_range(length, byte_offset, byte_offset + byte_length),
+        };
         self.buffer_views.insert(index, view.clone());
         Ok(view)
     }
@@ -1103,16 +1150,22 @@ impl Parser<'_> {
         let Some(index) = index_of(index_value) else {
             return reject("TypeError: accessorDef is undefined");
         };
+        let uses = self.accessor_uses.entry(index).or_default();
+        *uses = uses.saturating_sub(1);
+        let used_again = *uses > 0;
+        if !used_again && let Some(a) = self.accessors.remove(&index) {
+            return Ok(a);
+        }
         if let Some(a) = self.accessors.get(&index) {
             return Ok(a.clone());
         }
-        let def = require(self.defs("accessors").get(index), "accessorDef")?.clone();
-        let size = item_size(prop(&def, "type"))?;
-        let kind = component_kind(prop(&def, "componentType"))?;
-        let normalized = matches!(prop(&def, "normalized"), Some(JsValue::Bool(true)));
-        let count = to_number(prop(&def, "count"));
-        let buffer_view_index = defined(prop(&def, "bufferView"));
-        let sparse = defined(prop(&def, "sparse"));
+        let def = require(self.defs("accessors").get(index), "accessorDef")?;
+        let size = item_size(prop(def, "type"))?;
+        let kind = component_kind(prop(def, "componentType"))?;
+        let normalized = matches!(prop(def, "normalized"), Some(JsValue::Bool(true)));
+        let count = to_number(prop(def, "count"));
+        let buffer_view_index = defined(prop(def, "bufferView"));
+        let sparse = defined(prop(def, "sparse"));
         let width = element_bytes(kind);
 
         let mut attribute = match buffer_view_index {
@@ -1127,8 +1180,8 @@ impl Parser<'_> {
             }
             Some(view_index) => {
                 let view = self.load_buffer_view(view_index)?;
-                let byte_offset = if truthy(prop(&def, "byteOffset")) {
-                    to_number(prop(&def, "byteOffset"))
+                let byte_offset = if truthy(prop(def, "byteOffset")) {
+                    to_number(prop(def, "byteOffset"))
                 } else {
                     0.0
                 };
@@ -1141,7 +1194,7 @@ impl Parser<'_> {
                     Some(stride) if stride != (width * size) as f64 => {
                         let slice = math::floor(byte_offset / stride);
                         let array = typed_array(
-                            &view,
+                            view.bytes(),
                             kind,
                             to_index(slice * stride)?,
                             to_index(count * stride / width as f64)?,
@@ -1163,7 +1216,7 @@ impl Parser<'_> {
                     }
                     _ => BufferAttribute::new(
                         typed_array(
-                            &view,
+                            view.bytes(),
                             kind,
                             to_index(byte_offset)?,
                             to_index(count * size as f64)?,
@@ -1194,13 +1247,13 @@ impl Parser<'_> {
             };
             let index_kind = component_kind(prop(&indices_def, "componentType"))?;
             let indices = typed_array(
-                &indices_view,
+                indices_view.bytes(),
                 index_kind,
                 to_index(offset_of(&indices_def))?,
                 to_index(sparse_count)?,
             )?;
             let values = typed_array(
-                &values_view,
+                values_view.bytes(),
                 kind,
                 to_index(offset_of(&values_def))?,
                 to_index(sparse_count * size as f64)?,
@@ -1217,7 +1270,9 @@ impl Parser<'_> {
                 }
             }
         }
-        self.accessors.insert(index, attribute.clone());
+        if used_again {
+            self.accessors.insert(index, attribute.clone());
+        }
         Ok(attribute)
     }
 
@@ -1367,21 +1422,21 @@ impl Parser<'_> {
     }
 
     fn load_mesh(&mut self, index: usize) -> Result<MeshTemplate> {
-        let def = require(self.defs("meshes").get(index), "meshDef")?.clone();
-        let primitives = primitives_of(&def)?;
+        let def = require(self.defs("meshes").get(index), "meshDef")?;
+        let primitives = primitives_of(def)?;
         let mut materials = Vec::new();
-        for primitive in &primitives {
+        for primitive in primitives {
             materials.push(match defined(prop(primitive, "material")) {
                 Some(m) => self.load_material(m)?,
                 None => self.default_material.clone(),
             });
         }
         let mut geometries = Vec::new();
-        for primitive in &primitives {
+        for primitive in primitives {
             geometries.push(self.load_geometry(primitive)?);
         }
-        let base_name = if truthy(prop(&def, "name")) {
-            name_arg(prop(&def, "name"))?
+        let base_name = if truthy(prop(def, "name")) {
+            name_arg(prop(def, "name"))?
         } else {
             JsString::from(format!("mesh_{index}"))
         };
@@ -1432,9 +1487,9 @@ impl Parser<'_> {
         index: usize,
         name: JsString,
     ) -> Result<ObjectId> {
-        let def = self.node_def(index)?.clone();
+        let def = self.node_def(index)?;
         let mut objects = Vec::new();
-        if let Some(mesh) = defined(prop(&def, "mesh")).and_then(index_of) {
+        if let Some(mesh) = defined(prop(def, "mesh")).and_then(index_of) {
             let suffix = self.instance_suffix(true, mesh);
             let template = &self.meshes[&mesh];
             let id = if template.primitives.len() == 1 {
@@ -1452,7 +1507,7 @@ impl Parser<'_> {
             }
             objects.push(id);
         }
-        if let Some(camera) = defined(prop(&def, "camera")).and_then(index_of) {
+        if let Some(camera) = defined(prop(def, "camera")).and_then(index_of) {
             let suffix = self.instance_suffix(false, camera);
             let id = graph.create("", self.cameras[&camera].object.clone());
             if let Some(suffix) = suffix {
@@ -1471,25 +1526,25 @@ impl Parser<'_> {
                 group
             }
         };
-        if truthy(prop(&def, "name")) {
+        if truthy(prop(def, "name")) {
             graph.node_mut(node).data.name = name;
         }
         let object = graph.object_mut(node);
-        if let Some(matrix) = defined(prop(&def, "matrix")) {
+        if let Some(matrix) = defined(prop(def, "matrix")) {
             let mut e = [0.0; 16];
             for (i, slot) in e.iter_mut().enumerate() {
                 *slot = number_elem(Some(matrix), i);
             }
             object.apply_matrix4(&Matrix4::from_array(e));
         } else {
-            if let Some(t) = defined(prop(&def, "translation")) {
+            if let Some(t) = defined(prop(def, "translation")) {
                 object.position = Vector3::new(
                     number_elem(Some(t), 0),
                     number_elem(Some(t), 1),
                     number_elem(Some(t), 2),
                 );
             }
-            if let Some(r) = defined(prop(&def, "rotation")) {
+            if let Some(r) = defined(prop(def, "rotation")) {
                 object.set_quaternion(Quaternion::new(
                     number_elem(Some(r), 0),
                     number_elem(Some(r), 1),
@@ -1497,7 +1552,7 @@ impl Parser<'_> {
                     number_elem(Some(r), 3),
                 ));
             }
-            if let Some(s) = defined(prop(&def, "scale")) {
+            if let Some(s) = defined(prop(def, "scale")) {
                 object.scale = Vector3::new(
                     number_elem(Some(s), 0),
                     number_elem(Some(s), 1),

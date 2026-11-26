@@ -20,6 +20,8 @@ env:
   UPSTREAM_REPOSITORY: Mechanical-Advantage/AdvantageScope
   # Keep equal to UPSTREAM_COMMIT in xtask/src/oracle.rs.
   UPSTREAM_COMMIT: 8fc5b89fc93be5dba5a66005ea6111fa16594aa8
+  # Vulkan-Loader before 1.4.345 races independent logical-device lifetimes.
+  VULKAN_LOADER_VERSION: "1.4.345"
 
 jobs:
   # Job-level `if` cannot read the matrix, so the matrix itself is chosen here: while the
@@ -94,9 +96,27 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            pkg-config libx11-dev libx11-xcb-dev libxcb1-dev libxkbcommon-dev \
-            libxkbcommon-x11-dev libwayland-dev libfontconfig-dev libfreetype-dev \
+            cmake curl ca-certificates pkg-config libx11-dev libx11-xcb-dev libxcb1-dev \
+            libxrandr-dev libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev \
+            libfontconfig-dev libfreetype-dev \
             libvulkan-dev mesa-vulkan-drivers libgtk-3-dev libwebkit2gtk-4.1-dev
+      # ubuntu-latest moves between images, and a loader built against a newer glibc fails to load
+      # on an older one, so the key names the image the loader was built on.
+      - name: Identify the runner image
+        id: image
+        if: runner.os == 'Linux'
+        run: . /etc/os-release && echo "id=$ID-$VERSION_ID-$(uname -m)" >> "$GITHUB_OUTPUT"
+      - name: Cache the fixed Vulkan loader
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/asrs-vulkan-loader
+          key: vulkan-loader-${{ env.VULKAN_LOADER_VERSION }}-${{ steps.image.outputs.id }}-${{ hashFiles('.github/scripts/install-vulkan-loader.sh') }}
+      - name: Install the fixed Vulkan loader
+        if: runner.os == 'Linux'
+        run: |
+          .github/scripts/install-vulkan-loader.sh "$HOME/.cache/asrs-vulkan-loader"
+          echo "LD_LIBRARY_PATH=$HOME/.cache/asrs-vulkan-loader/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" >> "$GITHUB_ENV"
       - name: Cache the render host's fonts
         if: runner.os == 'Linux'
         uses: actions/cache@v4
@@ -141,6 +161,10 @@ jobs:
       - name: Test
         timeout-minutes: 30
         run: cargo test --workspace --locked --no-fail-fast
+      - name: Test (vendored Windows renderer)
+        if: runner.os == 'Windows'
+        timeout-minutes: 30
+        run: cargo test --locked -p gpui-pre-windows --lib directx
       - name: Test (parity features)
         timeout-minutes: 30
         run: >-

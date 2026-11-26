@@ -601,6 +601,31 @@ fn replayed(records: &[Record], target: &Record) -> FormModel {
     model
 }
 
+/// The drawn popup takes every key of the app's, so one that outlived its window would keep them.
+fn popup_closes_with_its_window(headless: &mut Headless) {
+    let markup = "<select><option>a</option><option>b</option></select>";
+    let first = open(headless, markup, true, SelectKeys::HOST);
+    let before = headless.context().update(|cx| cx.windows().len());
+    headless
+        .context()
+        .update_window(first.window.into(), |_, window, cx| {
+            first
+                .entity
+                .update(cx, |select, cx| select.open_popup(window, cx));
+        })
+        .expect("window");
+    headless.context().run_until_parked();
+    let opened = headless.context().update(|cx| cx.windows().len());
+    assert_eq!(opened, before + 1, "the popup is a window");
+    headless
+        .context()
+        .update_window(first.window.into(), |_, window, _| window.remove_window())
+        .expect("window");
+    headless.context().run_until_parked();
+    let left = headless.context().update(|cx| cx.windows().len());
+    assert_eq!(left, before - 1, "the popup's window stays open");
+}
+
 fn main() {
     let view = select_view();
     println!("select_vectors: form/select, {view} records shown and listed");
@@ -618,5 +643,8 @@ fn main() {
         };
         let keys = select_keys(&mut headless, spec, vector, SelectKeys::HOST, steps);
         println!("select_vectors: {vector}, {keys} records compared");
+    }
+    if cfg!(target_os = "linux") {
+        popup_closes_with_its_window(&mut headless);
     }
 }

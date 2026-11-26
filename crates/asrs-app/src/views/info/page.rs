@@ -5,6 +5,7 @@ use std::time::Instant;
 use asrs_canvas::text::dom::{LineHeight, Lu, WhiteSpace};
 use asrs_model::scroll_sensor::{Wheel, WheelScroll, assign_scroll_offset};
 use asrs_ui::canvas_view::geometry::mouse_client;
+use asrs_ui::focus::{self, ScrollAxis};
 use asrs_ui::gpui::{
     App, Context, CursorStyle, DispatchPhase, Div, InteractiveElement, KeyDownEvent, Keystroke,
     MouseDownEvent, MouseMoveEvent, MouseUpEvent, ParentElement, Render, Rgba, ScrollEvent,
@@ -100,6 +101,16 @@ impl PageScroll {
     pub fn scroll_by(&mut self, by: f64) {
         self.wheel.stop();
         self.offset = (self.top() + by).clamp(0.0, self.max);
+    }
+
+    /// Shows what takes the focus, `height` tall at `top` of the document.
+    pub fn reveal(&mut self, top: Lu, height: Lu) {
+        let start = css(top, self.scale) - self.top();
+        let span = [start, css(height, self.scale)];
+        let by = focus::reveal(ScrollAxis::Vertical, self.client, span);
+        if by != 0.0 {
+            self.scroll_by(by);
+        }
     }
 
     fn scroll(&mut self, wheel: Wheel, client: f64, cx: &App) {

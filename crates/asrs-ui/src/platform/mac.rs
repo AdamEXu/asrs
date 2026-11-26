@@ -15,13 +15,14 @@ use objc2::{
 use objc2_app_kit::{
     NSAppearance, NSAppearanceNameAqua, NSApplication, NSAutoresizingMaskOptions, NSBitmapImageRep,
     NSColor, NSColorSpace, NSControlStateValueOff, NSControlStateValueOn, NSDocumentController,
-    NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSFont, NSFontAttributeName, NSImage,
-    NSLineBreakMode, NSMenu, NSMenuItem, NSMutableParagraphStyle, NSParagraphStyleAttributeName,
-    NSPopUpButtonCell, NSTextAlignment, NSUserInterfaceLayoutDirection, NSView,
-    NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
-    NSWindow, NSWindowOrderingMode, NSWritingDirection,
+    NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSFloatingWindowLevel, NSFont,
+    NSFontAttributeName, NSImage, NSLineBreakMode, NSMenu, NSMenuItem, NSMutableParagraphStyle,
+    NSParagraphStyleAttributeName, NSPopUpButtonCell, NSTextAlignment,
+    NSUserInterfaceLayoutDirection, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
+    NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowCollectionBehavior,
+    NSWindowOrderingMode, NSWritingDirection,
 };
-use objc2_core_foundation::{CFData, CGRect};
+use objc2_core_foundation::{CFArray, CFData, CFRetained, CFString, CGRect};
 use objc2_core_graphics::{
     CGBitmapInfo, CGColorRenderingIntent, CGColorSpace, CGDataProvider, CGImage, CGImageAlphaInfo,
     CGImageByteOrderInfo, kCGColorSpaceSRGB,
@@ -62,6 +63,21 @@ pub(super) fn add_recent_document(path: &Path) {
 pub(super) fn init() {
     if MainThreadMarker::new().is_some() {
         install_wheel_monitor();
+    }
+}
+
+pub(super) fn name_fonts(cx: &App) {
+    #[link(name = "CoreText", kind = "framework")]
+    unsafe extern "C" {
+        fn CTFontManagerCopyAvailableFontFamilyNames() -> Option<NonNull<CFArray<CFString>>>;
+    }
+    // SAFETY: the function takes nothing and returns a retained array of strings.
+    let names = unsafe {
+        CTFontManagerCopyAvailableFontFamilyNames().map(|names| CFRetained::from_raw(names))
+    };
+    if let Some(names) = names {
+        cx.text_system()
+            .set_font_names(names.iter().map(|name| name.to_string()).collect());
     }
 }
 
@@ -147,6 +163,9 @@ pub(super) fn keep_visible_when_inactive(window: &Window) -> bool {
         return false;
     };
     window.setHidesOnDeactivate(false);
+    window.setLevel(NSFloatingWindowLevel);
+    // Mission Control leaves floating windows out otherwise.
+    window.setCollectionBehavior(window.collectionBehavior() | NSWindowCollectionBehavior::Managed);
     true
 }
 
@@ -1474,10 +1493,15 @@ pub(super) mod probe {
         let window = ns_window(window)?;
         let button = window.standardWindowButton(NSWindowButton::CloseButton)?;
         Some(WindowChrome {
-            toolbar: window.toolbar().is_some(),
             title: window.titleVisibility() == NSWindowTitleVisibility::Visible,
             buttons: !button.isHidden(),
         })
+    }
+
+    pub fn set_represented_filename(window: &Window, name: &str) {
+        if let Some(window) = ns_window(window) {
+            window.setRepresentedFilename(&objc2_foundation::NSString::from_str(name));
+        }
     }
 
     pub fn will_resize(window: &Window, size: (f64, f64)) -> Option<(f64, f64)> {
@@ -1495,7 +1519,7 @@ pub(super) mod probe {
         Some((frame.width, frame.height))
     }
 
-    pub fn framed_window() -> Option<(f64, f64)> {
+    pub fn framed_window(_scale: f64) -> Option<(f64, f64)> {
         let mtm = MainThreadMarker::new()?;
         let style = objc2_app_kit::NSWindowStyleMask::Titled
             | objc2_app_kit::NSWindowStyleMask::Closable

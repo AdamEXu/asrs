@@ -48,16 +48,18 @@ pub fn to_straight_bgra(pixmap: &Pixmap) -> Vec<u8> {
 }
 
 /// A premultiplied pixmap holding straight-alpha RGBA, as `putImageData` writes it.
-pub fn pixmap_from_straight_rgba(width: u32, height: u32, rgba: &[u8]) -> Option<Pixmap> {
-    if rgba.len() != width as usize * height as usize * 4 {
+pub fn pixmap_from_straight_rgba(
+    width: u32,
+    height: u32,
+    rgba: impl Into<Vec<u8>>,
+) -> Option<Pixmap> {
+    let mut data = rgba.into();
+    if data.len() != width as usize * height as usize * 4 {
         return None;
     }
-    let data = rgba
-        .as_chunks::<4>()
-        .0
-        .iter()
-        .flat_map(|&p| premultiply(p))
-        .collect();
+    for p in data.as_chunks_mut::<4>().0 {
+        *p = premultiply(*p);
+    }
     Pixmap::from_vec(data, IntSize::from_wh(width, height)?)
 }
 
@@ -223,15 +225,30 @@ mod tests {
     }
 
     #[test]
+    fn a_pixmap_is_made_in_the_buffer_it_is_given() {
+        let rgba: Vec<u8> = (0..=255).cycle().step_by(37).take(4 * 35).collect();
+        let want: Vec<u8> = rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|&p| premultiply(p))
+            .collect();
+        let at = rgba.as_ptr();
+        let pixmap = pixmap_from_straight_rgba(7, 5, rgba).unwrap();
+        assert_eq!(pixmap.data(), want);
+        assert_eq!(pixmap.data().as_ptr(), at);
+    }
+
+    #[test]
     fn bgra_swaps_red_and_blue() {
-        let pixmap = pixmap_from_straight_rgba(2, 1, &[255, 0, 0, 255, 0, 0, 255, 128]).unwrap();
+        let pixmap = pixmap_from_straight_rgba(2, 1, [255, 0, 0, 255, 0, 0, 255, 128]).unwrap();
         assert_eq!(to_straight_bgra(&pixmap), [0, 0, 255, 255, 255, 0, 0, 128]);
         assert_eq!(to_straight_rgba(&pixmap), [255, 0, 0, 255, 0, 0, 255, 128]);
     }
 
     #[test]
     fn reads_outside_the_canvas_as_transparent() {
-        let pixmap = pixmap_from_straight_rgba(1, 1, &[9, 9, 9, 255]).unwrap();
+        let pixmap = pixmap_from_straight_rgba(1, 1, [9, 9, 9, 255]).unwrap();
         let data = read_rect(&pixmap, -1, 0, 2, 1).unwrap();
         assert_eq!(data.data, [0, 0, 0, 0, 9, 9, 9, 255]);
     }

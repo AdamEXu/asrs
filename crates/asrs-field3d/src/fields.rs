@@ -453,7 +453,7 @@ pub fn to_scene_graph(scene: &Scene, root: ObjectId) -> (SceneGraph, ObjectId) {
             NodeKind::Object3D => ObjectKind::Object3D,
             NodeKind::Group => ObjectKind::Group,
             NodeKind::Mesh(mesh) => ObjectKind::Mesh {
-                geometry: Arc::new(mesh.geometry.geometry.clone()),
+                geometry: mesh.geometry.data(),
                 material: match &mesh.material {
                     Materials::Single(material) => MeshMaterial::Single(Arc::new(SourceMaterial {
                         color: Some(material.color.to_array()),

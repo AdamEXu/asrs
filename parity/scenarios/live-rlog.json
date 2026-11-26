@@ -1,5 +1,6 @@
 {
   "about": "Live data (RLOG): main's start-live, as Connect to Simulator sends it, against a local server that sends a log from the synthetic corpora (`cargo xtask corpus gen`) once and closes. The title while connected, then, gone and searched for again, statistics, line graph and table over what it sent. The title, the sidebar and the saved HubState are compared",
+  "titleBar": true,
   "prefs": {
     "liveMode": "rlog",
     "robotAddress": "127.0.0.1"

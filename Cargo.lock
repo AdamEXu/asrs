@@ -364,6 +364,7 @@ dependencies = [
  "asrs-tabs",
  "asrs-ui",
  "async-channel",
+ "backtrace",
  "fs4",
  "futures-util",
  "image",
@@ -4004,8 +4005,6 @@ dependencies = [
 [[package]]
 name = "gpui-pre-windows"
 version = "0.3.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7201762420222d5b5ce5bdf0056996199212a3349bfb2457a3a0238c688681f3"
 dependencies = [
  "accesskit",
  "accesskit_windows",

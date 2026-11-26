@@ -9,7 +9,10 @@ export type Action =
   | { selection: [string, ...unknown[]] }
   | { wait: number }
   | { idle: true }
-  | { mouse: "move" | "down" | "up" | "click" | "leave"; x: number; y: number; button?: "left" | "right" | "middle"; clickCount?: number; modifiers?: string[] }
+  /** `on` is a selector of what the point has to hit: off macOS, where text and scrollbars have
+   *  other sizes, the point moves to its centre when it does not, or to `right` px from its right
+   *  edge. */
+  | { mouse: "move" | "down" | "up" | "click" | "leave"; x: number; y: number; button?: "left" | "right" | "middle"; clickCount?: number; modifiers?: string[]; on?: string; right?: number }
   | {
       wheel: { x: number; y: number; deltaX?: number; deltaY?: number; wheelTicksX?: number; wheelTicksY?: number; precise?: boolean };
     }
@@ -44,13 +47,15 @@ export type Scenario = {
   userData: Record<string, unknown>;
   /** Served by robotServer.ts; the driver sends connections to it. */
   robot: boolean;
+  /** Points in the hub were measured under the title bar macOS and Windows have. */
+  titleBar: boolean;
   /** Served by xtask's live server; the driver sends the RLOG connections to it. */
   live: boolean;
   actions: Action[];
 };
 
 const ACTION_KEYS = ["main", "open", "eval", "selection", "wait", "idle", "mouse", "wheel", "pointer", "activate", "key", "dialog", "menu", "appMenu", "prompt", "download", "role", "copy", "focus", "title", "traverse", "hover", "capture"];
-const TOP_KEYS = ["page", "window", "scales", "themes", "gl", "prefs", "userData", "robot", "live", "scrollbars", "platforms", "actions", "about"];
+const TOP_KEYS = ["page", "window", "scales", "themes", "gl", "prefs", "userData", "robot", "live", "scrollbars", "platforms", "titleBar", "actions", "about"];
 
 export function actionKind(action: Action): string {
   return ACTION_KEYS.find((k) => k in action)!;
@@ -100,6 +105,7 @@ export function parseScenario(name: string, text: string): Scenario {
     prefs: raw.prefs ?? {},
     userData: raw.userData ?? {},
     robot: raw.robot !== undefined,
+    titleBar: raw.titleBar === true,
     live: raw.live !== undefined,
     actions
   };

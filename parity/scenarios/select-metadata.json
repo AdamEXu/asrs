@@ -1,5 +1,6 @@
 {
   "about": "Selecting and copying values in the Metadata tab (#292): drags across cells, into the keys and the header, which cannot be selected, and through wrapped values; double and triple clicks, Select All, and a merge, which rebuilds the table. Copies are compared as clipboard text",
+  "titleBar": true,
   "actions": [
     {
       "open": [

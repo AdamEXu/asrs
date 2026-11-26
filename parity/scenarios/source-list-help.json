@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U22): the help window of the 2D field's source list, opened with the list's help button and scrolled with the wheel and the keyboard. Every box and line box of the document is compared in every capture",
+  "titleBar": true,
   "actions": [
     {
       "open": [

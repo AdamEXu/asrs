@@ -1,17 +1,19 @@
 use gpui_kit::prelude::FluentBuilder as _;
 use gpui_kit::{
-    App, ClickEvent, Corners, ElementId, FocusHandle, InteractiveElement, IntoElement,
-    KeyDownEvent, ParentElement, RenderOnce, SharedString, StatefulInteractiveElement, Styled,
-    Window, canvas, div, px, rgb,
+    App, Canvas, ClickEvent, Corners, ElementId, FocusHandle, InteractiveElement, IntoElement,
+    KeyDownEvent, ParentElement, Pixels, RenderOnce, SharedString, StatefulInteractiveElement,
+    Styled, Window, canvas, div, px, rgb, transparent_black,
 };
 
 use crate::focus;
 use crate::icon::{IconSource, Placement, paint_icon};
+use crate::input::skia;
 use crate::input::style::{
     SPLIT_BADGE, SPLIT_BADGE_OPACITY, SPLIT_BADGE_RADIUS, SPLIT_ICON_FRACTION, SPLIT_RADIUS,
     SplitStyle,
 };
-use crate::text::{Align, FontSpec, LineHeight, Text, TextStyle};
+use crate::svg::Backend;
+use crate::text::{Align, FontSpec, LineHeight, Text, TextStyle, opaque_background};
 use crate::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, chains};
 use crate::tooltip::{titled, untitled};
 
@@ -116,6 +118,49 @@ fn blend(top: u32, under: u32, alpha: f32) -> u32 {
         ((t * alpha + u * (1.0 - alpha)).round() as u32) << shift
     };
     mix(16) | mix(8) | mix(0)
+}
+
+fn raster_box(
+    corners: Corners<Pixels>,
+    border: f32,
+    border_color: u32,
+    background: u32,
+) -> Canvas<()> {
+    canvas(
+        |_, _, _| {},
+        move |bounds, (), window, cx| {
+            let scale = window.scale_factor();
+            let (w, h) = skia::device_size(bounds, scale);
+            let device = |r: Pixels| f64::from(f32::from(r) * scale);
+            let radii = [
+                corners.top_left,
+                corners.top_right,
+                corners.bottom_right,
+                corners.bottom_left,
+            ]
+            .map(device);
+            let key = (
+                "segment",
+                w,
+                h,
+                radii.map(f64::to_bits),
+                border_color,
+                background,
+            );
+            let draw = || {
+                let opaque = |rgb: u32| rgb << 8 | 0xff;
+                skia::bordered_box(
+                    w,
+                    h,
+                    radii,
+                    f64::from(border),
+                    opaque(border_color),
+                    opaque(background),
+                )
+            };
+            skia::paint(key, bounds, draw, window, cx);
+        },
+    )
 }
 
 struct State {
@@ -229,6 +274,7 @@ impl RenderOnce for SegmentedControl {
                                 .child(
                                     Text::new(label, font_style)
                                         .color(blend(text, background, SPLIT_BADGE_OPACITY))
+                                        .grayscale()
                                         .subpixel(
                                             (bx - bx.round()) / scale,
                                             (text_top - snapped) / scale,
@@ -237,7 +283,7 @@ impl RenderOnce for SegmentedControl {
                                 ),
                         )
                         .into_any_element();
-                    untitled(badge).into_any_element()
+                    untitled(opaque_background(false, badge)).into_any_element()
                 }
                 Segment::Icon(source) => {
                     let lu = |v: f32| (f64::from(v) * 64.0) as i64 as f64 / 64.0;
@@ -308,13 +354,21 @@ impl RenderOnce for SegmentedControl {
                 .top_0()
                 .w(px((right - left) / scale))
                 .h(px(h / scale))
-                .bg(rgb(background))
                 .border(px(border / scale))
-                .border_color(rgb(border_color))
-                .rounded_tl(corners.top_left)
-                .rounded_bl(corners.bottom_left)
-                .rounded_tr(corners.top_right)
-                .rounded_br(corners.bottom_right)
+                .map(|segment| match Backend::HOST {
+                    Backend::Graphite => segment
+                        .bg(rgb(background))
+                        .border_color(rgb(border_color))
+                        .rounded_tl(corners.top_left)
+                        .rounded_bl(corners.bottom_left)
+                        .rounded_tr(corners.top_right)
+                        .rounded_br(corners.bottom_right),
+                    Backend::Raster => segment.border_color(transparent_black()).child(
+                        raster_box(corners, border, border_color, background)
+                            .absolute()
+                            .inset(-px(border / scale)),
+                    ),
+                })
                 .on_hover(move |entered: &bool, _, cx| {
                     hovered.update(cx, |h, cx| {
                         if *entered {

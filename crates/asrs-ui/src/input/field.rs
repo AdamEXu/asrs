@@ -7,10 +7,10 @@ use gpui_kit::base::input::{
 };
 use gpui_kit::{
     AnyWindowHandle, App, AppContext, Bounds, ClipboardItem, Context, DispatchPhase, Entity,
-    EntityInputHandler, EventEmitter, FocusHandle, Focusable, FontWeight, HoverListenerMode, Hsla,
-    InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent, MouseUpEvent,
-    ParentElement, Pixels, Point, Render, SharedString, StatefulInteractiveElement, Styled,
-    Subscription, Task, TextAlign, WeakEntity, Window, canvas, div, point, px, rgba, size,
+    EntityInputHandler, EventEmitter, FocusHandle, Focusable, Font, FontWeight, HoverListenerMode,
+    Hsla, InteractiveElement, IntoElement, MouseButton, MouseDownEvent, MouseMoveEvent,
+    MouseUpEvent, ParentElement, Pixels, Point, Render, SharedString, StatefulInteractiveElement,
+    Styled, Subscription, Task, TextAlign, WeakEntity, Window, canvas, div, point, px, rgba, size,
 };
 
 use crate::focus;
@@ -770,7 +770,8 @@ impl<M: FieldModel> Render for TextField<M> {
         let scale = window.scale_factor();
         let style = self.style;
         let text_style = self.text_style();
-        let line = text::layout(cx, &text_style, "0", scale, None).height as f32 / 64.0;
+        let layout = text::layout(cx, &text_style, "0", scale, None);
+        let line = layout.height as f32 / 64.0;
         let g = geometry(&style, self.kind, self.size.0, self.size.1, line, scale);
         let handle = self.focus_handle(cx);
         let focused = handle.is_focused(window);
@@ -853,7 +854,20 @@ impl<M: FieldModel> Render for TextField<M> {
             });
         });
         let (box_width, box_height) = (right - left, bottom - top);
-        let line_height = box_height / EDITOR_CARET;
+        let family = text::gpui_family(&style.font);
+        let weight = FontWeight(style.font.weight);
+        let line_height = px(box_height / EDITOR_CARET).round();
+        let text_system = window.text_system();
+        let font_id = text_system.resolve_font(&Font {
+            weight,
+            ..gpui_kit::font(family.clone())
+        });
+        // A platform's descent may have either sign.
+        let ascent = text_system.ascent(font_id, px(style.font.size));
+        let descent = text_system.descent(font_id, px(style.font.size)).abs();
+        let editor_baseline = (line_height - ascent - descent) / 2.0 + ascent;
+        let baseline = layout.lines[0].baseline as f32 / 64.0 + self.subpixel.1 + dy;
+        let editor_top = (baseline.round() - (f32::from(editor_baseline) * scale).round()) / scale;
         let editor_width = match style.align {
             Align::Center | Align::End | Align::Right => box_width,
             _ => box_width + EDITOR_MARGIN - CARET_WIDTH,
@@ -876,13 +890,13 @@ impl<M: FieldModel> Render for TextField<M> {
                         div()
                             .absolute()
                             .left_0()
-                            .top(px((box_height - line_height) / 2.0))
+                            .top(px(editor_top))
                             .w(px(editor_width))
-                            .h(px(line_height))
-                            .font_family(text::gpui_family(&style.font))
-                            .font_weight(FontWeight(style.font.weight))
+                            .h(line_height)
+                            .font_family(family)
+                            .font_weight(weight)
                             .text_size(px(style.font.size))
-                            .line_height(px(line_height))
+                            .line_height(line_height)
                             .text_color(clear)
                             .child(Input::new(&self.editor)),
                     ),
@@ -898,18 +912,18 @@ impl<M: FieldModel> Render for TextField<M> {
                 .h(px(bottom - top))
         };
         if shown.is_empty() && !self.placeholder.is_empty() {
-            let alpha = (style.placeholder & 0xff) as f32 / 255.0 * style.placeholder_opacity;
+            let alpha = (style.placeholder & 0xff) as f32 / 255.0;
             editor_box = editor_box.child(
                 div()
                     .absolute()
                     .left_0()
                     .top_0()
-                    .opacity(alpha)
-                    .child(paint(&self.placeholder, style.placeholder)),
+                    .opacity(style.placeholder_opacity)
+                    .child(paint(&self.placeholder, style.placeholder).alpha(alpha)),
             );
         } else if !shown.is_empty() {
             let alpha = (color & 0xff) as f32 / 255.0;
-            let text = paint(&shown, color);
+            let text = paint(&shown, color).alpha(alpha);
             let text = match focused {
                 false => text.selected(page_selected),
                 true => {
@@ -919,8 +933,7 @@ impl<M: FieldModel> Render for TextField<M> {
                         .marked(marked.map(|range| utf8_range(&shown, range)))
                 }
             };
-            editor_box =
-                editor_box.child(div().absolute().left_0().top_0().opacity(alpha).child(text));
+            editor_box = editor_box.child(div().absolute().left_0().top_0().child(text));
         }
 
         let editor_bounds = Bounds {

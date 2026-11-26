@@ -12,8 +12,8 @@ use std::sync::Arc;
 
 use super::layout::normalize_space;
 use super::line_break::LineBreaks;
-use super::lut::MaskGammaLut;
-use super::{FontSpec, Mask, Shaped, ShapedGlyph, TextBackend};
+use super::lut::{self, LcdGammaLut, MaskGammaLut};
+use super::{FontSpec, Glyph, LcdMask, Mask, Shaped, ShapedGlyph, TextBackend};
 
 /// One `LayoutUnit` of the zoomed layout, 1/64 of a device pixel.
 pub type Lu = i32;
@@ -875,6 +875,25 @@ pub struct RunImage {
     pub rgba: Option<Vec<u8>>,
 }
 
+/// Each glyph with the device pixel its origin falls in and its quarter-pixel phase.
+fn positions(
+    backend: &dyn TextBackend,
+    glyphs: &[ShapedGlyph],
+    fraction: Lu,
+    scale: f32,
+) -> Vec<(Glyph, i32, u8)> {
+    let origin = fraction as f32 / 64.0;
+    let subpixel = backend.subpixel_positioning();
+    let bias = if subpixel { 0.125 } else { 0.5 };
+    let place = |g: &ShapedGlyph| {
+        let biased = origin + scale * g.x + bias;
+        let ix = biased.floor();
+        let phase = (((biased - ix) * 4.0).floor() as u8).min(3) * u8::from(subpixel);
+        (g.glyph, ix as i32, phase)
+    };
+    glyphs.iter().map(place).collect()
+}
+
 /// Paints `glyphs` from an origin `fraction` `LayoutUnit`s right of a device pixel boundary, as
 /// Skia places DOM text: quarter-pixel x phases, whole-pixel baseline, each glyph's coverage
 /// through the mask-gamma row of `color` and composited source-over.
@@ -887,19 +906,13 @@ pub fn rasterize(
     color: [u8; 3],
 ) -> Option<RunImage> {
     backend.set_device_scale(scale);
-    let origin = fraction as f32 / 64.0;
     let mut placed: Vec<(i32, Arc<Mask>)> = Vec::with_capacity(glyphs.len());
-    let subpixel = backend.subpixel_positioning();
-    let bias = if subpixel { 0.125 } else { 0.5 };
-    for g in glyphs {
-        let biased = origin + scale * g.x + bias;
-        let ix = biased.floor();
-        let phase = (((biased - ix) * 4.0).floor() as u8).min(3) * u8::from(subpixel);
-        if let Some(mask) = backend.raw_mask(g.glyph, f64::from(scale), 1.0, phase)
+    for (glyph, x, phase) in positions(backend, glyphs, fraction, scale) {
+        if let Some(mask) = backend.raw_mask(glyph, f64::from(scale), 1.0, phase)
             && mask.width > 0
             && mask.height > 0
         {
-            placed.push((ix as i32, mask));
+            placed.push((x, mask));
         }
     }
     let left = placed.iter().map(|(x, m)| x + m.left).min()?;
@@ -942,6 +955,173 @@ pub fn rasterize(
         height,
         alpha,
         rgba: None,
+    })
+}
+
+/// What LCD text is drawn with, and the opaque colour it is drawn on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LcdInk {
+    pub color: [u8; 3],
+    pub alpha: u8,
+    pub background: [u8; 3],
+}
+
+/// A fragment blended onto an opaque background in LCD, relative to the pixel its origin falls in
+/// and to its baseline row: RGBA, with alpha 255 where a glyph has coverage and 0 elsewhere.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LcdImage {
+    pub left: i32,
+    pub top: i32,
+    pub width: u32,
+    pub height: u32,
+    pub rgba: Vec<u8>,
+}
+
+/// What a fragment covers where Chromium draws LCD text.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LcdExtent {
+    Blank,
+    /// The backend draws none of the glyphs in LCD.
+    Grayscale,
+    /// Left, top, width and height of the [`LcdImage`].
+    Rect([i32; 4]),
+}
+
+enum AnyMask {
+    Lcd(Arc<LcdMask>),
+    Other(Arc<Mask>),
+}
+
+impl AnyMask {
+    /// Left, top, width and height.
+    fn bounds(&self) -> [i32; 4] {
+        match self {
+            AnyMask::Lcd(m) => [m.left, m.top, m.width as i32, m.height as i32],
+            AnyMask::Other(m) => [m.left, m.top, m.width as i32, m.height as i32],
+        }
+    }
+}
+
+/// The masks of the glyphs with ink, each with the pixel its glyph's origin falls in. Skia falls
+/// back per strike, so a glyph without an LCD mask comes with its grayscale mask or colour image.
+fn lcd_masks(
+    backend: &mut dyn TextBackend,
+    glyphs: &[ShapedGlyph],
+    fraction: Lu,
+    scale: f32,
+) -> Vec<(i32, AnyMask)> {
+    backend.set_device_scale(scale);
+    let mut placed = Vec::with_capacity(glyphs.len());
+    for (glyph, x, phase) in positions(backend, glyphs, fraction, scale) {
+        let scale = f64::from(scale);
+        let mask = match backend.raw_lcd_mask(glyph, scale, 1.0, phase) {
+            Some(mask) => Some(AnyMask::Lcd(mask)),
+            None => backend
+                .raw_mask(glyph, scale, 1.0, phase)
+                .map(AnyMask::Other),
+        };
+        placed.extend(
+            mask.filter(|mask| {
+                let [_, _, width, height] = mask.bounds();
+                width > 0 && height > 0
+            })
+            .map(|mask| (x, mask)),
+        );
+    }
+    placed
+}
+
+fn extent_of(placed: &[(i32, AnyMask)]) -> LcdExtent {
+    if placed.is_empty() {
+        return LcdExtent::Blank;
+    }
+    if !placed.iter().any(|(_, m)| matches!(m, AnyMask::Lcd(_))) {
+        return LcdExtent::Grayscale;
+    }
+    let mut extent = [i32::MAX, i32::MAX, i32::MIN, i32::MIN];
+    for (x, mask) in placed {
+        let [left, top, width, height] = mask.bounds();
+        extent[0] = extent[0].min(x + left);
+        extent[1] = extent[1].min(top);
+        extent[2] = extent[2].max(x + left + width);
+        extent[3] = extent[3].max(top + height);
+    }
+    let [left, top, right, bottom] = extent;
+    LcdExtent::Rect([left, top, right - left, bottom - top])
+}
+
+/// What [`rasterize_lcd`] will cover.
+pub fn lcd_extent(
+    backend: &mut dyn TextBackend,
+    glyphs: &[ShapedGlyph],
+    fraction: Lu,
+    scale: f32,
+) -> LcdExtent {
+    extent_of(&lcd_masks(backend, glyphs, fraction, scale))
+}
+
+/// [`rasterize`] for text that Chromium draws in LCD.
+pub fn rasterize_lcd(
+    backend: &mut dyn TextBackend,
+    (gray_lut, lcd_lut): (&MaskGammaLut, &LcdGammaLut),
+    glyphs: &[ShapedGlyph],
+    fraction: Lu,
+    scale: f32,
+    ink: LcdInk,
+) -> Option<LcdImage> {
+    let placed = lcd_masks(backend, glyphs, fraction, scale);
+    let LcdExtent::Rect([left, top, width, height]) = extent_of(&placed) else {
+        return None;
+    };
+    let [r, g, b] = ink.background;
+    let mut rgba = [r, g, b, 0].repeat((width * height) as usize);
+    let alpha = f32::from(ink.alpha) / 255.0;
+    for (x, mask) in &placed {
+        let [l, t, w, h] = mask.bounds();
+        for i in 0..(w * h) as usize {
+            let (col, row) = (i as i32 % w, i as i32 / w);
+            let at = ((t - top + row) * width + x + l - left + col) as usize * 4;
+            let under = [rgba[at], rgba[at + 1], rgba[at + 2]];
+            let out = match mask {
+                AnyMask::Lcd(m) => {
+                    let raw = [m.data[i * 3], m.data[i * 3 + 1], m.data[i * 3 + 2]];
+                    let coverage = lcd_lut.apply(ink.color, raw);
+                    if coverage == [0; 3] {
+                        continue;
+                    }
+                    lut::blend_lcd_alpha(under, ink.color, ink.alpha, coverage)
+                }
+                AnyMask::Other(m) if m.color => {
+                    let p = &m.data[i * 4..i * 4 + 4];
+                    if p[3] == 0 {
+                        continue;
+                    }
+                    let keep = 1.0 - f32::from(p[3]) * alpha / 255.0;
+                    [0, 1, 2].map(|c| {
+                        (f32::from(p[c]) * alpha + f32::from(under[c]) * keep).round() as u8
+                    })
+                }
+                AnyMask::Other(m) => {
+                    let coverage = gray_lut.apply(ink.color, m.data[i]);
+                    if coverage == 0 {
+                        continue;
+                    }
+                    let a = f32::from(coverage) / 255.0 * alpha;
+                    [0, 1, 2].map(|c| {
+                        let (d, s) = (f32::from(under[c]), f32::from(ink.color[c]));
+                        (d + (s - d) * a).round() as u8
+                    })
+                }
+            };
+            rgba[at..at + 4].copy_from_slice(&[out[0], out[1], out[2], 255]);
+        }
+    }
+    Some(LcdImage {
+        left,
+        top,
+        width: width as u32,
+        height: height as u32,
+        rgba,
     })
 }
 

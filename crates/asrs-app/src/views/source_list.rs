@@ -10,6 +10,7 @@ use std::rc::Rc;
 use asrs_hub::frame::client_coordinate;
 use asrs_hub::hub::HubModel;
 use asrs_js::math;
+use asrs_js::time::Clock;
 use asrs_model::layout_unit::{centred, device, percent, snap, zoomed};
 use asrs_model::source_list::layout::{ListLayout, ListRoot, controller_roots};
 use asrs_model::source_list::{
@@ -305,7 +306,13 @@ impl Shown {
     }
 }
 
-type Dispatch = Rc<dyn Fn(ListPointer, &mut App)>;
+type Sender = Rc<dyn Fn(ListPointer, &mut App)>;
+
+#[derive(Clone)]
+struct Dispatch {
+    send: Sender,
+    date: Rc<dyn Clock>,
+}
 
 fn on(
     dispatch: &Option<Dispatch>,
@@ -314,7 +321,7 @@ fn on(
     let dispatch = dispatch.clone();
     move |_, _, cx| {
         if let Some(d) = &dispatch {
-            d(event, cx);
+            (d.send)(event, cx);
         }
     }
 }
@@ -473,9 +480,9 @@ fn item_body(
     let name_click = {
         let dispatch = dispatch.clone();
         move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
-            let now = math::trunc(asrs_js::time::Clock::now(&asrs_js::time::SystemClock));
             if let Some(d) = &dispatch {
-                d(ListPointer::NameClick { index, now }, cx);
+                let now = math::trunc(d.date.now());
+                (d.send)(ListPointer::NameClick { index, now }, cx);
             }
         }
     };
@@ -664,6 +671,7 @@ impl<H: FrameHost> HubFrame<H> {
         controls: [f64; 4],
         body_width: f64,
         scale: f32,
+        window: &Window,
         cx: &mut Context<'_, Self>,
     ) {
         let geometry = self.host().source_list_geometry();
@@ -676,7 +684,9 @@ impl<H: FrameHost> HubFrame<H> {
         let zoom = f64::from(scale);
         for (list, root) in displayed_lists(self.host().hub(cx), rect(controls), zoom) {
             let scroll = layout.scroll.entry(list.uuid().to_owned()).or_default();
-            scroll.animate(now, zoom);
+            if scroll.animate(now, zoom) {
+                window.request_animation_frame();
+            }
             let scroll_top = scroll.top();
             let mut placed = ListLayout::new(root, list.items(), scroll_top);
             placed.scrollbar = bar;
@@ -898,12 +908,15 @@ impl<H: FrameHost> HubFrame<H> {
                         .subpixel(title_dx as f32, 0.0),
                 ),
         );
-        let dispatch: Option<Dispatch> = {
+        let dispatch = {
             let frame = cx.entity().downgrade();
             let uuid = uuid.clone();
-            Some(Rc::new(move |event, cx: &mut App| {
-                let _ = frame.update(cx, |frame, cx| frame.list_input(&uuid, event, cx));
-            }))
+            Some(Dispatch {
+                send: Rc::new(move |event, cx: &mut App| {
+                    let _ = frame.update(cx, |frame, cx| frame.list_input(&uuid, event, cx));
+                }),
+                date: self.host().hub(cx).page().clock().clone(),
+            })
         };
         let half = f64::from(BUTTON) / 2.0;
         let corner =
@@ -1023,15 +1036,17 @@ impl<H: FrameHost> HubFrame<H> {
             items = items.child(div().flex_none().h(px(1.0)));
         }
         let bars = self.area_bars(area, scroll.extent(), cx);
-        element = element.child(items).child(
-            div()
-                .absolute()
-                .left_0()
-                .top(px(TITLE_HEIGHT as f32))
-                .w(px(inner as f32))
-                .h(px((r.height - TITLE_HEIGHT).max(0.0) as f32))
-                .child(bars),
-        );
+        element = element
+            .child(text::scroller(scroll.range()[1][1] > 0.0, items))
+            .child(
+                div()
+                    .absolute()
+                    .left_0()
+                    .top(px(TITLE_HEIGHT as f32))
+                    .w(px(inner as f32))
+                    .h(px((r.height - TITLE_HEIGHT).max(0.0) as f32))
+                    .child(bars),
+            );
 
         if list.hand_icon {
             element = element.child(

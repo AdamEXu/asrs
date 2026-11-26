@@ -681,7 +681,7 @@ impl Case {
                     mesh.cast_shadow,
                     mesh.receive_shadow,
                     Value::Array(vec![
-                        geometry_digest(&mesh.geometry.geometry),
+                        geometry_digest(&mesh.geometry.data()),
                         Value::Bool(array),
                         Value::Array(materials),
                         instances,
@@ -711,7 +711,7 @@ impl Case {
                 false,
                 false,
                 Value::Array(vec![
-                    geometry_digest(&line.geometry.geometry),
+                    geometry_digest(&line.geometry.data()),
                     Self::line_basic_material(&line.material),
                 ]),
             ),

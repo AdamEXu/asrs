@@ -11,7 +11,7 @@ use std::time::Instant;
 use asrs_canvas::Pixmap;
 use gpui_kit::{
     App, Bounds, Context, EventEmitter, FocusHandle, Focusable, InteractiveElement, IntoElement,
-    KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, ParentElement, Pixels, Render,
+    KeyDownEvent, Keystroke, MouseButton, MouseDownEvent, ParentElement, Pixels, Render, Rgba,
     StatefulInteractiveElement, Styled, Window, canvas, div, px,
 };
 
@@ -21,12 +21,13 @@ use crate::focus;
 use crate::input::skia;
 use crate::input::style::{
     CONTROL_FONT, DISABLED_BACKGROUND, DISABLED_BORDER, LIGHTEN_LAYER, NATIVE_BORDER,
-    NATIVE_RADIUS, device_border, native_stroke,
+    NATIVE_RADIUS, PAGE_CONTROL_FONT, device_border, native_stroke,
 };
 use crate::platform::{self, SelectMenu, SelectMenuItem, SelectMenuItemKind};
 use crate::selection;
 use crate::selection::colors::SelectionColors;
-use crate::text::{self, LineHeight, Overflow, TextStyle, WhiteSpace};
+use crate::svg::Backend;
+use crate::text::{self, FontSpec, LineHeight, Overflow, TextStyle, WhiteSpace};
 use crate::theme::Appearance;
 
 /// One of the select's list items as the popup shows it.
@@ -283,8 +284,8 @@ pub fn geometry(
     }
 }
 
-fn text_style(line: f32, scale: f32) -> TextStyle {
-    let mut style = TextStyle::new(CONTROL_FONT);
+fn text_style(font: FontSpec, line: f32, scale: f32) -> TextStyle {
+    let mut style = TextStyle::new(font);
     style.line_height = LineHeight::Px(line / scale);
     style.white_space = WhiteSpace::Pre;
     style.overflow = Overflow::Clip;
@@ -299,10 +300,10 @@ fn draw(
     origin: (f32, f32),
     css: (f32, f32),
     state: SelectState,
-    (label, selected): (&str, Option<SelectionColors>),
-    scale: f32,
+    (label, selected, lcd): (&str, Option<SelectionColors>, bool),
+    (font, scale): (FontSpec, f32),
 ) -> Option<Pixmap> {
-    let (ascent, descent) = text::font_metrics(cx, &TextStyle::new(CONTROL_FONT), scale);
+    let (ascent, descent) = text::font_metrics(cx, &TextStyle::new(font), scale);
     let line = ascent + descent;
     let g = geometry(
         css.0 * scale,
@@ -335,17 +336,23 @@ fn draw(
     };
     let mut pixmap = skia::svg(w, h, 1.0, &lighten)?;
     skia::fill_aliased_rrect(&mut pixmap, [i, i, bw, bh], radius, fill);
-    let mut body = skia::rect(
-        i,
-        i,
-        bw,
-        bh,
-        radius,
-        &format!(
-            "fill=\"none\" {} stroke-width=\"{stroke}\"",
-            skia::paint_attrs("stroke", border)
+    let mut body = match Backend::HOST {
+        Backend::Graphite => skia::rect(
+            i,
+            i,
+            bw,
+            bh,
+            radius,
+            &format!(
+                "fill=\"none\" {} stroke-width=\"{stroke}\"",
+                skia::paint_attrs("stroke", border)
+            ),
         ),
-    );
+        Backend::Raster => {
+            skia::stroke_aliased_rrect(&mut pixmap, [i, i, bw, bh], radius, stroke, border);
+            String::new()
+        }
+    };
     let color = if state == SelectState::Disabled {
         GRAY_TEXT
     } else {
@@ -364,14 +371,19 @@ fn draw(
     if !label.is_empty() {
         let color = selected.and_then(|s| s.text).unwrap_or(color);
         let [tx, ty, tw, _] = g.text;
+        let behind = selected.map_or([0xff; 3], |s| {
+            let Rgba { r, g, b, a } = s.rgba();
+            [r, g, b].map(|c| ((c * a + 1.0 - a) * 255.0).round() as u8)
+        });
         let masks = text::glyph_masks(
             cx,
-            &text_style(line, scale),
+            &text_style(font, line, scale),
             label,
             scale,
             tw / scale,
             (origin.0 + tx, origin.1 + ty),
             color,
+            (lcd && state != SelectState::Disabled).then_some(behind),
         );
         let [cx0, cy0, cw, ch] = g.clip;
         let clip_x = ((origin.0 + cx0).round() as i32).max(0)
@@ -379,7 +391,7 @@ fn draw(
         let clip_y = ((origin.1 + cy0).round() as i32).max(0)
             ..((origin.1 + cy0 + ch).round() as i32).min(h as i32);
         if let Some(selected) = selected.map(|s| s.rgba()) {
-            let style = text_style(line, scale);
+            let style = text_style(font, line, scale);
             let width = text::measure(cx, &style, label, scale).0 as f32 * scale;
             let space = text::space_width(cx, &style, scale);
             let edge =
@@ -425,11 +437,18 @@ fn composite_masks(
             }
             for col in 0..mask.width as i32 {
                 let x = mask.x + col;
-                let a = u32::from(mask.alpha[(row * mask.width as i32 + col) as usize]);
+                let i = (row * mask.width as i32 + col) as usize;
+                let p = ((y * width + x) * 4) as usize;
+                if let Some(lcd) = &mask.lcd {
+                    if lcd[i * 4 + 3] != 0 && clip_x.contains(&x) {
+                        data[p..p + 4].copy_from_slice(&lcd[i * 4..i * 4 + 4]);
+                    }
+                    continue;
+                }
+                let a = u32::from(mask.alpha[i]);
                 if a == 0 || !clip_x.contains(&x) {
                     continue;
                 }
-                let p = ((y * width + x) * 4) as usize;
                 let inverse = 255 - a;
                 for (c, &v) in rgb.iter().enumerate() {
                     let src = (u32::from(v) * a + 127) / 255;
@@ -448,7 +467,7 @@ pub fn paint_select(
     css: (f32, f32),
     subpixel: (f32, f32),
     state: SelectState,
-    label: &str,
+    (label, font): (&str, FontSpec),
     window: &mut Window,
     cx: &mut App,
 ) {
@@ -466,8 +485,9 @@ pub fn paint_select(
         size: bounds.size,
     };
     let selected = selection::all::colors(window, cx);
+    let lcd = text::may_be_lcd(window, cx);
     let key = (
-        ("select", selected),
+        ("select", selected, lcd),
         w,
         h,
         state,
@@ -476,12 +496,16 @@ pub fn paint_select(
         origin.1.to_bits(),
         css.0.to_bits(),
         css.1.to_bits(),
+        font.key(),
     );
     let label = label.to_owned();
     skia::paint_with_app(
         key,
         snapped,
-        |cx| draw(cx, (w, h), origin, css, state, (&label, selected), scale),
+        |cx| {
+            let text = (&*label, selected, lcd);
+            draw(cx, (w, h), origin, css, state, text, (font, scale))
+        },
         window,
         cx,
     );
@@ -492,6 +516,7 @@ pub struct Select<M: SelectModel> {
     model: M,
     size: (f32, f32),
     subpixel: (f32, f32),
+    font: FontSpec,
     disabled: bool,
     hovered: bool,
     popup_open: bool,
@@ -527,6 +552,7 @@ impl<M: SelectModel> Select<M> {
             model,
             size: (0.0, 0.0),
             subpixel: (0.0, 0.0),
+            font: CONTROL_FONT,
             disabled: false,
             hovered: false,
             popup_open: false,
@@ -535,6 +561,12 @@ impl<M: SelectModel> Select<M> {
             bounds: Rc::default(),
             epoch: Instant::now(),
         }
+    }
+
+    /// A select of its page's initial HTML ([`PAGE_CONTROL_FONT`]).
+    pub fn page_control(mut self) -> Self {
+        self.font = PAGE_CONTROL_FONT;
+        self
     }
 
     /// The key rules of another platform, for replaying its records.
@@ -718,6 +750,7 @@ impl<M: SelectModel> Render for Select<M> {
         let ring = focus::has_focus(&self.focus, window, cx);
         let appearance = Appearance::of(window, cx);
         let label = self.model.shown_text();
+        let font = self.font;
         let subpixel = self.subpixel;
         let size = self.size;
         let bounds = self.bounds.clone();
@@ -734,7 +767,7 @@ impl<M: SelectModel> Render for Select<M> {
                 canvas(
                     move |b, _, _| bounds.set(Some(b)),
                     move |b, _, window, cx| {
-                        paint_select(b, size, subpixel, state, &label, window, cx);
+                        paint_select(b, size, subpixel, state, (&label, font), window, cx);
                     },
                 )
                 .absolute()

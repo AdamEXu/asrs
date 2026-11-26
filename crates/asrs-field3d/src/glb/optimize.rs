@@ -34,7 +34,7 @@ pub struct OptimizedMaterial {
 #[derive(Clone, Debug, PartialEq)]
 pub struct OptimizedMesh {
     pub name: &'static str,
-    pub geometry: BufferGeometry,
+    pub geometry: Arc<BufferGeometry>,
     pub material: OptimizedMaterial,
     pub cast_shadow: bool,
     pub receive_shadow: bool,
@@ -102,6 +102,32 @@ pub fn optimize_geometries(
     is_ftc: bool,
     slicing_size: Option<f64>,
 ) -> Result<Optimized, OptimizeError> {
+    optimize(
+        graph,
+        root,
+        mode,
+        material_specular,
+        material_shininess,
+        enable_simplification,
+        is_ftc,
+        slicing_size,
+        false,
+    )
+}
+
+/// `optimize_geometries`, moving the source geometries out of the graph when `consume`.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn optimize(
+    graph: &mut SceneGraph,
+    root: ObjectId,
+    mode: Field3dMode,
+    material_specular: Color,
+    material_shininess: f64,
+    enable_simplification: bool,
+    is_ftc: bool,
+    slicing_size: Option<f64>,
+    consume: bool,
+) -> Result<Optimized, OptimizeError> {
     let mut normal = Buckets::new();
     let mut transparent = Buckets::new();
     let mut carpet = Buckets::new();
@@ -114,36 +140,42 @@ pub fn optimize_geometries(
     let no_simplify = JsString::from("NOSIMPLIFY");
 
     for id in graph.descendants(root) {
-        let (source, material) = match &graph.node(id).data.kind {
-            ObjectKind::Mesh { geometry, material } => (geometry.clone(), material.clone()),
+        let data = &mut graph.node_mut(id).data;
+        let (source, material) = match &mut data.kind {
+            ObjectKind::Mesh { geometry, material } => {
+                let material = material.clone();
+                let source = if consume {
+                    std::mem::take(geometry)
+                } else {
+                    geometry.clone()
+                };
+                (source, material)
+            }
             _ => continue,
         };
-        let mut geometry = (*source).clone();
         graph.update_world_matrix(id, true, false);
-        geometry.apply_matrix4(&graph.object(id).matrix_world);
-
-        if !geometry.has_attribute("normal") || !geometry.has_attribute("position") {
+        if !source.has_attribute("normal") || !source.has_attribute("position") {
             continue;
         }
-        let others: Vec<String> = geometry
-            .attribute_names()
-            .filter(|n| *n != "normal" && *n != "position")
-            .map(str::to_owned)
-            .collect();
-        for name in others {
-            geometry.delete_attribute(&name);
-        }
+        let mut geometry = match Arc::try_unwrap(source) {
+            Ok(mut geometry) => {
+                geometry.retain_attributes(&["normal", "position"]);
+                geometry
+            }
+            Err(shared) => shared.clone_attributes(&["normal", "position"]),
+        };
+        geometry.apply_matrix4(&graph.object(id).matrix_world);
 
-        let position = geometry
+        let count = geometry
             .attribute("position")
             .expect("checked above")
-            .clone();
+            .count();
         let mut is_transparent = false;
         if let MeshMaterial::Single(material) = &material {
             is_transparent = material.transparent && material.opacity < 0.75;
             if let Some(color) = material.color {
                 let rgb = color.map(|v| v * 255.0);
-                let mut colors = vec![0u8; 3 * position.count()];
+                let mut colors = vec![0u8; 3 * count];
                 for (i, c) in colors.iter_mut().enumerate() {
                     *c = math::to_uint8(rgb[i % 3]);
                 }
@@ -154,14 +186,14 @@ pub fn optimize_geometries(
             }
         }
 
-        let vertices: Vec<Vector3> = (0..position.count()).map(|i| position.get_xyz(i)).collect();
+        let position = geometry.attribute("position").expect("checked above");
         let mut center = Vector3::default();
-        for &v in &vertices {
-            center = center + v;
+        for i in 0..count {
+            center = center + position.get_xyz(i);
         }
-        center = center.divide_scalar(vertices.len() as f64);
-        let max_radius = vertices.iter().fold(0.0, |prev, v| {
-            let dist = v.distance_to(center);
+        center = center.divide_scalar(count as f64);
+        let max_radius = (0..count).fold(0.0, |prev, i| {
+            let dist = position.get_xyz(i).distance_to(center);
             if dist > prev { dist } else { prev }
         });
         let name = &graph.node(id).data.name;
@@ -200,14 +232,14 @@ pub fn optimize_geometries(
     let merged = |buckets: Buckets, name: &'static str| -> Vec<OptimizedMesh> {
         buckets
             .into_values()
-            .filter_map(|group| merge_geometries(&group, false).ok())
+            .filter_map(|group| merge_geometries(group, false).ok())
             .map(|geometry| {
                 let is_carpet = name == "carpet";
                 let is_transparent = name == "transparent";
                 let cinematic = mode == Field3dMode::Cinematic;
                 OptimizedMesh {
                     name,
-                    geometry,
+                    geometry: Arc::new(geometry),
                     material: OptimizedMaterial {
                         specular: material_specular,
                         shininess: if is_carpet { 0.0 } else { material_shininess },

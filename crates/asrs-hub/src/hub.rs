@@ -37,7 +37,7 @@ use asrs_model::assets::AdvantageScopeAssets;
 use asrs_model::build_constants::{DISTRIBUTION, Distribution, IS_LITE};
 use asrs_model::messages::{HubToMain, MainToHub, NamedMessage};
 use asrs_model::preferences::Preferences;
-use asrs_model::selection::{Selection, TimeSupplier};
+use asrs_model::selection::{Selection, SelectionMode, TimeSupplier};
 use asrs_model::selection_impl::{SelectionContext, SelectionImpl, SharedLog};
 use asrs_model::source_list::{ListInput, ListOutput, Rect, SourceListDom};
 use asrs_model::source_list_config::SourceListItemState;
@@ -624,6 +624,7 @@ pub struct HubModel {
     next_request: u64,
     exports: Vec<ExportRequest>,
     status_changes: Vec<(usize, Status)>,
+    frame_changed: bool,
 }
 
 fn num(n: f64) -> JsValue {
@@ -779,6 +780,7 @@ impl HubModel {
             next_request: 0,
             exports: Vec::new(),
             status_changes: Vec::new(),
+            frame_changed: false,
         }
     }
 
@@ -1322,7 +1324,11 @@ impl HubModel {
     /// Fires one interval the hub set.
     pub fn fire_interval(&mut self, interval: &HubInterval, host: &mut dyn HubHost) {
         match interval {
-            HubInterval::SidebarTuning => self.with_sidebar(Sidebar::publish_tuning),
+            HubInterval::SidebarTuning => {
+                let changes = self.sidebar.changes();
+                self.with_sidebar(Sidebar::publish_tuning);
+                self.frame_changed |= self.sidebar.changes() != changes;
+            }
             HubInterval::SaveState => {
                 let state = self.save_state();
                 host.send_main_message(NamedMessage::new(HubToMain::SaveState, state));
@@ -1355,12 +1361,14 @@ impl HubModel {
             }
             HubInterval::Source(uuid) => {
                 if let Some(index) = self.route(uuid) {
+                    let loading = self.loading_fields();
                     let active = self.active_fields();
                     let uuid = uuid.clone();
                     let result = self.with_source(index, &active, host, |source, cx| {
                         source.fire_interval(&uuid, cx)
                     });
                     uncaught("setInterval", result, host);
+                    self.frame_changed |= self.loading_fields() != loading;
                 }
             }
         }
@@ -1394,6 +1402,7 @@ impl HubModel {
     pub fn animation_frame(&mut self, frame: &HubFrame, host: &mut dyn HubHost) {
         match frame {
             HubFrame::Sidebar => {
+                let changes = self.sidebar.changes();
                 if self.sidebar.next_timeout().is_some() {
                     self.sidebar.fire_timeouts(host.now());
                 }
@@ -1404,16 +1413,20 @@ impl HubModel {
                     self.sidebar_periodic_ended = true;
                     host.exception("requestAnimationFrame", format!("{e}"));
                 }
+                self.frame_changed |= self.sidebar.changes() != changes || self.time_moves();
                 host.request_animation_frame(HubFrame::Sidebar);
             }
             HubFrame::Tabs => {
                 let now = host.frame_time();
+                let shown = self.tabs.frame_state();
                 self.tabs.scroll_step(&self.page, now);
                 self.lay_out_large_table();
                 let out = self.tabs.periodic(&mut self.page, now);
                 for update in out.satellite_updates {
                     host.update_satellite(update);
                 }
+                self.frame_changed |=
+                    self.time_moves() || self.tabs.frame_state() != shown || self.needs_draw();
                 match out.error {
                     Some(e) => host.exception("requestAnimationFrame", format!("{e}")),
                     None => host.request_animation_frame(HubFrame::Tabs),
@@ -1425,6 +1438,7 @@ impl HubModel {
                 for e in errors {
                     uncaught::<()>("requestAnimationFrame", Err(e.into()), host);
                 }
+                self.frame_changed |= self.needs_draw();
                 host.request_animation_frame(HubFrame::SourceLists);
             }
             HubFrame::LateSourceLists => {
@@ -1442,10 +1456,33 @@ impl HubModel {
                     });
                     uncaught("requestAnimationFrame", result, host);
                 }
+                self.frame_changed = true;
             }
         }
         self.microtasks(host);
         self.flush(host);
+    }
+
+    /// Whether what the page shows follows the clock: a log plays or a live source is connected.
+    fn time_moves(&self) -> bool {
+        let selection = &self.page.selection;
+        matches!(
+            selection.get_mode(),
+            SelectionMode::Playback | SelectionMode::Locked
+        ) || selection.get_current_live_time().is_some()
+    }
+
+    /// Whether the displayed tab left something to draw.
+    pub(crate) fn needs_draw(&mut self) -> bool {
+        let tab = self.tabs.selected_index();
+        tab.and_then(|index| self.tabs.tab_mut(index))
+            .is_some_and(|tab| tab.renderer.needs_draw() || tab.controller.needs_draw())
+    }
+
+    /// Whether the page's frames, or an interval since they last ran, changed what it shows on
+    /// their own rather than from input, a message or a settled layout.
+    pub fn take_frame_changed(&mut self) -> bool {
+        std::mem::take(&mut self.frame_changed)
     }
 
     /// One decode-worker message for the source `source`.

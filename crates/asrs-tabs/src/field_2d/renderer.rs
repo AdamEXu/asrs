@@ -1101,6 +1101,10 @@ fn draw_module_data(
 }
 
 impl<C: TabCx + ?Sized> TabRenderer<C> for Field2dRenderer {
+    fn needs_draw(&self) -> bool {
+        self.dom.borrow().painted.is_some()
+    }
+
     fn save_state(&self, _cx: &C) -> JsValue {
         let mut o = JsObject::new();
         o.insert("zoom", self.zoom.to_js());

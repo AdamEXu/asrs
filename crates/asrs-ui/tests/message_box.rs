@@ -1,4 +1,4 @@
-#![cfg(not(target_os = "macos"))]
+#![cfg(target_os = "linux")]
 
 //! Message boxes where GPUI's prompts show them.
 

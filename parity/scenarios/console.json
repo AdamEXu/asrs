@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U13): the generated console log on a restored empty Console tab with a selected time; /RobotConsole dragged from the sidebar into the table with the pointer (captured while the drag highlights the table and after the drop, over a hovered row), a row clicked to select its time, trackpad scrolling, the highlight button and a hovered warning row, a filter typed into the filter field, a click outside it and a key that no longer reaches it, the filter cleared with its cancel button, a time typed into the jump field with Enter, notched wheel ticks past the end and one back, the export button answered with a file name (files/dialog/console.txt and the dialog are compared), a right click that goes idle, the field removed with its delete button and an export with nothing to export (main's error box), then a restored field the log does not have. Saved HubState is compared at each capture. Nothing is masked but the focused filter and jump fields (gate 5)",
+  "titleBar": true,
   "actions": [
     {
       "open": [
@@ -217,12 +218,14 @@
     {
       "mouse": "move",
       "x": 899,
-      "y": 103
+      "y": 103,
+      "on": "button.highlight-button"
     },
     {
       "mouse": "click",
       "x": 899,
-      "y": 103
+      "y": 103,
+      "on": "button.highlight-button"
     },
     {
       "mouse": "move",
@@ -325,12 +328,16 @@
     {
       "mouse": "move",
       "x": 1084,
-      "y": 103
+      "y": 103,
+      "on": "input.filter",
+      "right": 11
     },
     {
       "mouse": "click",
       "x": 1084,
-      "y": 103
+      "y": 103,
+      "on": "input.filter",
+      "right": 11
     },
     {
       "mouse": "move",
@@ -458,7 +465,8 @@
     {
       "mouse": "click",
       "x": 871,
-      "y": 103
+      "y": 103,
+      "on": "button.export-button"
     },
     {
       "wait": 500
@@ -497,12 +505,16 @@
     {
       "mouse": "move",
       "x": 521,
-      "y": 103
+      "y": 103,
+      "on": "button.console-table-key-delete",
+      "right": 12
     },
     {
       "mouse": "click",
       "x": 521,
-      "y": 103
+      "y": 103,
+      "on": "button.console-table-key-delete",
+      "right": 12
     },
     {
       "mouse": "move",
@@ -518,7 +530,8 @@
     {
       "mouse": "click",
       "x": 871,
-      "y": 103
+      "y": 103,
+      "on": "button.export-button"
     },
     {
       "mouse": "move",

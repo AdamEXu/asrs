@@ -220,13 +220,17 @@ pub fn make_main(window: &Window) {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowChrome {
-    pub toolbar: bool,
     pub title: bool,
     pub buttons: bool,
 }
 
 pub fn window_chrome(window: &Window) -> Option<WindowChrome> {
     imp::probe::window_chrome(window)
+}
+
+/// `-[NSWindow setRepresentedFilename:]`, which the oracle's injected libraries listen to.
+pub fn set_represented_filename(window: &Window, name: &str) {
+    imp::probe::set_represented_filename(window, name);
 }
 
 /// Offers the main menu a key-down event with the given characters and `NSEventModifierFlags`.
@@ -240,9 +244,9 @@ pub fn will_resize(window: &Window, size: (f64, f64)) -> Option<(f64, f64)> {
     imp::probe::will_resize(window, size)
 }
 
-/// How much larger a titled, resizable window's frame is than its content.
-pub fn framed_window() -> Option<(f64, f64)> {
-    imp::probe::framed_window()
+/// How much larger a titled, resizable window's frame is than its content on a display at `scale`.
+pub fn framed_window(scale: f64) -> Option<(f64, f64)> {
+    imp::probe::framed_window(scale)
 }
 
 /// Takes a key-down event with this virtual key code off the application's queue, and what
@@ -283,6 +287,12 @@ pub fn post_mouse(action: MouseAction, x: f64, y: f64) -> bool {
 /// The cursor position in global top-left screen coordinates.
 pub fn cursor_location() -> (f64, f64) {
     imp::probe::cursor_location()
+}
+
+/// The handle of the window that has the activation.
+#[cfg(windows)]
+pub fn foreground_window() -> Option<u32> {
+    imp::probe::foreground_window()
 }
 
 pub fn warp_cursor(x: f64, y: f64) {
@@ -462,6 +472,23 @@ pub fn change_scale(number: u32, scale: u32) {
 #[cfg(windows)]
 pub fn screen_image(x: i32, y: i32, width: i32, height: i32) -> Option<WindowImage> {
     imp::probe::screen_image(x, y, width, height)
+}
+
+/// A visible top-level window: its handle, its and its client area's rects as [`rects`] gives
+/// them, and its `GWL_STYLE` and `GWL_EXSTYLE`.
+#[cfg(windows)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TopLevel {
+    pub number: u32,
+    pub rects: [[i32; 4]; 2],
+    pub style: u32,
+    pub ex_style: u32,
+}
+
+/// The visible top-level windows of a process, frontmost first.
+#[cfg(windows)]
+pub fn top_levels(process: u32) -> Vec<TopLevel> {
+    imp::probe::top_levels(process)
 }
 
 /// Electron's `minimize`, `maximize`, `unmaximize` or `restore` of the window with this handle.

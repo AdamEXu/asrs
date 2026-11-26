@@ -207,39 +207,26 @@ async fn full_screen(check: &Check, cx: &mut AsyncApp) {
     let seen = Rc::new(RefCell::new(Vec::new()));
     let sink = seen.clone();
     let observer = check.update(cx, |_, window, cx| {
-        let native = platform::native_window(window).expect("a native window");
-        native.hidden_inset_titlebar();
         platform::observe_full_screen(window, cx, move |full_screen, _| {
             sink.borrow_mut().push(full_screen);
         })
     });
     let observer = observer.expect("an observer");
-    let chrome = |toolbar, title, buttons| probe::WindowChrome {
-        toolbar,
-        title,
-        buttons,
-    };
-    let windowed = check.update(cx, |_, window, _| probe::window_chrome(window));
-    assert!(windowed.expect("a window").toolbar);
-    let steps: [(&str, probe::WindowChrome, &[bool]); 4] = [
-        (
-            "NSWindowWillEnterFullScreenNotification",
-            chrome(false, true, true),
-            &[],
-        ),
+    let chrome = |title, buttons| probe::WindowChrome { title, buttons };
+    let steps: [(&str, probe::WindowChrome, &[bool]); 3] = [
         (
             "NSWindowDidEnterFullScreenNotification",
-            chrome(false, true, true),
+            chrome(true, true),
             &[true],
         ),
         (
             "NSWindowWillExitFullScreenNotification",
-            chrome(false, false, false),
+            chrome(false, false),
             &[true],
         ),
         (
             "NSWindowDidExitFullScreenNotification",
-            chrome(true, false, true),
+            chrome(false, true),
             &[true, false],
         ),
     ];
@@ -254,7 +241,7 @@ async fn full_screen(check: &Check, cx: &mut AsyncApp) {
     }
     observer.stop();
     check.update(cx, |_, window, _| {
-        probe::post_window_notification(window, steps[1].0);
+        probe::post_window_notification(window, steps[0].0);
     });
     settle(cx).await;
     assert_eq!(*seen.borrow(), [true, false], "after it is stopped");

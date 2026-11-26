@@ -404,11 +404,16 @@ impl MainProcess {
                 Self::open_satellite(cx, config);
             }
             HubEvent::SatelliteUpdate(update) => {
+                let hub = Self::hub_windows(cx)
+                    .into_iter()
+                    .find(|(hub, _)| *hub == id);
+                let hub = hub.and_then(|(_, hub)| hub.upgrade());
+                let moving = hub.is_none_or(|hub| hub.read(cx).moving());
                 let uuid = ops::to_string(&update.uuid).to_string_lossy();
                 let satellites = Self::satellites(cx, &uuid);
                 for (window, satellite) in satellites {
                     if Windows::is_visible(cx, window) {
-                        satellite.update(cx, |page, cx| page.render_command(update, cx));
+                        satellite.update(cx, |page, cx| page.render_command(update, moving, cx));
                     }
                 }
             }
@@ -699,7 +704,7 @@ impl MainProcess {
             }
         };
         let prefs = Preferences::from_js(&data);
-        cx.set_global(theme_source(prefs.theme));
+        windows::set_theme(cx, theme_source(prefs.theme));
         for (_, hub) in Self::hub_windows(cx) {
             Self::send(cx, &hub, MainToHub::SetPreferences, data.clone());
         }
@@ -1046,10 +1051,8 @@ impl MainProcess {
             _ => {}
         })
         .detach();
-        if Platform::current() != Platform::Mac {
-            let title = hub.read(cx).model().title().to_string_lossy();
-            Self::set_title(cx, id, &title);
-        }
+        let title = hub.read(cx).model().title().to_string_lossy();
+        Self::set_title(cx, id, &title);
         if let Some(handle) = Windows::handle(cx, id) {
             let _ = handle.update(cx, |_, window, cx| {
                 window.on_window_should_close(cx, move |_, cx| {
@@ -1390,7 +1393,7 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
             return;
         }
     };
-    cx.set_global(theme_source(prefs.theme));
+    windows::set_theme(cx, theme_source(prefs.theme));
     video::init(&state.paths, cx);
     let saved = state
         .tracker
@@ -1447,7 +1450,9 @@ pub fn start(cx: &mut App, argv: &[String], open_events: async_channel::Receiver
         asset_download::start(asset_download::Config::new(folders), cx);
     }
     every(cx, ASSET_RELOAD_PERIOD, |cx| {
-        MainProcess::assets_updated(cx);
+        asset_download::between_extractions(cx, |cx| {
+            MainProcess::assets_updated(cx);
+        });
     });
     every(cx, STATE_SAVE_PERIOD, MainProcess::save_state);
     every(

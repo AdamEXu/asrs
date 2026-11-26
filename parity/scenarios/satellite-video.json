@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U17 and U23): a locked Video tab popped out, with video-data messages as main sends them for generated clips. The satellite shows the frame alone: the Video tab's own keys do nothing in it, the arrow keys step the hub's selection and the locked video with it, and Space starts and pauses playback; after the hub unlocks the video, its frame keys reach the satellite, and a portrait clip changes the aspect ratio. The satellite's saved state is compared. Nothing is masked",
+  "titleBar": true,
   "actions": [
     {
       "open": [
@@ -79,12 +80,14 @@
     {
       "mouse": "move",
       "x": 1041,
-      "y": 19
+      "y": 19,
+      "on": "button.popup"
     },
     {
       "mouse": "click",
       "x": 1041,
-      "y": 19
+      "y": 19,
+      "on": "button.popup"
     },
     {
       "prompt": "satellite"

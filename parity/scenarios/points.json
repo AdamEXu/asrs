@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U16): the generated panels log on a restored Points tab with large circles at a selected time; /Vision/Corners dragged from the sidebar into the source list with the pointer, the width typed to 480.6 (which its change listener rounds) and the height to 500, then restored states with every shape and size, split components, groups, each orientation and other origins, and the controls resized so the background sits on half pixels and its settings overflow. Saved HubState is compared at each capture; nothing is masked but a focused input",
+  "titleBar": true,
   "actions": [
     {
       "open": [

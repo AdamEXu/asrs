@@ -3,6 +3,7 @@
 use asrs_model::app_identity::AppIdentity;
 
 pub mod asset_download;
+pub mod crash_log;
 pub mod download_flow;
 mod export_flow;
 pub mod hub;
@@ -12,6 +13,7 @@ pub mod live;
 pub mod main_process;
 pub mod menus;
 pub mod quit;
+mod repaint;
 pub mod satellite;
 pub mod scenario;
 pub mod self_test;

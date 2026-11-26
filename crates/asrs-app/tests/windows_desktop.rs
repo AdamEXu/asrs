@@ -3,15 +3,15 @@
 //! The Windows window and menu checks on a real desktop, beside the oracle's Electron: the content
 //! size, bounds, track sizes, `WS_EX_TOPMOST` and DWM backdrop of every window `main.ts` opens,
 //! satellites' aspect ratios in a live resize, `isVisible()`, wheel deltas as Chromium's DOM
-//! events carry them, native menus driven by real pointer and key events, and the hub's own
-//! window against the capture scenario mode makes of it.
+//! events carry them, native menus driven by real pointer and key events, tooltips beside
+//! Electron's, and the hub's own window against the capture scenario mode makes of it.
 //!
 //! Needs the logged-in desktop at scale 1 and the oracle's Electron (`ASRS_ELECTRON` or
 //! `cargo xtask oracle setup`); skipped under `ASRS_CI=1` and off Windows. It moves the pointer.
 
 #[cfg(windows)]
 mod desktop {
-    use std::cell::RefCell;
+    use std::cell::{Cell, RefCell};
     use std::io::{BufRead, BufReader, Write as _};
     use std::net::{TcpListener, TcpStream};
     use std::path::{Path, PathBuf};
@@ -36,14 +36,19 @@ mod desktop {
     use asrs_services::windows::WindowSystem;
     use asrs_ui::gpui::{
         AnyWindowHandle, App, AppContext, AsyncApp, Context, Entity, InteractiveElement,
-        IntoElement, Render, ScrollEvent, Styled, Window, div, px, size,
+        IntoElement, MouseButton, Render, ScrollEvent, Styled, Window, div, px, rgb, size,
     };
-    use asrs_ui::platform::probe::{self, MouseAction, WheelSample};
+    use asrs_ui::platform::probe::{self, MouseAction, TopLevel, WheelSample, WindowImage};
     use asrs_ui::platform::{
         self, MenuPath, PopupEntry, PopupMenu, SelectMenu, SelectMenuItem, SelectMenuItemKind,
     };
     use asrs_ui::selection::colors::ForcedActive;
     use asrs_ui::theme::ThemeSource;
+    use asrs_ui::tooltip;
+
+    const WS_POPUP: u32 = 0x8000_0000;
+    const WS_CAPTION: u32 = 0x00c0_0000;
+    const WS_THICKFRAME: u32 = 0x0004_0000;
 
     const ELECTRON_MAIN: &str = r##"
 const { app, BrowserWindow, Menu } = require("electron");
@@ -57,6 +62,7 @@ app.whenReady().then(() => {
   Menu.setApplicationMenu(Menu.buildFromTemplate([{ label: "App", submenu: [{ label: "Item" }] }]));
   const parent = new BrowserWindow({ x: 60, y: 420, width: 1100, height: 650 });
   let win = null;
+  let blurs = 0;
   out("ready " + process.versions.electron);
   readline.createInterface({ input: socket }).on("line", async (line) => {
     const request = JSON.parse(line);
@@ -101,6 +107,30 @@ app.whenReady().then(() => {
       win.focus();
       await wait(600);
       out("focused");
+    } else if (request.op === "select") {
+      win = new BrowserWindow({ x: 300, y: 300, width: 400, height: 300, show: false });
+      win.setMenu(null);
+      blurs = 0;
+      win.on("blur", () => blurs++);
+      win.once("ready-to-show", () => win.show());
+      const page = "<body style='margin:0'><select style='position:absolute;left:20px;top:20px;width:200px;height:22px'><option>A</option><option>B</option><option>C</option></select>";
+      await win.loadURL("data:text/html," + encodeURIComponent(page));
+      await wait(900);
+      win.focus();
+      await wait(600);
+      out("select " + JSON.stringify([id(win)]));
+    } else if (request.op === "blurs") {
+      out("blurs " + JSON.stringify([blurs]));
+    } else if (request.op === "tooltip") {
+      win = new BrowserWindow({ x: 300, y: 300, width: 400, height: 300, show: false });
+      win.setMenu(null);
+      win.once("ready-to-show", () => win.show());
+      const page = "<body style='margin:0'><div title='" + request.title + "' style='height:100vh'></div>";
+      await win.loadURL("data:text/html," + encodeURIComponent(page));
+      await wait(900);
+      win.focus();
+      await wait(600);
+      out("tooltip " + JSON.stringify([id(win), ...Object.values(win.getContentBounds())]));
     } else if (request.op === "close") {
       win.destroy();
       await wait(300);
@@ -210,13 +240,29 @@ app.whenReady().then(() => {
     #[derive(Default)]
     struct Blank {
         wheel: WheelLog,
+        presses: Rc<Cell<usize>>,
+        replacement_enabled: Rc<Cell<bool>>,
+        replacement: Rc<RefCell<Vec<Option<usize>>>>,
     }
 
     impl Render for Blank {
         fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
             let wheel = self.wheel.clone();
+            let presses = self.presses.clone();
+            let replacement_enabled = self.replacement_enabled.clone();
+            let replacement = self.replacement.clone();
             div()
                 .size_full()
+                .on_mouse_down(MouseButton::Left, move |event, window, cx| {
+                    presses.set(presses.get() + 1);
+                    let [x, y] = [event.position.x, event.position.y].map(f32::from);
+                    if replacement_enabled.get()
+                        && (400.0..600.0).contains(&x)
+                        && (120.0..142.0).contains(&y)
+                    {
+                        open_list_now(window, cx, [400.0, 120.0, 200.0, 22.0], &replacement);
+                    }
+                })
                 .on_scroll(move |event: &ScrollEvent, _, _| {
                     let delta = platform::wheel_delta(event);
                     wheel
@@ -987,37 +1033,82 @@ app.whenReady().then(() => {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    fn open_list(
-        cx: &mut AsyncApp,
-        handle: AnyWindowHandle,
-        chosen: &Rc<RefCell<Vec<Option<usize>>>>,
-    ) {
+    fn list_menu() -> SelectMenu {
         let items = (0..30).map(|i| SelectMenuItem {
             label: format!("Option {i}"),
             kind: SelectMenuItemKind::Option,
             enabled: true,
             tool_tip: String::new(),
         });
-        let menu = SelectMenu {
+        SelectMenu {
             items: items.collect(),
             font_size: 13.0,
             selected: Some(10),
             right_aligned: false,
-        };
+        }
+    }
+
+    fn open_list_now(
+        window: &mut Window,
+        cx: &mut App,
+        at: [f64; 4],
+        chosen: &Rc<RefCell<Vec<Option<usize>>>>,
+    ) {
         let sink = chosen.clone();
+        platform::select_popup(window, cx, list_menu(), at, move |row, _| {
+            sink.borrow_mut().push(row);
+        });
+    }
+
+    fn open_list(
+        cx: &mut AsyncApp,
+        handle: AnyWindowHandle,
+        chosen: &Rc<RefCell<Vec<Option<usize>>>>,
+    ) {
+        let chosen = chosen.clone();
         cx.update(|cx| {
             handle.update(cx, |_, window, cx| {
-                let at = [100.0, 120.0, 200.0, 22.0];
-                platform::select_popup(window, cx, menu, at, move |row, _| {
-                    sink.borrow_mut().push(row);
-                });
+                open_list_now(window, cx, [100.0, 120.0, 200.0, 22.0], &chosen);
             })
         })
         .expect("window");
     }
 
-    /// The drawn select list: below its control, with keys, and closed by a press outside.
-    async fn lists(cx: &mut AsyncApp, report: &mut Report, hub: WindowId) {
+    /// Whether Electron's window keeps the activation, and is never blurred, while its select's
+    /// list is open.
+    async fn electron_list(cx: &mut AsyncApp, electron: &Electron) -> (bool, usize) {
+        let opened = electron.numbers(cx, r#"{"op":"select"}"#, "select ").await;
+        let number = opened[0] as u32;
+        let [_, client] = probe::rects(number).expect("rects");
+        click(
+            cx,
+            (f64::from(client[0]) + 120.0, f64::from(client[1]) + 31.0),
+        )
+        .await;
+        sleep(cx, 1000).await;
+        let kept = probe::foreground_window() == Some(number);
+        let blurs = electron.numbers(cx, r#"{"op":"blurs"}"#, "blurs ").await;
+        probe::post_keys(&[ESCAPE]);
+        sleep(cx, 400).await;
+        electron.request(cx, r#"{"op":"close"}"#, "closed").await;
+        (kept, blurs[0] as usize)
+    }
+
+    /// The drawn select list: below its control, with keys, closed by a press outside, which the
+    /// window still gets, and the window keeping the activation while it is open, as Electron's
+    /// does.
+    async fn lists(
+        cx: &mut AsyncApp,
+        electron: &Electron,
+        report: &mut Report,
+        (hub, view): (WindowId, &Entity<Blank>),
+    ) {
+        let (electron_kept, electron_blurs) = electron_list(cx, electron).await;
+        report.check(
+            "select list: Electron's window keeps the activation",
+            electron_kept && electron_blurs == 0,
+            format!("foreground {electron_kept}, {electron_blurs} blur events"),
+        );
         let handle = handle_of(cx, hub);
         with_window(cx, handle, |w| w.activate_window());
         sleep(cx, 800).await;
@@ -1025,7 +1116,7 @@ app.whenReady().then(() => {
         let number = with_window(cx, handle, |w| probe::window_number(w)).expect("window id");
         let [_, client] = probe::rects(number).expect("rects");
         let (x, y) = (f64::from(client[0]), f64::from(client[1]));
-        let chosen: Rc<RefCell<Vec<Option<usize>>>> = Rc::default();
+        let chosen = cx.update(|cx| view.read(cx).replacement.clone());
         for (name, keys, want) in [
             ("keys choose an option", &[DOWN, DOWN, RETURN][..], Some(12)),
             (
@@ -1041,6 +1132,13 @@ app.whenReady().then(() => {
             let list = windows.into_iter().find(|w| *w != handle);
             let open = cx.update(|cx| cx.windows().len()) == others + 1;
             report.check(&format!("select list, {name}: opens"), open, "");
+            let active = with_window(cx, handle, |w| w.is_window_active());
+            let kept = probe::foreground_window() == Some(number);
+            report.check(
+                &format!("select list, {name}: the window keeps the activation"),
+                active && kept,
+                format!("active {active}, foreground {kept}"),
+            );
             if let Some(list) = list.filter(|_| others == 1) {
                 let bounds = with_window(cx, list, |w| platform::window_bounds(w));
                 let placed =
@@ -1055,18 +1153,48 @@ app.whenReady().then(() => {
                 probe::post_keys(&[*key]);
                 sleep(cx, 400).await;
             }
+            let presses = cx.update(|cx| view.read(cx).presses.get());
             if keys.is_empty() {
                 click(cx, (x + 700.0, y + 500.0)).await;
             }
             sleep(cx, 1000).await;
             let got = chosen.take();
             let left = cx.update(|cx| cx.windows().len());
+            if keys.is_empty() {
+                let pressed = cx.update(|cx| view.read(cx).presses.get()) - presses;
+                report.check(
+                    "select list, a press outside: the window gets it too",
+                    pressed == 1,
+                    format!("{pressed} presses"),
+                );
+            }
             report.check(
                 &format!("select list, {name}"),
                 got == [want] && left == others,
                 format!("{got:?}, {left} windows left of {others}"),
             );
         }
+        cx.update(|cx| view.update(cx, |view, _| view.replacement_enabled.set(true)));
+        open_list(cx, handle, &chosen);
+        sleep(cx, 1500).await;
+        click(cx, (x + 410.0, y + 131.0)).await;
+        sleep(cx, 1000).await;
+        cx.update(|cx| view.update(cx, |view, _| view.replacement_enabled.set(false)));
+        let left = cx.update(|cx| cx.windows().len());
+        report.check(
+            "select list, a press on another select leaves the new list open",
+            left == others + 1,
+            format!("{left} windows left of {}", others + 1),
+        );
+        probe::post_keys(&[ESCAPE]);
+        sleep(cx, 1000).await;
+        let got = chosen.take();
+        let left = cx.update(|cx| cx.windows().len());
+        report.check(
+            "select list, a press on another select cancels the replaced list",
+            got == [None, None] && left == others,
+            format!("{got:?}, {left} windows left of {others}"),
+        );
         let rect = Rect {
             x: 2200.0,
             y: 200.0,
@@ -1093,6 +1221,170 @@ app.whenReady().then(() => {
         );
         cx.update(|cx| windows::close(cx, other));
         sleep(cx, 400).await;
+    }
+
+    const TOOLTIP_TITLE: &str = "Close tab";
+
+    struct Titled;
+
+    impl Render for Titled {
+        fn render(&mut self, _: &mut Window, _: &mut Context<'_, Self>) -> impl IntoElement {
+            tooltip::titled(TOOLTIP_TITLE, div().size_full().bg(rgb(0x000000)))
+        }
+    }
+
+    /// Moves the pointer from left of a window's content into its middle, as a hover does.
+    async fn hover(cx: &mut AsyncApp, [left, top, right, bottom]: [i32; 4]) -> (f64, f64) {
+        let at = (f64::from(left + right) / 2.0, f64::from(top + bottom) / 2.0);
+        let start = f64::from(left) - 40.0;
+        for step in 0..=10 {
+            let x = start + (at.0 - start) * f64::from(step) / 10.0;
+            probe::post_mouse(MouseAction::Drag, x, at.1);
+            sleep(cx, 40).await;
+        }
+        at
+    }
+
+    async fn new_top_level(
+        cx: &mut AsyncApp,
+        process: u32,
+        before: &[TopLevel],
+    ) -> Option<TopLevel> {
+        for _ in 0..80 {
+            let found = probe::top_levels(process)
+                .into_iter()
+                .find(|w| before.iter().all(|b| b.number != w.number));
+            if found.is_some() {
+                return found;
+            }
+            sleep(cx, 50).await;
+        }
+        None
+    }
+
+    /// The share of a tooltip's inside, within its 1 px border, that is its white background, and
+    /// whether any of it is darker, as its text is.
+    fn tooltip_pixels(image: &WindowImage) -> (f64, bool) {
+        let (mut white, mut dark, mut all) = (0usize, false, 0usize);
+        for y in 2..image.height.saturating_sub(2) {
+            for x in 2..image.width.saturating_sub(2) {
+                let [r, g, b, _] = image.pixel(x, y);
+                let level = (u32::from(r) + u32::from(g) + u32::from(b)) / 3;
+                all += 1;
+                if level >= 250 {
+                    white += 1;
+                } else if level < 200 {
+                    dark = true;
+                }
+            }
+        }
+        (white as f64 / all.max(1) as f64, dark)
+    }
+
+    /// `TooltipAura` beside Electron's: a frameless `WS_POPUP` window the size of its text, as far
+    /// from the pointer, with its text from the first frame it shows.
+    async fn tooltips(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
+        const SHAPE: u32 = WS_POPUP | WS_CAPTION | WS_THICKFRAME;
+        let request = format!(r#"{{"op":"tooltip","title":"{TOOLTIP_TITLE}"}}"#);
+        let opened = electron.numbers(cx, &request, "tooltip ").await;
+        let pid = electron.child.borrow().id();
+        let before = probe::top_levels(pid);
+        let [_, client] = probe::rects(opened[0] as u32).expect("rects");
+        let pointer = hover(cx, client).await;
+        let theirs = new_top_level(cx, pid, &before).await;
+        electron.request(cx, r#"{"op":"close"}"#, "closed").await;
+        let Some(theirs) = theirs else {
+            report.check("Electron shows a tooltip", false, "");
+            return;
+        };
+        let rect = Rect {
+            x: 300.0,
+            y: 300.0,
+            width: 400.0,
+            height: 300.0,
+        };
+        let opened = cx.update(|cx| {
+            windows::open_satellite(cx, "t", SatellitePlacement::Saved(rect), |_, cx| {
+                cx.new(|_| Titled)
+            })
+        });
+        let id = opened.expect("open window").0;
+        let handle = handle_of(cx, id);
+        sleep(cx, 1200).await;
+        with_window(cx, handle, |w| w.activate_window());
+        sleep(cx, 800).await;
+        let number = with_window(cx, handle, |w| probe::window_number(w)).expect("window id");
+        let [_, client] = probe::rects(number).expect("rects");
+        let own = std::process::id();
+        let before = probe::top_levels(own);
+        let ours_pointer = hover(cx, client).await;
+        let mut ours = None;
+        let mut frames = Vec::new();
+        for _ in 0..2000 {
+            if ours.is_none() {
+                ours = probe::top_levels(own)
+                    .into_iter()
+                    .find(|w| before.iter().all(|b| b.number != w.number));
+            }
+            if let Some(ours) = ours {
+                let [left, top, right, bottom] = ours.rects[1];
+                let image = probe::screen_image(left, top, right - left, bottom - top);
+                frames.extend(image.as_ref().map(tooltip_pixels));
+                if frames.len() == 30 {
+                    break;
+                }
+            }
+            sleep(cx, 2).await;
+        }
+        let active = with_window(cx, handle, |w| w.is_window_active());
+        let shown = cx
+            .update(|cx| handle.update(cx, |_, w, cx| tooltip::shown(w, cx).is_some()))
+            .unwrap_or(false);
+        let gpui_windows = cx.update(|cx| cx.windows().len());
+        cx.update(|cx| windows::close(cx, id));
+        sleep(cx, 400).await;
+        let Some(ours) = ours else {
+            report.check(
+                "asrs shows a tooltip",
+                false,
+                format!("active {active}, shown {shown}, {gpui_windows} windows"),
+            );
+            return;
+        };
+        let size = |r: [i32; 4]| (r[2] - r[0], r[3] - r[1]);
+        let offset = |r: [i32; 4], (x, y): (f64, f64)| (r[0] - x as i32, r[1] - y as i32);
+        report.check(
+            "tooltip: a frameless popup, as Electron's",
+            ours.style & SHAPE == theirs.style & SHAPE && ours.rects[0] == ours.rects[1],
+            format!(
+                "style {:#x} with window {:?} and client {:?}, Electron's {:#x}",
+                ours.style, ours.rects[0], ours.rects[1], theirs.style
+            ),
+        );
+        report.check(
+            "tooltip: Electron's size",
+            size(ours.rects[0]) == size(theirs.rects[0]),
+            format!(
+                "{:?}, Electron's {:?}",
+                size(ours.rects[0]),
+                size(theirs.rects[0])
+            ),
+        );
+        report.check(
+            "tooltip: as far from the pointer as Electron's",
+            offset(ours.rects[0], ours_pointer) == offset(theirs.rects[0], pointer),
+            format!(
+                "{:?}, Electron's {:?}",
+                offset(ours.rects[0], ours_pointer),
+                offset(theirs.rects[0], pointer)
+            ),
+        );
+        let first = frames.iter().position(|(white, _)| *white > 0.5);
+        report.check(
+            "tooltip: its first frame on screen has its text",
+            first.is_some_and(|i| frames[i].1),
+            format!("first shown at capture {first:?} of {frames:?}"),
+        );
     }
 
     struct NoScreen;
@@ -1229,19 +1521,19 @@ app.whenReady().then(() => {
                 let version = electron.reply(cx, "ready ").await;
                 let mut report = Report::default();
                 report.check("Electron is upstream's", version == "39.2.7", &version);
-                let hub = cx
+                let (hub, hub_view) = cx
                     .update(|cx| windows::open_hub(cx, None, blank))
-                    .expect("hub")
-                    .0;
+                    .expect("hub");
                 sleep(cx, 1500).await;
                 captions(cx, &electron, &mut report).await;
                 menus(cx, &mut report, hub).await;
-                lists(cx, &mut report, hub).await;
+                lists(cx, &electron, &mut report, (hub, &hub_view)).await;
                 accelerators(cx, &mut report, hub).await;
                 wheel(cx, &electron, &mut report).await;
                 aspects(cx, &electron, &mut report).await;
                 sizes(cx, &electron, &mut report, hub).await;
                 states(cx, &electron, &mut report).await;
+                tooltips(cx, &electron, &mut report).await;
                 drop(electron);
                 own_window(cx, &mut report).await;
                 println!(

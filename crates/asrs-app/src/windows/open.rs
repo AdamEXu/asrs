@@ -3,6 +3,7 @@ use asrs_ui::gpui::{
     WindowBackgroundAppearance, WindowBounds, point, px, size,
 };
 use asrs_ui::platform::{self, NativeWindow};
+use asrs_ui::theme::{Appearance, ThemeSource};
 
 use super::{Rect, WindowId, WindowKind, WindowOptions, Windows, focus_events, placement};
 
@@ -10,6 +11,9 @@ type Size = (f64, f64);
 
 /// `INT_MAX`, which Electron puts in for a maximum size dimension that is not given.
 const UNBOUNDED: f64 = i32::MAX as f64;
+
+/// The margin `NativeWindowMac` gives the traffic lights of `titleBarStyle: "hiddenInset"`.
+const HIDDEN_INSET: (f32, f32) = (12.0, 11.0);
 
 /// How much larger a framed window's bounds are than its content, where that is not the platform's
 /// own to say.
@@ -46,7 +50,7 @@ fn gpui_options(
         titlebar: Some(TitlebarOptions {
             title: None,
             appears_transparent: hub && !cfg!(target_os = "linux"),
-            traffic_light_position: None,
+            traffic_light_position: vibrant.then(|| point(px(HIDDEN_INSET.0), px(HIDDEN_INSET.1))),
         }),
         app_owns_titlebar_drag: vibrant,
         window_background: if vibrant {
@@ -62,7 +66,7 @@ fn gpui_options(
             asrs_ui::gpui::WindowKind::Dialog
         } else if options.modal {
             asrs_ui::gpui::WindowKind::Normal
-        } else if options.always_on_top {
+        } else if options.always_on_top && !cfg!(target_os = "macos") {
             asrs_ui::gpui::WindowKind::Floating
         } else {
             asrs_ui::gpui::WindowKind::Normal
@@ -167,6 +171,9 @@ fn track<V: Render>(
             }
         })
         .detach();
+        // GPUI draws nothing for this itself, and what the pages draw follows it.
+        cx.observe_window_appearance(window, |_, window, _| window.refresh())
+            .detach();
         let focus = focus_events(window, cx, move |_, focused, _, cx| {
             if focused {
                 cx.global_mut::<Windows>().manager.raised(id);
@@ -179,6 +186,27 @@ fn track<V: Render>(
         })
         .detach();
     });
+}
+
+fn follow_theme<V: Render>(window: &mut Window, entity: &Entity<V>, cx: &mut App) {
+    set_dark_frame(window, cx);
+    entity.update(cx, |_, cx| {
+        cx.observe_window_appearance(window, |_, window, cx| {
+            // GPUI sets the frame to the system's theme after it has told its observers.
+            let handle = window.window_handle();
+            cx.spawn(async move |_, cx| {
+                let _ = handle.update(cx, |_, window, cx| set_dark_frame(window, cx));
+            })
+            .detach();
+        })
+        .detach();
+        cx.observe_global_in::<ThemeSource>(window, |_, window, cx| set_dark_frame(window, cx))
+            .detach();
+    });
+}
+
+fn set_dark_frame(window: &Window, cx: &App) {
+    platform::set_dark_frame(window, Appearance::of(window, cx) == Appearance::Dark);
 }
 
 /// Electron's size constraints for the window, converted to content sizes. A constraint with a
@@ -204,12 +232,12 @@ fn content_limits(native: &NativeWindow, options: &WindowOptions) -> (Option<Siz
     (min, max)
 }
 
-/// What Electron's `BrowserWindow` constructor does that GPUI's options cannot: the
-/// `hiddenInset` toolbar, the exact content size (GPUI opens macOS windows 1 px taller than
-/// asked), frame-based sizes for windows without `useContentSize`, size limits, the place an X11
-/// window manager would choose itself, `fullscreenable`, then showing the window, or attaching it
-/// as a sheet to its parent. GPUI's `Dialog` kind would attach it to whichever window is main, and
-/// to none while the app is inactive.
+/// What Electron's `BrowserWindow` constructor does that GPUI's options cannot: the exact content
+/// size (GPUI opens macOS windows 1 px taller than asked), frame-based sizes for windows without
+/// `useContentSize`, size limits, the place an X11 window manager would choose itself,
+/// `fullscreenable`, then showing the window, or attaching it as a sheet to its parent. GPUI's
+/// `Dialog` kind would attach it to whichever window is main, and to none while the app is
+/// inactive.
 fn finish(
     native: &NativeWindow,
     options: &WindowOptions,
@@ -217,9 +245,6 @@ fn finish(
     parent: Option<&NativeWindow>,
     show: bool,
 ) {
-    if options.kind == WindowKind::Hub {
-        native.hidden_inset_titlebar();
-    }
     let (width, height) = if options.use_content_size {
         (options.width, options.height)
     } else {
@@ -232,9 +257,7 @@ fn finish(
         Some((x, y)) => native.set_content_origin(x, y),
         None => native.center(parent),
     }
-    if options.fullscreenable == Some(false) {
-        native.set_fullscreenable(false);
-    }
+    native.set_fullscreenable(options.fullscreenable.unwrap_or(true));
     if !show {
         return;
     }
@@ -273,10 +296,14 @@ pub(super) fn open<V: Render>(
             if options.kind == WindowKind::Hub {
                 platform::install_sidebar_vibrancy(window);
             }
+            platform::install_electron_frame(window);
             if options.always_on_top {
                 platform::keep_visible_when_inactive(window);
             }
             track(id, frame, window, &entity, cx);
+            if cfg!(windows) {
+                follow_theme(window, &entity, cx);
+            }
             native = platform::native_window(window);
             entity
         },

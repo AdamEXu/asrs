@@ -1468,6 +1468,7 @@ Scenario file:
 | `gl` | `false` | 3D scenario: GL switches and drawing-buffer dumps |
 | `prefs`, `userData` | `{}` | prefs merged by upstream over its defaults; extra files seeded into userData: JSON values, or `{"$file": path}` for a file under `parity/scenarios` |
 | `robot` | | `{account, files, stall}`: the robot `robotServer.ts` plays for the run on 127.0.0.1, where the scenario's `prefs.robotAddress` points |
+| `titleBar` | `false` | the points of mouse and wheel actions in the hub were measured under the 38 px title bar that macOS and Windows have above the viewer. Linux has none: there the driver moves points in the viewer above the tab controls up by it |
 | `live` | | `{rlog: path}`: xtask serves this RLOG file once on 127.0.0.1 and closes 1.5 s later, where the RLOG port 5800 of 127.0.0.1 leads |
 | `actions` | | in order, below |
 
@@ -1477,7 +1478,9 @@ Actions: `{"open": ["app:drive" or a path], "merge": false}` (the hub's `open-fi
 the folder of a clip `src/app/clips.ts` draws into `inputs/`, as `video-data`'s `imgFolder`, dispatched on the hub's
 `messagePort`, e.g. `new-tab`, `restore-state`), `{"eval": js}`,
 `{"selection": [method, ...args]}`,
-`{"mouse": "move"|"down"|"up"|"click"|"leave", "x", "y", "modifiers": [...]}`,
+`{"mouse": "move"|"down"|"up"|"click"|"leave", "x", "y", "modifiers": [...], "on": selector, "right": px}`
+(`on` is what the point has to hit; off macOS, where text and scrollbars have other sizes, it moves
+to that element's centre when it does not, or to `right` px from its right edge),
 `{"wheel": {"x", "y", "deltaX", "deltaY", "wheelTicksX", "wheelTicksY", "precise"}}`,
 `{"key": keyCode, "modifiers": [...]}` (`commandOrControl` is Cmd on macOS and Ctrl elsewhere), `{"dialog": button index | file name | null}` (queued
 answer for the next dialog; a name ending in `/` is a folder that exists), `{"menu": [label, ...]}` (clicks the item at that label path of the
@@ -1538,7 +1541,8 @@ rewrite, `createAssetFolders()` and `loadAssets()` over upstream's `bundledAsset
 (`--bundled-assets`), and boots the hub with main's assets and preferences file. The hub's
 `save-state` and `save-type-memory` go to main's `StateTracker` and type memory, with the window
 where the driver puts its own: 16 px into the primary work area that `xtask pixel port` reads
-from the upstream run (`--work-area`). What lands in `userData/` is copied to `files/` and listed
+from the upstream run (`--work-area`), and mouse and wheel actions go where that run's `points` say
+the driver sent them (`--points`). What lands in `userData/` is copied to `files/` and listed
 in `run.json` with the driver's filter, and `xtask pixel compare` requires every file the port
 wrote to equal upstream's and every file upstream wrote to be written by the port. Its
 page realm is `V8MathRandom::from_seed(1)` after the 77 draws upstream's hub bundle

@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U23): the hub window's keydown listener. Arrows step the selected time while a tab control button has the focus, a focused text field keeps them, and a press on the line graph gives them back to the page",
+  "titleBar": true,
   "actions": [
     {
       "open": [
@@ -125,12 +126,14 @@
     {
       "mouse": "move",
       "x": 1074,
-      "y": 19
+      "y": 19,
+      "on": "button.add-tab"
     },
     {
       "mouse": "click",
       "x": 1074,
-      "y": 19
+      "y": 19,
+      "on": "button.add-tab"
     },
     {
       "wait": 200

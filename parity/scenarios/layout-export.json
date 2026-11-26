@@ -1,5 +1,6 @@
 {
   "about": "Interaction: File > Export Layout, cancelled and then written, and File > Import Layout, cancelled; the dialogs and the JSON are compared. Two tabs, one with sources, so the file carries controller state",
+  "titleBar": true,
   "actions": [
     {
       "open": [

@@ -1,5 +1,6 @@
 {
   "about": "Interaction: the axis menus' remaining items: the discrete axis's robot mode, the filters, units turned off and back, and Clear All; a source hidden, its type and colour changed in its menu, and one removed with its button. Saved HubState is compared at each capture",
+  "titleBar": true,
   "actions": [
     {
       "open": [

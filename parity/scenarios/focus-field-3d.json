@@ -1,5 +1,6 @@
 {
   "about": "Focus rings (#355) in the active hub: the 3D field's XR button, pressed and after keys",
+  "titleBar": true,
   "gl": true,
   "actions": [
     {

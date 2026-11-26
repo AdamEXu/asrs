@@ -23,6 +23,7 @@ use asrs_ui::gpui::{
     AnyElement, AnyWindowHandle, App, AppContext, ClipboardItem, Entity, IntoElement, WeakEntity,
     Window,
 };
+use asrs_ui::text::TextSystem;
 
 use super::canvas_tabs::JoysticksTab;
 use super::console_layout::ConsoleLayout;
@@ -269,8 +270,12 @@ impl HubEntityHost {
         scenario_seed: Option<u64>,
         cx: &mut App,
     ) -> Entity<HubFrame<HubEntityHost>> {
+        if asrs_ui::platform::has_acrylic() {
+            TextSystem::set_grayscale(cx, window.window_handle().window_id());
+        }
         let geometry = FrameGeometry::default();
         geometry.set_dark(dark);
+        geometry.set_inner_height(f64::from(f32::from(window.viewport_size().height)));
         let sidebar_geometry = ViewGeometry::new();
         let lists = ListsGeometry::default();
         let view = Box::new(FrameView {
@@ -485,6 +490,14 @@ impl FrameHost for HubEntityHost {
 
     fn hub<'a>(&'a self, cx: &'a App) -> &'a HubModel {
         self.hub.read(cx).model()
+    }
+
+    fn begin_draw(&mut self, cx: &mut App) {
+        self.hub.update(cx, |hub, _| hub.begin_draw());
+    }
+
+    fn end_draw(&mut self, _: &Window, cx: &mut App) {
+        self.hub.update(cx, |hub, _| hub.end_draw());
     }
 
     fn input<R>(&mut self, cx: &mut App, f: impl FnOnce(&mut HubModel) -> R) -> R {

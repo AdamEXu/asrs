@@ -2755,6 +2755,11 @@ impl Window {
         self.next_frame.focus_bounds.insert(handle.id, bounds);
     }
 
+    /// What the frame being drawn has painted so far.
+    pub fn painted_scene(&self) -> &Scene {
+        &self.next_frame.scene
+    }
+
     /// Accessor for the text system.
     pub fn text_system(&self) -> &Rc<WindowTextSystem> {
         &self.text_system
@@ -3007,6 +3012,16 @@ impl Window {
         // Next-frame callbacks create frame demand without dirtying the
         // window, so the platform's frame source must be woken explicitly.
         self.invalidator.wake_platform();
+    }
+
+    /// Whether the window's next frame will draw it.
+    pub fn is_dirty(&self) -> bool {
+        self.invalidator.is_dirty()
+    }
+
+    /// Whether callbacks scheduled via [`Self::on_next_frame`] are waiting.
+    pub fn has_next_frame_callbacks(&self) -> bool {
+        !self.next_frame_callbacks.borrow().is_empty()
     }
 
     /// Schedule a frame to be drawn on the next animation frame.
@@ -4546,7 +4561,8 @@ impl Window {
         result
     }
 
-    pub(crate) fn with_element_opacity<R>(
+    /// Multiplies the opacity of what `f` paints.
+    pub fn with_element_opacity<R>(
         &mut self,
         opacity: Option<f32>,
         f: impl FnOnce(&mut Self) -> R,
@@ -4639,7 +4655,7 @@ impl Window {
     /// Obtain the current element opacity. This method should only be called during the
     /// prepaint phase of element drawing.
     #[inline]
-    pub(crate) fn element_opacity(&self) -> f32 {
+    pub fn element_opacity(&self) -> f32 {
         self.invalidator.debug_assert_paint_or_prepaint();
         self.element_opacity
     }

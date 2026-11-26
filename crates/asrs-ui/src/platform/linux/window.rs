@@ -7,7 +7,7 @@ use super::x11::X11Window;
 pub struct NativeWindow(X11Window);
 
 #[cfg(feature = "parity")]
-pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
+pub fn titled_content_size(width: f64, height: f64, _scale: f64) -> (f64, f64) {
     (width, height)
 }
 
@@ -25,8 +25,6 @@ pub fn bounds(window: &Window) -> Option<(f64, f64, f64, f64)> {
 }
 
 impl NativeWindow {
-    pub fn hidden_inset_titlebar(&self) {}
-
     pub fn content_size_for_frame(&self, width: f64, height: f64) -> (f64, f64) {
         (width, height)
     }

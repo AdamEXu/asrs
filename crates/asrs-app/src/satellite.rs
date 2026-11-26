@@ -11,9 +11,10 @@ use asrs_hub::tabs::{SatelliteUpdate, TabsError};
 use asrs_js::time::{Clock, SystemClock, V8MathRandom};
 use asrs_log::realm::JsRealm;
 use asrs_model::messages::{HubToMain, MainToSatellite, NamedMessage, SatelliteToMain};
-use asrs_ui::gpui::{App, Context, EventEmitter, Task, Window};
+use asrs_ui::gpui::{AnyWindowHandle, App, Context, EventEmitter, Task, Window};
 
 use crate::hub::{FrameClock, frame_time, interval};
+use crate::repaint::Repaint;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum SatelliteEvent {
@@ -31,15 +32,15 @@ pub struct Satellite {
     model: SatelliteModel,
     title: String,
     frame_origin: Instant,
+    window: Option<AnyWindowHandle>,
+    repaint: Repaint,
     _save: Task<()>,
 }
 
 fn save_interval(cx: &Context<'_, Satellite>, period_ms: f64) -> Task<()> {
     interval(cx, period_ms, |satellite: &mut Satellite, cx| {
-        satellite.task(cx, |model| {
-            model.save_state();
-            Ok(())
-        });
+        satellite.model.save_state();
+        satellite.after_task(cx);
     })
 }
 
@@ -59,12 +60,15 @@ impl Satellite {
             title: model.title().to_string_lossy(),
             model,
             frame_origin: cx.background_executor().now(),
+            window: None,
+            repaint: Repaint::default(),
             _save: save_interval(cx, SAVE_PERIOD_MS),
         }
     }
 
     /// Throttles the page while `window` is hidden, once it has been shown.
-    pub fn throttle_with(&self, window: &mut Window, cx: &mut Context<'_, Self>) {
+    pub fn throttle_with(&mut self, window: &mut Window, cx: &mut Context<'_, Self>) {
+        self.window = Some(window.window_handle());
         cx.observe_window_visibility(window, |satellite, visibility, _, cx| {
             let period = if visibility.is_visible() {
                 SAVE_PERIOD_MS
@@ -72,6 +76,9 @@ impl Satellite {
                 HIDDEN_PERIOD_MS
             };
             satellite._save = save_interval(cx, period);
+            if visibility.is_visible() {
+                satellite.repaint.changed();
+            }
         })
         .detach();
     }
@@ -92,7 +99,7 @@ impl Satellite {
         f: impl FnOnce(&mut HubModel) -> R,
     ) -> R {
         let result = f(self.model.hub_mut());
-        self.after_task(cx);
+        self.shown_task(cx);
         result
     }
 
@@ -105,11 +112,53 @@ impl Satellite {
         self.task(cx, |model| model.handle_main_message(message));
     }
 
-    /// `render`, with the hub's command itself in place of its clone.
-    pub fn render_command(&mut self, update: &SatelliteUpdate, cx: &mut Context<'_, Self>) {
-        self.task(cx, |model| {
-            model.render(update.command.clone(), &update.title)
+    /// `render`, with the hub's command itself in place of its clone, after a frame of the hub's
+    /// that showed something new if it was `moving`.
+    pub fn render_command(
+        &mut self,
+        update: &SatelliteUpdate,
+        moving: bool,
+        cx: &mut Context<'_, Self>,
+    ) {
+        if let Err(e) = self.model.render(update.command.clone(), &update.title) {
+            eprintln!("asrs: satellite: {e}");
+        }
+        self.after_task(cx);
+        let changed = moving || self.model.needs_draw();
+        let Some(window) = self.window else {
+            cx.notify();
+            return;
+        };
+        let this = cx.weak_entity();
+        cx.defer(move |cx| {
+            let dirty = window.update(cx, |_, window, _| window.is_dirty());
+            let _ = this.update(cx, |satellite, cx| {
+                if satellite.repaint.frame(changed || dirty.unwrap_or(false)) {
+                    cx.notify();
+                }
+            });
         });
+    }
+
+    /// How often the window has drawn the page.
+    pub fn draws(&self) -> u64 {
+        self.repaint.draws()
+    }
+
+    pub(crate) fn begin_draw(&mut self) {
+        self.repaint.begin_draw();
+    }
+
+    pub(crate) fn end_draw(&mut self, window: &Window) {
+        self.repaint.end_draw();
+        if window.has_next_frame_callbacks() {
+            self.repaint.changed();
+        }
+    }
+
+    /// Input whose effect is drawn rather than run as a task.
+    pub(crate) fn touched(&mut self) {
+        self.repaint.task();
     }
 
     /// The renderer's own `requestAnimationFrame` callbacks.
@@ -117,7 +166,7 @@ impl Satellite {
         for e in self.model.animation_frame() {
             eprintln!("asrs: satellite: {}: {}", e.name, e.message);
         }
-        self.after_task(cx);
+        self.shown_task(cx);
     }
 
     pub fn resized(&mut self, cx: &mut Context<'_, Self>) {
@@ -126,13 +175,13 @@ impl Satellite {
 
     pub fn key_down(&mut self, code: &str, cx: &mut Context<'_, Self>) -> bool {
         let handled = self.model.key_down(code);
-        self.after_task(cx);
+        self.shown_task(cx);
         handled
     }
 
     pub fn before_unload(&mut self, cx: &mut Context<'_, Self>) {
         self.model.before_unload();
-        self.after_task(cx);
+        self.shown_task(cx);
     }
 
     /// `window.sendMainMessage` from a view.
@@ -142,7 +191,7 @@ impl Satellite {
         cx: &mut Context<'_, Self>,
     ) {
         self.model.forward(message);
-        self.after_task(cx);
+        self.shown_task(cx);
     }
 
     fn task(
@@ -153,7 +202,13 @@ impl Satellite {
         if let Err(e) = f(&mut self.model) {
             eprintln!("asrs: satellite: {e}");
         }
+        self.shown_task(cx);
+    }
+
+    fn shown_task(&mut self, cx: &mut Context<'_, Self>) {
         self.after_task(cx);
+        self.repaint.task();
+        cx.notify();
     }
 
     fn after_task(&mut self, cx: &mut Context<'_, Self>) {
@@ -165,6 +220,5 @@ impl Satellite {
             self.title = title.clone();
             cx.emit(SatelliteEvent::Title(title));
         }
-        cx.notify();
     }
 }

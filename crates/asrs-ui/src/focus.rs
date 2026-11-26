@@ -6,6 +6,7 @@ use gpui_kit::{
 
 use crate::input::skia;
 use crate::selection::colors::page_active;
+use crate::text;
 use crate::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH};
 
 actions!(sequential_focus, [SelectContents]);
@@ -84,6 +85,7 @@ impl TransformedOutline {
                     &paint,
                 );
                 let extent = |v: f64| (v + 2.0 * margin) as u32;
+                let start = window.painted_scene().len();
                 skia::paint(
                     ("transformed-outline", &ring),
                     Bounds { origin, ..bounds },
@@ -91,6 +93,7 @@ impl TransformedOutline {
                     window,
                     cx,
                 );
+                text::painted_beside(window, cx, start);
             },
         )
         .absolute()

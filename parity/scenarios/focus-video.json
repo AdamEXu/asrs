@@ -1,5 +1,6 @@
 {
   "about": "Focus rings (#355) in the active hub: the video tab's buttons and its slider, which takes none, pressed and after keys",
+  "titleBar": true,
   "actions": [
     {
       "open": [

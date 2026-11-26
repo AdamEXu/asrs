@@ -1,5 +1,6 @@
 {
   "about": "Interaction (#325): the keys that scroll, after a click in the table, the sidebar and the timeline's overlay",
+  "titleBar": true,
   "actions": [
     {
       "open": [

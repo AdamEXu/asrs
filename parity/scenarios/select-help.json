@@ -1,5 +1,6 @@
 {
   "about": "Selecting and copying text in the source list Help window (#322): drags across titles, options and source lists and over the icons, double and triple clicks and Select All. Copies are compared as clipboard text",
+  "titleBar": true,
   "actions": [
     {
       "open": [

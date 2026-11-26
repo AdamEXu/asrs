@@ -1,0 +1,390 @@
+diff --git a/src/directx_renderer.rs b/src/directx_renderer.rs
+--- a/src/directx_renderer.rs
++++ b/src/directx_renderer.rs
+@@ -1,3 +1,4 @@
++// Modified by asrs: see patches/gpui-pre-windows-0.3.12.patch in the asrs repository.
+ use std::{
+     slice,
+     sync::{Arc, OnceLock},
+@@ -73,14 +74,19 @@
+     render_target: Option<ID3D11Texture2D>,
+     render_target_view: Option<ID3D11RenderTargetView>,
+ 
+-    // Path intermediate textures (with MSAA)
++    // Created by the first scene with paths at the current size
++    path_textures: Option<PathTextures>,
++
++    // Cached viewport
++    viewport: D3D11_VIEWPORT,
++}
++
++// Path intermediate textures (with MSAA)
++struct PathTextures {
+     path_intermediate_texture: ID3D11Texture2D,
+     path_intermediate_srv: Option<ID3D11ShaderResourceView>,
+     path_intermediate_msaa_texture: ID3D11Texture2D,
+     path_intermediate_msaa_view: Option<ID3D11RenderTargetView>,
+-
+-    // Cached viewport
+-    viewport: D3D11_VIEWPORT,
+ }
+ 
+ struct DirectXRenderPipelines {
+@@ -356,6 +362,11 @@
+             _ => [0.0f32; 4],
+         })?;
+         self.upload_scene_buffers(scene)?;
++        if !scene.paths.is_empty() {
++            let devices = self.devices.as_ref().context("devices missing")?;
++            let resources = self.resources.as_mut().context("resources missing")?;
++            resources.create_path_textures(devices)?;
++        }
+ 
+         let annotation = self
+             .devices
+@@ -409,7 +420,7 @@
+     /// goes through MetalRenderer; this is the Windows analogue). Draws into
+     /// the existing render target, copies it into a `D3D11_USAGE_STAGING`
+     /// texture, maps it, and converts BGRA to RGBA.
+-    #[cfg(feature = "test-support")]
++    #[cfg(any(test, feature = "test-support"))]
+     pub(crate) fn render_to_image(
+         &mut self,
+         scene: &Scene,
+@@ -497,6 +508,7 @@
+         let resources = self.resources.as_mut().context("resources missing")?;
+         resources.render_target.take();
+         resources.render_target_view.take();
++        resources.path_textures.take();
+ 
+         // Resizing the swap chain requires a call to the underlying DXGI adapter, which can return the device removed error.
+         // The app might have moved to a monitor that's attached to a different graphics device.
+@@ -619,15 +631,19 @@
+ 
+         let devices = self.devices.as_ref().context("devices missing")?;
+         let resources = self.resources.as_ref().context("resources missing")?;
++        let path_textures = resources
++            .path_textures
++            .as_ref()
++            .context("path textures missing")?;
+         // Clear intermediate MSAA texture
+         unsafe {
+             devices.device_context.ClearRenderTargetView(
+-                resources.path_intermediate_msaa_view.as_ref().unwrap(),
++                path_textures.path_intermediate_msaa_view.as_ref().unwrap(),
+                 &[0.0; 4],
+             );
+             // Set intermediate MSAA texture as render target
+             devices.device_context.OMSetRenderTargets(
+-                Some(slice::from_ref(&resources.path_intermediate_msaa_view)),
++                Some(slice::from_ref(&path_textures.path_intermediate_msaa_view)),
+                 None,
+             );
+         }
+@@ -660,9 +676,9 @@
+         // Resolve MSAA to non-MSAA intermediate texture
+         unsafe {
+             devices.device_context.ResolveSubresource(
+-                &resources.path_intermediate_texture,
++                &path_textures.path_intermediate_texture,
+                 0,
+-                &resources.path_intermediate_msaa_texture,
++                &path_textures.path_intermediate_msaa_texture,
+                 0,
+                 RENDER_TARGET_FORMAT,
+             );
+@@ -704,6 +720,10 @@
+ 
+         let devices = self.devices.as_ref().context("devices missing")?;
+         let resources = self.resources.as_ref().context("resources missing")?;
++        let path_textures = resources
++            .path_textures
++            .as_ref()
++            .context("path textures missing")?;
+         self.pipelines.path_sprite_pipeline.update_buffer(
+             &devices.device,
+             &devices.device_context,
+@@ -713,7 +733,7 @@
+         // Draw the sprites with the path texture
+         self.pipelines.path_sprite_pipeline.draw_with_texture(
+             &devices.device_context,
+-            slice::from_ref(&resources.path_intermediate_srv),
++            slice::from_ref(&path_textures.path_intermediate_srv),
+             slice::from_ref(&self.globals.sampler),
+             sprites.len() as u32,
+         )
+@@ -889,27 +909,36 @@
+             )?
+         };
+ 
+-        let (
+-            render_target,
+-            render_target_view,
+-            path_intermediate_texture,
+-            path_intermediate_srv,
+-            path_intermediate_msaa_texture,
+-            path_intermediate_msaa_view,
+-            viewport,
+-        ) = create_resources(devices, &swap_chain, width, height)?;
++        let (render_target, render_target_view, viewport) =
++            create_resources(devices, &swap_chain, width, height)?;
+         set_rasterizer_state(&devices.device, &devices.device_context)?;
+ 
+         Ok(Self {
+             swap_chain,
+             render_target: Some(render_target),
+             render_target_view,
++            path_textures: None,
++            viewport,
++        })
++    }
++
++    fn create_path_textures(&mut self, devices: &DirectXRendererDevices) -> Result<()> {
++        if self.path_textures.is_some() {
++            return Ok(());
++        }
++        let width = self.viewport.Width as u32;
++        let height = self.viewport.Height as u32;
++        let (path_intermediate_texture, path_intermediate_srv) =
++            create_path_intermediate_texture(&devices.device, width, height)?;
++        let (path_intermediate_msaa_texture, path_intermediate_msaa_view) =
++            create_path_intermediate_msaa_texture_and_view(&devices.device, width, height)?;
++        self.path_textures = Some(PathTextures {
+             path_intermediate_texture,
++            path_intermediate_srv,
+             path_intermediate_msaa_texture,
+             path_intermediate_msaa_view,
+-            path_intermediate_srv,
+-            viewport,
+-        })
++        });
++        Ok(())
+     }
+ 
+     #[inline]
+@@ -919,21 +948,11 @@
+         width: u32,
+         height: u32,
+     ) -> Result<()> {
+-        let (
+-            render_target,
+-            render_target_view,
+-            path_intermediate_texture,
+-            path_intermediate_srv,
+-            path_intermediate_msaa_texture,
+-            path_intermediate_msaa_view,
+-            viewport,
+-        ) = create_resources(devices, &self.swap_chain, width, height)?;
++        let (render_target, render_target_view, viewport) =
++            create_resources(devices, &self.swap_chain, width, height)?;
+         self.render_target = Some(render_target);
+         self.render_target_view = render_target_view;
+-        self.path_intermediate_texture = path_intermediate_texture;
+-        self.path_intermediate_msaa_texture = path_intermediate_msaa_texture;
+-        self.path_intermediate_msaa_view = path_intermediate_msaa_view;
+-        self.path_intermediate_srv = path_intermediate_srv;
++        self.path_textures = None;
+         self.viewport = viewport;
+         Ok(())
+     }
+@@ -1361,18 +1380,10 @@
+ ) -> Result<(
+     ID3D11Texture2D,
+     Option<ID3D11RenderTargetView>,
+-    ID3D11Texture2D,
+-    Option<ID3D11ShaderResourceView>,
+-    ID3D11Texture2D,
+-    Option<ID3D11RenderTargetView>,
+     D3D11_VIEWPORT,
+ )> {
+     let (render_target, render_target_view) =
+         create_render_target_and_its_view(swap_chain, &devices.device)?;
+-    let (path_intermediate_texture, path_intermediate_srv) =
+-        create_path_intermediate_texture(&devices.device, width, height)?;
+-    let (path_intermediate_msaa_texture, path_intermediate_msaa_view) =
+-        create_path_intermediate_msaa_texture_and_view(&devices.device, width, height)?;
+     let viewport = D3D11_VIEWPORT {
+         TopLeftX: 0.0,
+         TopLeftY: 0.0,
+@@ -1381,15 +1392,7 @@
+         MinDepth: 0.0,
+         MaxDepth: 1.0,
+     };
+-    Ok((
+-        render_target,
+-        render_target_view,
+-        path_intermediate_texture,
+-        path_intermediate_srv,
+-        path_intermediate_msaa_texture,
+-        path_intermediate_msaa_view,
+-        viewport,
+-    ))
++    Ok((render_target, render_target_view, viewport))
+ }
+ 
+ #[inline]
+@@ -2056,3 +2059,147 @@
+         ))
+     }
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use std::prelude::v1::test;
++    use windows::Win32::{Foundation::HMODULE, UI::WindowsAndMessaging::*};
++    use windows::core::w;
++
++    fn create_devices() -> Option<DirectXDevices> {
++        let dxgi_factory: IDXGIFactory6 =
++            unsafe { CreateDXGIFactory2(DXGI_CREATE_FACTORY_FLAGS(0)) }.ok()?;
++        let adapter: IDXGIAdapter1 = unsafe { dxgi_factory.EnumWarpAdapter() }.ok()?;
++        let mut device = None;
++        let mut device_context = None;
++        unsafe {
++            D3D11CreateDevice(
++                None,
++                D3D_DRIVER_TYPE_WARP,
++                HMODULE::default(),
++                D3D11_CREATE_DEVICE_BGRA_SUPPORT,
++                None,
++                D3D11_SDK_VERSION,
++                Some(&mut device),
++                None,
++                Some(&mut device_context),
++            )
++        }
++        .ok()?;
++        Some(DirectXDevices {
++            adapter,
++            dxgi_factory,
++            device: device?,
++            device_context: device_context?,
++        })
++    }
++
++    fn create_renderer(devices: &DirectXDevices) -> DirectXRenderer {
++        let hwnd = unsafe {
++            CreateWindowExW(
++                WINDOW_EX_STYLE(0),
++                w!("STATIC"),
++                w!(""),
++                WS_POPUP,
++                0,
++                0,
++                64,
++                64,
++                None,
++                None,
++                None,
++                None,
++            )
++        }
++        .expect("window");
++        DirectXRenderer::new(hwnd, devices, true).expect("renderer")
++    }
++
++    fn device_size(width: i32, height: i32) -> Size<DevicePixels> {
++        size(DevicePixels(width), DevicePixels(height))
++    }
++
++    fn path_scene() -> Scene {
++        let mut path = Path::new(point(px(3.), px(2.)));
++        path.line_to(point(px(50.), px(9.)));
++        path.curve_to(point(px(10.), px(40.)), point(px(45.), px(38.)));
++        path.color = rgb(0x336699).into();
++        path.content_mask = ContentMask {
++            bounds: Bounds::new(Point::default(), size(px(64.), px(48.))),
++        };
++        let mut scene = Scene::default();
++        scene.insert_primitive(path.scale(1.));
++        scene.finish();
++        scene
++    }
++
++    fn render(renderer: &mut DirectXRenderer, scene: &Scene) -> image::RgbaImage {
++        renderer
++            .render_to_image(scene, WindowBackgroundAppearance::Opaque)
++            .expect("image")
++    }
++
++    fn path_texture_sizes(renderer: &DirectXRenderer) -> Option<[(u32, u32, u32); 2]> {
++        let textures = renderer.resources.as_ref()?.path_textures.as_ref()?;
++        Some(
++            [
++                &textures.path_intermediate_texture,
++                &textures.path_intermediate_msaa_texture,
++            ]
++            .map(|texture| {
++                let mut desc = D3D11_TEXTURE2D_DESC::default();
++                unsafe { texture.GetDesc(&mut desc) };
++                (desc.Width, desc.Height, desc.SampleDesc.Count)
++            }),
++        )
++    }
++
++    #[test]
++    fn test_path_textures_follow_the_scenes_and_the_window() {
++        let devices = create_devices().expect("devices");
++        let mut renderer = create_renderer(&devices);
++        let empty = Scene::default();
++        let paths = path_scene();
++        renderer.resize(device_size(64, 48)).expect("resized");
++        let blank = render(&mut renderer, &empty);
++        assert_eq!(path_texture_sizes(&renderer), None);
++
++        let first = render(&mut renderer, &paths);
++        assert_ne!(first, blank);
++        assert_eq!(
++            path_texture_sizes(&renderer),
++            Some([(64, 48, 1), (64, 48, 4)])
++        );
++        assert_eq!(render(&mut renderer, &paths), first);
++
++        for (width, height) in [(80, 60), (72, 50), (64, 48)] {
++            renderer
++                .resize(device_size(width, height))
++                .expect("resized");
++            assert_eq!(path_texture_sizes(&renderer), None);
++            let mut image = render(&mut renderer, &paths);
++            assert_eq!(
++                image::imageops::crop(&mut image, 0, 0, 64, 48).to_image(),
++                first
++            );
++            let (width, height) = (width as u32, height as u32);
++            assert_eq!(
++                path_texture_sizes(&renderer),
++                Some([(width, height, 1), (width, height, 4)])
++            );
++        }
++
++        let devices = create_devices().expect("devices");
++        renderer.handle_device_lost(&devices).expect("recovered");
++        renderer.mark_drawable();
++        assert_eq!(path_texture_sizes(&renderer), None);
++        assert_eq!(render(&mut renderer, &empty), blank);
++        assert_eq!(path_texture_sizes(&renderer), None);
++        assert_eq!(render(&mut renderer, &paths), first);
++        assert_eq!(
++            path_texture_sizes(&renderer),
++            Some([(64, 48, 1), (64, 48, 4)])
++        );
++    }
++}
+diff --git a/src/window.rs b/src/window.rs
+--- a/src/window.rs
++++ b/src/window.rs
+@@ -1,3 +1,4 @@
++// Modified by asrs: see patches/gpui-pre-windows-0.3.12.patch in the asrs repository.
+ #![deny(unsafe_op_in_unsafe_fn)]
+ 
+ use std::{
+@@ -492,7 +493,7 @@
+         );
+ 
+         let (mut dwexstyle, dwstyle) = if params.kind == WindowKind::PopUp {
+-            (WS_EX_TOOLWINDOW | WS_EX_TOPMOST, WINDOW_STYLE(0x0))
++            (WS_EX_TOOLWINDOW | WS_EX_TOPMOST, WS_POPUP)
+         } else {
+             let mut dwstyle = WS_SYSMENU;
+ 

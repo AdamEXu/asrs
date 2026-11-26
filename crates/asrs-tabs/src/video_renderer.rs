@@ -134,6 +134,8 @@ impl VideoImage {
 pub struct VideoRenderer {
     image: Rc<RefCell<VideoImage>>,
     aspect_ratio: Option<f64>,
+    /// Whether the last command changed what the element shows or loads.
+    changed: bool,
 }
 
 impl VideoRenderer {
@@ -141,6 +143,7 @@ impl VideoRenderer {
         VideoRenderer {
             image,
             aspect_ratio: None,
+            changed: false,
         }
     }
 
@@ -157,8 +160,10 @@ impl VideoRenderer {
             return;
         };
         let mut image = self.image.borrow_mut();
+        let before = (image.hidden, image.src.clone());
         image.hidden = command.is_empty();
         image.set_src(command);
+        self.changed = before != (image.hidden, image.src.clone()) || image.pending.is_some();
         let [width, height] = image.natural_size();
         self.aspect_ratio = (width > 0.0 && height > 0.0).then(|| width / height);
     }
@@ -180,5 +185,9 @@ impl<Cx: ?Sized> TabRenderer<Cx> for VideoRenderer {
     fn render(&mut self, _: &mut Cx, command: &dyn TabCommand) -> Result<(), JsError> {
         self.render_command(&command.to_js());
         Ok(())
+    }
+
+    fn needs_draw(&self) -> bool {
+        self.changed
     }
 }

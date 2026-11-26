@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U23): a mechanism tab popped out, whose window takes the mechanism's aspect ratio, at two times",
+  "titleBar": true,
   "actions": [
     {
       "open": [
@@ -67,12 +68,14 @@
     {
       "mouse": "move",
       "x": 1041,
-      "y": 19
+      "y": 19,
+      "on": "button.popup"
     },
     {
       "mouse": "click",
       "x": 1041,
-      "y": 19
+      "y": 19,
+      "on": "button.popup"
     },
     {
       "prompt": "satellite"

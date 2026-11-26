@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::svg::Backend;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum FilterFn {
     Invert(f64),
@@ -75,8 +77,9 @@ impl FilterChain {
 
     /// Filters one straight-alpha sRGB colour the way Chromium does for the CSS shorthands: each
     /// function in sRGB on unpremultiplied components in floating point, clamped to [0, 1] after
-    /// every step, rounded to 8 bits once at the end. Matches every probe in the oracle's
-    /// `ui-icons` scenes exactly (quantizing between steps, as an 8-bit table would, does not).
+    /// every step, rounded to 8 bits once at the end (`SkRasterPipeline` does that in `f32` and takes a
+    /// tie to even). Matches every probe in the oracle's `ui-icons` scenes exactly (quantizing
+    /// between steps, as an 8-bit table would, does not).
     pub fn apply(&self, rgba: [u8; 4]) -> [u8; 4] {
         let mut c = [0, 1, 2].map(|i| f64::from(rgba[i]) / 255.0);
         let mut a = f64::from(rgba[3]) / 255.0;
@@ -94,7 +97,10 @@ impl FilterChain {
             c = c.map(|x| x.clamp(0.0, 1.0));
             a = a.clamp(0.0, 1.0);
         }
-        let q = |x: f64| (x * 255.0 + 0.5) as u8;
+        let q = |x: f64| match Backend::HOST {
+            Backend::Graphite => (x * 255.0 + 0.5) as u8,
+            Backend::Raster => (x as f32 * 255.0).round_ties_even() as u8,
+        };
         [q(c[0]), q(c[1]), q(c[2]), q(a)]
     }
 }

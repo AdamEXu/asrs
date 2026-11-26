@@ -485,6 +485,7 @@ impl LineGraphRenderer {
         self.last_render_state = render_state;
 
         let dpr = frame.device_pixel_ratio;
+        text.set_device_scale(dpr as f32);
         let width = frame.width;
         let height = frame.height;
         let mut ctx = Canvas2d::new(math::to_uint32(width * dpr), math::to_uint32(height * dpr));
@@ -1213,5 +1214,9 @@ impl<C: TabCx + ?Sized> TabRenderer<C> for LineGraphRenderer {
                 Err(error)
             }
         }
+    }
+
+    fn needs_draw(&self) -> bool {
+        self.dom.borrow().painted.is_some() || !self.help_timers.is_empty()
     }
 }

@@ -7,7 +7,7 @@ mod net;
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, RecvTimeoutError, Sender, channel};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, TryLockError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
@@ -92,6 +92,7 @@ struct AssetDownloads {
     #[cfg(feature = "parity")]
     timers: Arc<Mutex<Vec<Timer>>>,
     stopped: Arc<AtomicBool>,
+    extracting: Arc<Mutex<()>>,
     events: Sender<Event>,
     /// `updateCallback` calls, each with where its result goes.
     updates: async_channel::Receiver<Sender<bool>>,
@@ -124,6 +125,7 @@ pub fn start(config: Config, cx: &mut App) {
     #[cfg(feature = "parity")]
     let timers = Arc::<Mutex<Vec<Timer>>>::default();
     let stopped = Arc::new(AtomicBool::new(false));
+    let extracting = Arc::new(Mutex::new(()));
     let net = Net::new(config.api.starts_with("https:"));
     let worker = {
         let status = status.clone();
@@ -143,6 +145,7 @@ pub fn start(config: Config, cx: &mut App) {
             started: Instant::now(),
             skipped_ms: 0.0,
             stopped: stopped.clone(),
+            extracting: extracting.clone(),
             status,
             #[cfg(feature = "parity")]
             timers: timers.clone(),
@@ -159,6 +162,7 @@ pub fn start(config: Config, cx: &mut App) {
         #[cfg(feature = "parity")]
         timers,
         stopped,
+        extracting,
         events,
         updates: updated.clone(),
         net,
@@ -171,6 +175,23 @@ pub fn start(config: Config, cx: &mut App) {
         }
     })
     .detach();
+}
+
+/// Runs `load` unless an asset is being extracted, whose half-written folder would be reported as
+/// one that failed to load.
+pub fn between_extractions(cx: &mut App, load: impl FnOnce(&mut App)) {
+    let extracting = cx
+        .try_global::<AssetDownloads>()
+        .map(|downloads| downloads.extracting.clone());
+    let Some(extracting) = extracting else {
+        return load(cx);
+    };
+    let _guard = match extracting.try_lock() {
+        Ok(guard) => guard,
+        Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+        Err(TryLockError::WouldBlock) => return,
+    };
+    load(cx);
 }
 
 /// Ends the loop and its requests without waiting for them: no file changes from here on, apart
@@ -211,6 +232,7 @@ struct Worker {
     started: Instant,
     skipped_ms: f64,
     stopped: Arc<AtomicBool>,
+    extracting: Arc<Mutex<()>>,
     status: Arc<Mutex<String>>,
     #[cfg(feature = "parity")]
     timers: Arc<Mutex<Vec<Timer>>>,
@@ -240,6 +262,8 @@ impl Worker {
             }
             let now = self.now();
             let zone = NamedZone::system();
+            let extracting = self.extracting.clone();
+            let _extracting = locked(&extracting);
             let Worker {
                 downloader,
                 fs,

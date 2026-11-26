@@ -1,5 +1,6 @@
 {
   "about": "Interaction (U23): a line graph popped out with the tab bar's button; the satellite's plot hovered, clicked, stepped with the arrow keys, idled by a right click, zoomed with the trackpad and grab-zoomed with shift held back (a drag pan), all of which drive the hub's selection and timeline; the hub's own captures hold what the satellite set. Each satellite capture compares the state the satellite saved, and state.json at the end holds both windows",
+  "titleBar": true,
   "actions": [
     {
       "open": [
@@ -105,12 +106,14 @@
     {
       "mouse": "move",
       "x": 1041,
-      "y": 19
+      "y": 19,
+      "on": "button.popup"
     },
     {
       "mouse": "click",
       "x": 1041,
-      "y": 19
+      "y": 19,
+      "on": "button.popup"
     },
     {
       "prompt": "satellite"

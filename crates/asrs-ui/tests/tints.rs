@@ -1,4 +1,4 @@
-#![cfg(target_os = "macos")]
+#![cfg(any(target_os = "macos", target_os = "linux"))]
 #![allow(clippy::disallowed_methods)]
 
 use std::collections::BTreeSet;
@@ -9,7 +9,8 @@ use asrs_ui::filter::FilterChain;
 use asrs_ui::theme::{self, chains};
 
 fn records() -> Vec<Record> {
-    vectors::load("ui/tints-macos").expect("parity/vectors/ui/tints-macos is committed")
+    vectors::load(&format!("ui/tints-{}", std::env::consts::OS))
+        .expect("parity/vectors/ui has this platform's tints")
 }
 
 fn rgba(r: &Record) -> [u8; 4] {

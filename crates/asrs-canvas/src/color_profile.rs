@@ -483,18 +483,15 @@ impl IccTransform {
     }
 
     /// A premultiplied pixmap of straight-alpha RGBA in this colour space.
-    pub fn pixmap(&self, width: u32, height: u32, rgba: &[u8]) -> Option<Pixmap> {
+    pub fn pixmap(&self, width: u32, height: u32, mut rgba: Vec<u8>) -> Option<Pixmap> {
         if rgba.len() != width as usize * height as usize * 4 {
             return None;
         }
         let mut cache: HashMap<[u8; 4], [u8; 4]> = HashMap::new();
-        let data = rgba
-            .as_chunks::<4>()
-            .0
-            .iter()
-            .flat_map(|&p| *cache.entry(p).or_insert_with(|| self.convert(p)))
-            .collect();
-        Pixmap::from_vec(data, IntSize::from_wh(width, height)?)
+        for p in rgba.as_chunks_mut::<4>().0 {
+            *p = *cache.entry(*p).or_insert_with(|| self.convert(*p));
+        }
+        Pixmap::from_vec(rgba, IntSize::from_wh(width, height)?)
     }
 }
 
@@ -583,6 +580,23 @@ mod tests {
             let [r, g, b] = src;
             assert_eq!(t.convert([r, g, b, 255])[..3], chromium, "{src:?}");
         }
+    }
+
+    #[test]
+    fn a_pixmap_is_made_in_the_buffer_it_is_given() {
+        let t =
+            IccTransform::from_icc(&profile(ADOBE_RGB, curv(0x0233))).expect("Adobe RGB converts");
+        let rgba: Vec<u8> = (0..=255).cycle().step_by(37).take(4 * 35).collect();
+        let want: Vec<u8> = rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .flat_map(|&p| t.convert(p))
+            .collect();
+        let at = rgba.as_ptr();
+        let pixmap = t.pixmap(7, 5, rgba).unwrap();
+        assert_eq!(pixmap.data(), want);
+        assert_eq!(pixmap.data().as_ptr(), at);
     }
 
     #[test]

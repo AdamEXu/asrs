@@ -11,6 +11,7 @@ import { saveDisplayProfile, type DisplayProfile } from "./app/display";
 import { GENERATED_LOGS } from "./app/logs";
 import { busyReasons, domDump, downloadShows, focused, hubReady, sendMainMessage } from "./app/page";
 import { patchPageHtml } from "./app/patches";
+import { placePoint } from "./app/points";
 import { actionKind, parseScenario, type Action, type GlMode, type Scale, type Theme } from "./app/scenario";
 import { installTap } from "./app/tap";
 import { GRID_STEP, titleMap, titleMapArgs, type TitleMap } from "./app/tooltips";
@@ -735,10 +736,22 @@ async function traverse(contents: Electron.WebContents, name: string, count: num
   fs.writeFileSync(path.join(folder, `${name}.json`), records.map((record) => JSON.stringify(record) + "\n").join(""));
 }
 
+// Where each mouse and wheel action went and the size prompt actions left the prompt at, by index.
+const points: Record<number, { x: number; y: number; hit: string | null } | { width: number; height: number }> = {};
+
+async function place(index: number, x: number, y: number, on?: string, right?: number) {
+  const win = active();
+  const titleBar = scenario.titleBar && win === target && process.platform === "linux";
+  const at = scenario.page === "app" ? await exec<{ x: number; y: number; hit: string | null }>(call(placePoint, x, y, titleBar, on ?? null, process.platform === "darwin" ? null : (right ?? null)), win) : { x, y, hit: null };
+  if (process.platform === "darwin" && (at.x !== x || at.y !== y)) throw new Error(`[${x}, ${y}] does not hit ${on}`);
+  points[index] = at;
+  return at;
+}
+
 let pressedButton: string | null = null;
 const MOUSE_TYPES = { move: ["mouseMove"], down: ["mouseDown"], up: ["mouseUp"], click: ["mouseDown", "mouseUp"], leave: ["mouseLeave"] } as const;
 
-async function perform(action: Action) {
+async function perform(action: Action, index: number) {
   const contents = active().webContents;
   if ("main" in action) {
     await exec(call(sendMainMessage, action.main, resolveClips(action.data)));
@@ -755,21 +768,23 @@ async function perform(action: Action) {
     await waitIdle();
   } else if ("mouse" in action) {
     const button = action.button ?? "left";
-    pointer[0] = action.x;
-    pointer[1] = action.y;
+    const { x, y } = await place(index, action.x, action.y, action.on, action.right);
+    pointer[0] = x;
+    pointer[1] = y;
     for (const type of MOUSE_TYPES[action.mouse]) {
       // A real mouse reports the held button on its down and moves (PointerEvent.buttons).
       if (type === "mouseDown") pressedButton = button;
       if (type === "mouseUp") pressedButton = null;
       const modifiers = [...hostModifiers(action.modifiers), ...(pressedButton === null ? [] : [`${pressedButton}ButtonDown`])];
-      sendScripted(contents, { type, x: action.x, y: action.y, button, clickCount: action.clickCount ?? 1, modifiers } as any);
+      sendScripted(contents, { type, x, y, button, clickCount: action.clickCount ?? 1, modifiers } as any);
     }
   } else if ("wheel" in action) {
     const w = action.wheel;
+    const { x, y } = await place(index, w.x, w.y);
     sendScripted(contents, {
       type: "mouseWheel",
-      x: w.x,
-      y: w.y,
+      x,
+      y,
       deltaX: w.deltaX ?? 0,
       deltaY: w.deltaY ?? 0,
       wheelTicksX: w.wheelTicksX ?? 0,
@@ -778,6 +793,7 @@ async function perform(action: Action) {
       canScroll: true
     } as any);
   } else if ("pointer" in action) {
+    points[index] = { x: action.x, y: action.y, hit: null };
     await movePointer(action);
   } else if ("activate" in action) {
     await activate(action.activate);
@@ -798,6 +814,11 @@ async function perform(action: Action) {
     clickAppMenu(action.appMenu);
   } else if ("prompt" in action) {
     await switchPrompt(action.prompt, action.index ?? 0, action.width, action.height);
+    if (action.width !== undefined) {
+      // A window manager keeps it at its least size, which on Linux is its content's.
+      const [width, height] = prompt!.getContentSize();
+      points[index] = { width, height };
+    }
   } else if ("download" in action) {
     await until(`the download window to show ${JSON.stringify(action.download)}`, READY_TIMEOUT_MS, () => exec<boolean>(call(downloadShows, action.download), active()));
   } else if ("role" in action) {
@@ -880,7 +901,7 @@ async function run() {
   for (const [i, action] of scenario.actions.entries()) {
     performing = `action ${i} (${actionKind(action)})`;
     try {
-      await perform(action);
+      await perform(action, i);
     } catch (e) {
       throw new Error(`action ${i} (${actionKind(action)}): ${(e as Error).message}`);
     }
@@ -926,12 +947,15 @@ function finish(elapsedMs: number | null, error: unknown) {
     elapsedMs,
     blockedRequests: [...new Set(blockedRequests)].sort(),
     dialogs,
+    points,
     files,
     errors
   };
   fs.writeFileSync(path.join(out, "run.json"), JSON.stringify(record, null, 1) + "\n");
   if (errors.length > 0) console.error(`${scenario.name} ${scale}x ${theme}:\n  ${errors.join("\n  ")}`);
-  app.exit(errors.length > 0 ? 1 : 0);
+  // On Linux exiting past an open modal prompt crashes.
+  for (const win of [...windows].reverse()) if (!win.isDestroyed()) win.destroy();
+  setTimeout(() => app.exit(errors.length > 0 ? 1 : 0), 200);
 }
 
 process.on("uncaughtException", (e) => {

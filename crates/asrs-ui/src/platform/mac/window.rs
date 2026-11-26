@@ -1,10 +1,13 @@
 //! The parts of Electron's `NativeWindowMac` GPUI's window options do not cover.
 
 use gpui_kit::Window;
+use objc2::MainThreadMarker;
 use objc2::rc::Retained;
-use objc2::{MainThreadMarker, MainThreadOnly};
-use objc2_app_kit::{NSScreen, NSToolbar, NSWindow, NSWindowCollectionBehavior, NSWindowStyleMask};
-use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
+use objc2_app_kit::{
+    NSAppearance, NSAppearanceNameAqua, NSAppearanceNameDarkAqua, NSApplication, NSColor, NSScreen,
+    NSWindow, NSWindowButton, NSWindowCollectionBehavior, NSWindowStyleMask, NSWindowTabbingMode,
+};
+use objc2_foundation::{NSPoint, NSRect, NSSize};
 
 use super::ns_window;
 
@@ -14,7 +17,7 @@ pub fn native(window: &Window) -> Option<NativeWindow> {
     ns_window(window).map(NativeWindow)
 }
 
-pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
+pub fn titled_content_size(width: f64, height: f64, _scale: f64) -> (f64, f64) {
     let Some(mtm) = MainThreadMarker::new() else {
         return (width, height);
     };
@@ -29,27 +32,35 @@ pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
 
 pub fn title_bar_height() -> f64 {
     const FRAME: f64 = 1000.0;
-    FRAME - titled_content_size(FRAME, FRAME).1
+    FRAME - titled_content_size(FRAME, FRAME, 1.0).1
 }
 
-pub(super) fn add_hidden_inset_toolbar(window: &NSWindow) {
+/// GPUI's own background is black, which the title bar's material lets through before macOS 26.
+pub fn install_electron_frame(window: &Window) {
+    let Some(window) = ns_window(window) else {
+        return;
+    };
+    window.setBackgroundColor(Some(&NSColor::windowBackgroundColor()));
+    window.setTabbingMode(NSWindowTabbingMode::Disallowed);
+}
+
+pub fn set_app_appearance(dark: Option<bool>) {
     let Some(mtm) = MainThreadMarker::new() else {
         return;
     };
-    let toolbar = NSToolbar::initWithIdentifier(
-        NSToolbar::alloc(mtm),
-        &NSString::from_str("titlebarStylingToolbar"),
-    );
-    #[allow(deprecated)]
-    toolbar.setShowsBaselineSeparator(false);
-    window.setToolbar(Some(&toolbar));
+    // SAFETY: immutable NSString constants exported by AppKit.
+    let name = dark.map(|dark| unsafe {
+        if dark {
+            NSAppearanceNameDarkAqua
+        } else {
+            NSAppearanceNameAqua
+        }
+    });
+    let appearance = name.and_then(NSAppearance::appearanceNamed);
+    NSApplication::sharedApplication(mtm).setAppearance(appearance.as_deref());
 }
 
 impl NativeWindow {
-    pub fn hidden_inset_titlebar(&self) {
-        add_hidden_inset_toolbar(&self.0);
-    }
-
     pub fn content_size_for_frame(&self, width: f64, height: f64) -> (f64, f64) {
         let frame = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(width, height));
         let content = self.0.contentRectForFrameRect(frame);
@@ -78,7 +89,7 @@ impl NativeWindow {
         }
     }
 
-    /// `NativeWindowMac::SetFullScreenable`.
+    /// `NativeWindowMac::SetFullScreenable`, then `UpdateZoomButton`.
     pub fn set_fullscreenable(&self, fullscreenable: bool) {
         let mut behavior = self.0.collectionBehavior();
         behavior.set(
@@ -90,6 +101,11 @@ impl NativeWindow {
             !fullscreenable,
         );
         self.0.setCollectionBehavior(behavior);
+        if !self.0.styleMask().contains(NSWindowStyleMask::Resizable)
+            && let Some(zoom) = self.0.standardWindowButton(NSWindowButton::ZoomButton)
+        {
+            zoom.setEnabled(false);
+        }
     }
 
     pub fn begin_sheet(&self, sheet: &NativeWindow) {

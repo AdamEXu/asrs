@@ -143,7 +143,20 @@ pub fn blend_lcd(background: [u8; 3], color: [u8; 3], mask: [u8; 3]) -> [u8; 3] 
 }
 
 pub fn blend_lcd_channel(background: u8, color: u8, mask5: u8) -> u8 {
-    let scale = i32::from(mask5 + (mask5 >> 4));
+    blend32(background, color, i32::from(mask5 + (mask5 >> 4)))
+}
+
+/// `blend_lcd16` onto an opaque `background`: `blend_lcd` of a colour with `alpha`.
+pub fn blend_lcd_alpha(background: [u8; 3], color: [u8; 3], alpha: u8, mask: [u8; 3]) -> [u8; 3] {
+    [0, 1, 2].map(|c| {
+        let mask5 = i32::from(mask[c] >> 3);
+        let scale = ((mask5 + (mask5 >> 4)) * (i32::from(alpha) + 1)) >> 8;
+        blend32(background[c], color[c], scale)
+    })
+}
+
+/// `SkBlend32`.
+fn blend32(background: u8, color: u8, scale: i32) -> u8 {
     let (src, dst) = (i32::from(color), i32::from(background));
     (dst + (((src - dst) * scale) >> 5)) as u8
 }
@@ -281,6 +294,21 @@ mod tests {
         assert_eq!((bytes.len(), bytes[(2 * ROWS + 5) * 256]), (LCD_BYTES, 25));
         assert_eq!(LcdGammaLut::from_bytes(&bytes), Some(lut));
         assert_eq!(LcdGammaLut::from_bytes(&bytes[1..]), None);
+    }
+
+    #[test]
+    fn an_opaque_colour_blends_the_same_with_and_without_alpha() {
+        for mask in 0..=255u8 {
+            for (background, color) in [([255; 3], [0x22; 3]), ([0x22, 9, 200], [0xee, 80, 3])] {
+                let masks = [mask, 255 - mask, mask / 2];
+                assert_eq!(
+                    blend_lcd(background, color, masks),
+                    blend_lcd_alpha(background, color, 255, masks)
+                );
+                assert_eq!(blend_lcd_alpha(background, color, 0, masks), background);
+            }
+        }
+        assert_eq!(blend_lcd_alpha([255; 3], [0; 3], 127, [255; 3]), [127; 3]);
     }
 
     #[test]
