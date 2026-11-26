@@ -364,6 +364,7 @@ dependencies = [
  "asrs-tabs",
  "asrs-ui",
  "async-channel",
+ "backtrace",
  "fs4",
  "futures-util",
  "image",

@@ -4,7 +4,7 @@
 //! A panic in the hook aborts, and the panicking thread may hold any lock, so the file is written
 //! by a thread of its own that the hook waits for only so long.
 
-use std::backtrace::Backtrace;
+use backtrace::Backtrace;
 use std::cell::Cell;
 use std::fmt::Write as _;
 use std::fs::{self, File, OpenOptions};
@@ -83,16 +83,15 @@ impl CrashLog {
         let _ = write!(text, ":\n{}\n", without_contents(message));
         // Without symbols, a frame's address is found by its distance to this function.
         let _ = writeln!(text, "CrashLog::new at {:p}", CrashLog::new as *const ());
+        let backtrace = match WRITING.try_lock() {
+            Ok(_free) => Some(Backtrace::new_unresolved()),
+            Err(_) => None,
+        };
         let entry = Entry {
             dir: self.dir.clone(),
             home: self.home.clone(),
             text,
-            // Capturing waits for a writer that is looking up symbols.
-            backtrace: if WRITING.try_lock().is_ok() {
-                Backtrace::force_capture()
-            } else {
-                Backtrace::disabled()
-            },
+            backtrace,
         };
         let (written, done) = mpsc::channel();
         let writer = thread::Builder::new()
@@ -123,36 +122,32 @@ fn aborts(info: &PanicHookInfo<'_>) -> bool {
 }
 
 fn wait(done: &Receiver<bool>) -> bool {
-    let first = done.recv_timeout(WRITE_WAIT).unwrap_or(false);
-    let _ = done.recv_timeout(WRITE_WAIT);
-    first
+    done.recv_timeout(WRITE_WAIT).unwrap_or(false)
 }
 
 struct Entry {
     dir: PathBuf,
     home: Option<String>,
     text: String,
-    backtrace: Backtrace,
+    backtrace: Option<Backtrace>,
 }
 
 impl Entry {
-    /// Reports the panic, then, once its symbols are found, the backtrace.
     fn write(self, written: &Sender<bool>) {
         let _ = WRITER.try_with(|writer| writer.set(true));
         let _one = WRITING.lock().unwrap_or_else(PoisonError::into_inner);
         let home = self.home.as_deref();
         let file = open(&self.dir).and_then(|mut file| {
             file.write_all(without_home(&self.text, home).as_bytes())?;
+            if let Some(backtrace) = &self.backtrace {
+                let backtrace = without_home(&format!("{backtrace:#?}"), home);
+                file.write_all(bounded(&backtrace, MAX_BACKTRACE).as_bytes())?;
+            }
+            file.write_all(b"\n\n")?;
             file.sync_all()?;
             Ok(file)
         });
         let _ = written.send(file.is_ok());
-        let Ok(mut file) = file else { return };
-        let backtrace = without_home(&format!("{:#}", self.backtrace), home);
-        let _ = file.write_all(bounded(&backtrace, MAX_BACKTRACE).as_bytes());
-        let _ = file.write_all(b"\n\n");
-        let _ = file.sync_all();
-        let _ = written.send(true);
     }
 }
 
