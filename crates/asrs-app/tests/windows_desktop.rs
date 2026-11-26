@@ -255,7 +255,7 @@ app.whenReady().then(() => {
                 .size_full()
                 .on_mouse_down(MouseButton::Left, move |event, window, cx| {
                     presses.set(presses.get() + 1);
-                    let [x, y] = [event.position.x, event.position.y].map(|v| f32::from(v));
+                    let [x, y] = [event.position.x, event.position.y].map(f32::from);
                     if replacement_enabled.get()
                         && (400.0..600.0).contains(&x)
                         && (120.0..142.0).contains(&y)
