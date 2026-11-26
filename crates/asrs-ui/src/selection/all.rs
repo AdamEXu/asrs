@@ -27,6 +27,12 @@ pub fn set(all: bool, window: &Window, cx: &mut App) {
     }
 }
 
+pub(crate) fn forget(cx: &mut App, window: WindowId) {
+    if cx.has_global::<Windows>() {
+        cx.global_mut::<Windows>().0.remove(&window);
+    }
+}
+
 /// What a form control's text is selected with.
 pub fn colors(window: &Window, cx: &App) -> Option<SelectionColors> {
     let id = window.window_handle().window_id();

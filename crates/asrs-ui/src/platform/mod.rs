@@ -203,6 +203,13 @@ pub fn init(_cx: &mut App) {
     imp::init();
 }
 
+/// Lists the installed families before the kit looks for its default fonts among them: GPUI's own
+/// list takes a tenth of a second and leaves the fonts it compared parsed.
+#[cfg(target_os = "macos")]
+pub(crate) fn name_fonts(cx: &App) {
+    imp::name_fonts(cx);
+}
+
 /// Whether the key event being handled is the numpad's Enter, which GPUI also calls `enter`.
 /// Off macOS nothing tells the two apart (#262).
 pub fn numpad_enter(cx: &App) -> bool {

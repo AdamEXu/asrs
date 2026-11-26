@@ -167,6 +167,60 @@ diff --git a/src/taffy.rs b/src/taffy.rs
          );
  
          let bounds = (snapped_bounds / scale_factor).map(Pixels);
+diff --git a/src/text_system.rs b/src/text_system.rs
+--- a/src/text_system.rs
++++ b/src/text_system.rs
+@@ -1,3 +1,4 @@
++// Modified by asrs: see patches/gpui-pre-0.3.12.patch in the asrs repository.
+ mod font_fallbacks;
+ mod font_features;
+ mod line;
+@@ -236,6 +237,7 @@
+     wrapper_pool: Mutex<FxHashMap<FontIdWithSize, Vec<CharWidthCache>>>,
+     fallback_font_stack: SmallVec<[Font; 2]>,
+     font_generation: Arc<AtomicUsize>,
++    font_names: RwLock<Option<Vec<String>>>,
+     missing_glyph_reporter: Arc<MissingGlyphReporter>,
+     missing_glyph_receiver: Mutex<Option<MissingGlyphReceiver>>,
+ }
+@@ -272,6 +274,7 @@
+                 font("Arial"), // macOS, Windows
+             ],
+             font_generation: Arc::default(),
++            font_names: RwLock::default(),
+             missing_glyph_reporter: Arc::new(MissingGlyphReporter {
+                 generation: missing_glyph_generation.clone(),
+                 sender,
+@@ -288,18 +291,28 @@
+     ///
+     /// Includes fonts registered with [`Self::add_fonts`].
+     pub fn all_font_names(&self) -> Vec<String> {
+-        let mut names = self.platform_text_system.all_font_names();
++        let mut names = match self.font_names.read().clone() {
++            Some(names) => names,
++            None => self.platform_text_system.all_font_names(),
++        };
+         names.sort_unstable();
+         names.dedup();
+         names
+     }
+ 
++    /// Set what [`Self::all_font_names`] returns until the next [`Self::add_fonts`], in place of
++    /// the platform text system's names.
++    pub fn set_font_names(&self, names: Vec<String>) {
++        *self.font_names.write() = Some(names);
++    }
++
+     /// Add a font's data to the text system.
+     ///
+     /// Cached font resolution and line layouts are invalidated after installation.
+     /// Layouts already in progress may complete against the previous font set.
+     pub fn add_fonts(&self, fonts: Vec<Cow<'static, [u8]>>) -> Result<()> {
+         self.platform_text_system.add_fonts(fonts)?;
++        *self.font_names.write() = None;
+         self.font_ids_by_font.write().clear();
+         self.missing_glyph_reporter.reset();
+         self.font_generation.fetch_add(1, Ordering::Release);
 diff --git a/src/util.rs b/src/util.rs
 --- a/src/util.rs
 +++ b/src/util.rs
