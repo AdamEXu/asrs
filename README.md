@@ -52,7 +52,7 @@ be. asrs registers as an alternate program for `.wpilog`, `.wpilogxz`, `.rlog`, 
 opens them. On macOS and Windows it is also offered for `.csv` files, in a way that does not make it
 their default anywhere; Linux has no such way, so there it is not. The icon in `packaging/icons` is a placeholder.
 On Linux with a Vulkan loader older than 1.4.345 (`libvulkan1` on Ubuntu 24.04 and 26.04), the
-3D view keeps its device after its last tab closes, frees only its large resources, because
+3D view keeps its device after its last tab closes and frees only its large resources, because
 destroying it while GPUI recreates its swapchain can crash those loaders (#486). Updating the
 loader to 1.4.345 or newer lifts that.
 `--no-docs` leaves out the documentation, which may not be published yet (#310).
