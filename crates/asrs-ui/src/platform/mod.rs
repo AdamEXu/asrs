@@ -250,8 +250,7 @@ pub fn install_sidebar_vibrancy(window: &Window) -> bool {
     imp::install_sidebar_vibrancy(window)
 }
 
-/// Makes an always-on-top window behave like Electron's `alwaysOnTop: true`, which stays visible
-/// while the app is inactive.
+/// Electron's `alwaysOnTop: true`: above normal windows, and visible while the app is inactive.
 pub fn keep_visible_when_inactive(window: &Window) -> bool {
     imp::keep_visible_when_inactive(window)
 }
@@ -282,6 +281,24 @@ pub fn titled_content_size(width: f64, height: f64) -> (f64, f64) {
     imp::window::titled_content_size(width, height)
 }
 
+/// What Electron sets on every macOS window's frame and GPUI does not.
+pub fn install_electron_frame(window: &Window) {
+    #[cfg(target_os = "macos")]
+    mac::window::install_electron_frame(window);
+    #[cfg(not(target_os = "macos"))]
+    let _ = window;
+}
+
+/// `NSApp.appearance`, where `nativeTheme.themeSource` goes on macOS: `None` follows the system.
+/// AppKit tells GPUI's windows about the change before this returns, so it must not be called
+/// inside an update of the app.
+pub fn set_app_appearance(dark: Option<bool>) {
+    #[cfg(target_os = "macos")]
+    mac::window::set_app_appearance(dark);
+    #[cfg(not(target_os = "macos"))]
+    let _ = dark;
+}
+
 /// The displays of the X11 screen that GPUI says is `width` logical px wide. `None` off X11.
 pub fn x11_displays(width: f64) -> Option<displays::Displays> {
     #[cfg(target_os = "linux")]
@@ -304,13 +321,6 @@ pub fn title_bar_height() -> f64 {
 pub struct NativeWindow(imp::window::NativeWindow);
 
 impl NativeWindow {
-    /// Electron's `titleBarStyle: "hiddenInset"`: an empty toolbar under the transparent title
-    /// bar, which moves the traffic lights in from the window edge. The window must be opened
-    /// with a transparent title bar and no `traffic_light_position`.
-    pub fn hidden_inset_titlebar(&self) {
-        self.0.hidden_inset_titlebar();
-    }
-
     /// The content size a frame of `width` by `height` leaves for this window's style, which is
     /// how Electron reads the sizes of windows without `useContentSize`.
     pub fn content_size_for_frame(&self, width: f64, height: f64) -> (f64, f64) {

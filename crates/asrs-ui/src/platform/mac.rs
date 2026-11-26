@@ -15,11 +15,12 @@ use objc2::{
 use objc2_app_kit::{
     NSAppearance, NSAppearanceNameAqua, NSApplication, NSAutoresizingMaskOptions, NSBitmapImageRep,
     NSColor, NSColorSpace, NSControlStateValueOff, NSControlStateValueOn, NSDocumentController,
-    NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSFont, NSFontAttributeName, NSImage,
-    NSLineBreakMode, NSMenu, NSMenuItem, NSMutableParagraphStyle, NSParagraphStyleAttributeName,
-    NSPopUpButtonCell, NSTextAlignment, NSUserInterfaceLayoutDirection, NSView,
-    NSVisualEffectBlendingMode, NSVisualEffectMaterial, NSVisualEffectState, NSVisualEffectView,
-    NSWindow, NSWindowOrderingMode, NSWritingDirection,
+    NSEvent, NSEventMask, NSEventModifierFlags, NSEventType, NSFloatingWindowLevel, NSFont,
+    NSFontAttributeName, NSImage, NSLineBreakMode, NSMenu, NSMenuItem, NSMutableParagraphStyle,
+    NSParagraphStyleAttributeName, NSPopUpButtonCell, NSTextAlignment,
+    NSUserInterfaceLayoutDirection, NSView, NSVisualEffectBlendingMode, NSVisualEffectMaterial,
+    NSVisualEffectState, NSVisualEffectView, NSWindow, NSWindowCollectionBehavior,
+    NSWindowOrderingMode, NSWritingDirection,
 };
 use objc2_core_foundation::{CFData, CGRect};
 use objc2_core_graphics::{
@@ -147,6 +148,9 @@ pub(super) fn keep_visible_when_inactive(window: &Window) -> bool {
         return false;
     };
     window.setHidesOnDeactivate(false);
+    window.setLevel(NSFloatingWindowLevel);
+    // Mission Control leaves floating windows out otherwise.
+    window.setCollectionBehavior(window.collectionBehavior() | NSWindowCollectionBehavior::Managed);
     true
 }
 
@@ -1474,10 +1478,15 @@ pub(super) mod probe {
         let window = ns_window(window)?;
         let button = window.standardWindowButton(NSWindowButton::CloseButton)?;
         Some(WindowChrome {
-            toolbar: window.toolbar().is_some(),
             title: window.titleVisibility() == NSWindowTitleVisibility::Visible,
             buttons: !button.isHidden(),
         })
+    }
+
+    pub fn set_represented_filename(window: &Window, name: &str) {
+        if let Some(window) = ns_window(window) {
+            window.setRepresentedFilename(&objc2_foundation::NSString::from_str(name));
+        }
     }
 
     pub fn will_resize(window: &Window, size: (f64, f64)) -> Option<(f64, f64)> {

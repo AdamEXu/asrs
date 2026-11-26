@@ -220,13 +220,17 @@ pub fn make_main(window: &Window) {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct WindowChrome {
-    pub toolbar: bool,
     pub title: bool,
     pub buttons: bool,
 }
 
 pub fn window_chrome(window: &Window) -> Option<WindowChrome> {
     imp::probe::window_chrome(window)
+}
+
+/// `-[NSWindow setRepresentedFilename:]`, which the oracle's injected libraries listen to.
+pub fn set_represented_filename(window: &Window, name: &str) {
+    imp::probe::set_represented_filename(window, name);
 }
 
 /// Offers the main menu a key-down event with the given characters and `NSEventModifierFlags`.

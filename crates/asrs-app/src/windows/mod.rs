@@ -18,6 +18,7 @@ use std::rc::Rc;
 use asrs_services::window_manager::{Opened, WindowManager};
 use asrs_ui::gpui::{AnyWindowHandle, App, Context, Entity, Global, Render, Subscription, Window};
 use asrs_ui::platform::FocusObserver;
+use asrs_ui::theme::ThemeSource;
 
 use crate::main_process::MainProcess;
 
@@ -92,6 +93,18 @@ pub fn init(cx: &mut App) {
         }
     })
     .detach();
+}
+
+/// `nativeTheme.themeSource = source`.
+pub fn set_theme(cx: &mut App, source: ThemeSource) {
+    cx.set_global(source);
+    let dark = match source {
+        ThemeSource::Light => Some(false),
+        ThemeSource::Dark => Some(true),
+        ThemeSource::System => None,
+    };
+    cx.spawn(async move |_| asrs_ui::platform::set_app_appearance(dark))
+        .detach();
 }
 
 impl Windows {

@@ -44,6 +44,12 @@ display.icc beside the captures; `normalize` converts those to sRGB.
                   what its window focus and blur events follow, on windows that are never shown,
                   into parity/windows/<os>.json. On Linux, under `ASRS_RFB_PORT=<port>
                   xtask/hosts/linux/display.sh`, for several screens and work areas
+  chrome [--captures <dir>]
+                  (macOS) the native properties of upstream's windows in its Electron, on windows
+                  that are never shown, in each theme, into parity/windows/macos-chrome.json. With
+                  --captures also each window with its frame, ordered in off the screen, as PNGs,
+                  looking active with ASRS_CHROME_ACTIVE=1, and the recording is left alone.
+                  ASRS_ELECTRON names another build of Electron
   compare <dir> <dir>
                   two run labels or directories: window captures equal outside the recorded
                   masks; canvas and drawing-buffer dumps, DOM dumps and written files equal
@@ -69,6 +75,10 @@ pub fn run(args: &[String]) -> Result {
         }
         Some((cmd, rest)) if cmd == "tooltips" => tooltips(&paths, rest),
         Some((cmd, [])) if cmd == "windows" => windows(&paths),
+        Some((cmd, [])) if cmd == "chrome" => chrome(&paths, None),
+        Some((cmd, [flag, dir])) if cmd == "chrome" && flag == "--captures" => {
+            chrome(&paths, Some(Path::new(dir)))
+        }
         Some((cmd, [a, b])) if cmd == "compare" => {
             let report = compare(&run_dir(&paths, a), &run_dir(&paths, b))?;
             report.print();
@@ -630,6 +640,136 @@ fn windows(paths: &Paths) -> Result {
     );
     let file = format!("parity/windows/{}.json", std::env::consts::OS);
     write(&paths.root.join(file), text.as_bytes())
+}
+
+/// What `main.ts` opens on macOS: the page and the options, without the placement.
+const CHROME: [(&str, &str, &str); 12] = [
+    (
+        "Hub",
+        "hub.html",
+        r#"{"width":1100,"height":650,"minWidth":800,"minHeight":400,"vibrancy":"sidebar","titleBarStyle":"hiddenInset"}"#,
+    ),
+    (
+        "Satellite",
+        "satellite.html",
+        r#"{"width":900,"height":500,"minWidth":200,"minHeight":100,"resizable":true}"#,
+    ),
+    (
+        "Preferences",
+        "preferences.html",
+        r#"{"width":400,"height":473,"useContentSize":true,"resizable":false,"alwaysOnTop":true,"fullscreenable":false}"#,
+    ),
+    (
+        "Download",
+        "download.html",
+        r#"{"width":500,"height":500,"minWidth":500,"minHeight":500,"resizable":true,"alwaysOnTop":true,"fullscreenable":false}"#,
+    ),
+    (
+        "Licenses",
+        "licenses.html",
+        r#"{"width":600,"height":625,"minWidth":600,"minHeight":625,"resizable":true,"fullscreenable":false}"#,
+    ),
+    (
+        "SourceListHelp",
+        "sourceListHelp.html",
+        r#"{"width":350,"height":500,"minWidth":275,"maxWidth":600,"minHeight":200,"resizable":true,"fullscreenable":false,"alwaysOnTop":true}"#,
+    ),
+    (
+        "EditRange",
+        "editRange.html",
+        r#"{"width":300,"height":108,"useContentSize":true,"resizable":false,"modal":true}"#,
+    ),
+    (
+        "UnitConversion",
+        "unitConversion.html",
+        r#"{"width":300,"height":162,"useContentSize":true,"resizable":false,"modal":true}"#,
+    ),
+    (
+        "RenameTab",
+        "renameTab.html",
+        r#"{"width":300,"height":81,"useContentSize":true,"resizable":false,"modal":true}"#,
+    ),
+    (
+        "EditFov",
+        "editFov.html",
+        r#"{"width":300,"height":81,"useContentSize":true,"resizable":false,"modal":true}"#,
+    ),
+    (
+        "Export",
+        "export.html",
+        r#"{"width":300,"height":189,"useContentSize":true,"resizable":false,"modal":true}"#,
+    ),
+    (
+        "BetaWelcome",
+        "betaWelcome.html",
+        r#"{"width":450,"height":490,"useContentSize":true,"resizable":false,"modal":true}"#,
+    ),
+];
+
+fn chrome(paths: &Paths, captures: Option<&Path>) -> Result {
+    if !cfg!(target_os = "macos") {
+        return Err("only macOS has these windows".to_owned());
+    }
+    let out = paths.root.join("target/parity/app/chrome.json");
+    let www = paths.root.join("target/oracle/upstream/www");
+    let windows: Vec<String> = CHROME
+        .iter()
+        .map(|(name, page, options)| {
+            format!(r#"{{"name":"{name}","page":"{page}","options":{options}}}"#)
+        })
+        .collect();
+    let captures = match captures {
+        Some(dir) => {
+            fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            format!(r#","captures":{:?}"#, dir.display().to_string())
+        }
+        None => String::new(),
+    };
+    let request = out.with_extension("request.json");
+    write(
+        &request,
+        format!(
+            r#"{{"settle":300,"www":{:?}{captures},"windows":[{}]}}"#,
+            www.display().to_string(),
+            windows.join(",")
+        )
+        .as_bytes(),
+    )?;
+    let electron = match std::env::var_os("ASRS_ELECTRON") {
+        Some(electron) => PathBuf::from(electron),
+        None => paths.electron()?,
+    };
+    let mut command = Command::new(electron);
+    command
+        .arg("--lang=en-US")
+        .arg(paths.root.join("oracle/tools/windowChrome.cjs"))
+        .args([&request, &out])
+        .current_dir(&paths.root)
+        .env("ASRS_WINDOW_CHROME", "1")
+        .env_remove("ELECTRON_RUN_AS_NODE");
+    oracle::pin_environment(&mut command, oracle::DEFAULT_ZONE);
+    insert_library(paths, "windowChrome", &mut command)?;
+    let status = command
+        .status()
+        .map_err(|e| format!("running Electron: {e}"))?;
+    if !status.success() {
+        return Err(format!("windowChrome.cjs: {status}"));
+    }
+    if !captures.is_empty() {
+        return Ok(());
+    }
+    let record = fs::read_to_string(&out).map_err(|e| format!("{}: {e}", out.display()))?;
+    let text = format!(
+        "{{\"electron\":\"{}\",\"record\":{}}}\n",
+        oracle::ELECTRON_VERSION,
+        record
+            .replace("{\"name\":", "\n{\"name\":")
+            .replace(",\"changes\":", "\n,\"changes\":")
+    );
+    write(
+        &paths.root.join("parity/windows/macos-chrome.json"),
+        text.as_bytes(),
+    )
 }
 
 fn checked(command: &mut Command) -> Result {

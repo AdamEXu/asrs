@@ -14,10 +14,9 @@ use objc2::{DefinedClass, MainThreadMarker, MainThreadOnly, define_class, ffi, m
 use objc2_app_kit::{
     NSApplication, NSApplicationTerminateReply, NSWindow, NSWindowButton,
     NSWindowDidEnterFullScreenNotification, NSWindowDidExitFullScreenNotification,
-    NSWindowTitleVisibility, NSWindowWillEnterFullScreenNotification,
-    NSWindowWillExitFullScreenNotification,
+    NSWindowTitleVisibility, NSWindowWillExitFullScreenNotification,
 };
-use objc2_foundation::{NSNotification, NSNotificationCenter, NSString};
+use objc2_foundation::{NSNotification, NSNotificationCenter};
 
 use super::super::EditCommand;
 use super::{ns_view, ns_window};
@@ -177,11 +176,6 @@ pub(in super::super) fn install_edit_commands(
     disable_delegate_actions();
     for class in [c"GPUIWindow", c"GPUIPanel"] {
         add_action(class, sel!(toggleFullScreenMode:), toggle_full_screen_mode);
-        add_action(
-            class,
-            sel!(windowDidFailToEnterFullScreen:),
-            did_fail_to_enter,
-        );
     }
 }
 
@@ -207,16 +201,6 @@ unsafe extern "C-unwind" fn toggle_full_screen_mode(
             afterDelay: 0.0f64
         ];
     }
-}
-
-const DID_FAIL_TO_ENTER: &str = "asrs.windowDidFailToEnterFullScreen";
-
-/// A delegate method AppKit has no notification for; GPUI's windows are their own delegates.
-unsafe extern "C-unwind" fn did_fail_to_enter(window: &AnyObject, _: Sel, _: Option<&AnyObject>) {
-    let name = NSString::from_str(DID_FAIL_TO_ENTER);
-    let center = NSNotificationCenter::defaultCenter();
-    // SAFETY: a notification with the window as its object, as AppKit's own have.
-    unsafe { center.postNotificationName_object(&name, Some(window)) };
 }
 
 type MayQuit = Rc<dyn Fn() -> bool>;
@@ -298,28 +282,12 @@ define_class!(
     struct Observer;
 
     impl Observer {
-        /// A toolbar stays on screen in full screen, where Electron's hidden inset title bar has
-        /// none.
-        #[unsafe(method(willEnter:))]
-        fn will_enter(&self, notification: &NSNotification) {
-            if let Some(window) = window_of(notification) {
-                window.setToolbar(None);
-            }
-        }
-
         #[unsafe(method(didEnter:))]
         fn did_enter(&self, notification: &NSNotification) {
             if let Some(window) = window_of(notification) {
                 window.setTitleVisibility(NSWindowTitleVisibility::Visible);
             }
             self.changed(true);
-        }
-
-        #[unsafe(method(didFailToEnter:))]
-        fn did_fail_to_enter(&self, notification: &NSNotification) {
-            if let Some(window) = window_of(notification) {
-                super::window::add_hidden_inset_toolbar(&window);
-            }
         }
 
         /// `NativeWindowMac::NotifyWindowWillLeaveFullScreen`.
@@ -335,7 +303,6 @@ define_class!(
         #[unsafe(method(didExit:))]
         fn did_exit(&self, notification: &NSNotification) {
             if let Some(window) = window_of(notification) {
-                super::window::add_hidden_inset_toolbar(&window);
                 show_buttons(&window, true);
             }
             self.changed(false);
@@ -384,13 +351,10 @@ pub(in super::super) fn observe_full_screen(
     // SAFETY: NSObject's designated initializer on a freshly allocated instance.
     let observer: Retained<Observer> = unsafe { msg_send![super(observer), init] };
     let center = NSNotificationCenter::defaultCenter();
-    let failed = NSString::from_str(DID_FAIL_TO_ENTER);
     // SAFETY: AppKit's notification names.
     let names = unsafe {
         [
-            (NSWindowWillEnterFullScreenNotification, sel!(willEnter:)),
             (NSWindowDidEnterFullScreenNotification, sel!(didEnter:)),
-            (&*failed, sel!(didFailToEnter:)),
             (NSWindowWillExitFullScreenNotification, sel!(willExit:)),
             (NSWindowDidExitFullScreenNotification, sel!(didExit:)),
         ]
