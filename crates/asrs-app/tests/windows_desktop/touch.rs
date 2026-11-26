@@ -46,8 +46,8 @@ let ups = 0, clicks = 0;
 tab.addEventListener("pointerup", () => ups++);
 tab.addEventListener("contextmenu", () => menus.push(ups));
 tab.addEventListener("click", () => clicks++);
-const top = (id) => document.getElementById(id).scrollTop;
-window.state = () => [top("scroll"), top("table"), String(getSelection()).length,
+const offset = (id) => document.getElementById(id).scrollTop;
+window.state = () => [offset("scroll"), offset("table"), String(getSelection()).length,
   menus.length, menus.length ? menus.at(-1) : -1, ups, clicks];
 </script>"#;
 
