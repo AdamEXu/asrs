@@ -554,8 +554,14 @@ use asrs_js::number::to_int32;
 
 impl<'a> Raster<'a> {
     pub fn new(width: u32, height: u32) -> Option<Raster<'a>> {
-        Some(Raster {
-            pixmap: Pixmap::new(width, height)?,
+        Some(Raster::over(Pixmap::new(width, height)?))
+    }
+
+    /// A canvas showing `pixmap` (premultiplied), its context's state fresh.
+    pub fn over(pixmap: Pixmap) -> Raster<'a> {
+        let (width, height) = (pixmap.width(), pixmap.height());
+        Raster {
+            pixmap,
             state: State::default(),
             stack: Vec::new(),
             path: Path::new(),
@@ -569,7 +575,7 @@ impl<'a> Raster<'a> {
             unflushed: false,
             shades: ShadeCache::default(),
             deferred: Vec::new(),
-        })
+        }
     }
 
     /// Reuses the images an earlier frame of the same canvas resampled.
@@ -627,6 +633,10 @@ impl<'a> Raster<'a> {
 
     pub fn register(&self, name: &str) -> Option<&ImageData> {
         self.registers.get(name)
+    }
+
+    pub fn take_register(&mut self, name: &str) -> Option<ImageData> {
+        self.registers.remove(name)
     }
 
     pub fn pixmap(&self) -> &Pixmap {
@@ -842,9 +852,13 @@ impl<'a> Raster<'a> {
                 self.registers.insert(register.clone(), data);
             }
             Call::PutImageData { data, dx, dy } => {
+                let registered;
                 let image = match data {
-                    ImageDataSource::Register(name) => self.registers.get(name).cloned(),
-                    ImageDataSource::Inline(image) => Some(image.clone()),
+                    ImageDataSource::Register(name) => {
+                        registered = self.registers.get(name).cloned();
+                        registered.as_ref()
+                    }
+                    ImageDataSource::Inline(image) => Some(image),
                 };
                 if let Some(image) = image {
                     let (x, y) = (i64::from(to_int32(*dx)), i64::from(to_int32(*dy)));
@@ -853,7 +867,7 @@ impl<'a> Raster<'a> {
                         && x + i64::from(image.width) >= i64::from(self.pixmap.width())
                         && y + i64::from(image.height) >= i64::from(self.pixmap.height());
                     self.flush();
-                    pixels::write_rect(&mut self.pixmap, &image, x, y);
+                    pixels::write_rect(&mut self.pixmap, image, x, y);
                 }
             }
         }
@@ -2721,5 +2735,43 @@ mod shade_tests {
         assert!(shades.levels.len() <= 7);
         let (_, shades) = draw(&at(40.0, 28.0), &Arc::new((*image).clone()), shades);
         assert_eq!(shades.levels.len(), 1);
+    }
+
+    #[test]
+    fn a_blank_canvas_draws_nothing() {
+        let blank = Arc::new(Pixmap::new(90, 60).unwrap());
+        for (x, width, height, angle, alpha) in [
+            (3.0, 90.0, 60.0, 0.0, 1.0),
+            (3.25, 90.0, 60.0, 0.0, 1.0),
+            (3.25, 50.5, 33.25, 0.0, 1.0),
+            (3.25, 180.0, 130.0, 0.0, 0.4),
+            (40.0, 70.5, 40.25, 0.3, 1.0),
+        ] {
+            for smoothing in [true, false] {
+                let mut c = Canvas2d::new(120, 80);
+                let mut fill = Gradient::linear(0.0, 0.0, 120.0, 80.0);
+                fill.add_color_stop(0.0, "rgba(255, 10, 3, 0.1)");
+                fill.add_color_stop(1.0, "rgb(7, 200, 255)");
+                c.set_fill_style(fill);
+                c.fill_rect(0.0, 0.0, 110.0, 80.0);
+                c.set_image_smoothing_enabled(smoothing);
+                c.rotate(angle);
+                c.set_global_alpha(alpha);
+                c.draw_image_scaled("a", x, 2.5, width, height);
+                c.fill_rect(9.0, 9.0, 20.5, 20.5);
+                let draw = |image: Option<&Arc<Pixmap>>| {
+                    let mut raster = Raster::new(c.width, c.height).unwrap();
+                    if let Some(image) = image {
+                        raster.add_image("a", image.clone());
+                    }
+                    raster.run(&c.calls);
+                    (raster.state(), raster.into_pixmap())
+                };
+                let (state, drawn) = draw(Some(&blank));
+                let (without_state, without) = draw(None);
+                assert!(drawn.data() == without.data(), "{x} {width} {angle}");
+                assert_eq!(state, without_state);
+            }
+        }
     }
 }
