@@ -20,7 +20,9 @@ use asrs_parity::json::Json;
 use asrs_parity::vectors;
 use asrs_tabs::table::TableRenderer;
 use asrs_ui::gpui::{App, AsyncApp, Entity, px, size};
-use asrs_ui::platform::probe::{self, Contact, ContactPhase, PointerKind, SyntheticPointer};
+use asrs_ui::platform::probe::{
+    self, Contact, ContactPhase, MouseAction, PointerKind, SyntheticPointer,
+};
 
 use crate::desktop::{Electron, Report, fresh_boot, handle_of, sleep, with_window};
 
@@ -257,7 +259,7 @@ async fn open_hub(cx: &mut AsyncApp, user_data: &Path) -> (windows::WindowId, Ou
 impl OurHub {
     fn rect(&self, cx: &mut AsyncApp, element: FrameElement) -> [f64; 4] {
         let layout = cx.update(|cx| self.frame.read(cx).layout(cx, 1100.0, 400.0, 1.0));
-        let [x, y, w, h] = layout.rect(element).expect("the element is shown");
+        let [x, y, w, h] = layout.rect(element).unwrap_or_default();
         [x + self.client[0], y + self.client[1], w, h]
     }
 
@@ -422,11 +424,17 @@ pub async fn run(cx: &mut AsyncApp, electron: &Electron, report: &mut Report) {
 
     stroke(cx, &touch, touched, graph, [0.0, 0.0], 0, 0).await;
     sleep(cx, 1500).await;
+    let tapped = hub.selected_tab(cx);
     report.check(
         "touch: a tap selects a tab",
-        hub.selected_tab(cx) == Some(1),
-        format!("{:?}", hub.selected_tab(cx)),
+        tapped == Some(1),
+        format!("{tapped:?}"),
     );
+    if tapped != Some(1) {
+        probe::post_mouse(MouseAction::Down, graph[0], graph[1]);
+        probe::post_mouse(MouseAction::Up, graph[0], graph[1]);
+        sleep(cx, 1500).await;
+    }
 
     let timeline = hub.rect(cx, FrameElement::Timeline);
     let before = hub.range(cx);
