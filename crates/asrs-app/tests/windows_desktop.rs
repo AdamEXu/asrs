@@ -1122,10 +1122,7 @@ app.whenReady().then(() => {
 
     /// Moves the pointer from left of a window's content into its middle, as a hover does.
     async fn hover(cx: &mut AsyncApp, [left, top, right, bottom]: [i32; 4]) -> (f64, f64) {
-        let at = (
-            f64::from(left + right) / 2.0,
-            f64::from(top + bottom) / 2.0,
-        );
+        let at = (f64::from(left + right) / 2.0, f64::from(top + bottom) / 2.0);
         let start = f64::from(left) - 40.0;
         for step in 0..=10 {
             let x = start + (at.0 - start) * f64::from(step) / 10.0;
@@ -1216,8 +1213,8 @@ app.whenReady().then(() => {
                     .into_iter()
                     .find(|w| before.iter().all(|b| b.number != w.number));
             }
-            if let Some(TopLevel { rects: [_, client], .. }) = ours {
-                let [left, top, right, bottom] = client;
+            if let Some(ours) = ours {
+                let [left, top, right, bottom] = ours.rects[1];
                 let image = probe::screen_image(left, top, right - left, bottom - top);
                 frames.extend(image.as_ref().map(tooltip_pixels));
                 if frames.len() == 30 {

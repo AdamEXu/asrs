@@ -13,11 +13,12 @@ use windows::Win32::UI::Input::KeyboardAndMouse::{
     MOUSEEVENTF_MOVE, MOUSEEVENTF_WHEEL, MOUSEINPUT, SendInput, VIRTUAL_KEY,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, FindWindowW, GWL_EXSTYLE, GWL_STYLE, GetCursorPos, GetMenuItemCount, GetMenuItemInfoW, GetWindowLongPtrW,
-    HMENU, IsWindowVisible, MENUITEMINFOW, MFS_CHECKED, MFS_DISABLED, MFT_SEPARATOR, MIIM_BITMAP,
-    MIIM_FTYPE, MIIM_ID, MIIM_STATE, MIIM_STRING, MIIM_SUBMENU, MINMAXINFO, SW_MAXIMIZE,
-    GetWindowThreadProcessId, SW_MINIMIZE, SW_RESTORE, SendMessageW, SetCursorPos, ShowWindow, USER_DEFAULT_SCREEN_DPI,
-    WM_DPICHANGED, WM_GETMINMAXINFO, WM_SIZING, WS_EX_TOPMOST,
+    EnumWindows, FindWindowW, GWL_EXSTYLE, GWL_STYLE, GetCursorPos, GetMenuItemCount,
+    GetMenuItemInfoW, GetWindowLongPtrW, GetWindowThreadProcessId, HMENU, IsWindowVisible,
+    MENUITEMINFOW, MFS_CHECKED, MFS_DISABLED, MFT_SEPARATOR, MIIM_BITMAP, MIIM_FTYPE, MIIM_ID,
+    MIIM_STATE, MIIM_STRING, MIIM_SUBMENU, MINMAXINFO, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE,
+    SendMessageW, SetCursorPos, ShowWindow, USER_DEFAULT_SCREEN_DPI, WM_DPICHANGED,
+    WM_GETMINMAXINFO, WM_SIZING, WS_EX_TOPMOST,
 };
 use windows::core::{BOOL, PWSTR, w};
 
