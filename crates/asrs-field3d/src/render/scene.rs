@@ -3,8 +3,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
-use super::release;
-use crate::glb::MeshSource;
+use super::spool::{self, Spooled};
 
 use asrs_js::math;
 
@@ -32,32 +31,19 @@ pub struct Geometry {
     stored: Mutex<Stored>,
     groups: Vec<Group>,
     bounding_sphere: Sphere,
-    source: Option<MeshSource>,
-    release_claimed: AtomicBool,
+    spool_claimed: AtomicBool,
 }
 
 #[derive(Debug)]
 enum Stored {
     Memory(Arc<BufferGeometry>),
-    /// Dropped after its upload; the model loads again for anything that needs the arrays,
-    /// and must give the same bytes.
-    Released {
-        digest: u64,
-    },
+    Spooled(Box<Spooled>),
 }
 
 impl Geometry {
     /// Keeps a bounding sphere the geometry already carries (three never recomputes one that is
     /// set), otherwise computes it as the first render would.
     pub fn new(geometry: impl Into<Arc<BufferGeometry>>) -> Arc<Self> {
-        Self::with_source(geometry, None)
-    }
-
-    /// A geometry whose arrays may leave memory once uploaded, since `source` loads them again.
-    pub fn with_source(
-        geometry: impl Into<Arc<BufferGeometry>>,
-        source: Option<MeshSource>,
-    ) -> Arc<Self> {
         let geometry = geometry.into();
         let bounding_sphere = geometry
             .bounding_sphere
@@ -67,28 +53,26 @@ impl Geometry {
             groups: geometry.groups.clone(),
             stored: Mutex::new(Stored::Memory(geometry)),
             bounding_sphere,
-            source,
-            release_claimed: AtomicBool::new(false),
+            spool_claimed: AtomicBool::new(false),
         })
     }
 
-    /// The geometry, loaded again from its model once it left memory.
+    /// The geometry, read back from its spool file once it went there.
     pub fn data(&self) -> Arc<BufferGeometry> {
-        let digest = match &*self.stored.lock().expect("geometry") {
-            Stored::Memory(geometry) => return geometry.clone(),
-            Stored::Released { digest } => *digest,
-        };
-        let reloaded = self.source.as_ref().and_then(MeshSource::reload);
-        match reloaded {
-            Some(geometry) if release::digest(&geometry) == digest => geometry,
-            _ => {
-                eprintln!("asrs: a 3D model no longer loads as it did");
-                Arc::new(BufferGeometry::new())
-            }
+        let stored = self.stored.lock().expect("geometry");
+        match &*stored {
+            Stored::Memory(geometry) => geometry.clone(),
+            Stored::Spooled(spooled) => match spooled.read() {
+                Ok(geometry) => Arc::new(geometry),
+                Err(e) => {
+                    eprintln!("asrs: reading back a 3D model: {e}");
+                    Arc::new(BufferGeometry::new())
+                }
+            },
         }
     }
 
-    /// Whether the arrays are in memory.
+    /// Whether the arrays are in memory rather than in a spool file.
     pub fn is_in_memory(&self) -> bool {
         self.in_memory().is_some()
     }
@@ -97,33 +81,29 @@ impl Geometry {
         &self.groups
     }
 
-    pub(crate) fn source(&self) -> Option<&MeshSource> {
-        self.source.as_ref()
-    }
-
-    /// Lets the arrays go soon, if the model can give them back and they are worth it.
-    pub(crate) fn release_later(self: &Arc<Self>) {
-        release::release_later(self);
+    /// Moves the arrays to a spool file soon, if they are large enough to be worth it.
+    pub fn spool_later(self: &Arc<Self>) {
+        spool::spool_later(self);
     }
 
     pub(super) fn in_memory(&self) -> Option<Arc<BufferGeometry>> {
         match &*self.stored.lock().expect("geometry") {
             Stored::Memory(geometry) => Some(geometry.clone()),
-            Stored::Released { .. } => None,
+            Stored::Spooled(_) => None,
         }
     }
 
-    pub(super) fn claim_release(&self, min_bytes: usize) -> bool {
+    pub(super) fn claim_spool(&self, min_bytes: usize) -> bool {
         let large = self
             .in_memory()
-            .is_some_and(|g| release::size(&g) >= min_bytes);
-        self.source.is_some() && large && !self.release_claimed.swap(true, Ordering::Relaxed)
+            .is_some_and(|g| spool::size(&g) >= min_bytes);
+        large && !self.spool_claimed.swap(true, Ordering::Relaxed)
     }
 
-    pub(super) fn released(&self, data: &Arc<BufferGeometry>, digest: u64) {
+    pub(super) fn replace_with_spooled(&self, data: &Arc<BufferGeometry>, spooled: Spooled) {
         let mut stored = self.stored.lock().expect("geometry");
         if matches!(&*stored, Stored::Memory(g) if Arc::ptr_eq(g, data)) {
-            *stored = Stored::Released { digest };
+            *stored = Stored::Spooled(Box::new(spooled));
         }
     }
 

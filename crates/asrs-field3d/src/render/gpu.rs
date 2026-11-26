@@ -193,9 +193,6 @@ struct GpuGeometry {
     index: Option<(wgpu::Buffer, wgpu::IndexFormat, u32)>,
     vertex_count: u32,
     color_components: u32,
-    /// Set when the arrays can leave memory: then the upload stays as long as the geometry, since
-    /// uploading it again means loading the model again.
-    keep: Option<std::sync::Weak<Geometry>>,
 }
 
 impl GpuGeometry {
@@ -939,16 +936,7 @@ impl Renderer {
                 }
             }
         }
-        self.geometries.retain(|k, g| {
-            used_geometries.contains(k) || g.keep.as_ref().is_some_and(|w| w.strong_count() > 0)
-        });
-        for draw in all_draws(frame) {
-            if let DrawKind::Mesh { geometry, .. } | DrawKind::Line { geometry, .. } = &draw.kind
-                && let Some(source) = geometry.source()
-            {
-                source.model.forget();
-            }
-        }
+        self.geometries.retain(|k, _| used_geometries.contains(k));
         self.line_geometries.retain(|k, _| used_lines.contains(k));
         self.textures.retain(|k, _| used_textures.contains(k));
     }
@@ -962,15 +950,14 @@ impl Renderer {
         let key = (geometry.key(), primitives);
         used.insert(key);
         if !self.geometries.contains_key(&key) {
-            let mut gpu = upload_geometry(
+            let gpu = upload_geometry(
                 &self.device,
                 geometry,
                 self.provoking_last.then_some(primitives),
             );
-            gpu.keep = geometry.source().map(|_| Arc::downgrade(geometry));
             self.uploaded += gpu.size();
             self.geometries.insert(key, gpu);
-            geometry.release_later();
+            geometry.spool_later();
             if self.uploaded >= UPLOAD_BATCH {
                 self.uploaded = 0;
                 self.queue.submit([]);
@@ -2061,7 +2048,6 @@ fn upload_geometry(
         index,
         vertex_count: count as u32,
         color_components,
-        keep: None,
     }
 }
 

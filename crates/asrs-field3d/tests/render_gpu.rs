@@ -2,7 +2,6 @@ use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError, mpsc};
 use std::time::Duration;
 
-use asrs_field3d::glb::{MeshSource, ModelSource};
 use asrs_field3d::render::{
     FatLine, FrameOptions, Geometry, Line, LineBasicMaterial, LineMaterial, LineSegmentsGeometry,
     Mesh, NodeKind, PhongMaterial, RenderThread, Renderer, Scene, build_frame, edge_mask,
@@ -492,27 +491,12 @@ fn sphere() -> BufferGeometry {
     )
 }
 
-fn reloadable(load: impl Fn() -> BufferGeometry + Send + Sync + 'static) -> Arc<Geometry> {
-    let model = Arc::new(ModelSource::new(move || Some(vec![Arc::new(load())])));
-    Geometry::with_source(sphere(), Some(MeshSource { model, index: 0 }))
-}
-
-fn wait_until_released(geometry: &Geometry) {
-    for _ in 0..500 {
-        if !geometry.is_in_memory() {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(10));
-    }
-    assert!(!geometry.is_in_memory());
-}
-
 #[test]
-fn an_uploaded_model_leaves_memory_and_loads_again_for_a_new_device() {
+fn an_uploaded_model_leaves_memory_and_draws_the_same_from_its_spool() {
     let Some(mut renderer) = renderer() else {
         return;
     };
-    let geometry = reloadable(sphere);
+    let geometry = Geometry::new(sphere());
     let small = Geometry::new(primitives::box_geometry(1.0, 1.0, 1.0, 1.0, 1.0, 1.0));
     let mut scene = Scene::new();
     let root = scene.root;
@@ -531,7 +515,13 @@ fn an_uploaded_model_leaves_memory_and_loads_again_for_a_new_device() {
     let frame = build_frame(&mut scene, &mut camera, options);
     let mut before = Vec::new();
     renderer.render(&frame, &mut before).expect("rendered");
-    wait_until_released(&geometry);
+    for _ in 0..2000 {
+        if !geometry.is_in_memory() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(!geometry.is_in_memory());
     assert!(small.is_in_memory());
     assert_eq!(*geometry.data(), sphere());
     let mut after = Vec::new();
@@ -540,30 +530,6 @@ fn an_uploaded_model_leaves_memory_and_loads_again_for_a_new_device() {
         .render(&frame, &mut after)
         .expect("rendered");
     assert_eq!(before, after);
-}
-
-#[test]
-fn a_model_that_loads_differently_draws_nothing() {
-    let Some(mut renderer) = renderer() else {
-        return;
-    };
-    let geometry = reloadable(|| {
-        let mut changed = sphere();
-        changed.translate(0.0, 0.0, 1e-3);
-        changed
-    });
-    let mut scene = Scene::new();
-    let root = scene.root;
-    scene.add_mesh(
-        root,
-        Mesh::new(geometry.clone(), Arc::new(PhongMaterial::new())),
-    );
-    let (_, mut camera) = scene_with_box_at(0.0);
-    let options = FrameOptions::new(f64::from(W), f64::from(H), 1.0, true);
-    let frame = build_frame(&mut scene, &mut camera, options);
-    renderer.render(&frame, &mut Vec::new()).expect("rendered");
-    wait_until_released(&geometry);
-    assert_eq!(*geometry.data(), BufferGeometry::new());
 }
 
 #[test]

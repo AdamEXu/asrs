@@ -8,7 +8,7 @@ use asrs_js::math;
 use asrs_js::string::JsString;
 use asrs_model::preferences::Field3dMode;
 
-use super::{MeshMaterial, MeshSource, ObjectKind, SceneGraph};
+use super::{MeshMaterial, ObjectKind, SceneGraph};
 use crate::render::{Geometry, Mesh, PhongMaterial, Side};
 use crate::three::{
     ArrayData, BufferAttribute, BufferGeometry, Color, ObjectId, Vector3, merge_geometries,
@@ -31,26 +31,13 @@ pub struct OptimizedMaterial {
 }
 
 /// One merged mesh, named `normal`, `transparent` or `carpet` as upstream names it.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct OptimizedMesh {
     pub name: &'static str,
     pub geometry: Arc<BufferGeometry>,
     pub material: OptimizedMaterial,
     pub cast_shadow: bool,
     pub receive_shadow: bool,
-    /// Set on meshes from a background load, which can run again.
-    pub source: Option<MeshSource>,
-}
-
-/// Where a mesh came from is not part of its value.
-impl PartialEq for OptimizedMesh {
-    fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
-            && self.geometry == other.geometry
-            && self.material == other.material
-            && self.cast_shadow == other.cast_shadow
-            && self.receive_shadow == other.receive_shadow
-    }
 }
 
 impl OptimizedMesh {
@@ -70,8 +57,7 @@ impl OptimizedMesh {
             vertex_colors: true,
             ..PhongMaterial::new()
         };
-        let geometry = Geometry::with_source(self.geometry.clone(), self.source.clone());
-        let mut mesh = Mesh::new(geometry, Arc::new(material));
+        let mut mesh = Mesh::new(Geometry::new(self.geometry.clone()), Arc::new(material));
         mesh.cast_shadow = self.cast_shadow;
         mesh.receive_shadow = self.receive_shadow;
         mesh
@@ -263,7 +249,6 @@ pub(super) fn optimize(
                     },
                     cast_shadow: cinematic && !is_carpet,
                     receive_shadow: cinematic && is_carpet,
-                    source: None,
                 }
             })
             .collect()
