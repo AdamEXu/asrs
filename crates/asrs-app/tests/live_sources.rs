@@ -1052,6 +1052,7 @@ fn a_publisher_slower_than_its_period_leaves_the_page_responsive() {
         );
         if !page.read(|hub| hub.wait_for_live(STEP * 2)) {
             steps += 1;
+            // Keep the published value changing out of phase with its 20 ms interval.
             if steps % 3 == 0 {
                 selected = 1.0 - selected;
                 page.send(MainToHub::CallSelectionSetter, set_selected_time(selected));
