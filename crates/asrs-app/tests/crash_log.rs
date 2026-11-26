@@ -112,6 +112,18 @@ fn crashes() {
                 assert!(thread.join().is_err());
             }
         }
+        "symbols" => {
+            let thread = std::thread::spawn(|| panic!("in a thread"));
+            assert!(thread.join().is_err());
+            let log = home.join("data").join(FILE);
+            let start = Instant::now();
+            while !fs::read_to_string(&log).is_ok_and(|log| log.contains("\nsymbols:\n")) {
+                if start.elapsed() > TIMEOUT / 2 {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
         "contents" => {
             let thread = std::thread::spawn(|| {
                 let text = std::hint::black_box("confidential \u{e9}".to_owned());
@@ -152,6 +164,22 @@ fn a_panic_is_logged() {
     );
     let told = fs::read_to_string(home.0.join("told")).expect("told");
     assert_eq!(told, "logged");
+}
+
+#[test]
+fn a_backtrace_is_followed_by_its_symbols() {
+    let home = Home::new("symbols");
+    assert!(wait(home.start("symbols", Stdio::null())).success());
+    let log = home.log();
+    let (entry, symbols) = log.split_once("\nsymbols:\n").expect(&log);
+    let mut frames = entry
+        .lines()
+        .skip_while(|line| !line.starts_with("CrashLog::new at "));
+    let first = frames.nth(1).unwrap_or_default().trim_start();
+    assert!(first.starts_with("0: 0x"), "{log}");
+    let address = first.split(' ').nth(1).unwrap_or_default();
+    assert!(symbols.contains(address), "{log}");
+    assert!(symbols.contains("crash_log::crashes"), "{log}");
 }
 
 #[test]
