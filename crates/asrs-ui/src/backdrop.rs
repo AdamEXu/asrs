@@ -54,6 +54,7 @@ enum Fill {
 struct Item {
     rect: Rect,
     fill: Fill,
+    own: bool,
 }
 
 impl Item {
@@ -73,6 +74,7 @@ struct Known {
 pub struct Backdrop {
     seen: usize,
     known: Vec<Known>,
+    own: Vec<Range<usize>>,
     items: Vec<Item>,
     bands: Vec<Vec<u32>>,
 }
@@ -81,6 +83,7 @@ impl Backdrop {
     pub fn clear(&mut self) {
         self.seen = 0;
         self.known.clear();
+        self.own.clear();
         self.items.clear();
         self.bands.iter_mut().for_each(Vec::clear);
     }
@@ -91,7 +94,8 @@ impl Backdrop {
             self.take(scene, self.seen..range.start);
             self.seen = range.end;
             if let Some((rect, color)) = fill {
-                self.add(rect, Fill::Color(color));
+                let own = self.is_own(range.start);
+                self.add(rect, Fill::Color(color), own);
             }
         }
         self.take(scene, self.seen..scene.len());
@@ -109,36 +113,71 @@ impl Backdrop {
         self.known.push(Known { range, fill });
     }
 
+    /// Marks what the scene paints from `start` on as an element's own background, until
+    /// [`Backdrop::own_until`] with the returned mark.
+    pub fn own_from(&mut self, start: usize) -> usize {
+        self.own.push(start..usize::MAX);
+        self.own.len() - 1
+    }
+
+    pub fn own_until(&mut self, mark: usize, end: usize) {
+        if let Some(range) = self.own.get_mut(mark) {
+            range.end = end;
+        }
+    }
+
+    fn is_own(&self, at: usize) -> bool {
+        self.own.iter().any(|range| range.contains(&at))
+    }
+
     fn take(&mut self, scene: &Scene, range: Range<usize>) {
+        let mut at = range.start;
+        while at < range.end {
+            let next = (self.own.iter())
+                .flat_map(|own| [own.start, own.end])
+                .filter(|&bound| bound > at)
+                .fold(range.end, usize::min);
+            let own = self.is_own(at);
+            self.take_part(scene, at..next, own);
+            at = next;
+        }
+    }
+
+    fn take_part(&mut self, scene: &Scene, range: Range<usize>, own: bool) {
         for primitive in scene.primitives(range) {
             match primitive {
-                Primitive::Quad(quad) => self.quad(quad),
+                Primitive::Quad(quad) => self.quad(quad, own),
                 Primitive::PolychromeSprite(sprite) if sprite.opacity <= 0.0 => {}
                 Primitive::MonochromeSprite(sprite) if sprite.color.is_transparent() => {}
                 Primitive::SubpixelSprite(sprite) if sprite.color.is_transparent() => {}
                 Primitive::Shadow(shadow) => {
                     let reach = ScaledPixels(shadow.blur_radius.0 * 3.0);
                     let bounds = shadow.bounds.dilate(reach);
-                    self.push(outer(&bounds), &shadow.content_mask.bounds, Fill::Unknown);
+                    self.push(
+                        outer(&bounds),
+                        &shadow.content_mask.bounds,
+                        Fill::Unknown,
+                        own,
+                    );
                 }
                 other => {
                     let clip = other.content_mask().bounds;
-                    self.push(outer(other.bounds()), &clip, Fill::Unknown);
+                    self.push(outer(other.bounds()), &clip, Fill::Unknown, own);
                 }
             }
         }
     }
 
-    fn quad(&mut self, quad: &Quad) {
+    fn quad(&mut self, quad: &Quad, own: bool) {
         let clip = &quad.content_mask.bounds;
         let (bounds, whole) = (inner(&quad.bounds), outer(&quad.bounds));
         if bounds != whole {
-            self.push(whole, clip, Fill::Unknown);
+            self.push(whole, clip, Fill::Unknown, own);
         }
         match quad.background.as_solid() {
-            Some(color) => self.push(bounds, clip, color_fill(color)),
+            Some(color) => self.push(bounds, clip, color_fill(color), own),
             None if quad.background.is_transparent() => {}
-            None => self.push(bounds, clip, Fill::Unknown),
+            None => self.push(bounds, clip, Fill::Unknown, own),
         }
         let [l, t, r, b] = bounds;
         let edge = |v: ScaledPixels| v.0.ceil() as i32;
@@ -152,7 +191,7 @@ impl Backdrop {
                 [l, top, l + widths.left, bottom],
                 [r - widths.right, top, r, bottom],
             ] {
-                self.push(strip, clip, fill);
+                self.push(strip, clip, fill, own);
             }
         }
         let radii = quad.corner_radii.map(|radius| edge(*radius));
@@ -175,23 +214,23 @@ impl Backdrop {
             ),
         ] {
             if n > 0 {
-                self.push(corner, clip, Fill::Unknown);
+                self.push(corner, clip, Fill::Unknown, own);
             }
         }
     }
 
-    fn push(&mut self, rect: Rect, clip: &Bounds<ScaledPixels>, fill: Fill) {
+    fn push(&mut self, rect: Rect, clip: &Bounds<ScaledPixels>, fill: Fill, own: bool) {
         if let Some(rect) = intersect(rect, outer(clip)) {
-            self.add(rect, fill);
+            self.add(rect, fill, own);
         }
     }
 
-    fn add(&mut self, rect: Rect, fill: Fill) {
+    fn add(&mut self, rect: Rect, fill: Fill, own: bool) {
         if matches!(fill, Fill::Color(c) if c.a <= 0.0) || rect[3] <= 0 {
             return;
         }
         let index = self.items.len() as u32;
-        self.items.push(Item { rect, fill });
+        self.items.push(Item { rect, fill, own });
         let (first, last) = (rect[1].max(0) / BAND, (rect[3] - 1) / BAND);
         if self.bands.len() <= last as usize {
             self.bands.resize_with(last as usize + 1, Vec::new);
@@ -234,12 +273,12 @@ impl Backdrop {
     }
 
     /// The parts of `rect` by the opaque colour behind them, or `None` where part of it is not
-    /// behind one colour.
-    pub fn regions(&self, rect: Rect) -> Option<Vec<(Rect, [u8; 3])>> {
+    /// behind one colour, or with `own`, not behind what [`Backdrop::own_from`] marked alone.
+    pub fn regions(&self, rect: Rect, own: bool) -> Option<Vec<(Rect, [u8; 3])>> {
         let items = self.behind(rect);
         match items.as_slice() {
             [] => return None,
-            [only] if only.opaque() && only.rect == rect => {
+            [only] if only.opaque() && only.rect == rect && (only.own || !own) => {
                 return Some(vec![(rect, blend([0; 3], only.fill)?)]);
             }
             items if items.len() > MAX_OVERLAPS => return None,
@@ -261,7 +300,7 @@ impl Backdrop {
             let row = regions.len();
             for x in xs.windows(2) {
                 let cell = [x[0], y[0], x[1], y[1]];
-                let color = color_of(&items, cell)?;
+                let color = color_of(&items, cell, own)?;
                 match regions[row..].last_mut() {
                     Some((r, c)) if *c == color => r[2] = cell[2],
                     _ => regions.push((cell, color)),
@@ -291,10 +330,13 @@ fn merge_rows(regions: &mut Vec<(Rect, [u8; 3])>, row: usize) {
     }
 }
 
-fn color_of(items: &[Item], cell: Rect) -> Option<[u8; 3]> {
+fn color_of(items: &[Item], cell: Rect, own: bool) -> Option<[u8; 3]> {
     let over = || items.iter().filter(|item| contains(item.rect, cell));
     let base = over().position(|item| item.opaque())?;
     let layers: Vec<&Item> = over().take(base + 1).collect();
+    if own && !layers.iter().all(|item| item.own) {
+        return None;
+    }
     layers
         .into_iter()
         .rev()
@@ -368,31 +410,34 @@ mod tests {
     #[test]
     fn the_topmost_opaque_quad_is_the_background() {
         let backdrop = read([page(), quad([90, 100, 400, 130], rgb(0x2b66a2))]);
-        assert_eq!(backdrop.regions(RUN), Some(vec![(RUN, [0x2b, 0x66, 0xa2])]));
+        assert_eq!(
+            backdrop.regions(RUN, false),
+            Some(vec![(RUN, [0x2b, 0x66, 0xa2])])
+        );
         let below = [100, 500, 160, 520];
-        assert_eq!(backdrop.regions(below), Some(vec![(below, WHITE)]));
+        assert_eq!(backdrop.regions(below, false), Some(vec![(below, WHITE)]));
     }
 
     #[test]
     fn nothing_opaque_behind_a_part_is_no_background() {
-        assert_eq!(read([]).regions(RUN), None);
+        assert_eq!(read([]).regions(RUN, false), None);
         let half = quad([0, 0, 130, 800], rgb(0xffffff));
-        assert_eq!(read([half]).regions(RUN), None);
+        assert_eq!(read([half]).regions(RUN, false), None);
         let faint = quad([0, 0, 1000, 800], rgba(0xffffff80));
-        assert_eq!(read([faint]).regions(RUN), None);
+        assert_eq!(read([faint]).regions(RUN, false), None);
     }
 
     #[test]
     fn translucent_quads_blend_onto_what_they_cover() {
         let backdrop = read([page(), quad([0, 100, 1000, 130], rgba(0x00000080))]);
-        assert_eq!(backdrop.regions(RUN), Some(vec![(RUN, [127; 3])]));
+        assert_eq!(backdrop.regions(RUN, false), Some(vec![(RUN, [127; 3])]));
     }
 
     #[test]
     fn a_run_over_several_colours_has_a_region_of_each() {
         let backdrop = read([page(), quad([120, 100, 140, 130], rgb(0x3399ff))]);
         assert_eq!(
-            backdrop.regions(RUN),
+            backdrop.regions(RUN, false),
             Some(vec![
                 ([100, 110, 120, 124], WHITE),
                 ([120, 110, 140, 124], [0x33, 0x99, 0xff]),
@@ -401,7 +446,7 @@ mod tests {
         );
         let backdrop = read([page(), quad([0, 120, 1000, 130], rgb(0))]);
         assert_eq!(
-            backdrop.regions(RUN),
+            backdrop.regions(RUN, false),
             Some(vec![
                 ([100, 110, 160, 120], WHITE),
                 ([100, 120, 160, 124], [0; 3]),
@@ -416,7 +461,7 @@ mod tests {
             quad([0, 0, 1000, 118], rgb(0xeeeeee)),
             quad([0, 118, 1000, 800], rgb(0xeeeeee)),
         ]);
-        assert_eq!(backdrop.regions(RUN), Some(vec![(RUN, [0xee; 3])]));
+        assert_eq!(backdrop.regions(RUN, false), Some(vec![(RUN, [0xee; 3])]));
     }
 
     #[test]
@@ -424,14 +469,14 @@ mod tests {
         let mut gradient = quad([90, 100, 400, 130], rgb(0));
         let stop = |c, at| linear_color_stop(rgb(c), at);
         gradient.background = linear_gradient(90.0, stop(0, 0.0), stop(0xffffff, 1.0));
-        assert_eq!(read([page(), gradient]).regions(RUN), None);
+        assert_eq!(read([page(), gradient]).regions(RUN, false), None);
 
         let mut rounded = quad([155, 100, 400, 130], rgb(0));
         rounded.corner_radii.bottom_left = ScaledPixels(10.0);
-        assert_eq!(read([page(), rounded]).regions(RUN), None);
+        assert_eq!(read([page(), rounded]).regions(RUN, false), None);
         rounded.bounds = bounds([90, 100, 400, 140]);
         assert_eq!(
-            read([page(), rounded]).regions(RUN),
+            read([page(), rounded]).regions(RUN, false),
             Some(vec![(RUN, [0; 3])])
         );
 
@@ -453,7 +498,7 @@ mod tests {
         });
         let mut backdrop = Backdrop::default();
         backdrop.read(&scene);
-        assert_eq!(backdrop.regions(RUN), None);
+        assert_eq!(backdrop.regions(RUN, false), None);
     }
 
     #[test]
@@ -462,7 +507,7 @@ mod tests {
         bordered.border_color = rgb(0x888888).into();
         bordered.border_widths.bottom = ScaledPixels(2.0);
         assert_eq!(
-            read([page(), bordered]).regions(RUN),
+            read([page(), bordered]).regions(RUN, false),
             Some(vec![
                 ([100, 110, 160, 120], [0xdd; 3]),
                 ([100, 120, 160, 122], [0x88; 3]),
@@ -476,7 +521,7 @@ mod tests {
         let mut clipped = quad([0, 0, 1000, 800], rgb(0));
         clipped.content_mask.bounds = bounds([0, 0, 1000, 112]);
         assert_eq!(
-            read([page(), clipped]).regions(RUN),
+            read([page(), clipped]).regions(RUN, false),
             Some(vec![
                 ([100, 110, 160, 112], [0; 3]),
                 ([100, 112, 160, 124], WHITE),
@@ -492,7 +537,7 @@ mod tests {
             quad([0, 0, 1000, 800], rgba(0x00000080)),
             quad([0, 0, 1000, 800], rgba(0xffffff80)),
         ]);
-        assert_eq!(backdrop.regions(run), Some(vec![(run, [191; 3])]));
+        assert_eq!(backdrop.regions(run, false), Some(vec![(run, [191; 3])]));
         assert_eq!(backdrop.behind(run).len(), 3);
     }
 
@@ -506,7 +551,7 @@ mod tests {
         backdrop.skip(start..scene.len());
         scene.insert_primitive(quad([0, 0, 110, 800], rgb(0xff0000)));
         backdrop.read(&scene);
-        let regions = backdrop.regions(RUN);
+        let regions = backdrop.regions(RUN, false);
         assert_eq!(
             regions,
             Some(vec![
@@ -516,7 +561,7 @@ mod tests {
         );
         backdrop.clear();
         backdrop.read(&Scene::default());
-        assert_eq!(backdrop.regions(RUN), None);
+        assert_eq!(backdrop.regions(RUN, false), None);
     }
 
     #[test]
@@ -528,11 +573,41 @@ mod tests {
         scene.insert_primitive(quad([100, 110, 110, 124], rgb(0xff0000)));
         backdrop.read(&scene);
         assert_eq!(
-            backdrop.regions(RUN),
+            backdrop.regions(RUN, false),
             Some(vec![
                 ([100, 110, 110, 124], [0xff, 0, 0]),
                 ([110, 110, 160, 124], WHITE),
             ])
         );
+    }
+
+    #[test]
+    fn own_runs_need_a_background_marked_while_painted() {
+        let mut scene = Scene::default();
+        let mut backdrop = Backdrop::default();
+        scene.insert_primitive(page());
+        let mark = backdrop.own_from(scene.len());
+        scene.insert_primitive(quad([90, 100, 130, 130], rgb(0xaaaaaa)));
+        backdrop.own_until(mark, scene.len());
+        let open = backdrop.own_from(scene.len());
+        scene.insert_primitive(quad([500, 100, 600, 130], rgb(0x3399ff)));
+        backdrop.read(&scene);
+        let inside = [100, 110, 120, 124];
+        assert_eq!(
+            backdrop.regions(inside, true),
+            Some(vec![(inside, [0xaa; 3])])
+        );
+        assert_eq!(backdrop.regions(RUN, true), None);
+        assert!(backdrop.regions(RUN, false).is_some());
+        let later = [510, 110, 560, 124];
+        assert_eq!(
+            backdrop.regions(later, true),
+            Some(vec![(later, [0x33, 0x99, 0xff])])
+        );
+        backdrop.own_until(open, scene.len());
+        scene.insert_primitive(quad([0, 100, 1000, 130], rgba(0xffffff80)));
+        backdrop.read(&scene);
+        assert_eq!(backdrop.regions(inside, true), None);
+        assert!(backdrop.regions(inside, false).is_some());
     }
 }

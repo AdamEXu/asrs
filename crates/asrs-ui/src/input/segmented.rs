@@ -13,7 +13,7 @@ use crate::input::style::{
     SplitStyle,
 };
 use crate::svg::Backend;
-use crate::text::{Align, FontSpec, LineHeight, Text, TextStyle};
+use crate::text::{Align, FontSpec, LineHeight, Text, TextStyle, opaque_background};
 use crate::theme::{Appearance, FOCUS_RING_RADIUS, FOCUS_RING_WIDTH, chains};
 use crate::tooltip::{titled, untitled};
 
@@ -283,7 +283,7 @@ impl RenderOnce for SegmentedControl {
                                 ),
                         )
                         .into_any_element();
-                    untitled(badge).into_any_element()
+                    untitled(opaque_background(false, badge)).into_any_element()
                 }
                 Segment::Icon(source) => {
                     let lu = |v: f32| (f64::from(v) * 64.0) as i64 as f64 / 64.0;

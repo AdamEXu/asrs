@@ -11,7 +11,8 @@ use asrs_canvas::text::{
 };
 use asrs_ui::gpui::{HeadlessAppContext, NoopTextSystem};
 use asrs_ui::text::{
-    CacheStats, FontSpec, Text, TextStyle, TextSystem, faded, grayscale_layer, scroller,
+    CacheStats, FontSpec, Text, TextStyle, TextSystem, faded, grayscale_layer, opaque_background,
+    scroller,
 };
 use gpui_kit::{
     AnyElement, AnyWindowHandle, AppContext, Context, IntoElement, ParentElement, Render, Styled,
@@ -237,6 +238,59 @@ fn a_grayscale_window_has_no_lcd_text() {
     let id = f.window.window_id();
     f.cx.update(|cx| TextSystem::set_grayscale(cx, id));
     assert_eq!(f.draw(|| page(0xffffff, text("run"))).lcd, 0);
+}
+
+fn own(child: impl IntoElement) -> AnyElement {
+    opaque_background(false, div().bg(rgb(0xaaaaaa)).child(child)).into_any_element()
+}
+
+#[test]
+fn a_grayscale_window_keeps_lcd_text_over_an_opaque_background_of_its_own() {
+    type Case = (f32, &'static str, u64, fn() -> AnyElement);
+    let cases: [Case; 9] = [
+        (1.0, "the page", 0, || page(0xffffff, text("run"))),
+        (1.0, "its own", 1, || page(0xffffff, own(text("run")))),
+        (1.0, "the page's in it", 0, || {
+            page(0xffffff, opaque_background(false, text("run")))
+        }),
+        (1.0, "opacity in it", 1, || {
+            page(0xffffff, own(text("run").grayscale()))
+        }),
+        (1.0, "a layer in it", 0, || {
+            page(0xffffff, own(grayscale_layer(true, text("run"))))
+        }),
+        (1.0, "under the page's translucent box", 0, || {
+            let under = div().absolute().size_full().bg(rgb(0xaaaaaa));
+            let over = div().absolute().size_full().bg(gpui_kit::rgba(0xff000080));
+            let run = opaque_background(false, div().absolute().child(text("run")));
+            let layers = div().size_full().child(opaque_background(false, under));
+            page(0xffffff, layers.child(over).child(run))
+        }),
+        (2.0, "its own", 0, || page(0xffffff, own(text("run")))),
+        (2.0, "composited", 1, || {
+            let own = div().bg(rgb(0xaaaaaa)).child(text("run"));
+            page(0xffffff, opaque_background(true, own))
+        }),
+        (2.0, "in a scroller", 1, || {
+            page(0xffffff, scroller(true, own(text("run"))))
+        }),
+    ];
+    for (scale, name, lcd, build) in cases {
+        let mut f = Fixture::lcd(scale);
+        let id = f.window.window_id();
+        f.cx.update(|cx| TextSystem::set_grayscale(cx, id));
+        assert_eq!(f.draw(build).lcd, lcd, "{scale} {name}");
+    }
+    let mut f = Fixture::lcd(1.0);
+    assert_eq!(
+        f.draw(|| page(0xffffff, own(text("run").grayscale()))).lcd,
+        0
+    );
+    assert_eq!(
+        f.draw(|| page(0xffffff, opaque_background(false, text("run"))))
+            .lcd,
+        1
+    );
 }
 
 #[test]

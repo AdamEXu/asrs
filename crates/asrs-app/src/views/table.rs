@@ -992,9 +992,12 @@ impl<H: FrameHost> HubFrame<H> {
                     .track_focus(&focus::last(&rows_place)),
             )
             .child(probes)
-            .child(text::scroller(overflows, cells))
-            .child(first_cells)
-            .child(header)
+            .child(text::scroller(
+                overflows,
+                text::opaque_background(false, cells),
+            ))
+            .child(text::opaque_background(overflows, first_cells))
+            .child(text::opaque_background(overflows, header))
             .into_any_element()
     }
 }

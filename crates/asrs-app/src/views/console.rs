@@ -630,6 +630,7 @@ impl<H: FrameHost> HubFrame<H> {
             scale: f64::from(scale),
         };
         let dark = appearance == Appearance::Dark;
+        let overflows = layout.table_height() > shown.container[3];
         let mut root = div()
             .absolute()
             .left_0()
@@ -641,17 +642,20 @@ impl<H: FrameHost> HubFrame<H> {
             ))
             .children(recorded)
             .child(self.area_bars(Area::Console(shown.key), layout.extent(), cx))
-            .child(self.console_header(
-                Shown {
-                    container: [rect[0], rect[1], layout.client()[0], rect[3]],
-                    ..shown
-                },
-                &view,
-                appearance,
-                blurred,
-                grid,
-                window,
-                cx,
+            .child(text::opaque_background(
+                overflows,
+                self.console_header(
+                    Shown {
+                        container: [rect[0], rect[1], layout.client()[0], rect[3]],
+                        ..shown
+                    },
+                    &view,
+                    appearance,
+                    blurred,
+                    grid,
+                    window,
+                    cx,
+                ),
             ));
         let drag_hidden = displayed(self.host().hub(cx))
             .is_none_or(|(_, r)| r.dom().borrow().drag_highlight_hidden);
@@ -713,7 +717,10 @@ impl<H: FrameHost> HubFrame<H> {
                 grid.place([x, y - scroll_top, width, layout.table_height()])
                     .track_focus(&focus::last(&rows_place)),
             )
-            .child(scroller(layout.table_height() > height, layer))
+            .child(scroller(
+                layout.table_height() > height,
+                text::opaque_background(false, layer),
+            ))
             .child(probed(
                 ".console-table-container",
                 grid.place([x, y, width, height]),
