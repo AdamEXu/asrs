@@ -75,8 +75,11 @@ fn open(path: &Path) -> io::Result<File> {
         .create_new(true)
         .mode(0o600)
         .open(path)?;
-    std::fs::remove_file(path)?;
-    Ok(file)
+    // Another instance's `remove_stale` may have unlinked it already.
+    match std::fs::remove_file(path) {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
+        _ => Ok(file),
+    }
 }
 
 #[cfg(windows)]
